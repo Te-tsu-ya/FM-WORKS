@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.3  
+**文書版:** 0.8.4  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.3`
+`APP.version = 0.8.4`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -266,6 +266,42 @@ state.monthly = {
 - サマリー: 固定領域
 - 本体: `flex:1; min-height:0`
 - 表 / 文書: 内部スクロール
+
+## 10.3 ホーム1画面ダッシュボード
+
+`renderPage` は `home / monthly / admin` に `.content.one-screen` を付与する。
+
+ホームは `.single-screen-layout.home-screen` の2段構成。
+
+```
+home-screen
+├─ home-commandbar
+│  ├─ greeting / date / company calendar status
+│  └─ home-stats (勤務 / 残業 / 有給)
+└─ home-dashboard
+   ├─ home-attendance-panel
+   ├─ home-schedule-panel
+   └─ home-task-panel
+```
+
+デスクトップ:
+
+- `home-screen`: height 100%, min-height 0
+- `home-commandbar`: 固定高相当
+- `home-dashboard`: flex余剰高をすべて使用
+- 各 `home-panel`: overflow hidden
+- `home-panel-scroll`: パネル内部のみoverflow auto
+- 画面高760px以下はcompact rulesを適用
+- 幅1141〜1180pxは3カラム比率とクイック導線を圧縮
+
+狭いデスクトップ/タブレット/モバイル:
+
+- 幅1140px以下で `:has(>.home-screen)` を使い、ホームの `.content.one-screen` だけ `height:auto / overflow:visible` へ戻す
+- `home-dashboard` を1カラム化
+- ページ全体の通常スクロールを許可
+- パネル内部は必要に応じて最大高を設定
+
+共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
 
 ## 11. 設定画面
 
@@ -551,6 +587,8 @@ Apps Scriptの原則:
 - ホーム概要失敗時のインライン再読込
 - ライブ実働時間のserverTime基準更新
 - Escape / 検索ショートカット / ナビ後フォーカス
+- ホームの1画面レイアウト / 760px compact / 1140px narrow-screen fallback
+- ホーム統合後も打刻履歴・予定表・工数・申請・月次の導線を保持
 
 `scripts/validate.mjs`:
 
