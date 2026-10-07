@@ -386,12 +386,13 @@ function assertMonthlyReadyForExport_(summary) {
 }
 
 function writeMonthlyDetailSheet_(sheet, summary) {
-  const header = ['日付','会社区分','出勤','退勤','実働時間','残業時間','休日出勤時間','遅刻・早退時間','勤務場所','在宅','休暇・欠勤','要確認'];
+  const header = ['日付','会社区分','出勤','退勤','休憩時間','実働時間','残業時間','休日出勤時間','遅刻・早退時間','勤務場所','在宅','休暇・欠勤','工数差分','要確認'];
   const detail = [header].concat(summary.daily.map(d => [
     d.date,
     d.companyName || d.companyType,
     d.clockIn,
     d.clockOut,
+    minutesToExcelTime_(d.breakMinutes),
     minutesToExcelTime_(d.workMinutes),
     minutesToExcelTime_(d.overtimeMinutes),
     minutesToExcelTime_(d.holidayMinutes),
@@ -399,6 +400,7 @@ function writeMonthlyDetailSheet_(sheet, summary) {
     d.workLocation,
     d.remote ? '在宅' : '',
     d.leaveStatus || '',
+    d.worklogIssue ? formatMinutes_(Math.abs(d.worklogDifferenceMinutes)) : '',
     d.issue ? d.issueType : ''
   ]));
   sheet.getRange(1,1,detail.length,header.length).setValues(detail);
@@ -414,6 +416,7 @@ function writeMonthlyDetailSheet_(sheet, summary) {
     ['有給取得日数', summary.totals.paidLeaveDays],
     ['在宅勤務日数', summary.totals.remoteDays],
     ['工数入力時間', minutesToExcelTime_(summary.totals.worklogMinutes)],
+    ['工数差異日数', summary.totals.worklogMismatchDays],
     ['要確認日数', summary.totals.missingPunchDays]
   ];
   const summaryStart = detail.length + 2;
@@ -422,14 +425,14 @@ function writeMonthlyDetailSheet_(sheet, summary) {
   sheet.setFrozenRows(1);
   sheet.getRange(1,1,1,header.length).setFontWeight('bold').setBackground('#10294f').setFontColor('#ffffff');
   sheet.autoResizeColumns(1,header.length);
-  if (summary.daily.length) sheet.getRange(2,5,summary.daily.length,4).setNumberFormat('[h]:mm');
+  if (summary.daily.length) sheet.getRange(2,5,summary.daily.length,5).setNumberFormat('[h]:mm');
   sheet.getRange(summaryStart + 3,2,4,1).setNumberFormat('[h]:mm');
   sheet.getRange(summaryStart + 7,2).setNumberFormat('0.00');
   sheet.getRange(summaryStart + 9,2).setNumberFormat('[h]:mm');
 }
 
 function writeTeamSummarySheet_(sheet, summaries) {
-  const header = ['社員ID','氏名','出勤日数','欠勤日数','実働時間','残業時間','休日出勤時間','遅刻・早退時間','有給取得日数','在宅勤務日数','工数入力時間','要確認日数'];
+  const header = ['社員ID','氏名','出勤日数','欠勤日数','実働時間','残業時間','休日出勤時間','遅刻・早退時間','有給取得日数','在宅勤務日数','工数入力時間','工数差異日数','要確認日数'];
   const rows = [header].concat(summaries.map(s => [
     s.employee.employeeId,
     s.employee.name,
@@ -442,6 +445,7 @@ function writeTeamSummarySheet_(sheet, summaries) {
     s.totals.paidLeaveDays,
     s.totals.remoteDays,
     minutesToExcelTime_(s.totals.worklogMinutes),
+    s.totals.worklogMismatchDays,
     s.totals.missingPunchDays
   ]));
   sheet.getRange(1,1,rows.length,header.length).setValues(rows);
