@@ -372,7 +372,8 @@ function formatMinutes_(minutes) {
 
 
 function getScheduleBundle(sessionToken, params) {
-  requireSession_(sessionToken);
+  const session = requireSession_(sessionToken);
+  const viewer = session.employee;
   params = params || {};
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   const start = normalizeDate_(params.start || today);
@@ -411,7 +412,11 @@ function getScheduleBundle(sessionToken, params) {
         createdAt: r[14] || '',
         updatedAt: r[15] || '',
         source: r[16] || '',
-        colorKey: r[17] || r[8] || '予定'
+        colorKey: r[17] || r[8] || '予定',
+        canEdit: viewer.role === 'ADMIN' ||
+          (r[13] || '') === viewer.employeeId ||
+          (r[13] || '') === viewer.name ||
+          ((r[16] || '') === '予定表(仮)' && ids.includes(viewer.employeeId))
       });
     });
   }
@@ -483,7 +488,10 @@ function saveSchedule(sessionToken, payload) {
       rowNumber = found.getRow();
       const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
       const owner = old[13] || '';
-      if (!isAdmin && owner !== employee.employeeId && owner !== employee.name) {
+      const oldIds = String(old[5] || '').split(',').map(x => x.trim()).filter(Boolean);
+      const source = old[16] || '';
+      const canEditLegacyOwn = source === '予定表(仮)' && oldIds.includes(employee.employeeId);
+      if (!isAdmin && owner !== employee.employeeId && owner !== employee.name && !canEditLegacyOwn) {
         throw new Error('この予定を編集する権限がありません。');
       }
       createdBy = owner || employee.employeeId;
@@ -550,7 +558,10 @@ function deleteSchedule(sessionToken, scheduleId) {
     const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
     if (values[12] === '削除') return { ok: true };
     const owner = values[13] || '';
-    if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name) {
+    const participantIds = String(values[5] || '').split(',').map(x => x.trim()).filter(Boolean);
+    const source = values[16] || '';
+    const canEditLegacyOwn = source === '予定表(仮)' && participantIds.includes(employee.employeeId);
+    if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name && !canEditLegacyOwn) {
       throw new Error('この予定を削除する権限がありません。');
     }
 
