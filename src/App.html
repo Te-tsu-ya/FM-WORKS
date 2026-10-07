@@ -217,8 +217,16 @@ function openRequestModal(){
   </section>`;
   toggleRequestCorrectionFields();
 }
+function syncRequestDates(){
+  var type=document.getElementById('reqType')?document.getElementById('reqType').value:'';
+  var start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
+  var single=['午前半休','午後半休','打刻修正'].includes(type);
+  if(start&&end&&single){end.value=start.value;end.disabled=true}
+  else if(end){end.disabled=false}
+  if(type==='打刻修正')loadCorrectionPunchOptions();
+}
 function toggleRequestCorrectionFields(){var type=document.getElementById('reqType')?document.getElementById('reqType').value:'',isCorrection=type==='打刻修正',box=document.getElementById('correctionFields');if(box)box.style.display=isCorrection?'grid':'none';syncRequestDates();}
-function loadCorrectionPunchOptions(){var date=document.getElementById('reqStart').value;if(!date)return;google.script.run.withSuccessHandler(function(items){var select=document.getElementById('reqOriginalPunch');if(!select)return;select.innerHTML='<option value="">新規打刻として追加</option>'+items.map(function(x){return '<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>';}).join('');}).withFailureHandler(function(err){handleApiError(err,'打刻履歴を読み込めませんでした');}).getPunchesForDate(state.sessionToken,date);}
+function loadCorrectionPunchOptions(){var date=document.getElementById('reqStart').value;if(!date)return;google.script.run.withSuccessHandler(function(items){var select=document.getElementById('reqOriginalPunch');if(!select)return;select.innerHTML='<option value="">不足打刻として追加</option>'+items.map(function(x){return '<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>';}).join('');}).withFailureHandler(function(err){handleApiError(err,'打刻履歴を読み込めませんでした');}).getPunchesForDate(state.sessionToken,date);}
 function submitRequestFromModal(){var type=document.getElementById('reqType').value,payload={type:type,startDate:document.getElementById('reqStart').value,endDate:document.getElementById('reqEnd').value,reason:document.getElementById('reqReason').value,content:document.getElementById('reqContent').value};if(type==='打刻修正')payload.correction={originalPunchId:document.getElementById('reqOriginalPunch').value,action:document.getElementById('reqAction').value,time:document.getElementById('reqTime').value,workLocation:document.getElementById('reqLocation').value};google.script.run.withSuccessHandler(function(){closeModal();showToast('申請を登録しました');loadRequests();}).withFailureHandler(function(err){handleApiError(err,'申請を登録できませんでした');}).submitRequest(state.sessionToken,payload);}
 function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){google.script.run.withSuccessHandler(function(){showToast('申請を取り消しました');loadRequests();}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
 function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');loadRequests();loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
