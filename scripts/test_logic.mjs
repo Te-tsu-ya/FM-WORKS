@@ -45,7 +45,8 @@ globalThis.__fmTest = {
   isPrototypeLogin_,
   shortEmployeeName_,
   requiredBreakMinutes_,
-  calculateBreakMinutesForRows_
+  calculateBreakMinutesForRows_,
+  normalizeYearMonth_
 };
 `, context);
 
@@ -116,6 +117,8 @@ expect('recorded lunch break totals 60 minutes', api.calculateBreakMinutesForRow
   { action: api.PUNCH.BREAK_END, timestamp: '2026-10-07 13:00:00' },
   { action: api.PUNCH.CLOCK_OUT, timestamp: '2026-10-07 18:00:00' }
 ], false) === 60);
+expect('valid year-month accepted', api.normalizeYearMonth_('2026-09') === '2026-09');
+expectThrows('invalid year-month rejected', () => api.normalizeYearMonth_('2026-13'));
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
