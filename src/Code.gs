@@ -539,36 +539,42 @@ function deleteSchedule(sessionToken, scheduleId) {
   const id = String(scheduleId || '').trim();
   if (!id) throw new Error('予定IDがありません。');
   const employee = requireSession_(sessionToken).employee;
-  const sheet = getDb_().getSheetByName(DB.sheets.schedule);
-  const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
-    .createTextFinder(id).matchEntireCell(true).findNext();
-  if (!found) throw new Error('削除対象の予定が見つかりません。');
 
-  const row = found.getRow();
-  const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
-  const owner = values[13] || '';
-  if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name) {
-    throw new Error('この予定を削除する権限がありません。');
-  }
-  const title = values[7] || '';
-  sheet.getRange(row, 13).setValue('削除');
-  sheet.getRange(row, 16).setValue(Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss'));
+  return withScriptLock_(function() {
+    const sheet = getDb_().getSheetByName(DB.sheets.schedule);
+    const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
+      .createTextFinder(id).matchEntireCell(true).findNext();
+    if (!found) throw new Error('削除対象の予定が見つかりません。');
 
-  appendAudit_({
-    employeeId: employee.employeeId,
-    employeeName: employee.name,
-    operation: '予定削除',
-    target: '予定',
-    targetId: id,
-    before: title,
-    after: '削除',
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: ''
+    const row = found.getRow();
+    const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
+    if (values[12] === '削除') return { ok: true };
+    const owner = values[13] || '';
+    if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name) {
+      throw new Error('この予定を削除する権限がありません。');
+    }
+
+    const title = values[7] || '';
+    const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
+    sheet.getRange(row, 13).setValue('削除');
+    sheet.getRange(row, 16).setValue(nowText);
+
+    appendAudit_({
+      employeeId: employee.employeeId,
+      employeeName: employee.name,
+      operation: '予定削除',
+      target: '予定',
+      targetId: id,
+      before: title,
+      after: '削除',
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: ''
+    });
+    SpreadsheetApp.flush();
+    return { ok: true };
   });
-  return { ok: true };
 }
-
 function getCompanyCalendar(sessionToken, year) {
   requireSession_(sessionToken);
   const y = Number(year || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
@@ -591,46 +597,55 @@ function saveCompanyCalendarDay(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
   assertPermission_(employee, 'companyCalendarEdit');
 
-  const date = normalizeDate_(payload.date);
-  const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
-  const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
-  const working = type === '通常勤務' || type === '調整出勤日';
-  const name = String(payload.name || '').trim().slice(0, 100);
-  const start = working ? normalizeTime_(payload.start || '09:00') : '';
-  const end = working ? normalizeTime_(payload.end || '18:00') : '';
-  const breakMinutes = working ? Math.max(0, Math.min(480, Number(payload.breakMinutes || 60))) : '';
-  const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
+  return withScriptLock_(function() {
+    const date = normalizeDate_(payload.date);
+    const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
+    const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
+    const working = type === '通常勤務' || type === '調整出勤日';
+    const name = String(payload.name || '').trim().slice(0, 100);
+    const start = working ? normalizeTime_(payload.start || '09:00') : '';
+    const end = working ? normalizeTime_(payload.end || '18:00') : '';
+    if (working && start >= end) throw new Error('勤務終了時刻は開始時刻より後に設定してください。');
+    const breakMinutes = working ? Math.max(0, Math.min(480, Number(payload.breakMinutes || 60))) : '';
+    const totalMinutes = working ? timeRangeMinutes_(start, end) : 0;
+    if (working && breakMinutes >= totalMinutes) throw new Error('休憩時間は勤務時間より短く設定してください。');
+    const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
 
-  const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
-  const lastRow = sheet.getLastRow();
-  let rowNumber = 0;
-  if (lastRow >= 2) {
-    const found = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(date).matchEntireCell(true).findNext();
-    if (found) rowNumber = found.getRow();
-  }
-  if (!rowNumber) rowNumber = Math.max(2, lastRow + 1);
+    const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
+    const lastRow = sheet.getLastRow();
+    let rowNumber = 0;
+    let before = '';
+    if (lastRow >= 2) {
+      const found = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(date).matchEntireCell(true).findNext();
+      if (found) {
+        rowNumber = found.getRow();
+        const old = sheet.getRange(rowNumber, 1, 1, 10).getDisplayValues()[0];
+        before = [old[1], old[2], old[3], old[4], old[5]].join(' / ');
+      }
+    }
+    if (!rowNumber) rowNumber = Math.max(2, lastRow + 1);
 
-  sheet.getRange(rowNumber, 1, 1, 10).setValues([[
-    date, type, name, start, end, breakMinutes, working,
-    'FM WORKS編集', employee.name, nowText
-  ]]);
+    sheet.getRange(rowNumber, 1, 1, 10).setValues([[
+      date, type, name, start, end, breakMinutes, working,
+      'FM WORKS編集', employee.name, nowText
+    ]]);
 
-  appendAudit_({
-    employeeId: employee.employeeId,
-    employeeName: employee.name,
-    operation: '会社カレンダー更新',
-    target: '会社カレンダー',
-    targetId: date,
-    before: '',
-    after: type + (name ? ' / ' + name : ''),
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: ''
+    appendAudit_({
+      employeeId: employee.employeeId,
+      employeeName: employee.name,
+      operation: '会社カレンダー更新',
+      target: '会社カレンダー',
+      targetId: date,
+      before: before,
+      after: type + (name ? ' / ' + name : '') + (working ? ' / ' + start + '-' + end : ''),
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: ''
+    });
+    SpreadsheetApp.flush();
+    return { ok: true };
   });
-  SpreadsheetApp.flush();
-  return { ok: true };
 }
-
 function getCompanyCalendarRange_(start, end) {
   const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
   const lastRow = sheet.getLastRow();
