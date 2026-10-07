@@ -2,9 +2,8 @@ const MAINTENANCE = Object.freeze({
   backupFolderProperty: 'FM_WORKS_BACKUP_FOLDER_ID',
   databaseIdProperty: 'FM_WORKS_DB_ID',
   lastBackupProperty: 'FM_WORKS_LAST_BACKUP_AT',
-  backupRetentionDays: 30,
-  backupHour: 3,
-  backupHandler: 'runDailyBackup_'
+  autoBackupProperty: 'FM_WORKS_AUTO_BACKUP',
+  backupRetentionDays: 30
 });
 
 function getSystemStatus(sessionToken) {
@@ -31,8 +30,8 @@ function getSystemStatus(sessionToken) {
   }
 
   const props = PropertiesService.getScriptProperties();
-  const backupEnabled = ScriptApp.getProjectTriggers()
-    .some(t => t.getHandlerFunction() === MAINTENANCE.backupHandler);
+  const backupSetting = props.getProperty(MAINTENANCE.autoBackupProperty);
+  const backupEnabled = backupSetting === null ? true : backupSetting === 'true';
 
   return {
     dbName: db.getName(),
@@ -41,6 +40,7 @@ function getSystemStatus(sessionToken) {
     activeSessions: activeSessions,
     pinPending: pinPending,
     backupEnabled: backupEnabled,
+    backupMode: '管理者利用時に1日1回',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
     checkedAt: toTimestamp_(new Date()),
@@ -97,40 +97,53 @@ function createManualBackup(sessionToken) {
 
 function setDailyBackupEnabled(sessionToken, enabled) {
   const admin = requireAdminSession_(sessionToken).employee;
-  return withScriptLock_(function() {
-    const triggers = ScriptApp.getProjectTriggers()
-      .filter(t => t.getHandlerFunction() === MAINTENANCE.backupHandler);
-    triggers.forEach(t => ScriptApp.deleteTrigger(t));
+  const value = !!enabled;
+  PropertiesService.getScriptProperties().setProperty(MAINTENANCE.autoBackupProperty, String(value));
+  appendAudit_({
+    employeeId: admin.employeeId,
+    employeeName: admin.name,
+    operation: '自動バックアップ設定',
+    target: '設定',
+    targetId: 'AUTO_BACKUP',
+    before: '',
+    after: value ? '有効' : '無効',
+    source: 'WEB',
+    result: 'SUCCESS',
+    note: '管理者利用時に1日1回'
+  });
+  return getSystemStatus(sessionToken);
+}
 
-    if (enabled) {
-      ScriptApp.newTrigger(MAINTENANCE.backupHandler)
-        .timeBased()
-        .atHour(MAINTENANCE.backupHour)
-        .everyDays(1)
-        .create();
-    }
+function ensureDailyBackup(sessionToken) {
+  const admin = requireAdminSession_(sessionToken).employee;
+  const props = PropertiesService.getScriptProperties();
+  const setting = props.getProperty(MAINTENANCE.autoBackupProperty);
+  const enabled = setting === null ? true : setting === 'true';
+  if (!enabled) return { ok:true, skipped:true, reason:'disabled' };
 
+  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const last = String(props.getProperty(MAINTENANCE.lastBackupProperty) || '');
+  if (last.slice(0,10) === today) return { ok:true, skipped:true, reason:'already-backed-up' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return { ok:true, skipped:true, reason:'busy' };
+  try {
+    const recheck = String(props.getProperty(MAINTENANCE.lastBackupProperty) || '');
+    if (recheck.slice(0,10) === today) return { ok:true, skipped:true, reason:'already-backed-up' };
+    const result = createDatabaseBackup_(admin.name);
     appendAudit_({
       employeeId: admin.employeeId,
       employeeName: admin.name,
-      operation: '自動バックアップ設定',
-      target: '設定',
-      targetId: 'DAILY_BACKUP',
+      operation: '日次バックアップ',
+      target: 'FM WORKS DB',
+      targetId: result.fileId,
       before: '',
-      after: enabled ? '有効' : '無効',
+      after: result.fileName,
       source: 'WEB',
       result: 'SUCCESS',
-      note: '毎日 ' + MAINTENANCE.backupHour + '時台'
+      note: '管理者利用時の自動バックアップ'
     });
-    return getSystemStatus(sessionToken);
-  }, 30000);
-}
-
-function runDailyBackup_() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return;
-  try {
-    createDatabaseBackup_('SYSTEM');
+    return result;
   } finally {
     lock.releaseLock();
   }
