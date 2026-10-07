@@ -19,5 +19,9 @@ for (const label of ['ホーム','勤怠','工数','カレンダー','申請','�
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
+if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.executeAs !== 'USER_DEPLOYING') {
+  console.error('Apps Script webapp manifest configuration is missing or unsafe for current test mode');
+  failed = true;
+}
 if (failed) process.exit(1);
 console.log('FM WORKS scaffold validation passed.');
