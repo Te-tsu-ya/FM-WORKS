@@ -27,6 +27,7 @@ function submitRequest(sessionToken, payload) {
     const startDate = normalizeDate_(payload.startDate);
     const endDate = normalizeDate_(payload.endDate || startDate);
     if (startDate > endDate) throw new Error('対象期間を確認してください。');
+    assertMonthRangeOpen_(startDate,endDate,'申請を登録');
     if (['午前半休','午後半休','1/4日有給','打刻修正'].includes(type) && startDate !== endDate) {
       throw new Error(type + 'は1日単位で申請してください。');
     }
@@ -108,6 +109,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
     const approve = normalizedDecision === 'APPROVE';
     const rejectReason = safeSheetText_(comment, 500);
+    if (approve) assertMonthRangeOpen_(r[5],r[6],'申請を承認');
     if (!approve && !rejectReason) throw new Error('差戻し理由を入力してください。');
 
     const nowText = toTimestamp_(new Date());
