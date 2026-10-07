@@ -53,7 +53,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
 
   const fullLeaveDates = new Set();
   const absenceDates = new Set();
-  const halfLeaveByDate = {};
+  const partialLeaveByDate = {};
   requests.forEach(r=>{
     const rangeStart = r.startDate < start ? start : r.startDate;
     const rangeEnd = r.endDate > end ? end : r.endDate;
@@ -63,8 +63,8 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       if (company && company.working) {
         if (r.type === '有給') fullLeaveDates.add(d);
         if (r.type === '欠勤') absenceDates.add(d);
-        if (r.type === '午前半休' || r.type === '午後半休') {
-          const set=halfLeaveByDate[d]||(halfLeaveByDate[d]=new Set());
+        if (r.type === '午前半休' || r.type === '午後半休' || r.type === '1/4日有給') {
+          const set=partialLeaveByDate[d]||(partialLeaveByDate[d]=new Set());
           set.add(r.type);
         }
       }
@@ -100,7 +100,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       const legacyAbsence=!!snapshot.absence&&legacyPaid===0;
       if(legacyPaid>0){
         paidLeaveDays+=legacyPaid;
-        leaveStatus=legacyPaid===0.5?'有給 0.5日':'有給 '+legacyPaid+'日';
+        leaveStatus=inferLegacyLeaveLabel_(snapshot,company);
       }
       if(legacyAbsence){
         absence=true;
@@ -126,11 +126,11 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
 
       const fullPaidLeave=fullLeaveDates.has(date);
       absence=absenceDates.has(date);
-      const halfSet=halfLeaveByDate[date]||new Set();
-      const halfCount=halfSet.size;
+      const partialSet=partialLeaveByDate[date]||new Set();
+      const partialDays=[...partialSet].reduce((sum,type)=>sum+(type==='1/4日有給'?0.25:0.5),0);
       const fullDayOff=fullPaidLeave||absence;
       if(fullPaidLeave){paidLeaveDays+=1;leaveStatus='有給'}
-      if(halfCount){paidLeaveDays+=halfCount*0.5;leaveStatus=[...halfSet].join(' / ')}
+      if(partialSet.size){paidLeaveDays+=partialDays;leaveStatus=[...partialSet].join(' / ')}
       if(absence){absenceDays++;leaveStatus=leaveStatus?leaveStatus+' / 欠勤':'欠勤'}
 
       const incompletePunch=rows.length>0&&(!clockIn||(!clockOut&&past));
@@ -141,7 +141,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       else if(incompletePunch)issueType='打刻不足';
       else if(missingAllPunches)issueType='未打刻';
 
-      if(company.working&&clockIn&&clockOut&&halfCount===0&&!fullDayOff&&company.start&&company.end){
+      if(company.working&&clockIn&&clockOut&&partialSet.size===0&&!fullDayOff&&company.start&&company.end){
         const inMin=timeToMinutes_(clockIn);
         const outMin=timeToMinutes_(clockOut);
         const startMin=timeToMinutes_(company.start);
@@ -206,6 +206,29 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     requests:requests
   };
 }
+function inferLegacyLeaveLabel_(snapshot, company) {
+  const paid = Math.max(0, Number(snapshot && snapshot.paidLeave || 0));
+  if (paid >= 1) return '有給';
+  if (paid === 0.25) return '1/4日有給';
+  if (paid === 0.5) {
+    const clockIn = String(snapshot && snapshot.clockIn || '');
+    const clockOut = String(snapshot && snapshot.clockOut || '');
+    if (clockIn && clockOut) {
+      const inMin = timeToMinutes_(clockIn);
+      const outMin = timeToMinutes_(clockOut);
+      const companyStart = company && company.start ? timeToMinutes_(company.start) : null;
+      const companyEnd = company && company.end ? timeToMinutes_(company.end) : null;
+      if (companyStart !== null && companyEnd !== null) {
+        if (inMin <= companyStart + 60 && outMin < companyEnd) return '午後半休';
+        if (inMin > companyStart && outMin >= companyEnd - 60) return '午前半休';
+      }
+      if (outMin <= 15 * 60) return '午後半休';
+    }
+    return '半休';
+  }
+  return '有給 ' + paid + '日';
+}
+
 function calculateMonthlyDayMinutes_(rows, isToday) {
   if (!rows || !rows.length) return 0;
   const hasClockIn = rows.some(r => r.action === PUNCH.CLOCK_IN);
@@ -216,13 +239,104 @@ function calculateMonthlyDayMinutes_(rows, isToday) {
 }
 
 function createMonthlyExport(sessionToken, yearMonth, employeeId) {
-  const summary=getMonthlySummary(sessionToken,yearMonth,employeeId);
-  const header=['日付','会社区分','出勤','退勤','実働時間','残業時間','休日出勤時間','遅刻・早退時間','勤務場所','在宅','休暇・欠勤','要確認'];
-  const rows=[header];
+  const summary = getMonthlySummary(sessionToken, yearMonth, employeeId);
+  assertMonthlyReadyForExport_(summary);
 
-  summary.daily.forEach(d=>rows.push([
+  let blob;
+  let tempFileId = '';
+  const fileName = 'FM_WORKS_' + summary.employee.employeeId + '_' + summary.yearMonth + '.xlsx';
+  try {
+    const temp = SpreadsheetApp.create('FM_WORKS_EXPORT_' + Utilities.getUuid());
+    tempFileId = temp.getId();
+    const sheet = temp.getSheets()[0];
+    sheet.setName('勤怠集計');
+    writeMonthlyDetailSheet_(sheet, summary);
+    SpreadsheetApp.flush();
+    blob = exportSpreadsheetXlsx_(tempFileId, fileName);
+  } finally {
+    if (tempFileId) {
+      try { DriveApp.getFileById(tempFileId).setTrashed(true); }
+      catch(e) { console.warn('temporary export cleanup failed', e); }
+    }
+  }
+
+  if (!blob) throw new Error('Excelファイルを作成できませんでした。');
+  return {
+    filename: fileName,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    base64: Utilities.base64Encode(blob.getBytes()),
+    emailText: buildTaxEmailText_([summary], summary.yearMonth)
+  };
+}
+
+function createTeamMonthlyExport(sessionToken, yearMonth) {
+  requireAdminSession_(sessionToken);
+  const ym = String(yearMonth || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM'));
+  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('対象月を確認してください。');
+
+  const employees = getPayrollEmployees_();
+  if (!employees.length) throw new Error('給与集計対象の社員が設定されていません。社員マスタを確認してください。');
+
+  const summaries = employees.map(e => getMonthlySummary(sessionToken, ym, e.employeeId));
+  const blocked = summaries.filter(s => s.totals.missingPunchDays > 0);
+  if (blocked.length) {
+    throw new Error('要確認の勤怠が残っています: ' + blocked.map(s => s.employee.name + ' ' + s.totals.missingPunchDays + '日').join(' / '));
+  }
+
+  let blob;
+  let tempFileId = '';
+  const fileName = 'FM_WORKS_給与提出_' + ym + '.xlsx';
+  try {
+    const temp = SpreadsheetApp.create('FM_WORKS_TEAM_EXPORT_' + Utilities.getUuid());
+    tempFileId = temp.getId();
+    const summarySheet = temp.getSheets()[0];
+    summarySheet.setName('集計一覧');
+    writeTeamSummarySheet_(summarySheet, summaries);
+
+    summaries.forEach(summary => {
+      const sheetName = safeSheetName_(summary.employee.employeeId + ' ' + summary.employee.name);
+      const sheet = temp.insertSheet(sheetName);
+      writeMonthlyDetailSheet_(sheet, summary);
+    });
+
+    SpreadsheetApp.flush();
+    blob = exportSpreadsheetXlsx_(tempFileId, fileName);
+  } finally {
+    if (tempFileId) {
+      try { DriveApp.getFileById(tempFileId).setTrashed(true); }
+      catch(e) { console.warn('temporary team export cleanup failed', e); }
+    }
+  }
+
+  if (!blob) throw new Error('一括Excelファイルを作成できませんでした。');
+  return {
+    filename: fileName,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    base64: Utilities.base64Encode(blob.getBytes()),
+    emailText: buildTaxEmailText_(summaries, ym)
+  };
+}
+
+function getPayrollEmployees_() {
+  const sheet = getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2,1,lastRow-1,23).getDisplayValues()
+    .filter(r => r[0] && r[6] === '在籍' && String(r[22]).toUpperCase() === 'TRUE')
+    .map(r => ({ employeeId:r[0], name:r[1] }));
+}
+
+function assertMonthlyReadyForExport_(summary) {
+  if (summary.totals.missingPunchDays > 0) {
+    throw new Error(summary.employee.name + 'の勤怠に要確認日が' + summary.totals.missingPunchDays + '日あります。修正後に提出データを作成してください。');
+  }
+}
+
+function writeMonthlyDetailSheet_(sheet, summary) {
+  const header = ['日付','会社区分','出勤','退勤','実働時間','残業時間','休日出勤時間','遅刻・早退時間','勤務場所','在宅','休暇・欠勤','要確認'];
+  const detail = [header].concat(summary.daily.map(d => [
     d.date,
-    d.companyName||d.companyType,
+    d.companyName || d.companyType,
     d.clockIn,
     d.clockOut,
     minutesToExcelTime_(d.workMinutes),
@@ -230,76 +344,116 @@ function createMonthlyExport(sessionToken, yearMonth, employeeId) {
     minutesToExcelTime_(d.holidayMinutes),
     minutesToExcelTime_(d.lateEarlyMinutes),
     d.workLocation,
-    d.remote?'在宅':'',
-    d.leaveStatus||'',
-    d.issue?d.issueType:''
+    d.remote ? '在宅' : '',
+    d.leaveStatus || '',
+    d.issue ? d.issueType : ''
   ]));
+  sheet.getRange(1,1,detail.length,header.length).setValues(detail);
 
-  rows.push([]);
-  rows.push(['社員',summary.employee.name]);
-  rows.push(['出勤日数',summary.totals.workDays]);
-  rows.push(['欠勤日数',summary.totals.absenceDays]);
-  rows.push(['実働時間',minutesToExcelTime_(summary.totals.totalMinutes)]);
-  rows.push(['残業時間',minutesToExcelTime_(summary.totals.overtimeMinutes)]);
-  rows.push(['休日出勤時間',minutesToExcelTime_(summary.totals.holidayMinutes)]);
-  rows.push(['遅刻・早退時間',minutesToExcelTime_(summary.totals.lateEarlyMinutes)]);
-  rows.push(['有給取得日数',summary.totals.paidLeaveDays]);
-  rows.push(['在宅勤務日数',summary.totals.remoteDays]);
-  rows.push(['工数入力時間',minutesToExcelTime_(summary.totals.worklogMinutes)]);
-  rows.push(['要確認日数',summary.totals.missingPunchDays]);
+  const summaryRows = [
+    ['社員', summary.employee.name],
+    ['出勤日数', summary.totals.workDays],
+    ['欠勤日数', summary.totals.absenceDays],
+    ['実働時間', minutesToExcelTime_(summary.totals.totalMinutes)],
+    ['残業時間', minutesToExcelTime_(summary.totals.overtimeMinutes)],
+    ['休日出勤時間', minutesToExcelTime_(summary.totals.holidayMinutes)],
+    ['遅刻・早退時間', minutesToExcelTime_(summary.totals.lateEarlyMinutes)],
+    ['有給取得日数', summary.totals.paidLeaveDays],
+    ['在宅勤務日数', summary.totals.remoteDays],
+    ['工数入力時間', minutesToExcelTime_(summary.totals.worklogMinutes)],
+    ['要確認日数', summary.totals.missingPunchDays]
+  ];
+  const summaryStart = detail.length + 2;
+  sheet.getRange(summaryStart,1,summaryRows.length,2).setValues(summaryRows);
 
-  const fileName='FM_WORKS_'+summary.employee.employeeId+'_'+summary.yearMonth+'.xlsx';
-  let blob;
-  let tempFileId='';
-  try {
-    const temp=SpreadsheetApp.create('FM_WORKS_EXPORT_'+Utilities.getUuid());
-    tempFileId=temp.getId();
-    const sheet=temp.getSheets()[0];
-    sheet.setName('勤怠集計');
-    sheet.getRange(1,1,rows.length,header.length).clear();
-    rows.forEach((row,index)=>{
-      if(!row.length)return;
-      sheet.getRange(index+1,1,1,row.length).setValues([row]);
-    });
-    sheet.setFrozenRows(1);
-    sheet.getRange(1,1,1,header.length).setFontWeight('bold').setBackground('#10294f').setFontColor('#ffffff');
-    sheet.autoResizeColumns(1,header.length);
-    if(summary.daily.length){
-      sheet.getRange(2,5,summary.daily.length,4).setNumberFormat('[h]:mm');
-    }
-    const summaryStart=summary.daily.length+3;
-    sheet.getRange(summaryStart+2,2,1,1).setNumberFormat('0.0');
-    sheet.getRange(summaryStart+3,2,4,1).setNumberFormat('[h]:mm');
-    SpreadsheetApp.flush();
-
-    const exportUrl='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(tempFileId)+'/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const response=UrlFetchApp.fetch(exportUrl,{
-      headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},
-      muteHttpExceptions:false
-    });
-    blob=response.getBlob().setName(fileName);
-  } finally {
-    if(tempFileId){
-      try{DriveApp.getFileById(tempFileId).setTrashed(true);}catch(e){console.warn('temporary export cleanup failed',e);}
-    }
-  }
-
-  if(!blob) throw new Error('Excelファイルを作成できませんでした。');
-
-  const emailLines=summary.requests.length
-    ? summary.requests.map(r=>'・'+r.startDate+(r.endDate!==r.startDate?'〜'+r.endDate:'')+' '+r.type)
-    : ['・特になし'];
-
-  return {
-    filename:fileName,
-    mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    base64:Utilities.base64Encode(blob.getBytes()),
-    emailText:'■有給・残業・休日出勤等\n【'+summary.employee.name+'】\n'+emailLines.join('\n')+
-      '\n・欠勤 '+summary.totals.absenceDays+'日'+
-      '\n・遅刻・早退 '+formatMinutes_(summary.totals.lateEarlyMinutes)+
-      '\n・在宅勤務日数 '+summary.totals.remoteDays+'日'
-  };
+  sheet.setFrozenRows(1);
+  sheet.getRange(1,1,1,header.length).setFontWeight('bold').setBackground('#10294f').setFontColor('#ffffff');
+  sheet.autoResizeColumns(1,header.length);
+  if (summary.daily.length) sheet.getRange(2,5,summary.daily.length,4).setNumberFormat('[h]:mm');
+  sheet.getRange(summaryStart + 3,2,4,1).setNumberFormat('[h]:mm');
+  sheet.getRange(summaryStart + 7,2).setNumberFormat('0.00');
+  sheet.getRange(summaryStart + 9,2).setNumberFormat('[h]:mm');
 }
+
+function writeTeamSummarySheet_(sheet, summaries) {
+  const header = ['社員ID','氏名','出勤日数','欠勤日数','実働時間','残業時間','休日出勤時間','遅刻・早退時間','有給取得日数','在宅勤務日数','工数入力時間','要確認日数'];
+  const rows = [header].concat(summaries.map(s => [
+    s.employee.employeeId,
+    s.employee.name,
+    s.totals.workDays,
+    s.totals.absenceDays,
+    minutesToExcelTime_(s.totals.totalMinutes),
+    minutesToExcelTime_(s.totals.overtimeMinutes),
+    minutesToExcelTime_(s.totals.holidayMinutes),
+    minutesToExcelTime_(s.totals.lateEarlyMinutes),
+    s.totals.paidLeaveDays,
+    s.totals.remoteDays,
+    minutesToExcelTime_(s.totals.worklogMinutes),
+    s.totals.missingPunchDays
+  ]));
+  sheet.getRange(1,1,rows.length,header.length).setValues(rows);
+  sheet.setFrozenRows(1);
+  sheet.getRange(1,1,1,header.length).setFontWeight('bold').setBackground('#10294f').setFontColor('#ffffff');
+  if (summaries.length) {
+    sheet.getRange(2,5,summaries.length,4).setNumberFormat('[h]:mm');
+    sheet.getRange(2,9,summaries.length,1).setNumberFormat('0.00');
+    sheet.getRange(2,11,summaries.length,1).setNumberFormat('[h]:mm');
+  }
+  sheet.autoResizeColumns(1,header.length);
+}
+
+function exportSpreadsheetXlsx_(spreadsheetId, fileName) {
+  const exportUrl = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(spreadsheetId) +
+    '/export?mimeType=' + encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const response = UrlFetchApp.fetch(exportUrl, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: false
+  });
+  return response.getBlob().setName(fileName);
+}
+
+function safeSheetName_(value) {
+  return String(value || '勤怠').replace(/[\\\/\?\*\[\]\:]/g, '_').slice(0, 31) || '勤怠';
+}
+
+function buildTaxEmailText_(summaries, yearMonth) {
+  const p = String(yearMonth).split('-');
+  const heading = Number(p[0]) + '年' + Number(p[1]) + '月分の出勤簿をお送りいたします。';
+  return heading + '\n\n■有給・残業・休日出勤等\n' +
+    summaries.map(buildTaxEmailEmployeeBlock_).join('\n\n');
+}
+
+function buildTaxEmailEmployeeBlock_(summary) {
+  const lines = [];
+  summary.daily.forEach(d => {
+    if (d.leaveStatus) lines.push('・' + formatMonthDay_(d.date) + ' ' + d.leaveStatus);
+  });
+
+  summary.requests.forEach(r => {
+    if (['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(r.type)) return;
+    lines.push('・' + formatRequestRange_(r.startDate, r.endDate) + ' ' + r.type);
+  });
+
+  if (summary.totals.overtimeMinutes > 0) lines.push('・残業時間 合計 ' + formatMinutes_(summary.totals.overtimeMinutes));
+  if (summary.totals.holidayMinutes > 0) lines.push('・休日出勤時間 合計 ' + formatMinutes_(summary.totals.holidayMinutes));
+  if (summary.totals.lateEarlyMinutes > 0) lines.push('・遅刻・早退時間 合計 ' + formatMinutes_(summary.totals.lateEarlyMinutes));
+  if (!lines.length) lines.push('・特になし');
+  lines.push('・在宅勤務日数 ' + summary.totals.remoteDays + '日');
+
+  return '【' + summary.employee.name + '】\n' + lines.join('\n');
+}
+
+function formatRequestRange_(startDate, endDate) {
+  if (!endDate || startDate === endDate) return formatMonthDay_(startDate);
+  return formatMonthDay_(startDate) + '〜' + formatMonthDay_(endDate);
+}
+
+function formatMonthDay_(date) {
+  const p = String(date || '').split('-');
+  if (p.length !== 3) return String(date || '');
+  return Number(p[1]) + '/' + Number(p[2]);
+}
+
 function minutesToExcelTime_(minutes){
   return Math.max(0,Number(minutes||0))/1440;
 }
