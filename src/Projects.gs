@@ -39,15 +39,15 @@ function saveProject(sessionToken, payload) {
   payload = payload || {};
 
   return withScriptLock_(function() {
-    const name = String(payload.name || '').trim().slice(0,120);
+    const name = safeSheetText_(payload.name, 120);
     if (!name) throw new Error('プロジェクト名を入力してください。');
 
-    const client = String(payload.client || '').trim().slice(0,100);
+    const client = safeSheetText_(payload.client, 100);
     const status = PROJECT_STATUS.includes(payload.status) ? payload.status : '進行中';
     const startDate = payload.startDate ? normalizeDate_(payload.startDate) : '';
     const endDate = payload.endDate ? normalizeDate_(payload.endDate) : '';
     if (startDate && endDate && startDate > endDate) throw new Error('終了日は開始日以降に設定してください。');
-    const note = String(payload.note || '').trim().slice(0,500);
+    const note = safeSheetText_(payload.note, 500);
 
     const sheet = getDb_().getSheetByName(DB.sheets.projects);
     const lastRow = sheet.getLastRow();
