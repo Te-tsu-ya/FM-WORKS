@@ -59,8 +59,8 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   });
 
   const worklogSheet=getDb_().getSheetByName('工数');
-  const worklogRows=worklogSheet.getLastRow()<2?[]:worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,12).getDisplayValues()
-    .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end);
+  const worklogRows=worklogSheet.getLastRow()<2?[]:worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues()
+    .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end&&r[12]!=='削除');
   const worklogMinutes=worklogRows.reduce((sum,r)=>sum+Number(r[9]||0),0);
 
   return {
