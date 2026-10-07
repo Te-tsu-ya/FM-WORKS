@@ -439,6 +439,7 @@ for (const requiredMaintenanceMarker of [
   'function getAuditLogs(sessionToken',
   'function createManualBackup(sessionToken)',
   'function setDailyBackupEnabled(sessionToken',
+  'function installDailyBackupTrigger(sessionToken)',
   "autoBackupProperty: 'FM_WORKS_AUTO_BACKUP'",
   'function ensureDailyBackup(sessionToken)',
   'function getProductionReadiness_()',
@@ -468,9 +469,18 @@ for (const holidayMarker of [
     failed = true;
   }
 }
-if (maintenanceCode.includes('ScriptApp.newTrigger') || maintenanceCode.includes('getProjectTriggers')) {
-  console.error('Maintenance must not require installable-trigger authorization in zero-touch deployment.');
-  failed = true;
+for (const backupTriggerMarker of [
+  "backupTriggerHandler: 'scheduledDailyMaintenance_'",
+  'function scheduledDailyMaintenance_()',
+  'function installDailyBackupTrigger(sessionToken)',
+  'ScriptApp.newTrigger(MAINTENANCE.backupTriggerHandler)',
+  '.atHour(3)',
+  'getProjectTriggers()'
+]) {
+  if (!maintenanceCode.includes(backupTriggerMarker)) {
+    console.error('Scheduled backup implementation missing: ' + backupTriggerMarker);
+    failed = true;
+  }
 }
 if (requestCode.includes('setValue(true)') && requestCode.includes('修正対象')) {
   console.error('Punch correction must not mutate the original punch row.');

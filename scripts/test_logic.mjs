@@ -8,7 +8,8 @@ const files = [
   'src/Requests.gs',
   'src/Monthly.gs',
   'src/MonthlySnapshot.gs',
-  'src/LeaveLedger.gs'
+  'src/LeaveLedger.gs',
+  'src/Maintenance.gs'
 ];
 
 const context = vm.createContext({
@@ -58,7 +59,8 @@ globalThis.__fmTest = {
   leaveBalanceAfterDelta_,
   normalizeScheduleVisibility_,
   canViewScheduleRow_,
-  normalizeRuntimeEnvironment_
+  normalizeRuntimeEnvironment_,
+  isBackupDue_
 };
 `, context);
 
@@ -166,6 +168,8 @@ expect('admin-only hidden from participant', api.canViewScheduleRow_({employeeId
 expect('runtime environment defaults to staging', api.normalizeRuntimeEnvironment_('')==='STAGING');
 expect('runtime environment accepts production', api.normalizeRuntimeEnvironment_('production')==='PRODUCTION');
 expect('unknown runtime environment falls back to staging', api.normalizeRuntimeEnvironment_('UNKNOWN')==='STAGING');
+expect('backup due when last backup is prior day', api.isBackupDue_('2026-10-06 03:12:00','2026-10-07')===true);
+expect('backup skipped when already backed up today', api.isBackupDue_('2026-10-07 03:12:00','2026-10-07')===false);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

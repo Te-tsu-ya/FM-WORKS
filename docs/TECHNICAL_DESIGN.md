@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.4  
+**文書版:** 0.9.5  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.4`
+`APP.version = 0.9.5`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -984,3 +984,21 @@ DB:
 - PRODUCTION: 既定STAGING DBと同一IDを拒否。
 
 `getRuntimeInfo_` をSystem Statusへ返し、管理者が環境を常時確認できる。Production ReadinessはPRODUCTION以外をblockerとする。
+
+
+## 37. Scheduled Backup Trigger
+
+`MAINTENANCE.backupTriggerHandler = scheduledDailyMaintenance_`。
+
+`installDailyBackupTrigger_` は同名Triggerを削除して1件だけ作成し、Asia/Tokyoの03時台に日次実行する。
+
+`scheduledDailyMaintenance_`:
+1. AUTO_BACKUP設定確認
+2. 当日バックアップ済み判定
+3. Script Lock取得
+4. 再判定
+5. DriveへDB copy
+6. 監査ログ
+7. 90日超Backup cleanup
+
+公開UIから呼べる `installDailyBackupTrigger(sessionToken)` はADMIN認証必須。Trigger handler自体は末尾underscoreのprivate functionとし、client APIとして公開しない。

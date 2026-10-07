@@ -3,6 +3,7 @@ const MAINTENANCE = Object.freeze({
   databaseIdProperty: 'FM_WORKS_DB_ID',
   lastBackupProperty: 'FM_WORKS_LAST_BACKUP_AT',
   autoBackupProperty: 'FM_WORKS_AUTO_BACKUP',
+  backupTriggerHandler: 'scheduledDailyMaintenance_',
   backupRetentionDays: 90
 });
 
@@ -33,6 +34,7 @@ function getSystemStatus(sessionToken) {
   const backupSetting = props.getProperty(MAINTENANCE.autoBackupProperty);
   const backupEnabled = backupSetting === null ? true : backupSetting === 'true';
   const runtime = getRuntimeInfo_();
+  const triggerState = getDailyBackupTriggerState_();
 
   return {
     dbName: db.getName(),
@@ -41,7 +43,9 @@ function getSystemStatus(sessionToken) {
     activeSessions: activeSessions,
     pinPending: pinPending,
     backupEnabled: backupEnabled,
-    backupMode: '管理者利用時に1日1回',
+    backupTriggerInstalled: triggerState.installed,
+    backupTriggerCount: triggerState.count,
+    backupMode: triggerState.installed ? '毎日03時台 / 時間トリガー' : '未設定（管理者利用時の補助のみ）',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
     environment: runtime.environment,
@@ -103,6 +107,9 @@ function getProductionReadiness_() {
   const runtime=getRuntimeInfo_();
   if(runtime.environment!=='PRODUCTION')blockers.push('実行環境が'+runtime.environment+'です');
   if(runtime.environment==='PRODUCTION'&&runtime.usingDefaultStagingDb)blockers.push('PRODUCTION用DBが分離されていません');
+  const triggerState=getDailyBackupTriggerState_();
+  if(!triggerState.installed)blockers.push('日次バックアップの時間トリガーが未設定です');
+  if(triggerState.count>1)warnings.push('日次バックアップの時間トリガーが重複しています');
   const lastBackup=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
   const backupAt=parseTimestamp_(lastBackup);
   const backupAgeHours=backupAt?Math.floor((now-backupAt)/3600000):null;
@@ -116,6 +123,7 @@ function getProductionReadiness_() {
     ready:blockers.length===0,
     prototypeMode:prototypeMode,
     environment:runtime.environment,
+    backupTriggerInstalled:triggerState.installed,
     blockers:blockers,
     warnings:warnings,
     activeEmployees:employeeRows.length,
@@ -177,20 +185,97 @@ function createManualBackup(sessionToken) {
 function setDailyBackupEnabled(sessionToken, enabled) {
   const admin = requireAdminSession_(sessionToken).employee;
   const value = !!enabled;
-  PropertiesService.getScriptProperties().setProperty(MAINTENANCE.autoBackupProperty, String(value));
+  const props=PropertiesService.getScriptProperties();
+  const before=props.getProperty(MAINTENANCE.autoBackupProperty);
+  props.setProperty(MAINTENANCE.autoBackupProperty, String(value));
+  if(value) installDailyBackupTrigger_(true);
+  else removeDailyBackupTriggers_();
   appendAudit_({
     employeeId: admin.employeeId,
     employeeName: admin.name,
     operation: '自動バックアップ設定',
     target: '設定',
     targetId: 'AUTO_BACKUP',
-    before: '',
-    after: value ? '有効' : '無効',
+    before: before===null?'既定:有効':before,
+    after: value ? '有効 / 時間トリガー' : '無効',
     source: 'WEB',
     result: 'SUCCESS',
-    note: '管理者利用時に1日1回'
+    note: value ? '毎日03時台' : '時間トリガー削除'
   });
   return getSystemStatus(sessionToken);
+}
+
+function isBackupDue_(lastBackupAt, today) {
+  const last=String(lastBackupAt||'');
+  return last.slice(0,10)!==String(today||'');
+}
+
+function getDailyBackupTriggerState_() {
+  const triggers=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===MAINTENANCE.backupTriggerHandler);
+  return {installed:triggers.length===1,count:triggers.length};
+}
+
+function removeDailyBackupTriggers_() {
+  ScriptApp.getProjectTriggers()
+    .filter(t=>t.getHandlerFunction()===MAINTENANCE.backupTriggerHandler)
+    .forEach(t=>ScriptApp.deleteTrigger(t));
+}
+
+function installDailyBackupTrigger_(replaceExisting) {
+  const state=getDailyBackupTriggerState_();
+  if(state.installed&&!replaceExisting)return state;
+  if(replaceExisting||state.count>1)removeDailyBackupTriggers_();
+  ScriptApp.newTrigger(MAINTENANCE.backupTriggerHandler)
+    .timeBased()
+    .atHour(3)
+    .everyDays(1)
+    .inTimezone(DB.timeZone)
+    .create();
+  return getDailyBackupTriggerState_();
+}
+
+function installDailyBackupTrigger(sessionToken) {
+  const admin=requireAdminSession_(sessionToken).employee;
+  const before=getDailyBackupTriggerState_();
+  const after=installDailyBackupTrigger_(true);
+  PropertiesService.getScriptProperties().setProperty(MAINTENANCE.autoBackupProperty,'true');
+  appendAudit_({
+    employeeId:admin.employeeId,employeeName:admin.name,operation:'バックアップ時間トリガー設定',
+    target:'Apps Script Trigger',targetId:MAINTENANCE.backupTriggerHandler,
+    before:JSON.stringify(before),after:JSON.stringify(after),source:'WEB',result:'SUCCESS',note:'毎日03時台'
+  });
+  return getSystemStatus(sessionToken);
+}
+
+function scheduledDailyMaintenance_() {
+  const props=PropertiesService.getScriptProperties();
+  const setting=props.getProperty(MAINTENANCE.autoBackupProperty);
+  const enabled=setting===null?true:setting==='true';
+  if(!enabled)return {ok:true,skipped:true,reason:'disabled'};
+  const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
+  const last=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
+  if(!isBackupDue_(last,today))return {ok:true,skipped:true,reason:'already-backed-up'};
+  return withScriptLock_(function(){
+    const recheck=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
+    if(!isBackupDue_(recheck,today))return {ok:true,skipped:true,reason:'already-backed-up'};
+    try{
+      const result=createDatabaseBackup_('SYSTEM');
+      appendAudit_({
+        employeeId:'SYSTEM',employeeName:'SYSTEM',operation:'日次バックアップ',target:'FM WORKS DB',
+        targetId:result.fileId,before:'',after:result.fileName,source:'TRIGGER',result:'SUCCESS',note:'毎日03時台'
+      });
+      SpreadsheetApp.flush();
+      return result;
+    }catch(err){
+      try{
+        appendAudit_({
+          employeeId:'SYSTEM',employeeName:'SYSTEM',operation:'日次バックアップ',target:'FM WORKS DB',
+          targetId:'',before:'',after:'',source:'TRIGGER',result:'ERROR',note:String(err&&err.message?err.message:err)
+        });
+      }catch(_){}
+      throw err;
+    }
+  },30000);
 }
 
 function ensureDailyBackup(sessionToken) {

@@ -1182,9 +1182,10 @@ function maintenanceSection(){
     <div class='grid cols-2 section-gap'>
       ${card('バックアップ',`<div class='maintenance-detail'>
         <div><span>最終バックアップ</span><strong>${escapeHtml(backupText)}</strong></div>
-        <div><span>自動バックアップ</span><strong>${s.backupEnabled?escapeHtml(s.backupMode||'管理者利用時に1日1回')+' / 有効':'無効'}</strong></div>
+        <div><span>自動バックアップ</span><strong>${s.backupEnabled?escapeHtml(s.backupMode||'時間トリガー')+' / 有効':'無効'}</strong></div>
+        <div><span>時間トリガー</span><strong>${s.backupTriggerInstalled?'設定済み':'未設定'}</strong></div>
         <div><span>保持期間</span><strong>${s.backupRetentionDays}日</strong></div>
-      </div><div class='button-row section-gap'><button class='primary-button' onclick='createBackupNow()'>今すぐバックアップ</button><button class='secondary-button' onclick='toggleDailyBackup()'>${s.backupEnabled?'自動バックアップを停止':'自動バックアップを有効化'}</button></div>`)}
+      </div><div class='button-row section-gap'><button class='primary-button' onclick='createBackupNow()'>今すぐバックアップ</button><button class='secondary-button' onclick='toggleDailyBackup()'>${s.backupEnabled?'自動バックアップを停止':'自動バックアップを有効化'}</button><button class='secondary-button' onclick='repairDailyBackupTrigger()'>時間トリガー再設定</button></div>`)}
       ${card('システム状態',`<div class='maintenance-detail'>
         <div><span>データベース</span><strong>${escapeHtml(s.dbName)}</strong></div>
         <div><span>アプリバージョン</span><strong>${escapeHtml(state.data.app.version)}</strong></div>
@@ -1228,10 +1229,15 @@ function createBackupNow(){
     google.script.run.withSuccessHandler(result=>{showToast('バックアップを作成しました');invalidatePageCache('maintenance');loadMaintenance({force:true})}).withFailureHandler(err=>handleApiError(err,'バックアップを作成できませんでした')).createManualBackup(state.sessionToken);
   },false);
 }
+function repairDailyBackupTrigger(){
+  openConfirmDialog('時間トリガーを再設定','毎日03時台に自動バックアップする時間トリガーを1件だけ作り直します。','再設定',function(){
+    google.script.run.withSuccessHandler(data=>{state.maintenance.status=data;renderPageIfActive('admin');showToast('バックアップ時間トリガーを設定しました')}).withFailureHandler(err=>handleApiError(err,'時間トリガーを設定できませんでした')).installDailyBackupTrigger(state.sessionToken);
+  },false);
+}
 
 function toggleDailyBackup(){
   const current=!!(state.maintenance.status&&state.maintenance.status.backupEnabled);
-  openConfirmDialog(current?'自動バックアップを停止':'自動バックアップを有効化',current?'自動バックアップを停止しますか？':'管理者がFM WORKSを利用した日に1回DBをバックアップし、30日間保持します。','変更する',function(){
+  openConfirmDialog(current?'自動バックアップを停止':'自動バックアップを有効化',current?'自動バックアップと時間トリガーを停止しますか？':'毎日03時台にDBを自動バックアップし、90日間保持します。','変更する',function(){
     google.script.run.withSuccessHandler(data=>{state.maintenance.status=data;renderPage();showToast(current?'自動バックアップを停止しました':'自動バックアップを有効化しました')}).withFailureHandler(err=>handleApiError(err,'バックアップ設定を変更できませんでした')).setDailyBackupEnabled(state.sessionToken,!current);
   },false);
 }
