@@ -426,7 +426,19 @@ function maintenanceSection(){
   </tr>`).join('');
 
   const backupText=s.lastBackupAt||'まだありません';
+  const readiness=s.readiness||{ready:false,blockers:[],warnings:[],prototypeMode:true};
+  const blockers=(readiness.blockers||[]);
+  const warnings=(readiness.warnings||[]);
+  const remainingBlockers=blockers.filter(x=>!String(x).includes('試作版共通PIN'));
+  const readinessRows=[
+    ...blockers.map(x=>`<div class='readiness-row blocker'><span>要対応</span><strong>${escapeHtml(x)}</strong></div>`),
+    ...warnings.map(x=>`<div class='readiness-row warning'><span>確認</span><strong>${escapeHtml(x)}</strong></div>`)
+  ].join('');
+  const prototypeAction=readiness.prototypeMode
+    ? `<button class='primary-button' ${remainingBlockers.length?'disabled':''} onclick='switchToProductionMode()'>試作モードを終了</button>`
+    : '';
   return `<div class='section-gap'>
+    ${card('本番運用チェック',`<div class='readiness-head'><div><span class='badge ${readiness.ready?'success':blockers.length?'danger':'warning'}'>${readiness.ready?'READY':blockers.length?'要対応':'確認あり'}</span><strong>${readiness.ready?'本番運用の内部条件を満たしています':'公開前に確認が必要です'}</strong></div><small>ここではアプリ内部の準備状態を確認します。公開範囲の変更は別工程です。</small></div>${readinessRows||"<div class='readiness-row ok'><span>OK</span><strong>重大な未対応項目はありません。</strong></div>"}<div class='button-row section-gap'>${prototypeAction}<button class='secondary-button' onclick="navigate('companyCalendar')">会社カレンダーを確認</button></div>`)}
     <div class='grid cols-4'>
       ${metric('DBレコード',Object.values(s.sheets||{}).reduce((a,b)=>a+Number(b||0),0)+'件','tone-green')}
       ${metric('有効セッション',s.activeSessions+'件')}
@@ -447,6 +459,18 @@ function maintenanceSection(){
     </div>
     <div class='section-gap'>${card('監査ログ（最新40件）',auditRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>日時</th><th>操作者</th><th>操作</th><th>対象</th><th>結果</th></tr></thead><tbody>${auditRows}</tbody></table></div>`:"<p class='muted'>監査ログはありません。</p>")}</div>
   </div>`;
+}
+
+function switchToProductionMode(){
+  const readiness=state.maintenance&&state.maintenance.status&&state.maintenance.status.readiness;
+  const blockers=((readiness&&readiness.blockers)||[]).filter(x=>!String(x).includes('試作版共通PIN'));
+  if(blockers.length){showToast('先に本番運用チェックの要対応項目を解消してください');return}
+  openConfirmDialog('試作モードを終了しますか？','共通PIN 000000 は使えなくなり、現在のセッションも終了します。社員ごとのPIN設定が必要です。',()=>{
+    google.script.run.withSuccessHandler(()=>{
+      clearLocalSession();
+      showLogin('試作モードを終了しました。社員ごとのPINでログインしてください。');
+    }).withFailureHandler(err=>handleApiError(err,'試作モードを終了できませんでした')).setPrototypeMode(state.sessionToken,false);
+  });
 }
 
 function loadMaintenance(){
