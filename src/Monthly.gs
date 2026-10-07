@@ -35,6 +35,34 @@ function getMonthlyReviewPrompt_(employeeId) {
   };
 }
 
+function getMonthlyReviewTeamStatus_(yearMonth) {
+  const ym=normalizeYearMonth_(yearMonth);
+  const sheet=getDb_().getSheetByName(DB.sheets.employees);
+  const employees=sheet&&sheet.getLastRow()>=2
+    ? sheet.getRange(2,1,sheet.getLastRow()-1,23).getDisplayValues()
+        .filter(r=>r[0]&&r[6]==='在籍')
+        .map(r=>({employeeId:r[0],name:r[1],displayName:r[2]||r[1]}))
+    : [];
+  const items=employees.map(e=>{
+    const status=getMonthlyReviewStatusInternal_(ym,e.employeeId);
+    return {
+      employeeId:e.employeeId,
+      name:e.name,
+      displayName:e.displayName,
+      confirmed:status.confirmed,
+      stale:status.stale,
+      confirmedAt:status.confirmedAt
+    };
+  });
+  return {
+    yearMonth:ym,
+    total:items.length,
+    confirmed:items.filter(x=>x.confirmed).length,
+    pending:items.filter(x=>!x.confirmed).length,
+    items:items
+  };
+}
+
 function getMonthlyReviewStatus(sessionToken, yearMonth, employeeId) {
   const session=requireSession_(sessionToken);
   const ym=normalizeYearMonth_(yearMonth);
@@ -52,7 +80,7 @@ function getMonthlyReviewStatusInternal_(yearMonth, employeeId) {
     row=rows.find(r=>r[0]===ym&&r[1]===employeeId)||null;
   }
   const confirmedAt=row&&row[3]==='CONFIRMED'?row[4]||'':'';
-  const lastUpdatedAt=getLatestMonthlyDataUpdate_(employeeId,ym);
+  const lastUpdatedAt=confirmedAt?getLatestMonthlyDataUpdate_(employeeId,ym):'';
   const confirmedDate=parseTimestamp_(confirmedAt);
   const lastDate=parseTimestamp_(lastUpdatedAt);
   const stale=!!(confirmedDate&&lastDate&&lastDate>confirmedDate);
