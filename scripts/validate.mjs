@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
@@ -19,9 +21,12 @@ for (const label of ['ホーム','勤怠','工数','予定表','会社カレン�
 }
 try {
   const js = app.replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-  new Function(js);
+  const temp = path.join(os.tmpdir(), 'fmworks-app-check.js');
+  fs.writeFileSync(temp, js);
+  execFileSync(process.execPath, ['--check', temp], { stdio: 'pipe' });
 } catch (err) {
-  console.error('Client JavaScript syntax error:', err.message);
+  console.error('Client JavaScript syntax error:');
+  console.error(String(err.stderr || err.message || err));
   failed = true;
 }
 try {
