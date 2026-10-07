@@ -271,7 +271,10 @@ function renderLogin(message=''){
         <div id='loginError' class='login-error ${message?'show':''}'>${escapeHtml(message)}</div>
         <label class='login-field'><span>社員番号</span><div class='login-input-wrap'>${svg('i-user')}<input id='loginEmployeeId' value='${escapeHtml(remembered)}' autocomplete='username' autocapitalize='characters' spellcheck='false' placeholder='FM0001' required></div></label>
         <label class='login-field'><span>${cfg.needsSetup?'新しいPIN':'PIN'}</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPin' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='${cfg.needsSetup?'new-password':'current-password'}' required><button class='toggle-password' type='button' onclick="togglePassword('loginPin')" aria-label='PINを表示'>${svg('i-eye')}</button></div></label>
-        ${cfg.needsSetup?`<label class='login-field'><span>新しいPIN（確認）</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPinConfirm' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='new-password' required></div></label>`:''}
+        ${cfg.needsSetup?`<label class='login-field'><span>新しいPIN（確認）</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPinConfirm' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='new-password' required></div></label>
+        <div class='setup-note'>PINを忘れた社員が迷わないように、問い合わせ先を1つ以上登録してください。</div>
+        <label class='login-field'><span>管理者メール（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportEmail' type='email' autocomplete='email' placeholder='admin@example.jp'></div></label>
+        <label class='login-field'><span>管理者電話番号（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportPhone' inputmode='tel' autocomplete='tel' placeholder='0254-xx-xxxx'></div></label>`:''}
         <label class='login-remember'><input id='rememberEmployeeId' type='checkbox' ${remembered?'checked':''}><span>社員番号を記憶する</span></label>
         <button id='loginSubmit' class='login-submit' type='submit'>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
         <div class='login-help'>
@@ -304,14 +307,19 @@ function submitLogin(event){
   const id=document.getElementById('loginEmployeeId').value.trim().toUpperCase();
   const pin=document.getElementById('loginPin').value;
   const remember=document.getElementById('rememberEmployeeId').checked;
+  let initialSupport=null;
   if(state.publicConfig&&state.publicConfig.needsSetup){
     const confirmPin=document.getElementById('loginPinConfirm').value;
     if(pin!==confirmPin){renderLogin('確認用PINが一致しません。');document.getElementById('loginEmployeeId').value=id;return}
+    const email=document.getElementById('setupSupportEmail').value.trim();
+    const phone=document.getElementById('setupSupportPhone').value.trim();
+    if(!email&&!phone){renderLogin('PINを忘れた場合の連絡先として、メールまたは電話番号を入力してください。');document.getElementById('loginEmployeeId').value=id;return}
+    initialSupport={name:'FM WORKS管理者',email:email,phone:phone};
   }
   if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
   setLoginBusy(true);
   const runner=google.script.run.withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
-  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo());
+  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport);
   else runner.login(id,pin,clientInfo());
 }
 
