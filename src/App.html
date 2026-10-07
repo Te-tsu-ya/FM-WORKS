@@ -55,10 +55,13 @@ function renderNav(){
   document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>`<button class='nav-button ${state.page===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`).join('');
   const allowedIds=new Set(nav.map(x=>x[0]));
   const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
-  document.getElementById('mobileNav').innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  const mobile=document.getElementById('mobileNav');
+  mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
   document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>navigate(b.dataset.route));
 }
 function navigate(page){
+  closeMobileDrawer();
   if(page==='admin'&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
   state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'smooth'});
   if(page==='schedule')loadSchedule();
@@ -436,7 +439,24 @@ function setProfileUi(){
 }
 
 let searchTimer=null;
+function openMobileDrawer(){
+  const root=document.getElementById('mobileDrawerRoot');if(!root)return;
+  const nav=visibleNav();
+  root.innerHTML=`<div class='mobile-drawer-backdrop' onclick='closeMobileDrawer()'></div>
+    <aside class='mobile-drawer' aria-label='全メニュー'>
+      <div class='mobile-drawer-head'>${svgLogo()}<div><strong>FM WORKS</strong><small>${state.data?escapeHtml(state.data.user.displayName):''}</small></div><button class='icon-button' onclick='closeMobileDrawer()' aria-label='メニューを閉じる'>×</button></div>
+      <nav>${nav.map(([id,label,icon])=>`<button class='${state.page===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${label}</span></button>`).join('')}</nav>
+    </aside>`;
+  document.body.classList.add('drawer-open');
+}
+function closeMobileDrawer(){
+  const root=document.getElementById('mobileDrawerRoot');if(root)root.innerHTML='';
+  document.body.classList.remove('drawer-open');
+}
+
 function initTopbarInteractions(){
+  const menuButton=document.getElementById('mobileMenuButton');
+  if(menuButton&&!menuButton.dataset.bound){menuButton.dataset.bound='1';menuButton.addEventListener('click',e=>{e.stopPropagation();openMobileDrawer()})}
   const input=document.getElementById('globalSearchInput');
   if(input&&!input.dataset.bound){
     input.dataset.bound='1';
