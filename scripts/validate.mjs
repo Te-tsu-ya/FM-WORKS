@@ -104,6 +104,36 @@ if (!searchCode.includes('requireSession_(') || !notificationCode.includes('requ
   console.error('Search/notification APIs must require an authenticated session');
   failed = true;
 }
+const worklogCode = fs.readFileSync(path.join(root,'src/Worklog.gs'),'utf8');
+const requestCode = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
+const employeeCode = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
+const monthlyCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
+
+for (const [label, source, requiredMarkers] of [
+  ['request concurrency', requestCode, ['withScriptLock_', "['APPROVE','REJECT']"]],
+  ['worklog audit preservation', worklogCode, ["r[12] !== '削除'", "'削除', nowText", 'withScriptLock_']],
+  ['employee concurrency', employeeCode, ['withScriptLock_', '標準勤務終了時刻は開始時刻より後']],
+  ['monthly deleted-worklog exclusion', monthlyCode, ["r[12]!=='削除'", "date!==systemToday"]],
+  ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_']]
+]) {
+  for (const item of requiredMarkers) {
+    if (!source.includes(item)) {
+      console.error(`Regression guard failed (${label}): ${item}`);
+      failed = true;
+    }
+  }
+}
+
+for (const forbidden of ['confirm(', 'prompt(', 'demoAction', 'TODO', 'FIXME']) {
+  if (app.includes(forbidden)) {
+    console.error(`Forbidden production UI marker found: ${forbidden}`);
+    failed = true;
+  }
+}
+if (worklogCode.includes('deleteRow(')) {
+  console.error('Worklog must use soft-delete, not deleteRow().');
+  failed = true;
+}
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
 if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.executeAs !== 'USER_DEPLOYING') {
