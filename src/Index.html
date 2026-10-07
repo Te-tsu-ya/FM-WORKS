@@ -4,7 +4,16 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="theme-color" content="#f5f7fb">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function(){
+      try{
+        var saved=localStorage.getItem('fmworks.theme');
+        var system=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.dataset.theme=saved||system;
+      }catch(_){document.documentElement.dataset.theme='light';}
+    })();
+  </script>
   <title><?= appName ?></title>
   <?!= include_('Styles'); ?>
 </head>
@@ -27,6 +36,9 @@
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8 2 2-2 2 2 2-3 3-2-2-2 2"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.2A8 8 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2z"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></symbol>
   </svg>
 
   <div id="loginShell" class="login-shell" aria-live="polite">
@@ -46,6 +58,7 @@
         <div class="mobile-brand mobile-only"><svg class="fm-logo" viewBox="0 0 588 587" role="img" aria-label="Fusion Mind"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg><strong>FM WORKS</strong></div>
         <div class="search-wrap"><div class="search-box"><svg><use href="#i-search"/></svg><input id="globalSearchInput" aria-label="検索" placeholder="社員・申請・予定を検索..." autocomplete="off"></div><div id="globalSearchResults" class="search-results" hidden></div></div>
         <div class="top-actions">
+          <button id="themeToggleButton" class="icon-button theme-toggle" type="button" aria-label="表示テーマを切り替え" title="ライト / ダーク切替"><svg class="theme-icon theme-icon-sun"><use href="#i-sun"/></svg><svg class="theme-icon theme-icon-moon"><use href="#i-moon"/></svg></button>
           <div class="notification-wrap"><button id="notificationButton" class="icon-button" aria-label="通知" aria-haspopup="menu" aria-expanded="false"><svg><use href="#i-bell"/></svg><span id="notificationDot" class="notification-dot" hidden></span></button><div id="notificationMenu" class="notification-menu" hidden></div></div>
           <div class="profile-wrap">
             <button id="profileButton" class="profile-button" type="button" aria-haspopup="menu" aria-expanded="false">
