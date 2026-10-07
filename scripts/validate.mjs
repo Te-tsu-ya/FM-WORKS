@@ -578,6 +578,9 @@ for (const marker of [
   'function globalActionBanners()',
   'function syncGlobalActionBanner()',
   'function loadHomeOverview(',
+  'function homeMetricInline(',
+  'function homeScheduleRows(',
+  'function homeTaskRows(',
   "const backlog=!!r.isBacklog",
   'function monthlyCalendarView(',
   'function confirmMonthlyReviewFromPage()',
@@ -600,6 +603,9 @@ for (const marker of [
   '.global-caution',
   '.monthly-calendar',
   '.settings-tabs',
+  '.home-commandbar',
+  '.home-dashboard',
+  '.home-panel-scroll',
   'cursor:pointer'
 ]) {
   if (!styles.includes(marker)) {
@@ -615,6 +621,32 @@ if (!app.includes("loadSystemDocument('${type}',{force:true})")) {
 if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了です'}")) {
   console.error('Admin monthly view must expose the selected employee review status.');
   failed = true;
+}
+
+if (!app.includes("content.classList.toggle('one-screen',['home','monthly','admin'].includes(state.page))")) {
+  console.error('Desktop home must opt into the one-screen layout.');
+  failed = true;
+}
+if (!styles.includes('@media(max-width:900px){.home-screen{height:auto}')) {
+  console.error('Home dashboard must fall back to normal scrolling on tablet/mobile.');
+  failed = true;
+}
+if (!styles.includes('@media(max-height:760px) and (min-width:901px)')) {
+  console.error('Home dashboard needs a compact desktop mode for shorter viewports.');
+  failed = true;
+}
+for (const homeFlowMarker of [
+  'homePunchHistory(a)',
+  "navigate('attendance')",
+  "navigate('schedule')",
+  "navigate('worklog')",
+  "navigate('requests')",
+  "navigate('monthly')"
+]) {
+  if (!app.includes(homeFlowMarker)) {
+    console.error('Single-screen home lost a required workflow: ' + homeFlowMarker);
+    failed = true;
+  }
 }
 
 if (!docsCode.includes('requireAdminSession_(sessionToken)')) {

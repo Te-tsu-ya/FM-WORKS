@@ -320,36 +320,75 @@ function homeOverviewError(){
     <button class='secondary-button compact' onclick="loadHomeOverview({force:true})">再読込</button>
   </div>`;
 }
-
 function homeMetricLoading(){
-  return `<section class='card metric home-metric-loading' aria-hidden='true'><div><span class='home-loading-line short'></span><span class='home-loading-value'></span></div><span class='home-loading-dot'></span></section>`;
+  return `<div class='home-stat home-stat-loading' aria-hidden='true'><span class='home-loading-line short'></span><span class='home-loading-value'></span></div>`;
+}
+function homeMetricInline(label,value,tone=''){
+  return `<div class='home-stat ${tone}'><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+function homeWorkLocationSelector(){
+  return `<div class='home-location'><span>勤務場所</span><div class='home-location-options'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
+}
+function homePunchHistory(a){
+  if(!a.history||!a.history.length)return `<div class='home-empty-mini'>本日の打刻はまだありません。</div>`;
+  return `<div class='home-punch-history'>${a.history.slice(0,5).map(x=>`<div><span class='status-dot' style='background:${x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}'></span><strong>${escapeHtml(x.time)} ${escapeHtml(x.action)}</strong><small>${escapeHtml(x.workLocation||'')}</small></div>`).join('')}</div>`;
+}
+function homeScheduleRows(events){
+  if(!events.length)return `<div class='home-empty-state'><strong>今日の予定はありません</strong><span>新しい予定は予定表から追加できます。</span></div>`;
+  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' onclick="state.schedule.date='${escapeHtml(e.date||state.data.today)}';navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
+}
+function homeTaskRows(tasks){
+  if(!tasks)return state.homeOverview.error?homeOverviewError():homeOverviewLoading();
+  return `<div class='home-task-list'>${tasks.map(x=>`<div class='home-task-row'><div><strong>${escapeHtml(x.label)}</strong><small>${x.label==='工数入力'?'今日・今月の工数入力状況':x.label==='勤怠の確認'?'打刻漏れ・勤怠確認':state.data.permissions&&state.data.permissions.adminConsole?'承認待ちの申請':'自分の申請状況'}</small></div><span class='badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}'>${escapeHtml(x.status)}</span></div>`).join('')}</div>`;
 }
 function homePage(){
   const d=state.data,a=d.attendance,sched=(d.todaySchedule||[]),company=d.companyToday;
-  const tasks=Array.isArray(d.tasks)?d.tasks:null;
-  const month=d.month||null;
-  const overviewError=state.homeOverview.error;
-  const taskBody=tasks
-    ? tasks.map(x=>`<div class='list-item'><span></span><strong>${escapeHtml(x.label)}</strong><span class='badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}'>${escapeHtml(x.status)}</span></div>`).join('')
-    : overviewError?homeOverviewError():homeOverviewLoading();
-  const monthMetrics=month
-    ? `${metric('勤務時間',escapeHtml(month.workHours),'tone-green')}${metric('残業時間',escapeHtml(month.overtime),'')}${metric('有給残',escapeHtml(month.leaveBalance),'tone-orange')}`
-    : overviewError
-      ? `${metric('勤務時間','—','tone-green')}${metric('残業時間','—','')}${metric('有給残','—','tone-orange')}`
-      : homeMetricLoading()+homeMetricLoading()+homeMetricLoading();
+  const month=d.month||null,tasks=Array.isArray(d.tasks)?d.tasks:null;
+  const metrics=month
+    ? homeMetricInline('今月の勤務',month.workHours,'success')+homeMetricInline('残業',month.overtime,'info')+homeMetricInline('有給残',month.leaveBalance,'warning')
+    : homeMetricLoading()+homeMetricLoading()+homeMetricLoading();
 
-  return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}
-    <div class='hero'><div class='live-chip'>● 実データ接続済み</div><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>${company?`${escapeHtml(company.type)}${company.name?' / '+escapeHtml(company.name):''}`:'会社カレンダー未登録'} ・ ${fmtDate(d.today)}</p></div>
-    <div class='grid cols-3'>
-      ${card('現在の勤怠状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' 出勤':'未出勤'}</div><p class='muted'>実働 ${liveWorkedText(a)} / ${a.workLocation}</p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}
-      ${card('今日の予定',sched.length?list(sched.map(e=>({title:`${e.allDay?'終日':e.start||'--:--'} ${escapeHtml(e.title)}`,sub:`${escapeHtml((e.employeeNames||[]).join('、'))}${e.location?' / '+escapeHtml(e.location):''}`,color:categoryColor(e.category)}))):`<p class='muted'>今日の予定はありません。</p><button class='secondary-button' onclick="navigate('schedule')">予定表を開く</button>`)}
-      ${card('やること',taskBody)}
+  return `<div class='single-screen-layout home-screen'>
+    <section class='home-commandbar'>
+      <div class='home-command-copy'>
+        <div class='home-command-meta'><span class='live-chip compact'>● LIVE</span><span>${fmtDate(d.today)}</span><span>${company?`${escapeHtml(company.type)}${company.name?' / '+escapeHtml(company.name):''}`:'会社カレンダー未登録'}</span></div>
+        <h1>おはようございます、${escapeHtml(d.user.displayName)}</h1>
+        <p>今日の勤務・予定・確認事項を、この画面だけで把握できます。</p>
+      </div>
+      <div class='home-stats'>${metrics}</div>
+    </section>
+
+    <div class='home-dashboard'>
+      <section class='card home-panel home-attendance-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>ATTENDANCE</span><h2>現在の勤怠</h2></div><span class='home-state-pill ${a.state}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
+        <div class='home-attendance-main'>
+          <div><span>出勤</span><strong>${escapeHtml(a.clockIn||'--:--')}</strong></div>
+          <div><span>実働</span><strong>${escapeHtml(liveWorkedText(a))}</strong></div>
+          <div><span>退勤</span><strong>${escapeHtml(a.clockOut||'--:--')}</strong></div>
+        </div>
+        <div class='home-punch-actions'>${punchButtons(a)}</div>
+        ${homeWorkLocationSelector()}
+        <div class='home-subsection-head'><strong>今日の打刻履歴</strong><button onclick="navigate('attendance')">勤怠詳細</button></div>
+        <div class='home-panel-scroll'>${homePunchHistory(a)}</div>
+      </section>
+
+      <section class='card home-panel home-schedule-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>TODAY</span><h2>今日の予定</h2></div><span class='badge'>${sched.length}件</span></header>
+        <div class='home-panel-scroll home-schedule-scroll'>${homeScheduleRows(sched)}</div>
+        <div class='home-panel-footer'><button class='secondary-button compact' onclick="navigate('schedule')">予定表を開く</button></div>
+      </section>
+
+      <section class='card home-panel home-task-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>TO DO</span><h2>やること</h2></div></header>
+        <div class='home-panel-scroll'>${homeTaskRows(tasks)}</div>
+        <div class='home-quick-actions'>
+          <button onclick="navigate('worklog')"><span>工数</span><strong>入力・確認</strong></button>
+          <button onclick="navigate('requests')"><span>申請</span><strong>申請する</strong></button>
+          <button onclick="navigate('monthly')"><span>月次</span><strong>勤怠確認</strong></button>
+        </div>
+      </section>
     </div>
-    <div class='grid cols-3 section-gap'>${monthMetrics}</div>
-    <div class='grid cols-2 section-gap'>
-      ${card('今日の打刻履歴',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class="muted">本日の打刻はまだありません。</p>')}
-      ${card('共有予定表',`<p class='muted'>旧予定表をFM WORKSへ移行済み。月・週・日・一覧で確認できます。</p><button class='primary-button' onclick="navigate('schedule')">予定表を開く</button>`)}
-    </div>`;
+  </div>`;
 }
 
 function attendancePage(){const d=state.data,a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}<div class='grid cols-2'>${card('現在の勤務状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' に出勤':'まだ出勤していません'}</div><p class='muted'>現在の実働：${liveWorkedText(a)}</p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>まだ打刻はありません。</p>')}</div><div class='grid cols-4 section-gap'>${metric('本日の実働',liveWorkedText(a),'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
@@ -1238,7 +1277,7 @@ function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
-    content.classList.toggle('one-screen',['monthly','admin'].includes(state.page));
+    content.classList.toggle('one-screen',['home','monthly','admin'].includes(state.page));
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
   };
   if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();
