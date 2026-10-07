@@ -169,9 +169,9 @@ function getPunchHistory(sessionToken, limit) {
   if (lastRow < 2) return [];
 
   const rows = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
-    .filter(r => r[1] === employee.employeeId)
-    .slice(-Math.max(1, Number(limit) || 20))
-    .reverse();
+    .filter(r => r[1] === employee.employeeId && String(r[8]).toUpperCase() !== 'TRUE')
+    .sort((a,b) => String(b[5]).localeCompare(String(a[5])))
+    .slice(0, Math.max(1, Number(limit) || 20));
 
   return rows.map(r => ({
     punchId: r[0],
@@ -201,7 +201,8 @@ function getAttendanceState_(employeeId) {
       action: r[4],
       timestamp: r[5],
       workLocation: r[6]
-    }));
+    }))
+    .sort((a,b) => a.timestamp.localeCompare(b.timestamp));
 
   if (!rows.length) return emptyAttendance_(today);
 
@@ -275,6 +276,36 @@ function calculateWorkedMinutes_(rows) {
   if (breakStart && !clockOut) breakMs += Math.max(0, new Date() - breakStart);
 
   return Math.max(0, Math.floor(((end - start) - breakMs) / 60000));
+}
+
+function validatePunchSequence_(rows) {
+  const ordered = (rows || []).slice().sort((a,b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+  let state = 'off';
+  let clockInCount = 0;
+  let clockOutCount = 0;
+  const allowed = {
+    off: [PUNCH.CLOCK_IN],
+    working: [PUNCH.BREAK_START, PUNCH.CLOCK_OUT],
+    break: [PUNCH.BREAK_END],
+    finished: []
+  };
+
+  for (const row of ordered) {
+    const action = row.action;
+    if (!Object.values(PUNCH).includes(action)) throw new Error('打刻種別が不正です。');
+    if (!allowed[state].includes(action)) {
+      throw new Error('打刻修正後の順序が成立しません。出勤・休憩・退勤の時刻を確認してください。');
+    }
+    if (action === PUNCH.CLOCK_IN) { clockInCount++; state = 'working'; }
+    else if (action === PUNCH.BREAK_START) state = 'break';
+    else if (action === PUNCH.BREAK_END) state = 'working';
+    else if (action === PUNCH.CLOCK_OUT) { clockOutCount++; state = 'finished'; }
+  }
+
+  if (clockInCount > 1 || clockOutCount > 1) {
+    throw new Error('1日に複数の出勤・退勤打刻は登録できません。');
+  }
+  return true;
 }
 
 function validatePunchTransition_(attendance, action) {
