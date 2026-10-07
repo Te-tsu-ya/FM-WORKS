@@ -337,7 +337,10 @@ function loadAuthenticatedApp(mustChangePin){
     renderPage();
     if(state.page==='schedule')loadSchedule();
     if(state.page==='companyCalendar')loadCompanyCalendar();
-    if(state.page==='admin')loadAuthAdmin();
+    if(state.page==='worklog')loadWorklogs();
+    if(state.page==='requests')loadRequests();
+    if(state.page==='monthly')loadMonthly();
+    if((state.page==='admin'||state.page==='people')&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin();
     if(mustChangePin)setTimeout(()=>openChangePinModal(true),0);
   }).withFailureHandler(err=>{clearLocalSession();showLogin(sessionErrorMessage(err).includes('SESSION')?'セッションの有効期限が切れました。':'ログイン状態を確認できませんでした。')}).getInitialData(state.sessionToken);
 }
