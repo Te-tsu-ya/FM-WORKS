@@ -14,8 +14,22 @@ for (const file of required) {
   }
 }
 const app = fs.readFileSync(path.join(root,'src/App.html'),'utf8');
-for (const label of ['ホーム','勤怠','工数','カレンダー','申請','社員','月次','管理']) {
+for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','管理']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
+}
+try {
+  const js = app.replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+  new Function(js);
+} catch (err) {
+  console.error('Client JavaScript syntax error:', err.message);
+  failed = true;
+}
+try {
+  const server = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
+  new Function(server);
+} catch (err) {
+  console.error('Server JavaScript syntax error:', err.message);
+  failed = true;
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
