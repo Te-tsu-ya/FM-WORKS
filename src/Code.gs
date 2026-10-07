@@ -7,7 +7,6 @@ const APP = Object.freeze({
 const DB = Object.freeze({
   spreadsheetId: '1vCGsU43ZvfLfMUN9uA-LwxaIHY97Ssu73YvMERxPG-I',
   timeZone: 'Asia/Tokyo',
-  defaultEmployeeId: 'FM0001',
   sheets: {
     employees: '社員マスタ',
     punches: '打刻ログ',
