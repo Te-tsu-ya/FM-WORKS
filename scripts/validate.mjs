@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Index.html','src/Styles.html','src/App.html',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -29,7 +29,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -133,6 +133,26 @@ for (const forbidden of ['confirm(', 'prompt(', 'demoAction', 'TODO', 'FIXME']) 
 if (worklogCode.includes('deleteRow(')) {
   console.error('Worklog must use soft-delete, not deleteRow().');
   failed = true;
+}
+const maintenanceCode = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
+for (const requiredMaintenanceMarker of [
+  'function getSystemStatus(sessionToken)',
+  'function getAuditLogs(sessionToken',
+  'function createManualBackup(sessionToken)',
+  'function setDailyBackupEnabled(sessionToken',
+  "backupHandler: 'runDailyBackup_'",
+  'requireAdminSession_(sessionToken)'
+]) {
+  if (!maintenanceCode.includes(requiredMaintenanceMarker)) {
+    console.error(`Maintenance implementation missing: ${requiredMaintenanceMarker}`);
+    failed = true;
+  }
+}
+for (const uiMarker of ['loadMaintenance','createBackupNow','toggleDailyBackup','openMobileDrawer']) {
+  if (!app.includes(uiMarker)) {
+    console.error(`Production administration UI missing: ${uiMarker}`);
+    failed = true;
+  }
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
