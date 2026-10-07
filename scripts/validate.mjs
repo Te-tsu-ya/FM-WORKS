@@ -114,7 +114,7 @@ for (const compactLoginMarker of [
 for (const compactLoginStyleMarker of [
   '.login-mode{overflow:hidden!important',
   '.login-shell{height:100svh;min-height:0',
-  'height:min(640px,calc(100svh - 28px))',
+  'height:min(590px,calc(100svh - 24px))',
   '@media(max-height:620px) and (max-width:900px)'
 ]) {
   if (!styles.includes(compactLoginStyleMarker)) {
@@ -369,6 +369,16 @@ if (authCode.includes('prototypeMode: true')) {
   }
   if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
     console.error('Prototype PIN must never be enabled when the web app is accessible beyond MYSELF.');
+    failed = true;
+  }
+}
+for (const sessionMarker of [
+  'getRange(rowNumber, 1, 1, 10).getValues()[0]',
+  'value instanceof Date',
+  '(\\d{1,2}):(\\d{1,2})'
+]) {
+  if (!authCode.includes(sessionMarker)) {
+    console.error(`Robust session timestamp handling missing: ${sessionMarker}`);
     failed = true;
   }
 }
