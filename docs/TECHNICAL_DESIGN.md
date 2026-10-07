@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.3  
+**文書版:** 0.10.4  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -12,7 +12,11 @@ FM WORKSはGoogle Apps Script HTML Serviceを実行基盤とするSPAである�
 Browser
   ├─ Index.html
   ├─ Styles.html
-  └─ App.html
+  ├─ AppCore.html
+  ├─ AppOperations.html
+  ├─ AppPeopleMonthly.html
+  ├─ AppAdmin.html
+  └─ AppShell.html
        │ google.script.run
        ▼
 Google Apps Script (V8)
@@ -20,12 +24,11 @@ Google Apps Script (V8)
   ├─ Auth.gs
   ├─ Worklog.gs
   ├─ Requests.gs
-  ├─ Monthly.gs
-  ├─ Employees.gs
-  ├─ Projects.gs
-  ├─ Notifications.gs
-  ├─ Maintenance.gs
-  ├─ Holidays.gs
+  ├─ Monthly.gs / MonthlySnapshot.gs
+  ├─ Labor.gs / LeaveLedger.gs
+  ├─ Employees.gs / Projects.gs
+  ├─ Notifications.gs / Maintenance.gs
+  ├─ Holidays.gs / Schema.gs / DataAccess.gs
   └─ Docs.gs
        │
        ▼
@@ -62,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.3`
+`APP.version = 0.10.4`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -792,12 +795,14 @@ Apps Scriptの原則:
 | `saveWorklog(token,payload)` | Session | 工数 | ok,id |
 | `getRequestsBundle(token)` | Session | なし | own,team,context |
 | `submitRequest(token,payload)` | Session | 申請 | ok,id |
-| `approveRequest(token,id,decision,comment)` | ADMIN | 申請ID | ok |
+| `approveRequest(token,id,decision,comment)` | Session + 承認範囲 | 申請ID | ok |
 | `getMonthlySummary(token,ym,employeeId)` | Session | 年月,社員 | daily,totals,reviewStatus,closeStatus |
 | `confirmMonthlyReview(token,ym,note)` | Session | 年月 | reviewStatus |
 | `closeMonthlyPeriod(token,ym)` | ADMIN | 年月 | closeStatus |
 | `getAuthAdminData(token)` | ADMIN | なし | employees,resetRequests,support |
 | `getSystemStatus(token)` | ADMIN | なし | readiness,backup,sheets |
+| `getLeaveLedger(token,employeeId)` | ADMIN | 社員ID | state,rows,fiveDay |
+| `postLeaveLedgerEntry(token,employeeId,type,days,date,note)` | ADMIN | 年休台帳更新 | ok,balance |
 | `getSystemDocument(token,type)` | ADMIN | requirements/technical | markdown,version |
 
 新しい公開関数を追加する場合、`scripts/validate.mjs` の認証境界検査を通すこと。
@@ -1002,9 +1007,12 @@ DB:
 2. 当日バックアップ済み判定
 3. Script Lock取得
 4. 再判定
-5. DriveへDB copy
-6. 監査ログ
-7. 90日超Backup cleanup
+5. 原本Spreadsheetのシート形状を取得
+6. DriveへDB copy
+7. コピーを再オープンし、全シート名・最終行・最終列を原本と照合
+8. 検証成功後のみ最終成功時刻/verified=trueを保存
+9. 監査ログ
+10. 90日超Backup cleanup
 
 公開UIから呼べる `installDailyBackupTrigger(sessionToken)` はADMIN認証必須。Trigger handler自体は末尾underscoreのprivate functionとし、client APIとして公開しない。
 
@@ -1019,7 +1027,7 @@ DB:
 
 月次確定/日次確定は24列へ拡張し、法定時間外、深夜、法定休日、労務ルール状態を締め時点で固定する。
 
-`getProductionReadiness_` と `closeMonthlyPeriod` は労務ルール未確定をブロッカーとする。給与額や割増賃金額は本エンジンで算出しない。
+`getProductionReadiness_` と `closeMonthlyPeriod` は労務ルール未確定をブロッカーとする。加えて今後90日の会社カレンダーに明示的な `法定休日` が1日もない場合は本番READYを拒否する。標準カレンダー生成は法定休日を推測しない。給与額や割増賃金額は本エンジンで算出しない。
 
 
 ## 39. 構造化監査ログ
@@ -1188,3 +1196,38 @@ CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査
 - 予定表の日付/予定のキーボード操作用HTML
 
 これは実ブラウザのレイアウト・axe・視覚差分を代替しない。Webアプリ公開範囲が `MYSELF` の現在は、デプロイ済み環境のBrowser E2Eを別Gateとして残す。
+
+## 47. Operational Integrity Hardening v0.10.4
+
+### 47.1 Approval graph integrity
+
+`Employees.gs`:
+- `managerAssignmentCreatesCycle_` は社員→直属承認者の連鎖を純粋ロジックで検査する。
+- `assertManagerAssignmentAcyclic_` は循環する直属承認者設定を拒否する。
+- `getActiveDirectReports_` と `assertManagerRoleChangeSafe_` は直属部下を残したまま承認権限を失う降格/無効化を拒否する。
+
+`Notifications.gs` はロール名ではなく `getPermissions_(employee).requestApprove` を使い、ADMINとMANAGERの両方へ管理対象の承認待ちを通知する。
+
+### 47.2 Verified backup
+
+`spreadsheetShape_` は各シートの name / lastRow / lastColumn を取得する。`compareBackupShape_` で原本とコピーを比較し、`verifyDatabaseBackupCopy_` が3回までコピーを再オープンして検査する。
+
+検証失敗したコピーはゴミ箱へ移し、`FM_WORKS_LAST_BACKUP_VERIFIED=false` のままにする。成功後だけ `FM_WORKS_LAST_BACKUP_AT` とverifiedを更新する。
+
+### 47.3 Annual leave five-day evidence monitor
+
+`getAnnualLeaveFiveDayStatus_` は有給台帳のGRANT >= 10日の最新記録を根拠に対象期間を決める。承認済/取消申請中の全日有給を1日、午前/午後半休を0.5日として集計する。
+
+`1/4日有給` はQ-026が解消するまで法定5日取得実績から除外する。付与根拠・会社カレンダーが不足する場合はUNKNOWN / DATA_INCOMPLETEとして「達成済み」と判定しない。
+
+ADMINは社員一覧の「年休」からGRANT / EXPIRE / ADJUSTを登録し、最新100件と年5日状況を確認できる。
+
+### 47.4 Apps Script batching
+
+`updateEmployeeAuthCells_` は認証9列を1 Rangeでread-modify-writeする。`invalidateEmployeeSessions_` は対象H列をRangeListでまとめてREVOKEDへ変更する。
+
+### 47.5 CI / deployment parity
+
+CIとDeployの双方で `test_logic.mjs` と `test_client_contract.mjs` を実行する。workflowは `actions/checkout@v5`、`actions/setup-node@v6`、Node 24を使用する。
+
+静的Gateは、承認通知スコープ、承認経路整合性、年休5日監視、バックアップ整合性、法定休日READY、モーダル閉じるボタンのアクセシブルネームを検査する。

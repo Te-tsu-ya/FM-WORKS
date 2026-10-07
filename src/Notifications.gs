@@ -2,6 +2,7 @@ function getNotifications(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const items = [];
+  const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
 
   const monthlyReview=getMonthlyReviewPrompt_(employee.employeeId);
   if(monthlyReview.needsAttention){
@@ -21,13 +22,27 @@ function getNotifications(sessionToken) {
     });
   }
 
-  const requestScope = employee.role === 'ADMIN' ? 'ALL' : 'SELF';
+  const annualLeave=getAnnualLeaveFiveDayStatus_(employee,today);
+  if(annualLeave.status==='OVERDUE'||(annualLeave.status==='TRACKING'&&annualLeave.remainingDays>0&&annualLeave.daysRemaining<=120)){
+    items.push({
+      type:'年休5日',
+      title:annualLeave.status==='OVERDUE'?'年5日の年休取得を確認してください':'年休5日まで残り'+annualLeave.remainingDays+'日',
+      subtitle:annualLeave.status==='OVERDUE'
+        ? annualLeave.periodStart+'〜'+annualLeave.periodEnd+' の取得実績が '+annualLeave.takenDays+'日です。'
+        : '期限 '+annualLeave.periodEnd+' / 現在 '+annualLeave.takenDays+'日取得済み。',
+      route:'requests',
+      priority:annualLeave.status==='OVERDUE'||annualLeave.daysRemaining<=60?'danger':'warning'
+    });
+  }
+
+  const canApproveRequests = !!getPermissions_(employee).requestApprove;
+  const requestScope = canApproveRequests ? 'ALL' : 'SELF';
   getRequests(sessionToken, { scope: requestScope })
-    .filter(r => employee.role === 'ADMIN' ? r.status === '承認待ち' : ['承認待ち','差戻し'].includes(r.status))
+    .filter(r => canApproveRequests ? r.status === '承認待ち' : ['承認待ち','差戻し'].includes(r.status))
     .slice(0, 12)
     .forEach(r => items.push({
       type: '申請',
-      title: employee.role === 'ADMIN' ? (r.name + ' / ' + r.type) : (r.type + ' / ' + r.status),
+      title: canApproveRequests ? (r.name + ' / ' + r.type) : (r.type + ' / ' + r.status),
       subtitle: [r.startDate, r.reason].filter(Boolean).join(' / '),
       route: 'requests'
     }));

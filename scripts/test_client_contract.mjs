@@ -181,6 +181,10 @@ const result=vm.runInContext(`
   };
   expect('month schedule exposes keyboard-focusable day control',monthView().includes("class='day-open'"));
   expect('day schedule uses native button for appointment row',dayView().includes("<button type='button' class='agenda-item'"));
+  state.schedule.events=[{id:'E-XSS',date:'2026-10-01',allDay:false,start:'09:00',end:'10:00',title:'<img src=x onerror=alert(1)>',category:'予定',participantIds:'FM0001',participantNames:'<b>攻撃</b>',ownerEmployeeId:'FM0001',ownerName:'<b>攻撃</b>'}];
+  const escapedMonth=monthView();
+  expect('schedule title is HTML-escaped before innerHTML rendering',!escapedMonth.includes('<img src=x')&&escapedMonth.includes('&lt;img'));
+
 
   return {failures};
 })()

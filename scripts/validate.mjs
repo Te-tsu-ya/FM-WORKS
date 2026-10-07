@@ -107,6 +107,87 @@ const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs')
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
 const maintenanceCodeText = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
+const notificationCodeText = fs.readFileSync(path.join(root,'src/Notifications.gs'),'utf8');
+const deployWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/deploy.yml'),'utf8');
+const ciWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+
+for (const marker of [
+  'const canApproveRequests = !!getPermissions_(employee).requestApprove',
+  "const requestScope = canApproveRequests ? 'ALL' : 'SELF'"
+]) {
+  if (!notificationCodeText.includes(marker)) {
+    console.error('Manager approval notification scope missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'function annualLeavePeriodEnd_(',
+  'function annualLeaveQualifyingUsage_(',
+  'function getAnnualLeaveFiveDayStatus_(',
+  'function getLeaveLedger(sessionToken, employeeId)'
+]) {
+  if (!leaveLedgerCodeText.includes(marker)) {
+    console.error('Annual leave five-day monitor missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'openLeaveLedgerModal',
+  'postLeaveLedgerEntry',
+  '年次有給休暇管理簿'
+]) {
+  if (!app.includes(marker)) {
+    console.error('Annual leave ledger UI missing: ' + marker);
+    failed = true;
+  }
+}
+if (!notificationCodeText.includes("type:'年休5日'")) {
+  console.error('Annual leave five-day notification is missing.');
+  failed = true;
+}
+
+for (const marker of [
+  'function managerAssignmentCreatesCycle_(',
+  'function assertManagerRoleChangeSafe_(',
+  'function getActiveDirectReports_(',
+  'assertManagerAssignmentAcyclic_(employeeId,managerId)'
+]) {
+  if (!employeeCodeText.includes(marker)) {
+    console.error('Approval graph integrity guard missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  "calendar.some(d=>d.type==='法定休日')",
+  'function compareBackupShape_(',
+  'function verifyDatabaseBackupCopy_(',
+  "lastBackupVerifiedProperty: 'FM_WORKS_LAST_BACKUP_VERIFIED'"
+]) {
+  if (!maintenanceCodeText.includes(marker)) {
+    console.error('Production/backup integrity gate missing: ' + marker);
+    failed = true;
+  }
+}
+if (!deployWorkflowText.includes('node scripts/test_client_contract.mjs')) {
+  console.error('Deploy workflow must run client contract tests before deployment.');
+  failed = true;
+}
+for (const workflow of [deployWorkflowText,ciWorkflowText]) {
+  if (!workflow.includes('actions/checkout@v5') || !workflow.includes('actions/setup-node@v6') || !workflow.includes("node-version: '24'")) {
+    console.error('GitHub Actions workflow must use Node 24-compatible action/runtime versions.');
+    failed = true;
+  }
+}
+for (const unlabeledClose of [
+  "<button class='icon-button' onclick='closeModal()'>×</button>",
+  '<button class="icon-button" onclick="closeModal()">×</button>'
+]) {
+  if (app.includes(unlabeledClose)) {
+    console.error('Modal close icon button is missing an accessible label.');
+    failed = true;
+  }
+}
+
 for (const marker of [
   "requestApprove: role === 'ADMIN' || role === 'MANAGER'",
   'function canManageEmployeeRecord_(',

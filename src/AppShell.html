@@ -318,7 +318,7 @@ function openChangePinModal(force=false){
   closeProfileMenu();
   const r=ensureModal();
   r.innerHTML=`<div class='modal-backdrop' ${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true'>
-    <div class='modal-head'><div><small>${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>${force?'':"<button class='icon-button' onclick='closeModal()'>×</button>"}</div>
+    <div class='modal-head'><div><small>${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>${force?'':"<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button>"}</div>
     ${force?"<div class='setup-note'>安全のため、管理者が発行した仮PINから新しいPINへ変更してください。</div>":''}
     <div class='form-grid'>
       <label class='field full'><span>現在のPIN</span><input id='currentPin' type='password' inputmode='numeric' maxlength='6' autocomplete='current-password'></label>
@@ -341,7 +341,7 @@ function openPinHelpModal(){
   const contact=[s.email?`<a href='mailto:${escapeHtml(s.email)}'>${escapeHtml(s.email)}</a>`:'',s.phone?`<a href='tel:${escapeHtml(s.phone)}'>${escapeHtml(s.phone)}</a>`:''].filter(Boolean).join('<br>');
   const r=ensureModal();
   r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
-    <div class='modal-head'><div><small>ログインサポート</small><h2>PINを忘れた場合</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <div class='modal-head'><div><small>ログインサポート</small><h2>PINを忘れた場合</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
     <div class='support-card'><strong>${escapeHtml(s.name||'FM WORKS管理者')}</strong><small>${escapeHtml(s.note||'社内の管理者へご連絡ください。')}</small>${contact?`<div>${contact}</div>`:''}</div>
     <div class='form-grid section-gap'>
       <label class='field full'><span>社員番号</span><input id='helpEmployeeId' value='${escapeHtml(employeeId)}' placeholder='FM0001'></label>

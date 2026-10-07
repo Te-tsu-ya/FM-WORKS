@@ -12,7 +12,8 @@ const files = [
   'src/Maintenance.gs',
   'src/Labor.gs',
   'src/Schema.gs',
-  'src/DataAccess.gs'
+  'src/DataAccess.gs',
+  'src/Employees.gs'
 ];
 
 const context = vm.createContext({
@@ -63,6 +64,8 @@ globalThis.__fmTest = {
   monthlySnapshotPayload_,
   normalizeLeaveDays_,
   leaveBalanceAfterDelta_,
+  annualLeavePeriodEnd_,
+  annualLeaveQualifyingUsage_,
   normalizeScheduleVisibility_,
   canViewScheduleRow_,
   normalizeRuntimeEnvironment_,
@@ -79,7 +82,9 @@ globalThis.__fmTest = {
   dateRangeStrings_,
   dateRangeRegex_,
   contiguousRowBlocks_,
-  columnLetter_
+  columnLetter_,
+  managerAssignmentCreatesCycle_,
+  compareBackupShape_
 };
 `, context);
 
@@ -168,6 +173,9 @@ expect(
   JSON.stringify(Array.from(api.yearMonthsBetween_('2025-11','2026-02'))) === JSON.stringify(['2025-11','2025-12','2026-01','2026-02'])
 );
 expect('empty month range rejected as empty list', api.yearMonthsBetween_('2026-03','2026-02').length === 0);
+expect('manager cycle detects direct self return', api.managerAssignmentCreatesCycle_('FM0001','FM0002',{FM0002:'FM0001'})===true);
+expect('manager cycle detects longer loop', api.managerAssignmentCreatesCycle_('FM0001','FM0002',{FM0002:'FM0003',FM0003:'FM0001'})===true);
+expect('manager hierarchy accepts acyclic chain', api.managerAssignmentCreatesCycle_('FM0001','FM0002',{FM0002:'FM0003',FM0003:''})===false);
 expect('admin can manage another employee', api.canManageEmployeeRecord_({employeeId:'FM0001',role:'ADMIN'},{employeeId:'FM0003',role:'USER',managerId:'FM0001'}) === true);
 expect('admin cannot approve self', api.canManageEmployeeRecord_({employeeId:'FM0001',role:'ADMIN'},{employeeId:'FM0001',role:'ADMIN',managerId:''}) === false);
 expect('manager can manage direct report', api.canManageEmployeeRecord_({employeeId:'FM0002',role:'MANAGER'},{employeeId:'FM0003',role:'USER',managerId:'FM0002'}) === true);
@@ -181,6 +189,15 @@ const snapshotPayload = api.monthlySnapshotPayload_({
 });
 expect('monthly snapshot payload keeps employee and month', snapshotPayload.employeeId==='FM0003' && snapshotPayload.yearMonth==='2026-09');
 expect('monthly snapshot payload contains normalized daily facts', snapshotPayload.daily.length===1 && snapshotPayload.daily[0].workMinutes===480);
+expect('annual leave period ends one day before next anniversary', api.annualLeavePeriodEnd_('2026-04-01')==='2027-03-31');
+const leaveCalendar=['2026-04-01','2026-04-02','2026-04-03','2026-04-04'].map(date=>({date,working:date!=='2026-04-04'}));
+const leaveUsage=api.annualLeaveQualifyingUsage_([
+  {type:'有給',startDate:'2026-04-01',endDate:'2026-04-02'},
+  {type:'午前半休',startDate:'2026-04-03',endDate:'2026-04-03'},
+  {type:'1/4日有給',startDate:'2026-04-03',endDate:'2026-04-03'}
+],leaveCalendar,'2026-04-01','2026-04-04');
+expect('five-day leave monitor counts full and half days', leaveUsage.qualifyingDays===2.5);
+expect('quarter-day leave is excluded from statutory five-day tally', leaveUsage.excludedQuarterDays===0.25);
 expect('leave days normalize to quarter day', api.normalizeLeaveDays_(1.24)===1.25);
 expect('leave balance applies usage', api.leaveBalanceAfterDelta_(10,-1.5)===8.5);
 expectThrows('leave balance rejects negative result', ()=>api.leaveBalanceAfterDelta_(1,-1.25));
@@ -195,6 +212,9 @@ expect('admin-only hidden from participant', api.canViewScheduleRow_({employeeId
 expect('runtime environment defaults to staging', api.normalizeRuntimeEnvironment_('')==='STAGING');
 expect('runtime environment accepts production', api.normalizeRuntimeEnvironment_('production')==='PRODUCTION');
 expect('unknown runtime environment falls back to staging', api.normalizeRuntimeEnvironment_('UNKNOWN')==='STAGING');
+expect('backup shape accepts identical copy', api.compareBackupShape_([{name:'社員',rows:10,columns:26}],[{name:'社員',rows:10,columns:26}]).length===0);
+expect('backup shape detects missing sheet', api.compareBackupShape_([{name:'社員',rows:10,columns:26},{name:'打刻',rows:20,columns:12}],[{name:'社員',rows:10,columns:26}]).includes('missing:打刻'));
+expect('backup shape detects row mismatch', api.compareBackupShape_([{name:'社員',rows:10,columns:26}],[{name:'社員',rows:9,columns:26}]).includes('rows:社員'));
 expect('backup due when last backup is prior day', api.isBackupDue_('2026-10-06 03:12:00','2026-10-07')===true);
 expect('backup skipped when already backed up today', api.isBackupDue_('2026-10-07 03:12:00','2026-10-07')===false);
 expect('labor agreement start month validates', api.normalizeLaborAgreementStartMonth_(4)===4 && api.normalizeLaborAgreementStartMonth_(13)===0);

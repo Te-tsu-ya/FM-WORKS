@@ -2,6 +2,7 @@ const MAINTENANCE = Object.freeze({
   backupFolderProperty: 'FM_WORKS_BACKUP_FOLDER_ID',
   databaseIdProperty: 'FM_WORKS_DB_ID',
   lastBackupProperty: 'FM_WORKS_LAST_BACKUP_AT',
+  lastBackupVerifiedProperty: 'FM_WORKS_LAST_BACKUP_VERIFIED',
   autoBackupProperty: 'FM_WORKS_AUTO_BACKUP',
   backupTriggerHandler: 'scheduledDailyMaintenance_',
   backupRetentionDays: 90
@@ -47,6 +48,7 @@ function getSystemStatus(sessionToken) {
     backupTriggerCount: triggerState.count,
     backupMode: triggerState.installed ? '毎日03時台 / 時間トリガー' : '未設定（管理者利用時の補助のみ）',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
+    backupVerified: props.getProperty(MAINTENANCE.lastBackupVerifiedProperty) === 'true',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
     environment: runtime.environment,
     laborConfig: getLaborRuleConfig_(),
@@ -99,6 +101,9 @@ function getProductionReadiness_() {
   if(calendar.length!==expectedDays){
     blockers.push('会社カレンダーが今後90日分そろっていません');
   }
+  if(calendar.length&& !calendar.some(d=>d.type==='法定休日')){
+    blockers.push('会社カレンダーに法定休日の明示指定がありません。就業規則に合わせて法定休日を設定してください');
+  }
 
   const settingsSheet=db.getSheetByName(AUTH.settingsSheet);
   if(settingsSheet&&settingsSheet.getLastRow()>=2){
@@ -118,7 +123,9 @@ function getProductionReadiness_() {
   const lastBackup=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
   const backupAt=parseTimestamp_(lastBackup);
   const backupAgeHours=backupAt?Math.floor((now-backupAt)/3600000):null;
+  const backupVerified=props.getProperty(MAINTENANCE.lastBackupVerifiedProperty)==='true';
   if(!backupAt)warnings.push('バックアップがまだありません');
+  else if(!backupVerified)blockers.push('最新バックアップの整合性確認が完了していません');
   else if(backupAgeHours>36)warnings.push('最終バックアップから36時間以上経過しています');
 
   const laborConfig=getLaborRuleConfig_();
@@ -143,7 +150,8 @@ function getProductionReadiness_() {
     pinConfigured:employeeRows.length-missingPins.length,
     payrollEmployees:payrollCount,
     calendarThrough:horizon,
-    backupAgeHours:backupAgeHours
+    backupAgeHours:backupAgeHours,
+    backupVerified:backupVerified
   };
 }
 
@@ -327,20 +335,68 @@ function ensureDailyBackup(sessionToken) {
   }
 }
 
+function spreadsheetShape_(spreadsheet) {
+  return spreadsheet.getSheets().map(sheet=>({
+    name:sheet.getName(),
+    rows:sheet.getLastRow(),
+    columns:sheet.getLastColumn()
+  })).sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function compareBackupShape_(sourceShape, backupShape) {
+  const expected=Object.fromEntries((sourceShape||[]).map(x=>[x.name,x]));
+  const actual=Object.fromEntries((backupShape||[]).map(x=>[x.name,x]));
+  const issues=[];
+  Object.keys(expected).sort().forEach(name=>{
+    if(!actual[name]){issues.push('missing:'+name);return;}
+    if(Number(actual[name].rows)!==Number(expected[name].rows))issues.push('rows:'+name);
+    if(Number(actual[name].columns)!==Number(expected[name].columns))issues.push('columns:'+name);
+  });
+  Object.keys(actual).sort().forEach(name=>{if(!expected[name])issues.push('unexpected:'+name);});
+  return issues;
+}
+
+function verifyDatabaseBackupCopy_(copyId, sourceShape) {
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const backup=SpreadsheetApp.openById(copyId);
+      const backupShape=spreadsheetShape_(backup);
+      const issues=compareBackupShape_(sourceShape,backupShape);
+      if(!issues.length)return {ok:true,sheetCount:backupShape.length};
+      lastError=new Error('バックアップ形状不一致: '+issues.slice(0,8).join(' / '));
+    }catch(err){lastError=err;}
+    Utilities.sleep(300*(attempt+1));
+  }
+  throw lastError||new Error('バックアップの整合性を確認できませんでした。');
+}
+
 function createDatabaseBackup_(actor) {
   const db = getDb_();
   const now = new Date();
   const stamp = Utilities.formatDate(now, DB.timeZone, 'yyyyMMdd_HHmmss');
   const name = 'FM_WORKS_DB_BACKUP_' + stamp;
   const folder = getOrCreateBackupFolder_();
+  const sourceShape=spreadsheetShape_(db);
+  const props=PropertiesService.getScriptProperties();
+  props.setProperty(MAINTENANCE.lastBackupVerifiedProperty,'false');
   const copy = DriveApp.getFileById(db.getId()).makeCopy(name, folder);
+  let verification;
+  try{
+    verification=verifyDatabaseBackupCopy_(copy.getId(),sourceShape);
+  }catch(err){
+    try{copy.setTrashed(true);}catch(_){}
+    throw err;
+  }
 
-  PropertiesService.getScriptProperties()
-    .setProperty(MAINTENANCE.lastBackupProperty, toTimestamp_(now));
+  props.setProperty(MAINTENANCE.lastBackupProperty,toTimestamp_(now));
+  props.setProperty(MAINTENANCE.lastBackupVerifiedProperty,'true');
 
   cleanupOldBackups_(folder, now);
   return {
     ok: true,
+    verified: true,
+    sheetCount: verification.sheetCount,
     fileId: copy.getId(),
     fileName: copy.getName(),
     createdAt: toTimestamp_(now),

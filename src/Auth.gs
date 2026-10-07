@@ -624,13 +624,13 @@ function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
   const rows = sheet.getRange(2, 1, lastRow - 1, 11).getDisplayValues();
-  rows.forEach((r, idx) => {
-    const rowNumber = idx + 2;
-    if (rowNumber === exceptRowNumber) return;
-    if (r[2] === employeeId && r[7] === 'ACTIVE') {
-      sheet.getRange(rowNumber, 8).setValue('REVOKED');
-    }
+  const targets=[];
+  rows.forEach((r,idx)=>{
+    const rowNumber=idx+2;
+    if(rowNumber===exceptRowNumber)return;
+    if(r[2]===employeeId&&r[7]==='ACTIVE')targets.push('H'+rowNumber);
   });
+  if(targets.length)sheet.getRangeList(targets).setValue('REVOKED');
 }
 
 function getEmployeeAuthRecord_(employeeId) {
@@ -705,10 +705,16 @@ function updateEmployeeAuthCells_(rowNumber, values) {
     authState: 21,
     permissionDetail: 22
   };
-  Object.keys(values).forEach(key => {
-    if (!mapping[key]) return;
-    sheet.getRange(rowNumber, mapping[key]).setValue(values[key]);
+  const range=sheet.getRange(rowNumber,14,1,9);
+  const row=range.getValues()[0];
+  let changed=false;
+  Object.keys(values).forEach(key=>{
+    const column=mapping[key];
+    if(!column)return;
+    row[column-14]=values[key];
+    changed=true;
   });
+  if(changed)range.setValues([row]);
 }
 
 function hasAnyPinConfigured_() {

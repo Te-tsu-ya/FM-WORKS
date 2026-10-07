@@ -98,6 +98,89 @@ function recordLeaveBalanceAdminChange_(employeeId, name, basisDate, oldConfigur
   appendLeaveLedgerRow_(employee,basisDate,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),'ADJUST',delta,target,'',actor,'管理者による残数調整');
 }
 
+function annualLeavePeriodEnd_(startDate) {
+  const p=String(startDate||'').split('-').map(Number);
+  if(p.length!==3||!p[0]||!p[1]||!p[2])return '';
+  const end=new Date(Date.UTC(p[0]+1,p[1]-1,p[2]));
+  end.setUTCDate(end.getUTCDate()-1);
+  return end.getUTCFullYear()+'-'+String(end.getUTCMonth()+1).padStart(2,'0')+'-'+String(end.getUTCDate()).padStart(2,'0');
+}
+
+function annualLeaveQualifyingUsage_(requests, calendarDays, startDate, endDate) {
+  const working=new Set((calendarDays||[]).filter(d=>d.working).map(d=>d.date));
+  let qualifyingDays=0,excludedQuarterDays=0;
+  (requests||[]).forEach(r=>{
+    const type=String(r.type||'');
+    const start=String(r.startDate||''),end=String(r.endDate||start);
+    if(end<startDate||start>endDate)return;
+    if(type==='1/4日有給'){
+      const d=start<startDate?startDate:start;
+      if(d<=endDate&&working.has(d))excludedQuarterDays+=0.25;
+      return;
+    }
+    if(type==='午前半休'||type==='午後半休'){
+      if(start>=startDate&&start<=endDate&&working.has(start))qualifyingDays+=0.5;
+      return;
+    }
+    if(type!=='有給')return;
+    const from=start<startDate?startDate:start,to=end>endDate?endDate:end;
+    for(let d=from;;d=addDateString_(d,1)){
+      if(working.has(d))qualifyingDays+=1;
+      if(d===to)break;
+    }
+  });
+  return {
+    qualifyingDays:Math.round(qualifyingDays*2)/2,
+    excludedQuarterDays:Math.round(excludedQuarterDays*4)/4
+  };
+}
+
+function getAnnualLeaveFiveDayStatus_(employee, asOfDate) {
+  const today=normalizeDate_(asOfDate||Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'));
+  const grants=getLeaveLedgerRows_(employee.employeeId)
+    .filter(r=>r.type==='GRANT'&&Number(r.days||0)>=10&&r.transactionDate&&r.transactionDate<=today)
+    .sort((a,b)=>a.transactionDate.localeCompare(b.transactionDate));
+  if(!grants.length){
+    return {status:'UNKNOWN',requiredDays:5,takenDays:0,remainingDays:5,periodStart:'',periodEnd:'',daysRemaining:null,reason:'10日以上の年休付与記録がありません。'};
+  }
+  const grant=grants[grants.length-1];
+  const periodStart=grant.transactionDate,periodEnd=annualLeavePeriodEnd_(periodStart);
+  const through=today<periodEnd?today:periodEnd;
+  if(through<periodStart){
+    return {status:'UNKNOWN',requiredDays:5,takenDays:0,remainingDays:5,periodStart,periodEnd,daysRemaining:null,reason:'年休付与期間を確認できません。'};
+  }
+  const calendar=getCompanyCalendarRange_(periodStart,through);
+  const expected=dateSpanDays_(periodStart,through);
+  if(calendar.length!==expected){
+    return {status:'DATA_INCOMPLETE',requiredDays:5,takenDays:0,remainingDays:5,periodStart,periodEnd,daysRemaining:null,reason:'年5日判定に必要な会社カレンダーが不足しています。'};
+  }
+  const sheet=getDb_().getSheetByName('申請');
+  const rows=sheet&&sheet.getLastRow()>=2?sheet.getRange(2,1,sheet.getLastRow()-1,19).getDisplayValues():[];
+  const requests=rows
+    .filter(r=>r[0]&&r[2]===employee.employeeId&&['承認済','取消申請中'].includes(r[9])&&r[5]<=through&&r[6]>=periodStart)
+    .map(r=>({type:r[4],startDate:r[5],endDate:r[6]}));
+  const usage=annualLeaveQualifyingUsage_(requests,calendar,periodStart,through);
+  const takenDays=usage.qualifyingDays,remainingDays=Math.max(0,Math.round((5-takenDays)*2)/2);
+  const daysRemaining=today>periodEnd?0:Math.max(0,Math.ceil((parseYmd_(periodEnd)-parseYmd_(today))/86400000));
+  const status=takenDays>=5?'COMPLETED':today>periodEnd?'OVERDUE':'TRACKING';
+  return {
+    status,requiredDays:5,takenDays,remainingDays,periodStart,periodEnd,daysRemaining,
+    grantDays:Number(grant.days||0),excludedQuarterDays:usage.excludedQuarterDays,
+    reason:usage.excludedQuarterDays>0?'1/4日有給は法的区分未確定のため年5日取得実績へ算入していません。':''
+  };
+}
+
+function getLeaveLedger(sessionToken, employeeId) {
+  requireAdminSession_(sessionToken);
+  const employee=getEmployee_(employeeId);
+  return {
+    employee:{employeeId:employee.employeeId,name:employee.name},
+    state:getLeaveLedgerState_(employee),
+    rows:getLeaveLedgerRows_(employee.employeeId).slice().reverse().slice(0,100),
+    fiveDay:getAnnualLeaveFiveDayStatus_(employee,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'))
+  };
+}
+
 function postLeaveLedgerEntry(sessionToken, employeeId, type, days, transactionDate, note) {
   const admin=requireAdminSession_(sessionToken).employee;
   const allowed=['GRANT','EXPIRE','ADJUST'];
