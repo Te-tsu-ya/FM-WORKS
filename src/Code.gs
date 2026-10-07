@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.3.0',
+  version: '0.4.0',
   locale: 'ja-JP'
 });
 
@@ -43,11 +43,12 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-function getInitialData() {
-  const employee = getEmployee_(DB.defaultEmployeeId);
+function getInitialData(sessionToken) {
+  const session = requireSession_(sessionToken);
+  const employee = session.employee;
   const attendance = getAttendanceState_(employee.employeeId);
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
-  const scheduleBundle = getScheduleBundle({ start: today, end: today, employeeId: employee.employeeId });
+  const scheduleBundle = getScheduleBundle(sessionToken, { start: today, end: today, employeeId: employee.employeeId });
   const companyToday = scheduleBundle.companyDays.find(d => d.date === today) || null;
 
   return {
@@ -60,7 +61,8 @@ function getInitialData() {
       displayName: employee.displayName,
       fullName: employee.name,
       role: employee.role,
-      department: employee.department
+      department: employee.department,
+      title: employee.title || ''
     },
     permissions: getPermissions_(employee),
     employees: getEmployees_(),
@@ -80,14 +82,15 @@ function getInitialData() {
   };
 }
 
-function recordPunch(action, workLocation) {
+function recordPunch(sessionToken, action, workLocation) {
+  const session = requireSession_(sessionToken);
+  const employee = session.employee;
   const allowedActions = Object.values(PUNCH);
   if (!allowedActions.includes(action)) {
     throw new Error('不正な打刻種別です。');
   }
 
   const location = ['出社', '在宅', '外出'].includes(workLocation) ? workLocation : '出社';
-  const employee = getEmployee_(DB.defaultEmployeeId);
   const lock = LockService.getScriptLock();
 
   lock.waitLock(10000);
@@ -130,7 +133,7 @@ function recordPunch(action, workLocation) {
     });
 
     SpreadsheetApp.flush();
-    return getInitialData();
+    return getInitialData(sessionToken);
   } catch (err) {
     appendAudit_({
       employeeId: employee.employeeId,
@@ -150,8 +153,8 @@ function recordPunch(action, workLocation) {
   }
 }
 
-function getPunchHistory(limit) {
-  const employee = getEmployee_(DB.defaultEmployeeId);
+function getPunchHistory(sessionToken, limit) {
+  const employee = requireSession_(sessionToken).employee;
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
@@ -289,7 +292,11 @@ function getPermissions_(employee) {
   const role = String(employee && employee.role || 'USER').toUpperCase();
   return {
     companyCalendarView: true,
-    companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role)
+    companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
+    adminConsole: role === 'ADMIN',
+    employeeAdmin: role === 'ADMIN',
+    monthlyTeamView: role === 'ADMIN',
+    scheduleEdit: true
   };
 }
 
@@ -301,24 +308,9 @@ function assertPermission_(employee, permission) {
 }
 
 function getEmployee_(employeeId) {
-  const sheet = getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) throw new Error('社員マスタが登録されていません。');
-
-  const rows = sheet.getRange(2, 1, lastRow - 1, 13).getDisplayValues();
-  const row = rows.find(r => r[0] === employeeId);
-  if (!row) throw new Error('社員情報が見つかりません: ' + employeeId);
-
-  return {
-    employeeId: row[0],
-    name: row[1],
-    displayName: row[2] || row[1],
-    department: row[3],
-    title: row[4],
-    role: row[5],
-    active: row[6] === '在籍',
-    leaveBalance: Number(row[10] || 0)
-  };
+  const employee = getEmployeeAuthRecord_(employeeId);
+  if (!employee) throw new Error('社員情報が見つかりません。');
+  return employee;
 }
 
 function appendAudit_(item) {
@@ -360,7 +352,8 @@ function formatMinutes_(minutes) {
 }
 
 
-function getScheduleBundle(params) {
+function getScheduleBundle(sessionToken, params) {
+  requireSession_(sessionToken);
   params = params || {};
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   const start = normalizeDate_(params.start || today);
@@ -419,9 +412,10 @@ function getScheduleBundle(params) {
   };
 }
 
-function saveSchedule(payload) {
+function saveSchedule(sessionToken, payload) {
   payload = payload || {};
-  const employee = getEmployee_(DB.defaultEmployeeId);
+  const employee = requireSession_(sessionToken).employee;
+  const isAdmin = employee.role === 'ADMIN';
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
@@ -443,6 +437,10 @@ function saveSchedule(payload) {
     if (!employeeIds.length) employeeIds = [employee.employeeId];
 
     const activeEmployees = getEmployees_();
+    const validIds = new Set(activeEmployees.map(e => e.employeeId));
+    employeeIds = [...new Set(employeeIds.filter(id => validIds.has(id)))];
+    if (!employeeIds.length) employeeIds = [employee.employeeId];
+
     const names = employeeIds.map(id => {
       const hit = activeEmployees.find(e => e.employeeId === id);
       return hit ? hit.shortName : id;
@@ -455,7 +453,7 @@ function saveSchedule(payload) {
 
     let id = String(payload.id || '').trim();
     let rowNumber = 0;
-    let createdBy = employee.name;
+    let createdBy = employee.employeeId;
     let createdAt = nowText;
     let source = 'FM WORKS';
 
@@ -465,7 +463,11 @@ function saveSchedule(payload) {
       if (!found) throw new Error('編集対象の予定が見つかりません。');
       rowNumber = found.getRow();
       const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
-      createdBy = old[13] || employee.name;
+      const owner = old[13] || '';
+      if (!isAdmin && owner !== employee.employeeId && owner !== employee.name) {
+        throw new Error('この予定を編集する権限がありません。');
+      }
+      createdBy = owner || employee.employeeId;
       createdAt = old[14] || nowText;
       source = old[16] || 'FM WORKS';
     } else {
@@ -483,8 +485,8 @@ function saveSchedule(payload) {
       names.join('、'),
       title,
       category,
-      String(payload.location || '').trim(),
-      String(payload.detail || '').trim(),
+      String(payload.location || '').trim().slice(0, 150),
+      String(payload.detail || '').trim().slice(0, 1000),
       '社内',
       '有効',
       createdBy,
@@ -514,17 +516,22 @@ function saveSchedule(payload) {
   }
 }
 
-function deleteSchedule(scheduleId) {
+function deleteSchedule(sessionToken, scheduleId) {
   const id = String(scheduleId || '').trim();
   if (!id) throw new Error('予定IDがありません。');
-  const employee = getEmployee_(DB.defaultEmployeeId);
+  const employee = requireSession_(sessionToken).employee;
   const sheet = getDb_().getSheetByName(DB.sheets.schedule);
   const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
     .createTextFinder(id).matchEntireCell(true).findNext();
   if (!found) throw new Error('削除対象の予定が見つかりません。');
 
   const row = found.getRow();
-  const title = sheet.getRange(row, 8).getDisplayValue();
+  const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
+  const owner = values[13] || '';
+  if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name) {
+    throw new Error('この予定を削除する権限がありません。');
+  }
+  const title = values[7] || '';
   sheet.getRange(row, 13).setValue('削除');
   sheet.getRange(row, 16).setValue(Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss'));
 
@@ -543,7 +550,8 @@ function deleteSchedule(scheduleId) {
   return { ok: true };
 }
 
-function getCompanyCalendar(year) {
+function getCompanyCalendar(sessionToken, year) {
+  requireSession_(sessionToken);
   const y = Number(year || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
   if (!Number.isInteger(y) || y < 2024 || y > 2100) throw new Error('年の指定が不正です。');
   const start = y + '-01-01';
@@ -559,19 +567,19 @@ function getCompanyCalendar(year) {
   };
 }
 
-function saveCompanyCalendarDay(payload) {
+function saveCompanyCalendarDay(sessionToken, payload) {
   payload = payload || {};
-  const employee = getEmployee_(DB.defaultEmployeeId);
+  const employee = requireSession_(sessionToken).employee;
   assertPermission_(employee, 'companyCalendarEdit');
 
   const date = normalizeDate_(payload.date);
   const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
   const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
   const working = type === '通常勤務' || type === '調整出勤日';
-  const name = String(payload.name || '').trim();
+  const name = String(payload.name || '').trim().slice(0, 100);
   const start = working ? normalizeTime_(payload.start || '09:00') : '';
   const end = working ? normalizeTime_(payload.end || '18:00') : '';
-  const breakMinutes = working ? Math.max(0, Number(payload.breakMinutes || 60)) : '';
+  const breakMinutes = working ? Math.max(0, Math.min(480, Number(payload.breakMinutes || 60))) : '';
   const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
 
   const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
