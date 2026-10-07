@@ -542,8 +542,19 @@ function renderLogin(message=''){
   shell.hidden=false;
   shell.innerHTML=`<div class='login-stage'>
     <section class='login-visual'>
-      <div><div class='login-kicker'>FUSION MIND</div><h1>はたらくを、<br>もっとシンプルに。</h1><div class='login-accent'></div><p>人・時間・仕事がつながることで、チームの力はもっと大きくなる。FM WORKSは、組織の可能性をひらくワークプラットフォームです。</p></div>
-      <div class='login-benefits'><div class='login-benefit'><b>人がつながる</b><small>チームの情報を共有</small></div><div class='login-benefit'><b>時間を見える化</b><small>勤怠と工数を一元化</small></div><div class='login-benefit'><b>仕事が進む</b><small>予定・申請をひとつに</small></div></div>
+      <div class='login-visual-copy'>
+        <div class='login-kicker'>FUSION MIND / FM WORKS</div>
+        <h1>はたらくを、<br>もっとシンプルに。</h1>
+        <div class='login-accent'></div>
+        <p>勤怠・工数・予定・申請を、ひとつの画面へ。毎日の「確認する・入力する」を減らし、仕事に集中できる状態をつくります。</p>
+        <div class='login-feature-grid' aria-label='FM WORKSの主な機能'>
+          <div class='login-feature'><span>01</span><div><b>勤怠</b><small>出退勤・休憩・勤務場所</small></div></div>
+          <div class='login-feature'><span>02</span><div><b>工数</b><small>案件ごとの作業時間を記録</small></div></div>
+          <div class='login-feature'><span>03</span><div><b>予定</b><small>チームの予定をまとめて確認</small></div></div>
+          <div class='login-feature'><span>04</span><div><b>申請</b><small>休暇・残業・修正をスムーズに</small></div></div>
+        </div>
+      </div>
+      <div class='login-visual-caption'><span>WORK PORTAL</span><span>ATTENDANCE · WORKLOG · SCHEDULE</span></div>
     </section>
     <section class='login-panel'>
       <form class='login-card' onsubmit='submitLogin(event)'>
