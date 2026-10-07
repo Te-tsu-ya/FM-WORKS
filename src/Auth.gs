@@ -352,6 +352,7 @@ function getAuthAdminData(sessionToken) {
     }));
   return {
     employees: employees,
+    projects: getProjectsInternal_(true),
     resetRequests: resetRequests,
     support: getSupportConfig_(),
     currentUser: publicEmployee_(session.employee)
