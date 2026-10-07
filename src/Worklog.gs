@@ -30,6 +30,7 @@ function saveWorklog(sessionToken, payload) {
 
   return withScriptLock_(function() {
     const date = normalizeDate_(payload.date);
+    assertMonthOpenForDate_(date,'工数を登録・編集');
     const project = String(payload.project || '').trim().slice(0, 120);
     const category = safeSheetText_(payload.category, 80);
     const description = safeSheetText_(payload.description, 500);
@@ -59,6 +60,7 @@ function saveWorklog(sessionToken, payload) {
       if (!found) throw new Error('編集対象の工数が見つかりません。');
       rowNumber = found.getRow();
       const existing = sheet.getRange(rowNumber, 1, 1, 15).getDisplayValues()[0];
+      assertMonthOpenForDate_(existing[1],'工数を編集');
       if (existing[12] === '削除') throw new Error('削除済みの工数は編集できません。');
       if (employee.role !== 'ADMIN' && existing[2] !== employee.employeeId) {
         throw new Error('この工数を編集する権限がありません。');
@@ -110,6 +112,7 @@ function deleteWorklog(sessionToken, worklogId) {
 
     const row = found.getRow();
     const values = sheet.getRange(row, 1, 1, 15).getDisplayValues()[0];
+    assertMonthOpenForDate_(values[1],'工数を削除');
     if (values[12] === '削除') return { ok: true };
     if (employee.role !== 'ADMIN' && values[2] !== employee.employeeId) {
       throw new Error('この工数を削除する権限がありません。');
