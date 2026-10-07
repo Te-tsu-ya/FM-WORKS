@@ -117,6 +117,9 @@ function approveRequest(sessionToken, requestId, decision, comment) {
       assertNoLeaveConflict_(r[2], r[4], r[5], r[6], r[0], true);
       if (r[4] !== '欠勤') {
         leaveEmployee = getEmployee_(r[2]);
+        if (!leaveEmployee.leaveBalanceConfigured) {
+          throw new Error('有給残日数が未設定です。社員マスタで残日数を設定してから承認してください。');
+        }
         leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
         if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
         if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
