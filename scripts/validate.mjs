@@ -289,7 +289,28 @@ for (const forbiddenRealData of ['会津屋','ラクッショ','キキラク','C
     failed = true;
   }
 }
+for (const [label, source] of [
+  ['employees', employeeCode],
+  ['worklogs', worklogCode],
+  ['requests', requestCode],
+  ['projects', projectsCode],
+  ['auth', authCode]
+]) {
+  if (!source.includes('safeSheetText_(')) {
+    console.error(`Spreadsheet text sanitization missing from ${label}`);
+    failed = true;
+  }
+}
+
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
+if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
+  console.error('Pre-release safety gate: web app access must remain MYSELF until human acceptance testing is explicitly started.');
+  failed = true;
+}
+if (manifest.webapp.executeAs !== 'USER_DEPLOYING') {
+  console.error('Web app must execute as USER_DEPLOYING.');
+  failed = true;
+}
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
 if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.executeAs !== 'USER_DEPLOYING') {
   console.error('Apps Script webapp manifest configuration is missing or unsafe for current test mode');
