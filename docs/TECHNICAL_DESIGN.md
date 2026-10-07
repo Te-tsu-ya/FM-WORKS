@@ -191,6 +191,8 @@ DBスキーマ目安: 4。
 
 クライアントの `loadHomeOverview` は `pageCache.homeOverview` と `pendingLoads` で重複通信を抑止する。概要取得後は `syncGlobalActionBanner` で月次確認コーションだけを更新でき、別画面を表示中でもページ全体を再描画しない。
 
+強制再取得が既存のホーム概要通信と重なった場合は `state.homeOverview.reloadRequested=true` とし、先行レスポンスを画面へ確定反映せず、直後に再取得する。`callbacks` は最終的に確定したレスポンス後にまとめて実行し、打刻・月次確認直後の古い集計値による上書きを防ぐ。
+
 
 ## 9. 通知
 

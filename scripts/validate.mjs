@@ -99,6 +99,7 @@ for (const performanceMarker of [
   'function cacheFresh(',
   'requestIdleCallback',
   'function loadHomeOverview(',
+  'reloadRequested:false',
   "getHomeOverview(state.sessionToken)",
   '.getRequestsBundle(state.sessionToken)',
   "invalidatePageCache('worklog','monthly')"
@@ -137,6 +138,12 @@ for (const performanceServerMarker of [
     console.error('v0.8.2 performance server marker missing: ' + performanceServerMarker);
     failed = true;
   }
+}
+if (!app.includes("if(options.force)state.homeOverview.reloadRequested=true") ||
+    !app.includes("if(rerun){") ||
+    !app.includes("flushHomeOverviewCallbacks_")) {
+  console.error('Home overview refresh must survive overlapping force reloads without stale overwrite.');
+  failed = true;
 }
 if (!app.includes("state.adminTab==='operation'))loadMaintenance")) {
   console.error('Admin data load must not fetch maintenance outside the operation tab.');
