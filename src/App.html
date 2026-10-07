@@ -1175,6 +1175,7 @@ function maintenanceSection(){
   const backupText=s.lastBackupAt||'まだありません';
   const labor=s.laborConfig||{profile:'UNCONFIGURED',weekStartDay:'',configured:false,note:''};
   const schema=s.schemaStatus||{version:0,expectedVersion:0,ready:false,issues:[]};
+  const schemaIssuesHtml=schema.ready?'':`<p class='muted'>${escapeHtml((schema.issues||[]).slice(0,3).join(' / '))}</p>`;
   const readiness=s.readiness||{ready:false,blockers:[],warnings:[],prototypeMode:true};
   const blockers=(readiness.blockers||[]);
   const warnings=(readiness.warnings||[]);
@@ -1208,7 +1209,7 @@ function maintenanceSection(){
         <div><span>アプリバージョン</span><strong>${escapeHtml(state.data.app.version)}</strong></div>
         <div><span>実行環境</span><strong>${escapeHtml(s.environment||'STAGING')}</strong></div>
         <div><span>最終確認</span><strong>${escapeHtml(s.checkedAt)}</strong></div>
-      </div><div class='button-row section-gap'><button class='secondary-button' onclick='loadMaintenance()'>状態を再確認</button><button class='secondary-button' onclick='migrateDatabaseFromAdmin()'>DBスキーマ更新</button></div>${schema.ready?'':`<p class='muted'>${escapeHtml((schema.issues||[]).slice(0,3).join(' / '))}</p>`}`}`)}
+      </div><div class='button-row section-gap'><button class='secondary-button' onclick='loadMaintenance()'>状態を再確認</button><button class='secondary-button' onclick='migrateDatabaseFromAdmin()'>DBスキーマ更新</button></div>${schemaIssuesHtml}`)}
     </div>
     <div class='section-gap'>${card('監査ログ（最新40件）',auditRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>日時</th><th>操作者</th><th>操作</th><th>対象</th><th>結果</th></tr></thead><tbody>${auditRows}</tbody></table></div>`:"<p class='muted'>監査ログはありません。</p>")}</div>
   </div>`;

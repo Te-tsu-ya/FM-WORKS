@@ -1035,3 +1035,8 @@ DB:
 `migrateDatabaseToCurrent` はADMIN専用、Script Lock内で実行し、変更前に `createDatabaseBackup_` を実行する。`ensureSchemaSheet_` は欠けた列/シートを追加するが、既存の非空欄ヘッダが契約と異なる場合は破壊的上書きを行わず例外停止する。
 
 `getProductionReadiness_` はSchema Contract不一致をblockerにする。
+
+
+### 40.1 Validation hardening
+
+`validate.mjs` は新設した `Labor.gs` / `Schema.gs` / `LeaveLedger.gs` / `MonthlySnapshot.gs` をrequired fileおよびJavaScript構文検査対象に含める。管理画面のSchema状態検査は `Maintenance.gs` の実ソースを明示的に読み込んで検証する。
