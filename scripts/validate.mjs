@@ -390,7 +390,7 @@ for (const compactLoginMarker of [
   "document.body.classList.add('login-mode')",
   "document.body.classList.remove('login-mode')",
   "prototypeMode?'試作版ログイン'",
-  "cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000')",
+  "試作環境です。ログイン用PINは開発管理者から案内されたものを入力してください。",
   "function getStoredSessionToken()",
   "localStorage.getItem('fmworks.session')",
   "この端末でログイン状態を保持する（30日）"
