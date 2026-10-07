@@ -145,7 +145,11 @@ function recordPunch(sessionToken, action, workLocation) {
     });
 
     SpreadsheetApp.flush();
-    return getInitialData(sessionToken);
+    return {
+      ok: true,
+      today: dateText,
+      attendance: getAttendanceState_(employee.employeeId)
+    };
   } catch (err) {
     appendAudit_({
       employeeId: employee.employeeId,
