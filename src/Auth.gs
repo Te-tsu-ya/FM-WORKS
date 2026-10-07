@@ -465,7 +465,7 @@ function setPrototypeMode(sessionToken, enabled) {
     target:'設定',targetId:'PROTOTYPE_MODE',before:'TRUE',after:'FALSE',
     source:'WEB',result:'SUCCESS',note:'本番認証へ切替'
   });
-  invalidateEmployeeSessions_(admin.employeeId,0);
+  rows.forEach(r=>invalidateEmployeeSessions_(r[0],0));
   return {ok:true,prototypeMode:false,requiresRelogin:true};
 }
 
