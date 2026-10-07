@@ -22,15 +22,16 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const calendar = getCompanyCalendarRange_(start,end);
   const calendarMap = Object.fromEntries(calendar.map(d=>[d.date,d]));
   const daily = [];
+  const systemToday = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   let totalMinutes=0,overtimeMinutes=0,holidayMinutes=0,workDays=0,missingPunchDays=0;
 
   for(let day=1;day<=lastDay;day++){
     const date=ym+'-'+String(day).padStart(2,'0');
     const rows=byDate[date]||[];
     const company=calendarMap[date]||{date:date,type:'未登録',working:false,start:'',end:'',breakMinutes:0,name:''};
-    const minutes=rows.length?calculateWorkedMinutes_(rows):0;
     const clockIn=rows.find(x=>x.action===PUNCH.CLOCK_IN);
     const clockOut=[...rows].reverse().find(x=>x.action===PUNCH.CLOCK_OUT);
+    const minutes=rows.length?calculateMonthlyDayMinutes_(rows,date===systemToday):0;
     const standard=company.working&&company.start&&company.end ? Math.max(0,timeRangeMinutes_(company.start,company.end)-Number(company.breakMinutes||0)) : 0;
     const overtime=company.working?Math.max(0,minutes-standard):0;
     const holiday=company.working?0:minutes;
@@ -68,6 +69,15 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     daily:daily,
     requests:requests
   };
+}
+
+function calculateMonthlyDayMinutes_(rows, isToday) {
+  if (!rows || !rows.length) return 0;
+  const hasClockIn = rows.some(r => r.action === PUNCH.CLOCK_IN);
+  const hasClockOut = rows.some(r => r.action === PUNCH.CLOCK_OUT);
+  if (!hasClockIn) return 0;
+  if (!hasClockOut && !isToday) return 0;
+  return calculateWorkedMinutes_(rows);
 }
 
 function createMonthlyExport(sessionToken, yearMonth, employeeId) {
