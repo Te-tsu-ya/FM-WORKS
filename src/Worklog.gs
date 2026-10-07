@@ -31,9 +31,9 @@ function saveWorklog(sessionToken, payload) {
   return withScriptLock_(function() {
     const date = normalizeDate_(payload.date);
     const project = String(payload.project || '').trim().slice(0, 120);
-    const category = String(payload.category || '').trim().slice(0, 80);
-    const description = String(payload.description || '').trim().slice(0, 500);
-    const note = String(payload.note || '').trim().slice(0, 500);
+    const category = safeSheetText_(payload.category, 80);
+    const description = safeSheetText_(payload.description, 500);
+    const note = safeSheetText_(payload.note, 500);
     const start = normalizeTime_(payload.start || '');
     const end = normalizeTime_(payload.end || '');
 
