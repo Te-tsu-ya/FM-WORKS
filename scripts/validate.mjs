@@ -114,6 +114,38 @@ if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
   failed = true;
 }
+for (const scheduleIdentityMarker of [
+  'function eventPeopleLabel(',
+  'function schedulePeopleLegend(',
+  "class='schedule-event-owner'",
+  "class='person-avatar'",
+  '社員名を予定カードに直接表示'
+]) {
+  if (!app.includes(scheduleIdentityMarker)) {
+    console.error(`Schedule owner identity UI missing: ${scheduleIdentityMarker}`);
+    failed = true;
+  }
+}
+for (const registeredCalendarMarker of [
+  'function getCompanyCalendarYears_()',
+  'availableYears: availableYears',
+  'nextCreatableYear: nextCreatableYear'
+]) {
+  if (!serverCode.includes(registeredCalendarMarker)) {
+    console.error(`Registered-year calendar control missing: ${registeredCalendarMarker}`);
+    failed = true;
+  }
+}
+for (const registeredCalendarUiMarker of [
+  'function companyYearToolbar()',
+  '未作成の年度は「作成」を実行するまで表示されません。',
+  'function generateCompanyCalendarYear(targetYear)'
+]) {
+  if (!app.includes(registeredCalendarUiMarker)) {
+    console.error(`Company calendar registered-year UI missing: ${registeredCalendarUiMarker}`);
+    failed = true;
+  }
+}
 
 for (const uiMarker of ['performGlobalSearch','toggleNotificationMenu','renderLogin','openPinHelpModal']) {
   if (!app.includes(uiMarker)) {
