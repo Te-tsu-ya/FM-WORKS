@@ -257,13 +257,12 @@ function getMonthlyCloseStatus(sessionToken, yearMonth) {
 function getMonthlyCloseStatusInternal_(yearMonth) {
   const ym=normalizeYearMonth_(yearMonth);
   const sheet=getDb_().getSheetByName(DB.sheets.monthlyClose);
-  if(!sheet||sheet.getLastRow()<2)return {yearMonth:ym,closed:false,status:'OPEN',closedAt:'',closedBy:'',reopenedAt:'',reopenedBy:'',note:''};
+  if(!sheet||sheet.getLastRow()<2)return {yearMonth:ym,closed:false,status:'OPEN',closedAt:'',closedBy:'',reopenedAt:'',reopenedBy:'',note:'',snapshotId:''};
   const found=sheet.getRange(2,1,sheet.getLastRow()-1,1).createTextFinder(ym).matchEntireCell(true).findNext();
-  if(!found)return {yearMonth:ym,closed:false,status:'OPEN',closedAt:'',closedBy:'',reopenedAt:'',reopenedBy:'',note:''};
-  const r=sheet.getRange(found.getRow(),1,1,8).getDisplayValues()[0];
-  return {yearMonth:ym,closed:r[1]==='CLOSED',status:r[1]||'OPEN',closedAt:r[2]||'',closedBy:r[3]||'',reopenedAt:r[4]||'',reopenedBy:r[5]||'',note:r[6]||''};
+  if(!found)return {yearMonth:ym,closed:false,status:'OPEN',closedAt:'',closedBy:'',reopenedAt:'',reopenedBy:'',note:'',snapshotId:''};
+  const r=sheet.getRange(found.getRow(),1,1,9).getDisplayValues()[0];
+  return {yearMonth:ym,closed:r[1]==='CLOSED',status:r[1]||'OPEN',closedAt:r[2]||'',closedBy:r[3]||'',reopenedAt:r[4]||'',reopenedBy:r[5]||'',note:r[6]||'',snapshotId:r[8]||''};
 }
-
 function closeMonthlyPeriod(sessionToken, yearMonth) {
   const admin=requireAdminSession_(sessionToken).employee;
   const ym=normalizeYearMonth_(yearMonth);
@@ -297,14 +296,16 @@ function closeMonthlyPeriod(sessionToken, yearMonth) {
       if(pending.length)throw new Error('対象月に承認待ち申請が'+pending.length+'件あります。すべて処理してから締めてください。');
     }
 
+    const snapshotId=persistMonthlyCloseSnapshots_(ym,summaries,admin);
+
     const sheet=getDb_().getSheetByName(DB.sheets.monthlyClose);
     const lastRow=sheet.getLastRow();
     const found=lastRow>=2?sheet.getRange(2,1,lastRow-1,1).createTextFinder(ym).matchEntireCell(true).findNext():null;
     const row=found?found.getRow():Math.max(2,lastRow+1);
     const nowText=toTimestamp_(new Date());
-    const before=found?sheet.getRange(row,1,1,8).getDisplayValues()[0]:['','','','','','','',''];
-    sheet.getRange(row,1,1,8).setValues([[ym,'CLOSED',nowText,admin.name,before[4]||'',before[5]||'',before[6]||'',nowText]]);
-    appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,operation:'月次締め',target:'月次締め',targetId:ym,before:before[1]||'OPEN',after:'CLOSED',source:'WEB',result:'SUCCESS',note:'給与対象 '+employees.length+'名'});
+    const before=found?sheet.getRange(row,1,1,9).getDisplayValues()[0]:['','','','','','','','',''];
+    sheet.getRange(row,1,1,9).setValues([[ym,'CLOSED',nowText,admin.name,before[4]||'',before[5]||'',before[6]||'',nowText,snapshotId]]);
+    appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,operation:'月次締め',target:'月次締め',targetId:ym,before:before[1]||'OPEN',after:'CLOSED',source:'WEB',result:'SUCCESS',note:'給与対象 '+employees.length+'名 / snapshot '+snapshotId});
     SpreadsheetApp.flush();
     return getMonthlyCloseStatusInternal_(ym);
   },30000);
@@ -321,10 +322,10 @@ function reopenMonthlyPeriod(sessionToken, yearMonth, reason) {
     const found=lastRow>=2?sheet.getRange(2,1,lastRow-1,1).createTextFinder(ym).matchEntireCell(true).findNext():null;
     if(!found)throw new Error('締め済みの月が見つかりません。');
     const row=found.getRow();
-    const before=sheet.getRange(row,1,1,8).getDisplayValues()[0];
+    const before=sheet.getRange(row,1,1,9).getDisplayValues()[0];
     if(before[1]!=='CLOSED')return getMonthlyCloseStatusInternal_(ym);
     const nowText=toTimestamp_(new Date());
-    sheet.getRange(row,2,1,7).setValues([['OPEN',before[2]||'',before[3]||'',nowText,admin.name,note,nowText]]);
+    sheet.getRange(row,2,1,8).setValues([['OPEN',before[2]||'',before[3]||'',nowText,admin.name,note,nowText,before[8]||'']]);
     appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,operation:'月次締め解除',target:'月次締め',targetId:ym,before:'CLOSED',after:'OPEN',source:'WEB',result:'SUCCESS',note:note});
     SpreadsheetApp.flush();
     return getMonthlyCloseStatusInternal_(ym);
@@ -659,8 +660,7 @@ function calculateMonthlyDayMinutes_(rows, isToday) {
 }
 
 function createMonthlyExport(sessionToken, yearMonth, employeeId) {
-  requireSession_(sessionToken);
-  const summary = getMonthlySummary(sessionToken, yearMonth, employeeId);
+  const summary = getMonthlySummaryForExport_(sessionToken, yearMonth, employeeId);
   assertMonthlyReadyForExport_(summary);
 
   let blob;
@@ -697,11 +697,13 @@ function createTeamMonthlyExport(sessionToken, yearMonth) {
 
   const employees = getPayrollEmployees_();
   if (!employees.length) throw new Error('給与集計対象の社員が設定されていません。社員マスタを確認してください。');
-
-  const summaries = employees.map(e => getMonthlySummary(sessionToken, ym, e.employeeId));
-  const blocked = summaries.filter(s => s.totals.missingPunchDays > 0);
-  if (blocked.length) {
-    throw new Error('要確認の勤怠が残っています: ' + blocked.map(s => s.employee.name + ' ' + s.totals.missingPunchDays + '日').join(' / '));
+  const closeStatus = getMonthlyCloseStatusInternal_(ym);
+  if (!closeStatus.closed || !closeStatus.snapshotId) {
+    throw new Error('給与対象の一括出力は月次締め後に実行してください。');
+  }
+  const summaries = getMonthlySnapshotSummaries_(ym, closeStatus.snapshotId, employees.map(e=>e.employeeId));
+  if (summaries.length !== employees.length) {
+    throw new Error('締め済み月の確定データが不足しています。締めを解除し、再締めしてください。');
   }
 
   let blob;

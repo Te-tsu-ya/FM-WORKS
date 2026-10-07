@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.0  
+**文書版:** 0.9.1  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.0`
+`APP.version = 0.9.1`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -904,3 +904,22 @@ ADMIN closeMonthlyPeriod
 `getMonthlySummary` / `getMonthlyReviewStatus` も同じ管理範囲をサーバー側で検証する。
 
 UIでは `monthlyTeamView` と `adminConsole` を分離する。MANAGERは直属部下の月次閲覧のみ、締め・給与一括出力・社員設定はADMINのみ。
+
+
+## 33. 月次確定スナップショット
+
+DB:
+
+- `月次確定`: 1 snapshot × 1 employee = 1 row、19列
+- `月次確定日次`: 1 snapshot × 1 employee × 1 date = 1 row、19列
+- `月次締め.I`: スナップショットID
+
+`closeMonthlyPeriod` は全blocker確認後に `persistMonthlyCloseSnapshots_` を実行し、そのIDを月次締めへ保存してからCLOSEDにする。
+
+`monthlySnapshotHash_` は、月次合計と日次事実を正規化した `monthlySnapshotPayload_` のJSONへSHA-256を適用する。
+
+`getMonthlySummaryForExport_` は締め済みなら再集計せず、月次確定/日次確定から復元する。
+
+`createTeamMonthlyExport` は月次締め済み + snapshotId必須。現在のSheets値を再計算して給与提出データに使用しない。
+
+締め解除は過去スナップショットを削除しない。再締め時は新しいIDを発行するため、履歴比較と監査が可能。

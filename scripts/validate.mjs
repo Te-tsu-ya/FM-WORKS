@@ -56,6 +56,7 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
     failed = true;
   }
 }
+const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
 for (const marker of [
@@ -78,6 +79,33 @@ const approveBlockEnd=requestCodeText.indexOf('\nfunction ',approveBlockStart+10
 const approveBlock=approveBlockStart>=0?(approveBlockEnd>approveBlockStart?requestCodeText.slice(approveBlockStart,approveBlockEnd):requestCodeText.slice(approveBlockStart)):'';
 if (!approveBlock.includes('requireSession_(sessionToken)') || approveBlock.includes('requireAdminSession_(sessionToken)') || !approveBlock.includes('assertCanApproveRequest_')) {
   console.error('Approval API must use scoped approver authorization instead of ADMIN-only authorization.');
+  failed = true;
+}
+
+for (const marker of [
+  'monthlySnapshot',
+  'monthlySnapshotDaily'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('Monthly snapshot DB mapping missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'function persistMonthlyCloseSnapshots_(',
+  'function getMonthlySnapshotSummaries_(',
+  'function getMonthlySummaryForExport_(',
+  'Utilities.DigestAlgorithm.SHA_256'
+]) {
+  if (!snapshotCodeText.includes(marker)) {
+    console.error('Monthly close snapshot marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!monthlyCode.includes('persistMonthlyCloseSnapshots_(ym,summaries,admin)') ||
+    !monthlyCode.includes('snapshotId') ||
+    !monthlyCode.includes('給与対象の一括出力は月次締め後に実行してください。')) {
+  console.error('Monthly close must persist immutable snapshots and exports must use closed data.');
   failed = true;
 }
 

@@ -12,7 +12,7 @@
 | Q-003 | 上司・承認者という組織概念がない | High | Kite / Ledger / Atlas | MANAGERと直属承認者を定義し、自分の部下のみ承認可能 | DONE v0.9.0 |
 | Q-004 | 有給が残日数だけで台帳がない | High | Lex / Atlas | 基準日・付与・取得・失効・調整・関連申請を履歴化 | READY |
 | Q-005 | 承認済申請の取消/変更が弱い | High | Kite / Ledger | 取消理由、取消承認、休暇残数の補償トランザクションを記録 | READY |
-| Q-006 | 月次締めが状態フラグのみ | Critical | Ledger / Atlas | 締め時点の月次/日次スナップショットを保存し再現可能 | READY |
+| Q-006 | 月次締めが状態フラグのみ | Critical | Ledger / Atlas | 締め時点の月次/日次スナップショットを保存し再現可能 | DONE v0.9.1 |
 | Q-007 | 労務計算モデルが単純 | High | Lex / Forge | 深夜・法定休日・法定時間外等を区分可能なデータモデルを実装。会社固有ルール未設定時は「法令対応済み」と表示しない | RESEARCHED |
 | Q-008 | Browser E2Eがない | High | Probe | ログイン/打刻/申請/承認/月次/テーマの自動E2Eまたは同等の実行可能テスト | READY |
 | Q-009 | 開発/検証/本番の境界が弱い | High | Orbit / Sentinel | ENVを明示し、Production Gateで危険設定を拒否 | READY |

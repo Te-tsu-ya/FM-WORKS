@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.0',
+  version: '0.9.1',
   locale: 'ja-JP'
 });
 
@@ -15,7 +15,9 @@ const DB = Object.freeze({
     audit: '監査ログ',
     projects: 'プロジェクト',
     monthlyClose: '月次締め',
-    monthlyReview: '月次確認'
+    monthlyReview: '月次確認',
+    monthlySnapshot: '月次確定',
+    monthlySnapshotDaily: '月次確定日次'
   }
 });
 

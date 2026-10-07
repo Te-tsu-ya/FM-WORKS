@@ -6,7 +6,8 @@ const files = [
   'src/Auth.gs',
   'src/Worklog.gs',
   'src/Requests.gs',
-  'src/Monthly.gs'
+  'src/Monthly.gs',
+  'src/MonthlySnapshot.gs'
 ];
 
 const context = vm.createContext({
@@ -50,7 +51,8 @@ globalThis.__fmTest = {
   previousYearMonth_,
   monthlyReviewUrgency_,
   yearMonthsBetween_,
-  canManageEmployeeRecord_
+  canManageEmployeeRecord_,
+  monthlySnapshotPayload_
 };
 `, context);
 
@@ -136,6 +138,14 @@ expect('admin cannot approve self', api.canManageEmployeeRecord_({employeeId:'FM
 expect('manager can manage direct report', api.canManageEmployeeRecord_({employeeId:'FM0002',role:'MANAGER'},{employeeId:'FM0003',role:'USER',managerId:'FM0002'}) === true);
 expect('manager cannot manage unrelated employee', api.canManageEmployeeRecord_({employeeId:'FM0002',role:'MANAGER'},{employeeId:'FM0004',role:'USER',managerId:'FM0001'}) === false);
 expect('user cannot manage another employee', api.canManageEmployeeRecord_({employeeId:'FM0003',role:'USER'},{employeeId:'FM0004',role:'USER',managerId:'FM0003'}) === false);
+const snapshotPayload = api.monthlySnapshotPayload_({
+  yearMonth:'2026-09',
+  employee:{employeeId:'FM0003'},
+  totals:{workDays:20,totalMinutes:9600,overtimeMinutes:120,worklogMinutes:9600},
+  daily:[{date:'2026-09-01',workingDay:true,workMinutes:480,worklogMinutes:480,workLocation:'出社'}]
+});
+expect('monthly snapshot payload keeps employee and month', snapshotPayload.employeeId==='FM0003' && snapshotPayload.yearMonth==='2026-09');
+expect('monthly snapshot payload contains normalized daily facts', snapshotPayload.daily.length===1 && snapshotPayload.daily[0].workMinutes===480);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
