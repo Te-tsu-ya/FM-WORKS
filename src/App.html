@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000};
 const pageCache={};
 const pendingLoads=new Set();
@@ -49,6 +49,44 @@ function fmtDate(s){const d=parseIso(s);return `${d.getMonth()+1}月${d.getDate(
 function fmtMonth(s){const d=parseIso(s);return `${d.getFullYear()}年 ${d.getMonth()+1}月`}
 function isToday(s){return state.data&&s===state.data.today}
 function categoryColor(c){return CATEGORY_COLORS[c]||'#64748b'}
+const PERSON_COLORS=[
+  {line:'#2563eb',bg:'#eff6ff',text:'#1d4ed8'},
+  {line:'#7c3aed',bg:'#f5f3ff',text:'#6d28d9'},
+  {line:'#059669',bg:'#ecfdf5',text:'#047857'},
+  {line:'#db2777',bg:'#fdf2f8',text:'#be185d'},
+  {line:'#d97706',bg:'#fffbeb',text:'#b45309'},
+  {line:'#0891b2',bg:'#ecfeff',text:'#0e7490'},
+  {line:'#4f46e5',bg:'#eef2ff',text:'#4338ca'},
+  {line:'#dc2626',bg:'#fef2f2',text:'#b91c1c'}
+];
+function personColor(key){
+  const s=String(key||'unknown');let hash=0;
+  for(let i=0;i<s.length;i++)hash=((hash<<5)-hash+s.charCodeAt(i))|0;
+  return PERSON_COLORS[Math.abs(hash)%PERSON_COLORS.length];
+}
+function shortPersonName(name){return String(name||'').trim().replace(/さん$/,'').split(/\s+/).filter(Boolean)[0]||'未設定'}
+function eventPeople(e){
+  const employees=state.schedule.employees.length?state.schedule.employees:(state.data&&state.data.employees||[]);
+  const byId=Object.fromEntries(employees.map(x=>[x.employeeId,x]));
+  const ids=e.employeeIds||[],names=e.employeeNames||[];
+  if(ids.length)return ids.map((id,i)=>({id,name:(byId[id]&&byId[id].name)||names[i]||id}));
+  return names.map((name,i)=>({id:'name:'+name+':'+i,name}));
+}
+function eventPeopleLabel(e){
+  const people=eventPeople(e);if(!people.length)return '参加者未設定';
+  const labels=people.slice(0,2).map(p=>shortPersonName(p.name));
+  return labels.join('・')+(people.length>2?' +'+(people.length-2):'');
+}
+function eventPersonAvatar(e){
+  const people=eventPeople(e);const p=people[0]||{id:'unknown',name:'?'},color=personColor(p.id);
+  return `<span class='person-avatar' style='--person-bg:${color.bg};--person-text:${color.text}' aria-hidden='true'>${escapeHtml(shortPersonName(p.name).slice(0,1))}</span>`;
+}
+function schedulePeopleLegend(){
+  const s=state.schedule,employees=s.employees.length?s.employees:(state.data&&state.data.employees||[]);
+  const visible=s.employeeId==='ALL'?employees:employees.filter(e=>e.employeeId===s.employeeId);
+  if(!visible.length)return '';
+  return `<div class='people-legend'><span class='people-legend-label'>社員</span>${visible.map(e=>{const color=personColor(e.employeeId);return `<span class='person-chip' style='--person-color:${color.line};--person-bg:${color.bg};--person-text:${color.text}'><i></i><b>${escapeHtml(shortPersonName(e.name))}</b></span>`}).join('')}</div>`;
+}
 function roleLabel(role){return ({ADMIN:'管理者',CALENDAR_EDITOR:'会社カレンダー編集者',USER:'社員'})[role]||role||'社員'}
 function clientInfo(){return [navigator.platform||'',navigator.userAgent||''].join(' | ').slice(0,240)}
 function sessionErrorMessage(err){return String(err&&err.message||err||'')}
@@ -199,13 +237,21 @@ function scheduleToday(){state.schedule.date=state.data.today;loadSchedule()}
 function setScheduleFilter(kind,value){state.schedule[kind]=value;loadSchedule()}
 function companyDayMap(){return Object.fromEntries((state.schedule.companyDays||[]).map(d=>[d.date,d]))}
 function eventsFor(date){return (state.schedule.events||[]).filter(e=>e.date===date)}
-function eventChip(e){return `<button class='schedule-event' style='--event-color:${categoryColor(e.category)}' onclick="event.stopPropagation();openScheduleEditor('${e.id}')"><span>${e.allDay?'終日':escapeHtml(e.start||'')}</span><strong>${escapeHtml(e.title)}</strong></button>`}
+function eventChip(e){
+  const people=eventPeople(e),primary=people[0]||{id:'unknown'},color=personColor(primary.id);
+  return `<button class='schedule-event' style='--person-color:${color.line};--person-bg:${color.bg};--category-color:${categoryColor(e.category)}' onclick="event.stopPropagation();openScheduleEditor('${e.id}')">
+    <span class='schedule-event-time'>${e.allDay?'終日':escapeHtml(e.start||'')}</span>
+    <strong class='schedule-event-title'>${escapeHtml(e.title)}</strong>
+    <span class='schedule-event-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span>
+    <i class='schedule-category-dot' title='${escapeHtml(e.category)}'></i>
+  </button>`
+}
 function scheduleToolbar(){const s=state.schedule;const employees=s.employees.length?s.employees:(state.data.employees||[]);return `<div class='schedule-toolbar'><div class='toolbar-group'><button class='secondary-button compact' onclick='moveSchedule(-1)'>‹</button><button class='secondary-button compact' onclick='scheduleToday()'>今日</button><button class='secondary-button compact' onclick='moveSchedule(1)'>›</button><strong class='period-label'>${fmtMonth(s.date)}</strong></div><div class='toolbar-group'><div class='segmented'>${[['month','月'],['week','週'],['day','日'],['list','一覧']].map(x=>`<button class='${s.view===x[0]?'active':''}' onclick="changeScheduleView('${x[0]}')">${x[1]}</button>`).join('')}</div><select class='filter-select' onchange="setScheduleFilter('employeeId',this.value)"><option value='ALL'>全社員</option>${employees.map(e=>`<option value='${e.employeeId}' ${s.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select><select class='filter-select' onchange="setScheduleFilter('category',this.value)"><option value='ALL'>全カテゴリ</option>${Object.keys(CATEGORY_COLORS).map(c=>`<option value='${c}' ${s.category===c?'selected':''}>${c}</option>`).join('')}</select><button class='primary-button' onclick='openScheduleEditor()'>＋ 予定登録</button></div></div>`}
 function monthView(){const s=state.schedule,range=monthGridRange(s.date),map=companyDayMap(),curMonth=parseIso(s.date).getMonth(),cells=[];for(let d=range.start;;d=addDays(d,1)){const dt=parseIso(d),ev=eventsFor(d),cd=map[d];cells.push(`<div class='month-day ${dt.getMonth()!==curMonth?'outside':''} ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}' onclick="openDay('${d}')"><div class='day-head'><span>${dt.getDate()}</span>${cd&&cd.type!=='通常勤務'?`<em class='day-type ${cd.working?'workday':'offday'}'>${escapeHtml(cd.name||cd.type)}</em>`:''}</div><div class='day-events'>${ev.slice(0,3).map(eventChip).join('')}${ev.length>3?`<button class='more-events'>＋${ev.length-3}件</button>`:''}</div></div>`);if(d===range.end)break}return `<div class='weekday-row'>${['日','月','火','水','木','金','土'].map(x=>`<div>${x}</div>`).join('')}</div><div class='month-grid'>${cells.join('')}</div>`}
 function weekView(){const start=startOfWeek(state.schedule.date),map=companyDayMap();return `<div class='week-grid'>${Array.from({length:7},(_,i)=>{const d=addDays(start,i),cd=map[d],ev=eventsFor(d);return `<section class='week-day ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}'><header><strong>${fmtDate(d)}</strong><small>${cd?escapeHtml(cd.name||cd.type):''}</small></header><div>${ev.length?ev.map(eventChip).join(''):`<p class='muted empty-day'>予定なし</p>`}</div><button class='add-inline' onclick="openScheduleEditor('', '${d}')">＋</button></section>`}).join('')}</div>`}
-function dayView(){const d=state.schedule.date,cd=companyDayMap()[d],ev=eventsFor(d);return `<div class='day-view'><div class='day-summary'><div><h2>${fmtDate(d)}</h2><p class='muted'>${cd?`${escapeHtml(cd.type)}${cd.name?' / '+escapeHtml(cd.name):''}${cd.working?'  '+cd.start+'-'+cd.end:''}`:'会社カレンダー未登録'}</p></div><button class='primary-button' onclick="openScheduleEditor('', '${d}')">＋ この日に予定</button></div>${ev.length?ev.map(e=>`<article class='agenda-item' style='--event-color:${categoryColor(e.category)}' onclick="openScheduleEditor('${e.id}')"><div class='agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</div><div><strong>${escapeHtml(e.title)}</strong><p>${escapeHtml(e.employeeNames.join('、'))}${e.location?' ・ '+escapeHtml(e.location):''}</p><span class='badge'>${escapeHtml(e.category)}</span></div></article>`).join(''):`<div class='empty-state'><strong>予定はありません</strong><p>右上のボタンから予定を登録できます。</p></div>`}</div>`}
-function listView(){const ev=state.schedule.events||[];return `<div class='schedule-list'><div class='schedule-list-head'><span>日付</span><span>時間</span><span>予定</span><span>参加者</span><span>分類</span></div>${ev.length?ev.map(e=>`<button class='schedule-list-row' onclick="openScheduleEditor('${e.id}')"><span><strong>${fmtDate(e.date)}</strong></span><span>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span><span><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</span><span>${escapeHtml(e.employeeNames.join('、'))}</span><span><i style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></button>`).join(''):`<div class='empty-state'>該当する予定はありません。</div>`}</div>`}
-function schedulePage(){const s=state.schedule;let body=(s.loading&&!cacheHas('schedule',scheduleCacheKey()))?`<div class='loading-card'></div>`:s.view==='month'?monthView():s.view==='week'?weekView():s.view==='day'?dayView():listView();return `${pageHead('予定表','社員の予定・訪問・会議・作業予定を共有します。会社の休日設定とは分離しています。')} ${scheduleToolbar()} <div class='schedule-surface'>${body}</div><div class='calendar-legend'><span><i class='legend-dot holiday'></i>会社休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span>予定データはFM WORKS DBで共有</span></div>`}
+function dayView(){const d=state.schedule.date,cd=companyDayMap()[d],ev=eventsFor(d);return `<div class='day-view'><div class='day-summary'><div><h2>${fmtDate(d)}</h2><p class='muted'>${cd?`${escapeHtml(cd.type)}${cd.name?' / '+escapeHtml(cd.name):''}${cd.working?'  '+cd.start+'-'+cd.end:''}`:'会社カレンダー未登録'}</p></div><button class='primary-button' onclick="openScheduleEditor('', '${d}')">＋ この日に予定</button></div>${ev.length?ev.map(e=>{const p=eventPeople(e)[0]||{id:'unknown'},color=personColor(p.id);return `<article class='agenda-item' style='--person-color:${color.line};--person-bg:${color.bg}' onclick="openScheduleEditor('${e.id}')"><div class='agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</div><div><strong>${escapeHtml(e.title)}</strong><p class='agenda-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b>${e.location?' <span>・ '+escapeHtml(e.location)+'</span>':''}</p><span class='badge'><i class='inline-category-dot' style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></div></article>`}).join(''):`<div class='empty-state'><strong>予定はありません</strong><p>右上のボタンから予定を登録できます。</p></div>`}</div>`}
+function listView(){const ev=state.schedule.events||[];return `<div class='schedule-list'><div class='schedule-list-head'><span>日付</span><span>時間</span><span>予定</span><span>担当・参加者</span><span>分類</span></div>${ev.length?ev.map(e=>`<button class='schedule-list-row' onclick="openScheduleEditor('${e.id}')"><span><strong>${fmtDate(e.date)}</strong></span><span>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span><span><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</span><span class='list-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span><span><i style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></button>`).join(''):`<div class='empty-state'>該当する予定はありません。</div>`}</div>`}
+function schedulePage(){const s=state.schedule;let body=(s.loading&&!cacheHas('schedule',scheduleCacheKey()))?`<div class='loading-card'></div>`:s.view==='month'?monthView():s.view==='week'?weekView():s.view==='day'?dayView():listView();return `${pageHead('予定表','社員名を予定カードに直接表示し、色と名前の両方で誰の予定か判別できます。')} ${scheduleToolbar()} ${schedulePeopleLegend()} <div class='schedule-surface'>${body}</div><div class='calendar-legend'><span><i class='legend-dot holiday'></i>会社休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span><i class='legend-dot category'></i>右端の点は予定カテゴリ</span></div>`}
 function openDay(date){state.schedule.date=date;state.schedule.view='day';loadSchedule()}
 function openConfirmDialog(title,message,confirmLabel,onConfirm,danger){
   state.confirmAction=onConfirm;
@@ -294,23 +340,41 @@ function loadCompanyCalendar(year,options={}){
   if(!options.silent)renderPageIfActive('companyCalendar');
   google.script.run.withSuccessHandler(data=>{
     endPageLoad(ticket);
-    if(companyCacheKey()!==key)return;
+    if(String(state.company.year)!==String(key))return;
     Object.assign(state.company,data,{loading:false});
-    markPageCache('company',key);
+    markPageCache('company',String(data.year));
     renderPageIfActive('companyCalendar');
   }).withFailureHandler(err=>{
     endPageLoad(ticket);state.company.loading=false;
     if(!handleApiError(err,'会社カレンダーを読み込めませんでした')&&!options.silent)renderPageIfActive('companyCalendar');
   }).getCompanyCalendar(state.sessionToken,state.company.year);
 }
-function moveCompanyYear(n){loadCompanyCalendar((state.company.year||2026)+n)}
+function moveCompanyYear(n){
+  const years=state.company.availableYears||[],idx=years.indexOf(Number(state.company.year));
+  const next=idx>=0?years[idx+n]:null;
+  if(next)loadCompanyCalendar(next);
+}
+function companyYearToolbar(){
+  const c=state.company,years=c.availableYears||[],idx=years.indexOf(Number(c.year));
+  const prev=idx>0?years[idx-1]:null,next=idx>=0&&idx<years.length-1?years[idx+1]:null;
+  const create=canEditCompanyCalendar()&&c.nextCreatableYear&&c.canGenerateNextStandard
+    ? `<button class='secondary-button compact create-year-button' onclick='generateCompanyCalendarYear(${Number(c.nextCreatableYear)})'>＋ ${Number(c.nextCreatableYear)}年を作成</button>`
+    : '';
+  return `<div class='company-year-toolbar'><button class='secondary-button compact' onclick='moveCompanyYear(-1)' ${prev?'':'disabled'}>‹</button><select class='company-year-select' onchange='loadCompanyCalendar(Number(this.value))'>${years.map(y=>`<option value='${y}' ${Number(c.year)===y?'selected':''}>${y}年</option>`).join('')}</select><button class='secondary-button compact' onclick='moveCompanyYear(1)' ${next?'':'disabled'}>›</button>${create}</div>`;
+}
 function miniMonth(year,month){const days=state.company.days||[],map=Object.fromEntries(days.map(d=>[d.date,d])),first=new Date(year,month-1,1),start=new Date(first);start.setDate(1-first.getDay());const cells=[];for(let i=0;i<42;i++){const dt=new Date(start);dt.setDate(start.getDate()+i);const ds=iso(dt),cd=map[ds],outside=dt.getMonth()!==month-1;cells.push(`<button class='mini-day ${outside?'outside':''} ${cd&&!cd.working?'off':''} ${cd&&cd.type==='調整出勤日'?'adjusted':''} ${isToday(ds)?'today':''}' onclick="openCompanyDay('${ds}')" ${outside?'disabled':''} aria-label="${fmtDate(ds)} ${cd?escapeHtml(cd.name||cd.type):'未登録'}"><span>${dt.getDate()}</span>${cd&&cd.name?`<small>${escapeHtml(cd.name)}</small>`:''}</button>`)}return `<section class='mini-month'><h3>${month}月</h3><div class='mini-weekdays'>${['日','月','火','水','木','金','土'].map(x=>`<span>${x}</span>`).join('')}</div><div class='mini-grid'>${cells.join('')}</div></section>`}
-function companyCalendarPage(){const c=state.company,editable=canEditCompanyCalendar();if(c.loading&&!cacheHas('company',companyCacheKey()))return `${pageHead('会社カレンダー','会社としての勤務日・休日・調整出勤日を確認します。予定表とは別データです。')}<div class='loading-card'></div>`;const permissionBadge=editable?`<span class='badge success'>編集権限あり</span>`:`<span class='badge'>閲覧専用</span>`;return `${pageHead('会社カレンダー','会社としての勤務日・休日・調整出勤日を確認します。予定表とは別データです。','<button class=\'secondary-button\' onclick="navigate(\'schedule\')">予定表へ</button>')}<div class='permission-banner ${editable?'can-edit':'read-only'}'><div><strong>${permissionBadge}</strong><span>${editable?'管理者または会社カレンダー編集権限を持つユーザーです。':'このアカウントは閲覧のみです。会社カレンダーの変更はできません。'}</span></div></div><div class='company-year-toolbar'><button class='secondary-button compact' onclick='moveCompanyYear(-1)'>‹</button><strong>${c.year||2026}年</strong><button class='secondary-button compact' onclick='moveCompanyYear(1)'>›</button></div><div class='grid cols-4 company-kpis'>${metric('年間稼働日数',`${c.workdays||0}日`,'tone-green')}${metric('年間休日',`${c.daysOff||0}日`,'tone-orange')}${metric('調整出勤日',`${c.adjustedWorkdays||0}日`,'')}${metric('会社独自休日',`${c.companyHolidays||0}日`,'tone-purple')}</div>${c.days&&c.days.length?`<div class='year-grid'>${Array.from({length:12},(_,i)=>miniMonth(c.year,i+1)).join('')}</div>`:`<div class='empty-state'><strong>${c.year}年の会社カレンダーは未登録です。</strong><p>${c.canGenerateStandard&&editable?'土日と国民の祝日を基準に標準カレンダーを自動生成できます。会社独自休日・調整出勤日は生成後に設定します。':'管理者が登録すると予定表にも休日情報が反映されます。'}</p>${c.canGenerateStandard&&editable?`<button class='primary-button' onclick='generateCompanyCalendarYear()'>${c.year}年の標準カレンダーを生成</button>`:''}</div>`}<div class='calendar-legend'><span><i class='legend-dot holiday'></i>休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span>${editable?'日付をクリックすると確認・編集できます':'日付をクリックすると詳細を確認できます'}</span></div>`}
-function generateCompanyCalendarYear(){
-  const year=state.company.year;
-  openConfirmDialog('標準カレンダーを生成',year+'年を土日＋国民の祝日で生成します。会社独自休日や調整出勤日は自動では設定しません。','生成する',function(){
-    showToast('会社カレンダーを生成しています...');
-    google.script.run.withSuccessHandler(result=>{showToast(year+'年の標準カレンダーを生成しました');invalidatePageCache('company','schedule','monthly');loadCompanyCalendar(year,{force:true})}).withFailureHandler(err=>handleApiError(err,'会社カレンダーを生成できませんでした')).generateStandardCompanyCalendarYear(state.sessionToken,year);
+function companyCalendarPage(){
+  const c=state.company,editable=canEditCompanyCalendar();
+  if(c.loading&&!cacheHas('company',companyCacheKey()))return `${pageHead('会社カレンダー','会社として登録済みの年度だけを表示します。')}<div class='loading-card'></div>`;
+  const permissionBadge=editable?`<span class='badge success'>編集権限あり</span>`:`<span class='badge'>閲覧専用</span>`;
+  return `${pageHead('会社カレンダー','登録済みの年度だけを表示します。未作成の年度は「作成」を実行するまで表示されません。','<button class=\'secondary-button\' onclick="navigate(\'schedule\')">予定表へ</button>')}<div class='permission-banner ${editable?'can-edit':'read-only'}'><div><strong>${permissionBadge}</strong><span>${editable?'管理者または会社カレンダー編集権限を持つユーザーです。':'このアカウントは閲覧のみです。会社カレンダーの変更はできません。'}</span></div></div>${companyYearToolbar()}<div class='grid cols-4 company-kpis'>${metric('年間稼働日数',`${c.workdays||0}日`,'tone-green')}${metric('年間休日',`${c.daysOff||0}日`,'tone-orange')}${metric('調整出勤日',`${c.adjustedWorkdays||0}日`,'')}${metric('会社独自休日',`${c.companyHolidays||0}日`,'tone-purple')}</div>${c.days&&c.days.length?`<div class='year-grid'>${Array.from({length:12},(_,i)=>miniMonth(c.year,i+1)).join('')}</div>`:`<div class='empty-state'><strong>会社カレンダーがまだありません。</strong><p>編集権限者が年度を作成すると表示されます。</p></div>`}<div class='calendar-legend'><span><i class='legend-dot holiday'></i>休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span>${editable?'日付をクリックすると確認・編集できます':'日付をクリックすると詳細を確認できます'}</span></div>`;
+}
+function generateCompanyCalendarYear(targetYear){
+  const year=Number(targetYear||state.company.nextCreatableYear);
+  if(!year){showToast('作成する年度を確認できませんでした');return}
+  openConfirmDialog('新しい年度を作成',year+'年の会社カレンダーを土日＋国民の祝日を基準に作成します。作成するまで社員画面には表示されません。会社独自休日・調整出勤日は作成後に設定してください。',''+year+'年を作成',function(){
+    showToast(year+'年の会社カレンダーを作成しています...');
+    google.script.run.withSuccessHandler(()=>{showToast(year+'年を作成しました');invalidatePageCache('company','schedule','monthly');state.company.year=year;loadCompanyCalendar(year,{force:true})}).withFailureHandler(err=>handleApiError(err,'会社カレンダーを生成できませんでした')).generateStandardCompanyCalendarYear(state.sessionToken,year);
   },false);
 }
 function openCompanyDay(date){const cd=(state.company.days||[]).find(x=>x.date===date)||{date,type:'通常勤務',name:'',start:'09:00',end:'18:00',breakMinutes:60,working:true};const editable=canEditCompanyCalendar(),r=ensureModal();if(!editable){r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー / 閲覧専用</small><h2>${fmtDate(date)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div><div class='readonly-calendar-detail'><div><span>区分</span><strong>${escapeHtml(cd.type||'未登録')}</strong></div><div><span>名称</span><strong>${escapeHtml(cd.name||'—')}</strong></div><div><span>勤務時間</span><strong>${cd.working?`${escapeHtml(cd.start||'--:--')} - ${escapeHtml(cd.end||'--:--')}`:'休日'}</strong></div><div><span>休憩</span><strong>${cd.working?`${Number(cd.breakMinutes||0)}分`:'—'}</strong></div></div><div class='modal-actions'><span class='muted'>変更するには管理者または編集権限が必要です。</span><div><button class='primary-button' onclick='closeModal()'>閉じる</button></div></div></section>`;return}r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー編集</small><h2>${fmtDate(date)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div><div class='form-grid'><label class='field full'><span>区分</span><select id='companyType'>${['通常勤務','法定祝日','会社休日','調整出勤日','週末'].map(x=>`<option value='${x}' ${cd.type===x?'selected':''}>${x}</option>`).join('')}</select></label><label class='field full'><span>名称</span><input id='companyName' value='${escapeHtml(cd.name||'')}' placeholder='例：夏季休暇'></label><label class='field'><span>勤務開始</span><input id='companyStart' type='time' value='${escapeHtml(cd.start||'09:00')}'></label><label class='field'><span>勤務終了</span><input id='companyEnd' type='time' value='${escapeHtml(cd.end||'18:00')}'></label><label class='field'><span>休憩（分）</span><input id='companyBreak' type='number' min='0' value='${cd.breakMinutes||60}'></label></div><div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="saveCompanyDayFromModal('${date}')">保存</button></div></div></section>`}
