@@ -92,6 +92,7 @@ runnerProxy=new Proxy(runner,{
 
 const context=vm.createContext({
   console,
+  apiCalls,
   Object,Array,Set,Map,JSON,RegExp,Error,Date,Math,Number,String,Boolean,
   document,
   window:{matchMedia:()=>({matches:true})},
