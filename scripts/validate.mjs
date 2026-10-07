@@ -304,7 +304,7 @@ for (const schedulePrivacyMarker of [
     failed = true;
   }
 }
-if (!searchCode.includes('canViewScheduleRow_(session.employee,r)')) {
+if (!fs.readFileSync(path.join(root,'src/Search.gs'),'utf8').includes('canViewScheduleRow_(session.employee,r)')) {
   console.error('Global search must respect schedule visibility.');
   failed = true;
 }
