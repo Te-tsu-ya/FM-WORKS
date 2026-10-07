@@ -360,7 +360,11 @@ CSS対象:
 
 disabledは `cursor:not-allowed`。
 
+小型操作要素 `.small-button`、申請理由チップ、設定サブメニュー、設定タブは `min-height:28px` とし、24px未満の独立クリック領域を作らない。
+
 `:focus-visible` は青系3pxアウトライン。
+
+ダークテーマでは、管理画面のsmall-button / security-item / readiness-row / maintenance-detail / auth-stateにも個別の暗色面・枠・文字色を指定し、ライト背景の取り残しを防ぐ。
 
 ## 17. クライアントキャッシュ
 
