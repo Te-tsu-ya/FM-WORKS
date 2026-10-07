@@ -116,6 +116,10 @@ function approveRequest(sessionToken, requestId, decision, comment) {
       }
     }
 
+    if (approve && r[4] === '打刻修正') {
+      preparePunchCorrection_(r);
+    }
+
     rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
       approve ? '承認済' : '差戻し',
       admin.name,
@@ -183,7 +187,7 @@ function findRequestRow_(requestId) {
   return {sheet:sheet,row:row,values:sheet.getRange(row,1,1,14).getDisplayValues()[0]};
 }
 
-function applyApprovedPunchCorrection_(requestRow) {
+function preparePunchCorrection_(requestRow) {
   let correction;
   try { correction = JSON.parse(requestRow[7] || '{}'); }
   catch(e) { throw new Error('打刻修正申請の内容が読み取れません。'); }
@@ -195,7 +199,6 @@ function applyApprovedPunchCorrection_(requestRow) {
   const time = normalizeTime_(correction.time || '');
   if (!Object.values(PUNCH).includes(action) || !time) throw new Error('打刻修正内容が不正です。');
 
-  const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const activeRows = getActivePunchRows_(employeeId, date, date);
   const originalId = String(correction.originalPunchId || '').trim();
   let originalLocation = ['出社','在宅','外出'].includes(correction.workLocation) ? correction.workLocation : '出社';
@@ -213,10 +216,23 @@ function applyApprovedPunchCorrection_(requestRow) {
   candidate.push({ id:'PROPOSED', action:action, timestamp:timestamp, workLocation:originalLocation });
   validatePunchSequence_(candidate);
 
+  return {
+    employeeId: employeeId,
+    employeeName: employeeName,
+    date: date,
+    action: action,
+    timestamp: timestamp,
+    workLocation: originalLocation,
+    originalId: originalId
+  };
+}
+
+function applyApprovedPunchCorrection_(requestRow) {
+  const plan = preparePunchCorrection_(requestRow);
   const nowText = toTimestamp_(new Date());
-  sheet.appendRow([
-    createId_('P'), employeeId, employeeName, date, action,
-    timestamp, originalLocation, 'CORRECTION',
-    false, originalId, '申請承認による修正 ' + requestRow[0], nowText
+  getDb_().getSheetByName(DB.sheets.punches).appendRow([
+    createId_('P'), plan.employeeId, plan.employeeName, plan.date, plan.action,
+    plan.timestamp, plan.workLocation, 'CORRECTION',
+    false, plan.originalId, '申請承認による修正 ' + requestRow[0], nowText
   ]);
 }
