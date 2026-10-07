@@ -162,14 +162,32 @@ function recordPunch(sessionToken, action, workLocation) {
   }
 }
 
-function getPunchHistory(sessionToken, limit) {
-  const employee = requireSession_(sessionToken).employee;
+function getActivePunchRows_(employeeId, startDate, endDate) {
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
-    .filter(r => r[1] === employee.employeeId && String(r[8]).toUpperCase() !== 'TRUE')
+  const all = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
+    .filter(r => {
+      if (r[1] !== employeeId) return false;
+      if (startDate && r[3] < startDate) return false;
+      if (endDate && r[3] > endDate) return false;
+      return true;
+    });
+
+  const superseded = new Set(
+    all.map(r => String(r[9] || '').trim()).filter(Boolean)
+  );
+
+  return all.filter(r =>
+    String(r[8]).toUpperCase() !== 'TRUE' &&
+    !superseded.has(String(r[0] || '').trim())
+  );
+}
+
+function getPunchHistory(sessionToken, limit) {
+  const employee = requireSession_(sessionToken).employee;
+  const rows = getActivePunchRows_(employee.employeeId)
     .sort((a,b) => String(b[5]).localeCompare(String(a[5])))
     .slice(0, Math.max(1, Number(limit) || 20));
 
@@ -186,16 +204,9 @@ function getPunchHistory(sessionToken, limit) {
 }
 
 function getAttendanceState_(employeeId) {
-  const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
-  const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) {
-    return emptyAttendance_(today);
-  }
-
-  const rows = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
-    .filter(r => r[1] === employeeId && r[3] === today && String(r[8]).toUpperCase() !== 'TRUE')
+  const rows = getActivePunchRows_(employeeId, today, today)
     .map(r => ({
       id: r[0],
       action: r[4],
