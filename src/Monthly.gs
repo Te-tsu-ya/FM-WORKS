@@ -190,8 +190,9 @@ function getMonthlyReviewPrompt_(employeeId) {
 function getMonthlyReviewStatus(sessionToken, yearMonth, employeeId) {
   const session=requireSession_(sessionToken);
   const ym=normalizeYearMonth_(yearMonth);
-  const target=session.employee.role==='ADMIN'&&employeeId?String(employeeId):session.employee.employeeId;
-  return getMonthlyReviewStatusInternal_(ym,target);
+  const requested=employeeId?String(employeeId).trim().toUpperCase():session.employee.employeeId;
+  if(requested!==session.employee.employeeId&&!canManageEmployee_(session.employee,requested)) throw new Error('この社員の月次確認状態を表示する権限がありません。');
+  return getMonthlyReviewStatusInternal_(ym,requested);
 }
 
 function getMonthlyReviewStatusInternal_(yearMonth, employeeId) {
@@ -394,7 +395,9 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const ym = String(yearMonth || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM'));
   if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('対象月を確認してください。');
 
-  const targetId = session.employee.role === 'ADMIN' && employeeId ? String(employeeId) : session.employee.employeeId;
+  const requestedId = employeeId ? String(employeeId).trim().toUpperCase() : session.employee.employeeId;
+  if (requestedId !== session.employee.employeeId && !canManageEmployee_(session.employee, requestedId)) throw new Error('この社員の月次勤怠を表示する権限がありません。');
+  const targetId = requestedId;
   const employee = getEmployee_(targetId);
   const parts = ym.split('-').map(Number);
   const start = ym + '-01';

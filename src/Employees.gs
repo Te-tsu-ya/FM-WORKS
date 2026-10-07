@@ -11,7 +11,7 @@ function saveEmployee(sessionToken, payload) {
     const displayName = safeSheetText_(payload.displayName || name, 80);
     const department = safeSheetText_(payload.department, 80);
     const title = safeSheetText_(payload.title, 80);
-    const allowedRoles = ['USER','CALENDAR_EDITOR','ADMIN'];
+    const allowedRoles = ['USER','CALENDAR_EDITOR','MANAGER','ADMIN'];
     const role = allowedRoles.includes(payload.role) ? payload.role : 'USER';
     const status = payload.active === false ? '退職' : '在籍';
 
@@ -36,6 +36,13 @@ function saveEmployee(sessionToken, payload) {
     }
     const note = safeSheetText_(payload.note, 500);
     const payrollIncluded = !!payload.payrollIncluded;
+    const managerId = String(payload.managerId || '').trim().toUpperCase();
+    if (managerId === employeeId) throw new Error('自分自身を直属承認者には設定できません。');
+    if (managerId) {
+      const manager = getEmployeeAuthRecord_(managerId);
+      if (!manager || !manager.active) throw new Error('直属承認者が在籍社員として見つかりません。');
+      if (!['MANAGER','ADMIN'].includes(String(manager.role || '').toUpperCase())) throw new Error('直属承認者にはマネージャーまたは管理者を指定してください。');
+    }
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
     if (existingBefore && existingBefore.employeeId === admin.employeeId && (role !== 'ADMIN' || status !== '在籍')) {
@@ -61,9 +68,9 @@ function saveEmployee(sessionToken, payload) {
       ? (String(existingAuth[7] || '').toUpperCase() === 'DISABLED' ? 'ACTIVE' : (existingAuth[7] || 'ACTIVE'))
       : 'DISABLED';
 
-    sheet.getRange(rowNumber,1,1,23).setValues([[
+    sheet.getRange(rowNumber,1,1,24).setValues([[
       employeeId,name,displayName,department,title,role,status,workStart,workEnd,
-      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded
+      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded,managerId
     ]]);
 
     if (existingEmployee && existingEmployee.active && status !== '在籍') {
@@ -74,7 +81,7 @@ function saveEmployee(sessionToken, payload) {
       employeeId:admin.employeeId,employeeName:admin.name,operation:isNew?'社員追加':'社員更新',
       target:'社員マスタ',targetId:employeeId,
       before:existingEmployee ? [existingEmployee.name,existingEmployee.role,existingEmployee.active?'在籍':'退職'].join(' / ') : '',
-      after:name+' / '+role+' / '+status,
+      after:name+' / '+role+' / '+status+' / approver:'+(managerId||'none'),
       source:'WEB',result:'SUCCESS',note:''
     });
     SpreadsheetApp.flush();

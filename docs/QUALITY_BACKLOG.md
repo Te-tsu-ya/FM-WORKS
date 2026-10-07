@@ -8,8 +8,8 @@
 | ID | 問題 | Severity | 主担当 | 受入条件 | 状態 |
 | --- | --- | --- | --- | --- | --- |
 | Q-001 | 試作共通PIN 000000 / Prototype Mode | Critical | Sentinel / Orbit | Production Gateで共通PINを禁止し、個別認証のみ許可 | IN PROGRESS |
-| Q-002 | ADMINが自分の申請を承認可能 | Critical | Ledger / Forge | 申請者=承認者をAPIレベルで拒否しテスト | READY |
-| Q-003 | 上司・承認者という組織概念がない | High | Kite / Ledger / Atlas | MANAGERと直属承認者を定義し、自分の部下のみ承認可能 | READY |
+| Q-002 | ADMINが自分の申請を承認可能 | Critical | Ledger / Forge | 申請者=承認者をAPIレベルで拒否しテスト | DONE v0.9.0 |
+| Q-003 | 上司・承認者という組織概念がない | High | Kite / Ledger / Atlas | MANAGERと直属承認者を定義し、自分の部下のみ承認可能 | DONE v0.9.0 |
 | Q-004 | 有給が残日数だけで台帳がない | High | Lex / Atlas | 基準日・付与・取得・失効・調整・関連申請を履歴化 | READY |
 | Q-005 | 承認済申請の取消/変更が弱い | High | Kite / Ledger | 取消理由、取消承認、休暇残数の補償トランザクションを記録 | READY |
 | Q-006 | 月次締めが状態フラグのみ | Critical | Ledger / Atlas | 締め時点の月次/日次スナップショットを保存し再現可能 | READY |

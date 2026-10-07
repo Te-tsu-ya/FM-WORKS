@@ -6,10 +6,12 @@ function getRequests(sessionToken, params) {
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  const all = session.employee.role === 'ADMIN' && params.scope === 'ALL';
+  const permissions = getPermissions_(session.employee);
+  const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(session.employee) : new Set();
+  const teamScope = permissions.requestApprove && params.scope === 'ALL';
   const status = String(params.status || 'ALL');
   return sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues()
-    .filter(r => r[0] && (all || r[2] === session.employee.employeeId) && (status === 'ALL' || r[9] === status))
+    .filter(r => r[0] && (teamScope ? managedIds.has(r[2]) : r[2] === session.employee.employeeId) && (status === 'ALL' || r[9] === status))
     .map(r => ({
       id:r[0], requestDate:r[1], employeeId:r[2], name:r[3], type:r[4],
       startDate:r[5], endDate:r[6], content:r[7], reason:r[8], status:r[9],
@@ -17,43 +19,47 @@ function getRequests(sessionToken, params) {
     }))
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
-
 function getPendingRequestCount_(employee) {
   if (!employee || !employee.employeeId) return 0;
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return 0;
-  const admin = employee.role === 'ADMIN';
+  const permissions = getPermissions_(employee);
+  const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
   const rows = sheet.getRange(2, 3, lastRow - 1, 8).getDisplayValues();
   return rows.reduce((count, r) => {
-    const employeeId = r[0];
-    const status = r[7];
-    return count + (status === '承認待ち' && (admin || employeeId === employee.employeeId) ? 1 : 0);
+    const visible = permissions.requestApprove ? managedIds.has(r[0]) : r[0] === employee.employeeId;
+    return count + (r[7] === '承認待ち' && visible ? 1 : 0);
   }, 0);
 }
 
+function assertCanApproveRequest_(approver, requesterEmployeeId) {
+  const requesterId = String(requesterEmployeeId || '').trim().toUpperCase();
+  if (!requesterId) throw new Error('申請者を確認できません。');
+  if (requesterId === approver.employeeId) throw new Error('申請者本人は承認できません。別の承認者へ依頼してください。');
+  const requester = getEmployee_(requesterId);
+  if (!canManageEmployeeRecord_(approver, requester)) throw new Error('この申請を承認する権限がありません。');
+  return requester;
+}
 function getRequestsBundle(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
+  const permissions = getPermissions_(employee);
+  const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
   const items = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues()
-    .filter(r => r[0] && (employee.role === 'ADMIN' || r[2] === employee.employeeId))
+    .filter(r => r[0] && (r[2] === employee.employeeId || managedIds.has(r[2])))
     .map(r => ({
       id:r[0], requestDate:r[1], employeeId:r[2], name:r[3], type:r[4],
       startDate:r[5], endDate:r[6], content:r[7], reason:r[8], status:r[9],
       approver:r[10], approvedAt:r[11], rejectReason:r[12], createdAt:r[13]
     }))
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
-
   const own = items.filter(r => r.employeeId === employee.employeeId);
-  return {
-    own: own,
-    team: employee.role === 'ADMIN' ? items : [],
-    context: getLeaveRequestContext_(employee.employeeId, own)
-  };
+  const team = items.filter(r => managedIds.has(r.employeeId));
+  return { own: own, team: team, context: getLeaveRequestContext_(employee.employeeId, own) };
 }
-
 function getLeaveRequestContext_(employeeId, ownRequests) {
   const employee = getEmployee_(employeeId);
   if (!employee) throw new Error('社員情報が見つかりません。');
@@ -227,7 +233,7 @@ function cancelRequest(sessionToken, requestId) {
   });
 }
 function approveRequest(sessionToken, requestId, decision, comment) {
-  const admin = requireAdminSession_(sessionToken).employee;
+  const approver = requireSession_(sessionToken).employee;
   const normalizedDecision = String(decision || '').toUpperCase();
   if (!['APPROVE','REJECT'].includes(normalizedDecision)) throw new Error('承認操作を確認してください。');
 
@@ -236,6 +242,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     if (!rowInfo) throw new Error('申請が見つかりません。');
     const r = rowInfo.values;
     if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
+    assertCanApproveRequest_(approver, r[2]);
     const approve = normalizedDecision === 'APPROVE';
     const rejectReason = safeSheetText_(comment, 500);
     if (approve) assertMonthRangeOpen_(r[5],r[6],'申請を承認');
@@ -265,7 +272,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
 
     rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
       approve ? '承認済' : '差戻し',
-      admin.name,
+      approver.name,
       nowText,
       approve ? '' : rejectReason
     ]]);
@@ -279,7 +286,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     }
 
     appendAudit_({
-      employeeId:admin.employeeId,employeeName:admin.name,
+      employeeId:approver.employeeId,employeeName:approver.name,
       operation:approve?'申請承認':'申請差戻し',target:'申請',targetId:r[0],
       before:'承認待ち',after:approve?'承認済':'差戻し',source:'WEB',result:'SUCCESS',
       note:approve?'':rejectReason.slice(0,200)

@@ -49,7 +49,8 @@ globalThis.__fmTest = {
   normalizeYearMonth_,
   previousYearMonth_,
   monthlyReviewUrgency_,
-  yearMonthsBetween_
+  yearMonthsBetween_,
+  canManageEmployeeRecord_
 };
 `, context);
 
@@ -130,6 +131,11 @@ expect(
   JSON.stringify(Array.from(api.yearMonthsBetween_('2025-11','2026-02'))) === JSON.stringify(['2025-11','2025-12','2026-01','2026-02'])
 );
 expect('empty month range rejected as empty list', api.yearMonthsBetween_('2026-03','2026-02').length === 0);
+expect('admin can manage another employee', api.canManageEmployeeRecord_({employeeId:'FM0001',role:'ADMIN'},{employeeId:'FM0003',role:'USER',managerId:'FM0001'}) === true);
+expect('admin cannot approve self', api.canManageEmployeeRecord_({employeeId:'FM0001',role:'ADMIN'},{employeeId:'FM0001',role:'ADMIN',managerId:''}) === false);
+expect('manager can manage direct report', api.canManageEmployeeRecord_({employeeId:'FM0002',role:'MANAGER'},{employeeId:'FM0003',role:'USER',managerId:'FM0002'}) === true);
+expect('manager cannot manage unrelated employee', api.canManageEmployeeRecord_({employeeId:'FM0002',role:'MANAGER'},{employeeId:'FM0004',role:'USER',managerId:'FM0001'}) === false);
+expect('user cannot manage another employee', api.canManageEmployeeRecord_({employeeId:'FM0003',role:'USER'},{employeeId:'FM0004',role:'USER',managerId:'FM0003'}) === false);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

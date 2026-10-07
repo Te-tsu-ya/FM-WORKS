@@ -56,6 +56,31 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
     failed = true;
   }
 }
+const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
+const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
+for (const marker of [
+  "requestApprove: role === 'ADMIN' || role === 'MANAGER'",
+  'function canManageEmployeeRecord_(',
+  'managerId: r[23]',
+  "const allowedRoles = ['USER','CALENDAR_EDITOR','MANAGER','ADMIN']"
+]) {
+  if (!(serverCode + employeeCodeText + authCode).includes(marker)) {
+    console.error('Approval hierarchy marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!requestCodeText.includes('申請者本人は承認できません。別の承認者へ依頼してください。')) {
+  console.error('Self-approval guard is missing.');
+  failed = true;
+}
+const approveBlockStart=requestCodeText.indexOf('function approveRequest(');
+const approveBlockEnd=requestCodeText.indexOf('\nfunction ',approveBlockStart+10);
+const approveBlock=approveBlockStart>=0?(approveBlockEnd>approveBlockStart?requestCodeText.slice(approveBlockStart,approveBlockEnd):requestCodeText.slice(approveBlockStart)):'';
+if (!approveBlock.includes('requireSession_(sessionToken)') || approveBlock.includes('requireAdminSession_(sessionToken)') || !approveBlock.includes('assertCanApproveRequest_')) {
+  console.error('Approval API must use scoped approver authorization instead of ADMIN-only authorization.');
+  failed = true;
+}
+
 for (const authMarker of [
   'function login(',
   'function requireSession_(',

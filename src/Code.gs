@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.8.4',
+  version: '0.9.0',
   locale: 'ja-JP'
 });
 
@@ -374,9 +374,27 @@ function getPermissions_(employee) {
     companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
     adminConsole: role === 'ADMIN',
     employeeAdmin: role === 'ADMIN',
-    monthlyTeamView: role === 'ADMIN',
+    requestApprove: role === 'ADMIN' || role === 'MANAGER',
+    monthlyTeamView: role === 'ADMIN' || role === 'MANAGER',
     scheduleEdit: true
   };
+}
+
+function canManageEmployeeRecord_(viewer, target) {
+  if (!viewer || !target || !viewer.employeeId || !target.employeeId) return false;
+  if (viewer.employeeId === target.employeeId) return false;
+  const role = String(viewer.role || 'USER').toUpperCase();
+  if (role === 'ADMIN') return true;
+  if (role === 'MANAGER') return String(target.managerId || '') === String(viewer.employeeId);
+  return false;
+}
+
+function canManageEmployee_(viewer, targetEmployeeId) {
+  return canManageEmployeeRecord_(viewer, getEmployee_(targetEmployeeId));
+}
+
+function getManagedEmployeeIds_(viewer) {
+  return new Set(getEmployees_().filter(target => canManageEmployeeRecord_(viewer, target)).map(target => target.employeeId));
 }
 
 function assertPermission_(employee, permission) {
@@ -798,7 +816,7 @@ function getEmployees_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 23).getDisplayValues()
+  return sheet.getRange(2, 1, lastRow - 1, 24).getDisplayValues()
     .filter(r => r[0] && r[6] === '在籍')
     .map(r => ({
       employeeId: r[0],
@@ -808,7 +826,8 @@ function getEmployees_() {
       department: r[3] || '',
       title: r[4] || '',
       role: r[5] || 'USER',
-      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE'
+      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
+      managerId: r[23] || ''
     }));
 }
 

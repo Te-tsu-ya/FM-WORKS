@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.4  
+**文書版:** 0.9.0  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.4`
+`APP.version = 0.9.0`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -880,3 +880,27 @@ ADMIN closeMonthlyPeriod
 6. DB列を追加する場合は末尾追加を優先。
 7. UI変更はPC/モバイル、ライト/ダーク、エラー/空/読込状態を確認。
 8. GitHub ActionsのCIとDeployが両方成功してから完了扱いとする。
+
+
+## 32. 承認認可モデル
+
+社員マスタの追加列:
+
+| 列 | 項目 | 内容 |
+| --- | --- | --- |
+| X | 直属承認者ID | MANAGER / ADMINの社員ID。空欄可 |
+
+`canManageEmployeeRecord_(viewer, target)` を認可の単一ルールとする。
+
+- 同一社員ID: false
+- ADMIN: true（他社員）
+- MANAGER: `target.managerId === viewer.employeeId`
+- その他: false
+
+`approveRequest` は `requireAdminSession_` ではなく `requireSession_` + `assertCanApproveRequest_` で申請単位の認可を行う。
+
+`getRequestsBundle` / `getRequests` は `getManagedEmployeeIds_` で可視範囲を限定する。
+
+`getMonthlySummary` / `getMonthlyReviewStatus` も同じ管理範囲をサーバー側で検証する。
+
+UIでは `monthlyTeamView` と `adminConsole` を分離する。MANAGERは直属部下の月次閲覧のみ、締め・給与一括出力・社員設定はADMINのみ。
