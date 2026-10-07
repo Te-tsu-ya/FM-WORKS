@@ -76,7 +76,24 @@ function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 58
 
 
 function selectWorkLocation(location){if(!['出社','在宅','外出'].includes(location))return;state.workLocation=location;renderPage()}
-function performPunch(action){if(state.busy)return;state.busy=true;showToast(`${action}を登録しています...`);google.script.run.withSuccessHandler(data=>{state.data=data;state.workLocation=data.attendance.workLocation||state.workLocation;state.busy=false;renderNav();renderPage();showToast(`${action}をGoogle Sheetsへ保存しました`)}).withFailureHandler(err=>{state.busy=false;if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage()}).recordPunch(state.sessionToken,action,state.workLocation)}
+function performPunch(action){
+  if(state.busy)return;
+  state.busy=true;showToast(`${action}を登録しています...`);
+  google.script.run.withSuccessHandler(data=>{
+    if(data&&data.attendance){
+      state.data.attendance=data.attendance;
+      state.workLocation=data.attendance.workLocation||state.workLocation;
+    }
+    state.busy=false;
+    invalidatePageCache('worklog','monthly');
+    renderPage();
+    showToast(`${action}をGoogle Sheetsへ保存しました`);
+    scheduleIdleTask(()=>refreshAppData(),700);
+  }).withFailureHandler(err=>{
+    state.busy=false;
+    if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage();
+  }).recordPunch(state.sessionToken,action,state.workLocation);
+}
 function workLocationSelector(){return `<div class='section-gap'><small class='muted'>勤務場所</small><div class='button-row' style='margin-top:8px'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'primary-button':'secondary-button'}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`}
 function punchButtons(a){if(a.state==='off')return `<button class='primary-button' onclick="performPunch('出勤')">出勤する</button>`;if(a.state==='working')return `<button class='secondary-button' onclick="performPunch('休憩開始')">休憩する</button><button class='primary-button' onclick="performPunch('退勤')">退勤する</button>`;if(a.state==='break')return `<button class='primary-button' onclick="performPunch('休憩終了')">休憩終了</button>`;return `<button class='secondary-button' disabled>本日の勤務は終了しました</button>`}
 
