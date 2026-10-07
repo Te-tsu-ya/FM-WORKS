@@ -57,6 +57,7 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
   }
 }
 const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
+const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
@@ -107,6 +108,28 @@ if (!monthlySnapshotMainCode.includes('persistMonthlyCloseSnapshots_(ym,summarie
     !monthlySnapshotMainCode.includes('snapshotId') ||
     !monthlySnapshotMainCode.includes('給与対象の一括出力は月次締め後に実行してください。')) {
   console.error('Monthly close must persist immutable snapshots and exports must use closed data.');
+  failed = true;
+}
+
+for (const marker of [
+  'function getLeaveLedgerState_(',
+  'function consumeLeaveBalance_(',
+  'function restoreLeaveBalance_(',
+  'function postLeaveLedgerEntry('
+]) {
+  if (!leaveLedgerCodeText.includes(marker)) {
+    console.error('Leave ledger marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!requestCodeText.includes('function requestApprovedCancellation(') ||
+    !requestCodeText.includes('function decideApprovedCancellation(') ||
+    !requestCodeText.includes("status==='取消申請中'") && !app.includes("status==='取消申請中'")) {
+  console.error('Approved request cancellation workflow is incomplete.');
+  failed = true;
+}
+if (!authCode.includes('leaveBasisDate: r[24]') || !authCode.includes('hireDate: r[25]')) {
+  console.error('Employee leave basis/hire dates are not persisted.');
   failed = true;
 }
 

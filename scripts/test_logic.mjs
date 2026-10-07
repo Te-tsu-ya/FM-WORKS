@@ -7,7 +7,8 @@ const files = [
   'src/Worklog.gs',
   'src/Requests.gs',
   'src/Monthly.gs',
-  'src/MonthlySnapshot.gs'
+  'src/MonthlySnapshot.gs',
+  'src/LeaveLedger.gs'
 ];
 
 const context = vm.createContext({
@@ -52,7 +53,9 @@ globalThis.__fmTest = {
   monthlyReviewUrgency_,
   yearMonthsBetween_,
   canManageEmployeeRecord_,
-  monthlySnapshotPayload_
+  monthlySnapshotPayload_,
+  normalizeLeaveDays_,
+  leaveBalanceAfterDelta_
 };
 `, context);
 
@@ -146,6 +149,9 @@ const snapshotPayload = api.monthlySnapshotPayload_({
 });
 expect('monthly snapshot payload keeps employee and month', snapshotPayload.employeeId==='FM0003' && snapshotPayload.yearMonth==='2026-09');
 expect('monthly snapshot payload contains normalized daily facts', snapshotPayload.daily.length===1 && snapshotPayload.daily[0].workMinutes===480);
+expect('leave days normalize to quarter day', api.normalizeLeaveDays_(1.24)===1.25);
+expect('leave balance applies usage', api.leaveBalanceAfterDelta_(10,-1.5)===8.5);
+expectThrows('leave balance rejects negative result', ()=>api.leaveBalanceAfterDelta_(1,-1.25));
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

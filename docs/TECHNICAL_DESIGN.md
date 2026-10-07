@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.1  
+**文書版:** 0.9.2  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.1`
+`APP.version = 0.9.2`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -923,3 +923,40 @@ DB:
 `createTeamMonthlyExport` は月次締め済み + snapshotId必須。現在のSheets値を再計算して給与提出データに使用しない。
 
 締め解除は過去スナップショットを削除しない。再締め時は新しいIDを発行するため、履歴比較と監査が可能。
+
+
+## 34. 有給台帳
+
+`有給台帳` 13列を追加する。
+
+`getLeaveLedgerState_` は台帳があれば最終残高を正本として返し、未移行社員だけ社員マスタの既存残数へフォールバックする。
+
+初回のUSE/RESTORE/ADJUST前に `ensureLeaveLedgerOpening_` がOPENING行を作る。
+
+`consumeLeaveBalance_` / `restoreLeaveBalance_` はScript Lock内で台帳追記と社員マスタK列キャッシュ更新を行う。
+
+社員マスタ追加列:
+
+- X: 直属承認者ID
+- Y: 年休基準日
+- Z: 雇入日
+
+申請追加列:
+
+- O: 取消理由
+- P: 取消申請日時
+- Q: 取消判断理由
+- R: 取消判断者
+- S: 取消判断日時
+
+取消フロー:
+
+```
+承認済
+  -> requestApprovedCancellation
+  -> 取消申請中
+  -> decideApprovedCancellation(APPROVE) -> 取消済
+  -> decideApprovedCancellation(REJECT)  -> 承認済
+```
+
+有給系の取消承認ではRESTOREを台帳へ記録する。打刻修正は補償処理の複雑性から直接取消対象外とし、新規打刻修正で訂正する。

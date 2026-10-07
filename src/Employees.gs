@@ -37,6 +37,8 @@ function saveEmployee(sessionToken, payload) {
     const note = safeSheetText_(payload.note, 500);
     const payrollIncluded = !!payload.payrollIncluded;
     const managerId = String(payload.managerId || '').trim().toUpperCase();
+    const leaveBasisDate = payload.leaveBasisDate ? normalizeDate_(payload.leaveBasisDate) : '';
+    const hireDate = payload.hireDate ? normalizeDate_(payload.hireDate) : '';
     if (managerId === employeeId) throw new Error('自分自身を直属承認者には設定できません。');
     if (managerId) {
       const manager = getEmployeeAuthRecord_(managerId);
@@ -45,6 +47,10 @@ function saveEmployee(sessionToken, payload) {
     }
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
+    if (leaveText !== '' && !leaveBasisDate) throw new Error('有給残日数を設定する場合は年休基準日も設定してください。');
+    if (existingBefore && existingBefore.leaveBalanceConfigured && leaveText === '') {
+      throw new Error('有給台帳運用開始後は残日数を未設定へ戻せません。調整値を入力してください。');
+    }
     if (existingBefore && existingBefore.employeeId === admin.employeeId && (role !== 'ADMIN' || status !== '在籍')) {
       throw new Error('自分自身の管理者権限解除・無効化はできません。別の管理者から変更してください。');
     }
@@ -68,10 +74,17 @@ function saveEmployee(sessionToken, payload) {
       ? (String(existingAuth[7] || '').toUpperCase() === 'DISABLED' ? 'ACTIVE' : (existingAuth[7] || 'ACTIVE'))
       : 'DISABLED';
 
-    sheet.getRange(rowNumber,1,1,24).setValues([[
+    sheet.getRange(rowNumber,1,1,26).setValues([[
       employeeId,name,displayName,department,title,role,status,workStart,workEnd,
-      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded,managerId
+      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded,managerId,leaveBasisDate,hireDate
     ]]);
+
+    recordLeaveBalanceAdminChange_(
+      employeeId,name,leaveBasisDate,
+      !!(existingBefore&&existingBefore.leaveBalanceConfigured),
+      existingBefore?existingBefore.leaveBalance:0,
+      leaveText!=='',leaveBalance,admin
+    );
 
     if (existingEmployee && existingEmployee.active && status !== '在籍') {
       invalidateEmployeeSessions_(employeeId, 0);

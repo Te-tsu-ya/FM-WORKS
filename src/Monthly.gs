@@ -888,8 +888,8 @@ function minutesToExcelTime_(minutes){
 function getApprovedRequestsForMonth_(employeeId,start,end) {
   const sheet=getDb_().getSheetByName('申請');
   if(sheet.getLastRow()<2)return [];
-  return sheet.getRange(2,1,sheet.getLastRow()-1,14).getDisplayValues()
-    .filter(r=>r[2]===employeeId&&r[9]==='承認済'&&r[5]<=end&&r[6]>=start)
+  return sheet.getRange(2,1,sheet.getLastRow()-1,19).getDisplayValues()
+    .filter(r=>r[2]===employeeId&&['承認済','取消申請中'].includes(r[9])&&r[5]<=end&&r[6]>=start)
     .map(r=>({id:r[0],type:r[4],startDate:r[5],endDate:r[6],reason:r[8]}));
 }
 

@@ -10,8 +10,8 @@
 | Q-001 | 試作共通PIN 000000 / Prototype Mode | Critical | Sentinel / Orbit | Production Gateで共通PINを禁止し、個別認証のみ許可 | IN PROGRESS |
 | Q-002 | ADMINが自分の申請を承認可能 | Critical | Ledger / Forge | 申請者=承認者をAPIレベルで拒否しテスト | DONE v0.9.0 |
 | Q-003 | 上司・承認者という組織概念がない | High | Kite / Ledger / Atlas | MANAGERと直属承認者を定義し、自分の部下のみ承認可能 | DONE v0.9.0 |
-| Q-004 | 有給が残日数だけで台帳がない | High | Lex / Atlas | 基準日・付与・取得・失効・調整・関連申請を履歴化 | READY |
-| Q-005 | 承認済申請の取消/変更が弱い | High | Kite / Ledger | 取消理由、取消承認、休暇残数の補償トランザクションを記録 | READY |
+| Q-004 | 有給が残日数だけで台帳がない | High | Lex / Atlas | 基準日・付与・取得・失効・調整・関連申請を履歴化 | IN PROGRESS v0.9.2（台帳/基準日/付与・失効API/取得・復元履歴まで実装。年5日監視はQ-007へ） |
+| Q-005 | 承認済申請の取消/変更が弱い | High | Kite / Ledger | 取消理由、取消承認、休暇残数の補償トランザクションを記録 | DONE v0.9.2 |
 | Q-006 | 月次締めが状態フラグのみ | Critical | Ledger / Atlas | 締め時点の月次/日次スナップショットを保存し再現可能 | DONE v0.9.1 |
 | Q-007 | 労務計算モデルが単純 | High | Lex / Forge | 深夜・法定休日・法定時間外等を区分可能なデータモデルを実装。会社固有ルール未設定時は「法令対応済み」と表示しない | RESEARCHED |
 | Q-008 | Browser E2Eがない | High | Probe | ログイン/打刻/申請/承認/月次/テーマの自動E2Eまたは同等の実行可能テスト | READY |

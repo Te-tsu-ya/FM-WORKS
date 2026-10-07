@@ -332,7 +332,7 @@ function getAuthAdminData(sessionToken) {
   const lastRow = sheet.getLastRow();
   const employees = [];
   if (lastRow >= 2) {
-    const rows = sheet.getRange(2, 1, lastRow - 1, 24).getDisplayValues();
+    const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
     rows.forEach((r, i) => {
       if (!r[0]) return;
       employees.push({
@@ -357,7 +357,9 @@ function getAuthAdminData(sessionToken) {
         lastLogin: r[18] || '',
         authState: r[20] || '',
         payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-        managerId: r[23] || ''
+        managerId: r[23] || '',
+        leaveBasisDate: r[24] || '',
+        hireDate: r[25] || ''
       });
     });
   }
@@ -614,7 +616,7 @@ function getEmployeeAuthRecord_(employeeId) {
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 24).getDisplayValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r[0] !== id) continue;
@@ -639,7 +641,9 @@ function getEmployeeAuthRecord_(employeeId) {
       pinUpdatedAt: r[19] || '',
       authState: r[20] || '',
       payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-      managerId: r[23] || ''
+      managerId: r[23] || '',
+      leaveBasisDate: r[24] || '',
+      hireDate: r[25] || ''
     };
   }
   return null;
