@@ -4,7 +4,7 @@ const NAV = [
   ['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']
 ];
 const MOBILE_NAV = ['home','attendance','worklog','requests','admin'];
-let state = {page:'home', data:null};
+let state = {page:'home', data:null, workLocation:'出社', busy:false};
 
 function svg(id){return `<svg aria-hidden="true"><use href="#${id}"/></svg>`}
 function escapeHtml(v){return String(v ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
@@ -13,7 +13,42 @@ function metric(label,value,iconTone=''){return `<section class="card metric"><d
 function list(items){return `<div class="list">${items.map(i=>`<div class="list-item"><span class="status-dot" style="background:${i.color||'var(--blue)'}"></span><div><strong>${i.title}</strong><div class="muted" style="font-size:12px;margin-top:3px">${i.sub||''}</div></div>${i.right||''}</div>`).join('')}</div>`}
 function pageHead(title,desc,action=''){return `<div class="page-head"><div><div class="eyebrow">FM WORKS</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2200)}
-function demoAction(label){showToast(`${label}：デモ画面のため、まだ保存されません`)}
+function demoAction(label){showToast(`${label}：この機能は次フェーズで実装します`)}
+function selectWorkLocation(location){
+  if(!['出社','在宅','外出'].includes(location)) return;
+  state.workLocation=location;
+  renderPage();
+}
+function performPunch(action){
+  if(state.busy) return;
+  state.busy=true;
+  showToast(`${action}を登録しています...`);
+  google.script.run
+    .withSuccessHandler(data=>{
+      state.data=data;
+      state.workLocation=data.attendance.workLocation || state.workLocation;
+      state.busy=false;
+      renderPage();
+      showToast(`${action}をGoogle Sheetsへ保存しました`);
+    })
+    .withFailureHandler(err=>{
+      state.busy=false;
+      showToast(err&&err.message ? err.message : '打刻の登録に失敗しました');
+      renderPage();
+    })
+    .recordPunch(action,state.workLocation);
+}
+function workLocationSelector(){
+  return `<div class="section-gap"><small class="muted">勤務場所</small><div class="button-row" style="margin-top:8px">
+    ${['出社','在宅','外出'].map(x=>`<button class="${state.workLocation===x?'primary-button':'secondary-button'}" onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}
+  </div></div>`;
+}
+function punchButtons(attendance,compact=false){
+  if(attendance.state==='off') return `<button class="primary-button" onclick="performPunch('出勤')">出勤する</button>`;
+  if(attendance.state==='working') return `<button class="secondary-button" onclick="performPunch('休憩開始')">休憩する</button><button class="primary-button" onclick="performPunch('退勤')">退勤する</button>`;
+  if(attendance.state==='break') return `<button class="primary-button" onclick="performPunch('休憩終了')">休憩終了</button>`;
+  return `<button class="secondary-button" disabled>本日の勤務は終了しました</button>`;
+}
 
 function renderNav(){
   const desktop=document.getElementById('desktopNav');
@@ -24,19 +59,22 @@ function renderNav(){
 }
 function navigate(page){state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();document.getElementById('content').focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
 
-function homePage(){const d=state.data;return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}
-<div class="hero"><div style="display:inline-flex;align-items:center;gap:8px;background:#e7f8f0;color:#128758;border:1px solid #bfead8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;margin-bottom:12px">✓ GitHub自動更新テスト</div><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>この表示が見えれば、ChatGPT → GitHub → Apps Script の自動反映に成功しています。</p></div>
+function homePage(){const d=state.data;const a=d.attendance;return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}
+<div class="hero"><div style="display:inline-flex;align-items:center;gap:8px;background:#e7f8f0;color:#128758;border:1px solid #bfead8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;margin-bottom:12px">● 実データ接続済み</div><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>出退勤・休憩の操作は「FM WORKS DB」の打刻ログへ保存されます。</p></div>
 <div class="grid cols-3">
-${card('現在の勤怠状況',`<div class="status-row"><span class="status-dot"></span><strong>勤務中</strong></div><div class="attendance-time">${d.attendance.clockIn}</div><div class="button-row"><button class="primary-button" onclick="demoAction('退勤')">退勤する</button><button class="secondary-button" onclick="demoAction('休憩')">休憩する</button></div>`)}
+${card('現在の勤怠状況',`<div class="status-row"><span class="status-dot" style="background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}"></span><strong>${a.stateLabel}</strong></div><div class="attendance-time">${a.clockIn ? a.clockIn + ' 出勤' : '未出勤'}</div><p class="muted">実働 ${a.worked} / ${a.workLocation}</p><div class="button-row">${punchButtons(a,true)}</div>${workLocationSelector()}`)}
 ${card('今日の予定',list([{title:'10:00 定例ミーティング',sub:'会議室A / オンライン',color:'#1478ff'},{title:'13:00 プロジェクト進捗確認',sub:'オンライン',color:'#18a46d'},{title:'15:00 提案資料レビュー',sub:'Focus Time',color:'#f3a11b'}]))}
 ${card('やること',d.tasks.map(x=>`<div class="list-item"><span></span><strong>${x.label}</strong><span class="badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}">${x.status}</span></div>`).join(''))}
 </div>
 <div class="grid cols-3 section-gap">${metric('勤務時間',d.month.workHours,'tone-green')}${metric('残業時間',d.month.overtime,'')}${metric('有給残',d.month.leaveBalance,'tone-orange')}</div>
-<div class="grid cols-2 section-gap">${card('チームの勤務状況',list([{title:'メンバーA',sub:'勤務中 09:02',color:'#18a46d'},{title:'メンバーB',sub:'勤務中 08:45',color:'#18a46d'},{title:'メンバーC',sub:'休憩中',color:'#f3a11b'}]))}${card('会社カレンダー',calendarMini())}</div>`}
+<div class="grid cols-2 section-gap">${card('今日の打刻履歴',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class="muted">本日の打刻はまだありません。</p>')}${card('会社カレンダー',calendarMini())}</div>`}
 
-function attendancePage(){return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}
-<div class="grid cols-2">${card('現在の勤務状況',`<div class="status-row"><span class="status-dot"></span><strong>勤務中</strong></div><div class="attendance-time">08:57 に出勤</div><div class="button-row"><button class="primary-button" onclick="demoAction('退勤')">退勤</button><button class="secondary-button" onclick="demoAction('休憩開始')">休憩開始</button><button class="secondary-button" onclick="demoAction('休憩終了')">休憩終了</button></div><div class="section-gap"><small class="muted">勤務場所</small><div class="button-row" style="margin-top:8px"><button class="secondary-button">出社</button><button class="secondary-button">在宅</button><button class="secondary-button">外出</button></div></div>`)}${card('本日の打刻状況',list([{title:'08:57 出勤',sub:'出社',color:'#1478ff'},{title:'12:01 休憩開始',sub:'45分',color:'#8090a8'},{title:'12:46 休憩終了',sub:'勤務再開',color:'#18a46d'},{title:'退勤',sub:'未打刻',color:'#cbd4e1'}]))}</div>
-<div class="grid cols-4 section-gap">${metric('勤務日数','18 / 20日')}${metric('残業時間','12時間36分')}${metric('遅刻・早退','1回','tone-red')}${metric('在宅勤務','6日','tone-green')}</div>`}
+function attendancePage(){const d=state.data;const a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}
+<div class="grid cols-2">
+${card('現在の勤務状況',`<div class="status-row"><span class="status-dot" style="background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}"></span><strong>${a.stateLabel}</strong></div><div class="attendance-time">${a.clockIn ? a.clockIn + ' に出勤' : 'まだ出勤していません'}</div><p class="muted">現在の実働：${a.worked}</p><div class="button-row">${punchButtons(a)}</div>${workLocationSelector()}`)}
+${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class="muted">まだ打刻はありません。出勤ボタンを押すとGoogle Sheetsに記録されます。</p>')}
+</div>
+<div class="grid cols-4 section-gap">${metric('本日の実働',a.worked,'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
 
 function worklogPage(){return `${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。','<button class="primary-button" onclick="demoAction(\'工数追加\')">＋ 工数追加</button>')}
 <div class="grid cols-4">${metric('今日の勤務時間','8時間36分','tone-green')}${metric('入力済工数','6時間30分')}${metric('未入力時間','2時間06分','tone-orange')}${metric('プロジェクト数','4件','tone-purple')}</div>
@@ -65,7 +103,7 @@ function renderPage(){const fn={home:homePage,attendance:attendancePage,worklog:
 function setLoading(){document.getElementById('content').innerHTML='<div class="grid cols-3"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>'}
 function bootstrap(){
   state.page=(location.hash||'#home').slice(1); if(!NAV.some(n=>n[0]===state.page)) state.page='home'; renderNav(); setLoading();
-  google.script.run.withSuccessHandler(data=>{state.data=data;document.getElementById('profileName').textContent=data.user.displayName;document.getElementById('profileRole').textContent=data.user.role;document.getElementById('app').classList.remove('is-loading');renderPage()}).withFailureHandler(err=>{document.getElementById('content').innerHTML=`<section class="card"><h3>読み込みに失敗しました</h3><p class="muted">${escapeHtml(err&&err.message||'不明なエラー')}</p></section>`}).getInitialData();
+  google.script.run.withSuccessHandler(data=>{state.data=data;state.workLocation=data.attendance.workLocation||'出社';document.getElementById('profileName').textContent=data.user.displayName;document.getElementById('profileRole').textContent=data.user.role;document.getElementById('app').classList.remove('is-loading');renderPage()}).withFailureHandler(err=>{document.getElementById('content').innerHTML=`<section class="card"><h3>読み込みに失敗しました</h3><p class="muted">${escapeHtml(err&&err.message||'不明なエラー')}</p></section>`}).getInitialData();
 }
 document.addEventListener('DOMContentLoaded',bootstrap);
 </script>
