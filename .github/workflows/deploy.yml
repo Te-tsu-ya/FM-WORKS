@@ -23,6 +23,8 @@ jobs:
           node-version: '20'
       - name: Validate repository
         run: node scripts/validate.mjs
+      - name: Run logic tests
+        run: node scripts/test_logic.mjs
       - name: Install clasp
         run: npm install --global @google/clasp@latest
       - name: Restore clasp credentials
