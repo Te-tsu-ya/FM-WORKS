@@ -11,7 +11,7 @@ const AUTH = Object.freeze({
   defaultLockMinutes: 15,
   defaultPinLength: 6,
   sessionTouchMinutes: 5,
-  prototypeMode: true,
+  prototypeMode: false,
   prototypePin: '000000',
   prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']
 });
@@ -23,7 +23,6 @@ function getPublicAuthConfig() {
     needsSetup: isPrototypeMode_() ? false : !hasAnyPinConfigured_(),
     pinLength: config.pinLength,
     prototypeMode: isPrototypeMode_(),
-    prototypePin: isPrototypeMode_() ? AUTH.prototypePin : '',
     support: getSupportConfig_()
   };
 }
@@ -164,12 +163,26 @@ function login(employeeId, pin, clientInfo, rememberSession) {
   }
 }
 
-function isPrototypeMode_() {
-  if(typeof SpreadsheetApp==='undefined')return !!AUTH.prototypeMode;
-  const raw=String(getSettingsMap_().PROTOTYPE_MODE||'').trim().toUpperCase();
+function prototypeSettingEnabled_(value) {
+  const raw=String(value==null?'':value).trim().toUpperCase();
   if(['FALSE','0','OFF'].includes(raw))return false;
   if(['TRUE','1','ON'].includes(raw))return true;
   return !!AUTH.prototypeMode;
+}
+
+function prototypeModeEnabledForEnvironment_(value, environment) {
+  return prototypeSettingEnabled_(value) && normalizeRuntimeEnvironment_(environment)!=='PRODUCTION';
+}
+
+function isPrototypeConfigured_() {
+  if(typeof SpreadsheetApp==='undefined')return !!AUTH.prototypeMode;
+  return prototypeSettingEnabled_(getSettingsMap_().PROTOTYPE_MODE);
+}
+
+function isPrototypeMode_() {
+  if(!isPrototypeConfigured_())return false;
+  if(typeof PropertiesService==='undefined')return false;
+  return prototypeModeEnabledForEnvironment_('TRUE',getRuntimeEnvironment_());
 }
 
 function isPrototypeLogin_(record, pin) {
@@ -384,7 +397,8 @@ function getAuthAdminData(sessionToken) {
     projects: getProjectsInternal_(true),
     resetRequests: resetRequests,
     support: getSupportConfig_(),
-    prototypeMode: isPrototypeMode_(),
+    prototypeMode: isPrototypeConfigured_(),
+    prototypeAccessEffective: isPrototypeMode_(),
     currentUser: publicEmployee_(session.employee)
   };
 }

@@ -124,12 +124,14 @@ function getProductionReadiness_() {
   const laborConfig=getLaborRuleConfig_();
   if(!laborConfig.configured)blockers.push('労務ルールが未確定です（就業規則・36協定の確認が必要）');
 
-  const prototypeMode=isPrototypeMode_();
+  const prototypeMode=isPrototypeConfigured_();
+  const prototypeAccessEffective=isPrototypeMode_();
   if(prototypeMode)blockers.push('試作版共通PINモードが有効です');
 
   return {
     ready:blockers.length===0,
     prototypeMode:prototypeMode,
+    prototypeAccessEffective:prototypeAccessEffective,
     environment:runtime.environment,
     backupTriggerInstalled:triggerState.installed,
     laborConfig:laborConfig,

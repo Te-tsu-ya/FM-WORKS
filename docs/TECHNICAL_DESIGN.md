@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.9  
+**文書版:** 0.10.0  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,9 +57,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.9`
+`APP.version = 0.10.0`
 
-DBスキーマ目安: 4。  
+DBスキーマ: 9。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -1056,3 +1056,26 @@ DB:
 - `getMonthlySummary` の工数
 
 Performance Budget超過は処理失敗にせずJSON logで観測する。
+
+
+## 42. Production Authentication Fail-Closed
+
+`Auth.gs` は試作モードを「設定状態」と「実効状態」に分離する。
+
+- `prototypeSettingEnabled_`: 設定値 TRUE/FALSE/ON/OFF を正規化する。
+- `isPrototypeConfigured_`: DB上で試作モードが設定されているかを返す。
+- `prototypeModeEnabledForEnvironment_`: PRODUCTIONなら必ずfalseを返す。
+- `isPrototypeMode_`: 実際に共通PIN認証を許可してよいかを返す。
+
+`getPublicAuthConfig` は共通PIN値を返さない。クライアントもPIN値を表示しない。
+
+`Maintenance.getProductionReadiness_` は `isPrototypeConfigured_` を使うため、PRODUCTIONで共通PINが実効無効になっていても、設定 `PROTOTYPE_MODE=TRUE` が残る限りREADYを拒否する。これにより「安全にログインできること」と「本番設定が正しいこと」を別々に保証する。
+
+CIでは `validate.mjs` が以下を検査する。
+
+1. 試作モード既定値がfalse。
+2. PRODUCTION強制無効化ロジックが存在する。
+3. 共通PINを公開設定APIや画面へ流していない。
+4. Readinessが設定状態と実効状態を分離している。
+
+`test_logic.mjs` は STAGING / PRODUCTION / OFF の境界条件を純粋関数で検証する。

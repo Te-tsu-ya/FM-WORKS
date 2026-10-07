@@ -7,7 +7,7 @@
 
 | ID | 問題 | Severity | 主担当 | 受入条件 | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| Q-001 | 試作共通PIN 000000 / Prototype Mode | Critical | Sentinel / Orbit | Production Gateで共通PINを禁止し、個別認証のみ許可 | IN PROGRESS |
+| Q-001 | 試作共通PIN 000000 / Prototype Mode | Critical | Sentinel / Orbit | Production Gateで共通PINを禁止し、個別認証のみ許可 | DONE v0.10.0（PRODUCTIONでは設定値に関係なく共通PINを無効化。ブラウザへPINを返さず、設定がTRUEのままならREADYを拒否） |
 | Q-002 | ADMINが自分の申請を承認可能 | Critical | Ledger / Forge | 申請者=承認者をAPIレベルで拒否しテスト | DONE v0.9.0 |
 | Q-003 | 上司・承認者という組織概念がない | High | Kite / Ledger / Atlas | MANAGERと直属承認者を定義し、自分の部下のみ承認可能 | DONE v0.9.0 |
 | Q-004 | 有給が残日数だけで台帳がない | High | Lex / Atlas | 基準日・付与・取得・失効・調整・関連申請を履歴化 | IN PROGRESS v0.9.2（台帳/基準日/付与・失効API/取得・復元履歴まで実装。年5日監視はQ-007へ） |

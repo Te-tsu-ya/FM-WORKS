@@ -48,6 +48,8 @@ globalThis.__fmTest = {
   safeSheetText_,
   safeSheetName_,
   parseTimestamp_,
+  prototypeSettingEnabled_,
+  prototypeModeEnabledForEnvironment_,
   isPrototypeLogin_,
   shortEmployeeName_,
   requiredBreakMinutes_,
@@ -130,8 +132,10 @@ expect('normal sheet text unchanged', api.safeSheetText_('Project Atlas', 100) =
 expect('sheet name sanitizes forbidden characters', !/[\\\/\?\*\[\]\:]/.test(api.safeSheetName_('FM/WORKS:*?')));
 const singleDigitHourTimestamp = api.parseTimestamp_('2026-10-08 3:19:57');
 expect('session timestamp accepts single-digit Sheets hour', !!singleDigitHourTimestamp && !Number.isNaN(singleDigitHourTimestamp.getTime()));
-expect('prototype PIN accepts fictional employee', api.isPrototypeLogin_({employeeId:'FM0001'}, '000000') === true);
-expect('prototype PIN rejects unknown employee', api.isPrototypeLogin_({employeeId:'FM9999'}, '000000') === false);
+expect('prototype mode may be explicitly enabled in staging', api.prototypeModeEnabledForEnvironment_('TRUE','STAGING') === true);
+expect('prototype mode is forcibly disabled in production', api.prototypeModeEnabledForEnvironment_('TRUE','PRODUCTION') === false);
+expect('prototype mode honors an explicit OFF setting', api.prototypeModeEnabledForEnvironment_('FALSE','STAGING') === false);
+expect('prototype login fails closed without Apps Script runtime settings', api.isPrototypeLogin_({employeeId:'FM0001'}, '000000') === false);
 expect('employee short label uses surname only', api.shortEmployeeName_('青木 悠真','青木さん','FM0001') === '青木');
 expect('display name fallback strips honorific', api.shortEmployeeName_('', '森川さん', 'FM0002') === '森川');
 expect('6h requires no statutory break threshold', api.requiredBreakMinutes_(360) === 0);

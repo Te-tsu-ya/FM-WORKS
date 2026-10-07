@@ -815,7 +815,7 @@ if (!requirementsDoc.includes('文書同期ルール') || !technicalDoc.includes
 }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
-if (authCode.includes('prototypeMode: true')) {
+if (authCode.includes("prototypePin: '000000'")) {
   for (const prototypeAuthMarker of [
     "prototypePin: '000000'",
     "prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']",
@@ -837,6 +837,29 @@ if (authCode.includes('prototypeMode: true')) {
     failed = true;
   }
 }
+
+for (const prototypeSafetyMarker of [
+  'prototypeMode: false',
+  'function prototypeSettingEnabled_(',
+  'function prototypeModeEnabledForEnvironment_(',
+  "normalizeRuntimeEnvironment_(environment)!=='PRODUCTION'",
+  'function isPrototypeConfigured_(',
+  "prototypeModeEnabledForEnvironment_('TRUE',getRuntimeEnvironment_())"
+]) {
+  if (!authCode.includes(prototypeSafetyMarker)) {
+    console.error('Production prototype-auth safety missing: ' + prototypeSafetyMarker);
+    failed = true;
+  }
+}
+if (authCode.includes("prototypePin: isPrototypeMode_() ? AUTH.prototypePin : ''") || app.includes('cfg.prototypePin')) {
+  console.error('Prototype PIN must not be returned to or rendered by the browser.');
+  failed = true;
+}
+if (!maintenanceCode.includes('const prototypeMode=isPrototypeConfigured_();') || !maintenanceCode.includes('prototypeAccessEffective:prototypeAccessEffective')) {
+  console.error('Production readiness must detect configured prototype mode separately from effective production access.');
+  failed = true;
+}
+
 for (const sessionMarker of [
   'getRange(rowNumber, 1, 1, 11).getValues()[0]',
   'value instanceof Date',
