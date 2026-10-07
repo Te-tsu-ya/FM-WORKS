@@ -161,6 +161,7 @@ function login(employeeId, pin, clientInfo) {
 }
 
 function isPrototypeMode_() {
+  if(typeof SpreadsheetApp==='undefined')return !!AUTH.prototypeMode;
   const raw=String(getSettingsMap_().PROTOTYPE_MODE||'').trim().toUpperCase();
   if(['FALSE','0','OFF'].includes(raw))return false;
   if(['TRUE','1','ON'].includes(raw))return true;
