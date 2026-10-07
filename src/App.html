@@ -119,22 +119,291 @@ function peoplePage(){
   </div>`;
 }
 function monthlyPage(){return `${pageHead('月次','月次締め前に勤怠・申請・工数の不足を確認します。','<button class=\'primary-button\' onclick="demoAction(\'税理士提出データ作成\')">税理士提出データを作成</button>')}<div class='grid cols-4'>${metric('勤務時間','168時間00分','tone-green')}${metric('残業時間','22時間30分')}${metric('有給取得','2日','tone-orange')}${metric('休日出勤','1日','tone-purple')}</div>`}
+function authStateBadge(emp){
+  if(emp.lockedUntil) return "<span class='auth-state locked'>ロック中</span>";
+  if(!emp.pinConfigured) return "<span class='auth-state pending'>PIN未設定</span>";
+  if(emp.mustChangePin) return "<span class='auth-state pending'>初回変更待ち</span>";
+  return "<span class='auth-state'>利用可能</span>";
+}
+
 function adminPage(){
-  const employeeCount=(state.data.employees||[]).length;
-  return `${pageHead('管理','総務・管理者向けの運用状況と各種設定です。')}
-  <div class='grid cols-4'>
-    ${metric('社員',employeeCount+'名','tone-green')}
-    ${metric('予定表','共有DB','')}
-    ${metric('会社カレンダー','2026年登録済','tone-orange')}
-    ${metric('監査ログ','記録中','tone-purple')}
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){
+    return pageHead('管理','この画面を表示する権限がありません。');
+  }
+  if(!state.authAdmin){
+    return \`\${pageHead('管理','社員認証・サポート・権限設定を管理します。')}<div class='loading-card'></div>\`;
+  }
+  const a=state.authAdmin;
+  const configured=a.employees.filter(e=>e.pinConfigured).length;
+  const locked=a.employees.filter(e=>e.lockedUntil).length;
+  const pending=(a.resetRequests||[]).filter(r=>r.status==='未対応').length;
+  const employeeRows=a.employees.map(e=>\`<tr>
+    <td><strong>\${escapeHtml(e.name)}</strong><br><small class='muted'>\${escapeHtml(e.employeeId)}</small></td>
+    <td>\${escapeHtml(roleLabel(e.role))}</td>
+    <td>\${authStateBadge(e)}</td>
+    <td>\${escapeHtml(e.lastLogin||'—')}</td>
+    <td><div class='admin-actions'>
+      <button class='small-button' onclick="openTempPinModal('\${e.employeeId}','\${escapeHtml(e.name)}')">仮PIN発行</button>
+      \${e.lockedUntil?\`<button class='small-button' onclick="unlockAccount('\${e.employeeId}')">ロック解除</button>\`:''}
+    </div></td>
+  </tr>\`).join('');
+  const requestRows=(a.resetRequests||[]).slice(0,12).map(r=>\`<tr>
+    <td>\${escapeHtml(r.requestedAt)}</td><td><strong>\${escapeHtml(r.name)}</strong><br><small class='muted'>\${escapeHtml(r.employeeId)}</small></td>
+    <td>\${r.status==='未対応'?'<span class="badge warning">未対応</span>':'<span class="badge success">対応済</span>'}</td>
+    <td>\${escapeHtml(r.note||'—')}</td>
+    <td>\${r.status==='未対応'?\`<button class='small-button' onclick="openTempPinModal('\${r.employeeId}','\${escapeHtml(r.name)}')">仮PIN発行</button>\`:'—'}</td>
+  </tr>\`).join('');
+  const s=a.support||{};
+  return \`\${pageHead('管理','社員認証・サポート・権限設定を管理します。')}
+  <div class='security-summary'>
+    <div class='security-item'><strong>\${configured} / \${a.employees.length}</strong><small>PIN設定済み</small></div>
+    <div class='security-item'><strong>\${locked}</strong><small>ロック中アカウント</small></div>
+    <div class='security-item'><strong>\${pending}</strong><small>PIN再発行依頼</small></div>
   </div>
   <div class='grid cols-2 section-gap'>
-    ${card('管理メニュー',`<div class='button-row'><button class='secondary-button' onclick="navigate('companyCalendar')">会社カレンダー</button><button class='secondary-button' onclick="navigate('people')">社員マスター</button></div>`)}
-    ${card('データ基盤',`<p class='muted'>勤怠・予定表・会社カレンダーはGoogle Sheetsの「FM WORKS DB」に保存されています。</p>`)}
-  </div>`;
+    \${card('認証設定',\`<div class='table-wrap'><table class='auth-table'><thead><tr><th>社員</th><th>権限</th><th>認証状態</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>\${employeeRows}</tbody></table></div>\`)}
+    \${card('PINを忘れた場合の連絡先',\`<div class='form-grid'>
+      <label class='field full'><span>表示名</span><input id='supportName' value='\${escapeHtml(s.name||'FM WORKS管理者')}'></label>
+      <label class='field'><span>メール</span><input id='supportEmail' type='email' value='\${escapeHtml(s.email||'')}' placeholder='例：admin@example.jp'></label>
+      <label class='field'><span>電話番号</span><input id='supportPhone' value='\${escapeHtml(s.phone||'')}' placeholder='例：0254-xx-xxxx'></label>
+      <label class='field full'><span>案内文</span><textarea id='supportNote' rows='4'>\${escapeHtml(s.note||'')}</textarea></label>
+    </div><div class='section-gap'><button class='primary-button' onclick='saveSupportSettingsFromAdmin()'>連絡先を保存</button></div>\`)}
+  </div>
+  <div class='section-gap'>
+    \${card('PIN再発行依頼',requestRows?\`<div class='table-wrap'><table class='auth-table'><thead><tr><th>依頼日時</th><th>社員</th><th>状態</th><th>メモ</th><th>操作</th></tr></thead><tbody>\${requestRows}</tbody></table></div>\`:"<p class='muted'>再発行依頼はありません。</p>")}
+  </div>\`;
 }
-function renderPage(){const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;document.getElementById('content').innerHTML=fn()}
-function setLoading(){document.getElementById('content').innerHTML='<div class=\'grid cols-3\'><div class=\'loading-card\'></div><div class=\'loading-card\'></div><div class=\'loading-card\'></div></div>'}
-function bootstrap(){state.page=(location.hash||'#home').slice(1);if(!NAV.some(n=>n[0]===state.page))state.page='home';renderNav();setLoading();google.script.run.withSuccessHandler(data=>{state.data=data;state.workLocation=data.attendance.workLocation||'出社';state.schedule.date=data.today;state.schedule.employees=data.employees||[];state.company.year=parseIso(data.today).getFullYear();document.getElementById('profileName').textContent=data.user.displayName;document.getElementById('profileRole').textContent=data.user.role;document.getElementById('app').classList.remove('is-loading');renderPage();if(state.page==='schedule')loadSchedule();if(state.page==='companyCalendar')loadCompanyCalendar()}).withFailureHandler(err=>{document.getElementById('content').innerHTML=`<section class='card'><h3>読み込みに失敗しました</h3><p class='muted'>${escapeHtml(err&&err.message||'不明なエラー')}</p></section>`}).getInitialData()}
+
+function loadAuthAdmin(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)) return;
+  state.authAdmin=null;renderPage();
+  google.script.run
+    .withSuccessHandler(data=>{state.authAdmin=data;renderPage()})
+    .withFailureHandler(err=>handleApiError(err,'管理情報を読み込めませんでした'))
+    .getAuthAdminData(state.sessionToken);
+}
+
+function openTempPinModal(employeeId,name){
+  const r=ensureModal();
+  r.innerHTML=\`<div class='modal-backdrop' onclick='closeModal()'></div>
+  <section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>管理者操作</small><h2>仮PINを発行</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <p class='muted'>\${escapeHtml(name)}（\${escapeHtml(employeeId)}）に6桁の仮PINを設定します。本人は初回ログイン時に変更が必要です。</p>
+    <div class='form-grid'>
+      <label class='field full'><span>仮PIN</span><input id='tempPin' inputmode='numeric' maxlength='6' type='password' autocomplete='new-password'></label>
+      <label class='field full'><span>仮PIN（確認）</span><input id='tempPinConfirm' inputmode='numeric' maxlength='6' type='password' autocomplete='new-password'></label>
+    </div>
+    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="submitTempPin('\${employeeId}')">発行</button></div></div>
+  </section>\`;
+}
+
+function submitTempPin(employeeId){
+  const pin=document.getElementById('tempPin').value;
+  const confirmPin=document.getElementById('tempPinConfirm').value;
+  if(pin!==confirmPin){showToast('確認用PINが一致しません');return}
+  google.script.run.withSuccessHandler(()=>{closeModal();showToast('仮PINを発行しました');loadAuthAdmin()})
+    .withFailureHandler(err=>handleApiError(err,'仮PINを発行できませんでした'))
+    .adminSetTemporaryPin(state.sessionToken,employeeId,pin);
+}
+
+function unlockAccount(employeeId){
+  if(!confirm('このアカウントのログインロックを解除しますか？'))return;
+  google.script.run.withSuccessHandler(()=>{showToast('ロックを解除しました');loadAuthAdmin()})
+    .withFailureHandler(err=>handleApiError(err,'ロック解除に失敗しました'))
+    .adminUnlockAccount(state.sessionToken,employeeId);
+}
+
+function saveSupportSettingsFromAdmin(){
+  const payload={name:document.getElementById('supportName').value,email:document.getElementById('supportEmail').value,phone:document.getElementById('supportPhone').value,note:document.getElementById('supportNote').value};
+  google.script.run.withSuccessHandler(support=>{state.authAdmin.support=support;state.publicConfig.support=support;renderPage();showToast('連絡先を保存しました')})
+    .withFailureHandler(err=>handleApiError(err,'連絡先を保存できませんでした'))
+    .saveAuthSupportSettings(state.sessionToken,payload);
+}
+
+function renderPage(){
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  document.getElementById('content').innerHTML=fn();
+}
+
+function setLoading(){
+  document.getElementById('content').innerHTML="<div class='grid cols-3'><div class='loading-card'></div><div class='loading-card'></div><div class='loading-card'></div></div>";
+}
+
+function renderLogin(message=''){
+  const cfg=state.publicConfig||{needsSetup:false,pinLength:6,support:{name:'FM WORKS管理者',email:'',phone:'',note:''}};
+  const support=cfg.support||{};
+  const remembered=localStorage.getItem('fmworks.employeeId')||(cfg.needsSetup?'FM0001':'');
+  const heading=cfg.needsSetup?'初期管理者設定':'FM WORKSへログイン';
+  const intro=cfg.needsSetup?"初回のみ、管理者の社員番号と新しいPINを設定してください。設定後は通常のログイン画面になります。":"";
+  const shell=document.getElementById('loginShell');
+  shell.hidden=false;
+  shell.innerHTML=\`<div class='login-stage'>
+    <section class='login-visual'>
+      <div><div class='login-kicker'>FUSION MIND</div><h1>はたらくを、<br>もっとシンプルに。</h1><div class='login-accent'></div><p>人・時間・仕事がつながることで、チームの力はもっと大きくなる。FM WORKSは、組織の可能性をひらくワークプラットフォームです。</p></div>
+      <div class='login-benefits'><div class='login-benefit'><b>人がつながる</b><small>チームの情報を共有</small></div><div class='login-benefit'><b>時間を見える化</b><small>勤怠と工数を一元化</small></div><div class='login-benefit'><b>仕事が進む</b><small>予定・申請をひとつに</small></div></div>
+    </section>
+    <section class='login-panel'>
+      <form class='login-card' onsubmit='submitLogin(event)'>
+        <div class='login-brand'>\${svgLogo()}<h2>FM WORKS</h2><div class='brand-line'></div><p>人・時間・仕事をひとつに。</p></div>
+        <div class='login-divider'></div>
+        <h3>\${heading}</h3>
+        \${intro?\`<div class='setup-note'>\${intro}</div>\`:''}
+        <div id='loginError' class='login-error \${message?'show':''}'>\${escapeHtml(message)}</div>
+        <label class='login-field'><span>社員番号</span><div class='login-input-wrap'>\${svg('i-user')}<input id='loginEmployeeId' value='\${escapeHtml(remembered)}' autocomplete='username' autocapitalize='characters' spellcheck='false' placeholder='FM0001' required></div></label>
+        <label class='login-field'><span>\${cfg.needsSetup?'新しいPIN':'PIN'}</span><div class='login-input-wrap'>\${svg('i-lock')}<input id='loginPin' type='password' inputmode='numeric' maxlength='\${cfg.pinLength||6}' autocomplete='\${cfg.needsSetup?'new-password':'current-password'}' required><button class='toggle-password' type='button' onclick="togglePassword('loginPin')" aria-label='PINを表示'>\${svg('i-eye')}</button></div></label>
+        \${cfg.needsSetup?\`<label class='login-field'><span>新しいPIN（確認）</span><div class='login-input-wrap'>\${svg('i-lock')}<input id='loginPinConfirm' type='password' inputmode='numeric' maxlength='\${cfg.pinLength||6}' autocomplete='new-password' required></div></label>\`:''}
+        <label class='login-remember'><input id='rememberEmployeeId' type='checkbox' \${remembered?'checked':''}><span>社員番号を記憶する</span></label>
+        <button id='loginSubmit' class='login-submit' type='submit'>\${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
+        <div class='login-help'>
+          <button type='button' onclick='openPinHelpModal()'>PINを忘れた場合</button>
+          <small>\${escapeHtml(support.note||'社内のFM WORKS管理者へご連絡ください。')}</small>
+        </div>
+      </form>
+    </section>
+  </div>\`;
+}
+
+function showLogin(message=''){
+  document.getElementById('app').hidden=true;
+  closeModal();
+  renderLogin(message);
+}
+
+function togglePassword(id){
+  const input=document.getElementById(id);if(!input)return;
+  input.type=input.type==='password'?'text':'password';
+}
+
+function setLoginBusy(busy){
+  const button=document.getElementById('loginSubmit');if(!button)return;
+  button.disabled=busy;button.textContent=busy?'確認しています...':((state.publicConfig&&state.publicConfig.needsSetup)?'初期設定を完了　→':'ログイン　→');
+}
+
+function submitLogin(event){
+  event.preventDefault();
+  const id=document.getElementById('loginEmployeeId').value.trim().toUpperCase();
+  const pin=document.getElementById('loginPin').value;
+  const remember=document.getElementById('rememberEmployeeId').checked;
+  if(state.publicConfig&&state.publicConfig.needsSetup){
+    const confirmPin=document.getElementById('loginPinConfirm').value;
+    if(pin!==confirmPin){renderLogin('確認用PINが一致しません。');document.getElementById('loginEmployeeId').value=id;return}
+  }
+  if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
+  setLoginBusy(true);
+  const runner=google.script.run.withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
+  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo());
+  else runner.login(id,pin,clientInfo());
+}
+
+function acceptLogin(result){
+  setSessionToken(result.sessionToken);
+  loadAuthenticatedApp(!!result.mustChangePin);
+}
+
+function loadAuthenticatedApp(mustChangePin){
+  setLoading();
+  google.script.run.withSuccessHandler(data=>{
+    state.data=data;
+    state.workLocation=data.attendance.workLocation||'出社';
+    state.schedule.date=data.today;
+    state.schedule.employees=data.employees||[];
+    state.company.year=parseIso(data.today).getFullYear();
+    const requested=(location.hash||'#home').slice(1);
+    state.page=NAV.some(n=>n[0]===requested)?requested:'home';
+    if(state.page==='admin'&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
+    document.getElementById('loginShell').hidden=true;
+    document.getElementById('app').hidden=false;
+    setProfileUi();
+    renderNav();
+    renderPage();
+    if(state.page==='schedule')loadSchedule();
+    if(state.page==='companyCalendar')loadCompanyCalendar();
+    if(state.page==='admin')loadAuthAdmin();
+    if(mustChangePin)setTimeout(()=>openChangePinModal(true),0);
+  }).withFailureHandler(err=>{clearLocalSession();showLogin(sessionErrorMessage(err).includes('SESSION')?'セッションの有効期限が切れました。':'ログイン状態を確認できませんでした。')}).getInitialData(state.sessionToken);
+}
+
+function setProfileUi(){
+  const u=state.data.user;
+  document.getElementById('profileAvatar').textContent=(u.displayName||u.fullName||'?').slice(0,1);
+  document.getElementById('profileName').textContent=u.displayName||u.fullName;
+  document.getElementById('profileRole').textContent=roleLabel(u.role);
+  document.getElementById('profileMenuName').textContent=u.fullName||u.displayName;
+  document.getElementById('profileMenuId').textContent=u.employeeId+' / '+roleLabel(u.role);
+}
+
+function toggleProfileMenu(){
+  const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');
+  const next=menu.hidden;menu.hidden=!next;button.setAttribute('aria-expanded',String(next));
+}
+function closeProfileMenu(){const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');if(menu){menu.hidden=true}if(button)button.setAttribute('aria-expanded','false')}
+
+function performLogout(){
+  const token=state.sessionToken;
+  clearLocalSession();closeProfileMenu();document.getElementById('app').hidden=true;
+  google.script.run.withSuccessHandler(()=>showLogin('ログアウトしました。')).withFailureHandler(()=>showLogin('ログアウトしました。')).logout(token);
+}
+
+function openChangePinModal(force=false){
+  closeProfileMenu();
+  const r=ensureModal();
+  r.innerHTML=\`<div class='modal-backdrop' \${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>\${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>\${force?'':"<button class='icon-button' onclick='closeModal()'>×</button>"}</div>
+    \${force?"<div class='setup-note'>安全のため、管理者が発行した仮PINから新しいPINへ変更してください。</div>":''}
+    <div class='form-grid'>
+      <label class='field full'><span>現在のPIN</span><input id='currentPin' type='password' inputmode='numeric' maxlength='6' autocomplete='current-password'></label>
+      <label class='field full'><span>新しいPIN</span><input id='newPin' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
+      <label class='field full'><span>新しいPIN（確認）</span><input id='newPinConfirm' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
+    </div>
+    <div class='modal-actions'><span></span><div>\${force?'':"<button class='secondary-button' onclick='closeModal()'>キャンセル</button>"}<button class='primary-button' onclick="submitOwnPinChange(\${force})">変更</button></div></div>
+  </section>\`;
+}
+
+function submitOwnPinChange(force){
+  const current=document.getElementById('currentPin').value,newPin=document.getElementById('newPin').value,confirmPin=document.getElementById('newPinConfirm').value;
+  if(newPin!==confirmPin){showToast('確認用PINが一致しません');return}
+  google.script.run.withSuccessHandler(()=>{closeModal();showToast('PINを変更しました')}).withFailureHandler(err=>{if(!handleApiError(err,'PINを変更できませんでした')&&force){} }).changeOwnPin(state.sessionToken,current,newPin);
+}
+
+function openPinHelpModal(){
+  const s=(state.publicConfig&&state.publicConfig.support)||{};
+  const employeeId=document.getElementById('loginEmployeeId')?document.getElementById('loginEmployeeId').value.trim().toUpperCase():'';
+  const contact=[s.email?\`<a href='mailto:\${escapeHtml(s.email)}'>\${escapeHtml(s.email)}</a>\`:'',s.phone?\`<a href='tel:\${escapeHtml(s.phone)}'>\${escapeHtml(s.phone)}</a>\`:''].filter(Boolean).join('<br>');
+  const r=ensureModal();
+  r.innerHTML=\`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>ログインサポート</small><h2>PINを忘れた場合</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <div class='support-card'><strong>\${escapeHtml(s.name||'FM WORKS管理者')}</strong><small>\${escapeHtml(s.note||'社内の管理者へご連絡ください。')}</small>\${contact?\`<div>\${contact}</div>\`:''}</div>
+    <div class='form-grid section-gap'>
+      <label class='field full'><span>社員番号</span><input id='helpEmployeeId' value='\${escapeHtml(employeeId)}' placeholder='FM0001'></label>
+      <label class='field full'><span>補足（任意）</span><textarea id='helpNote' rows='3' placeholder='管理者へのメモ'></textarea></label>
+    </div>
+    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>閉じる</button><button class='primary-button' onclick='submitPinHelp()'>再発行を依頼</button></div></div>
+  </section>\`;
+}
+
+function submitPinHelp(){
+  const id=document.getElementById('helpEmployeeId').value.trim().toUpperCase();
+  const note=document.getElementById('helpNote').value;
+  google.script.run.withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
+    .withFailureHandler(()=>{closeModal();showToast('案内先の管理者へ直接ご連絡ください')})
+    .requestPinHelp(id,note,clientInfo());
+}
+
+function bootstrap(){
+  state.sessionToken=sessionStorage.getItem('fmworks.session')||null;
+  const button=document.getElementById('profileButton');
+  if(button)button.addEventListener('click',e=>{e.stopPropagation();toggleProfileMenu()});
+  document.addEventListener('click',e=>{if(!e.target.closest('.profile-wrap'))closeProfileMenu()});
+  google.script.run.withSuccessHandler(config=>{
+    state.publicConfig=config;
+    if(state.sessionToken){
+      google.script.run.withSuccessHandler(result=>loadAuthenticatedApp(!!result.mustChangePin)).withFailureHandler(()=>{clearLocalSession();showLogin()}).resumeSession(state.sessionToken);
+    }else{
+      showLogin();
+    }
+  }).withFailureHandler(()=>showLogin('FM WORKSの初期情報を読み込めませんでした。')).getPublicAuthConfig();
+}
+
 document.addEventListener('DOMContentLoaded',bootstrap);
+
 </script>
