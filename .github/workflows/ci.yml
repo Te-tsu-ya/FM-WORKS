@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [develop, staging]
+    branches: [develop, staging, feature/v0.8-monthly-review-docs]
 
 jobs:
   validate:
