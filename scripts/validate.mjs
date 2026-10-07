@@ -821,8 +821,8 @@ if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了
   failed = true;
 }
 
-if (!app.includes("content.classList.toggle('one-screen',['home','monthly','admin'].includes(state.page))")) {
-  console.error('Desktop home must opt into the one-screen layout.');
+if (!app.includes("content.classList.toggle('one-screen',state.page==='home')")) {
+  console.error('Desktop one-screen mode must be limited to the home dashboard.');
   failed = true;
 }
 if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-screen){height:auto;overflow:visible}')) {
