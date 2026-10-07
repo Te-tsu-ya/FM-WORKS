@@ -7,7 +7,8 @@ const AUTH = Object.freeze({
   defaultIdleMinutes: 120,
   defaultMaxFailures: 5,
   defaultLockMinutes: 15,
-  defaultPinLength: 6
+  defaultPinLength: 6,
+  sessionTouchMinutes: 5
 });
 
 function getPublicAuthConfig() {
@@ -477,9 +478,12 @@ function requireSession_(sessionToken) {
   }
 
   const config = getAuthConfig_();
-  const nowText = toTimestamp_(now);
-  const nextIdle = toTimestamp_(new Date(now.getTime() + config.idleMinutes * 60000));
-  sheet.getRange(rowNumber, 6, 1, 2).setValues([[nextIdle, nowText]]);
+  const lastUsed = parseTimestamp_(row[6]);
+  if (!lastUsed || (now.getTime() - lastUsed.getTime()) >= AUTH.sessionTouchMinutes * 60000) {
+    const nowText = toTimestamp_(now);
+    const nextIdle = toTimestamp_(new Date(now.getTime() + config.idleMinutes * 60000));
+    sheet.getRange(rowNumber, 6, 1, 2).setValues([[nextIdle, nowText]]);
+  }
   return { rowNumber: rowNumber, employee: employee, sessionId: row[0] };
 }
 
