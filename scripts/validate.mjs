@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -15,13 +15,14 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const app = fs.readFileSync(path.join(root,'src/App.html'),'utf8');
+const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppAdmin.html','AppShell.html'];
+const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
 }
 try {
-  const js = app.replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+  const js = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
   const temp = path.join(os.tmpdir(), 'fmworks-app-check.js');
   fs.writeFileSync(temp, js);
   execFileSync(process.execPath, ['--check', temp], { stdio: 'pipe' });

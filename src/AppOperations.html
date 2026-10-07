@@ -1,0 +1,465 @@
+<script>
+function attendancePage(){const d=state.data,a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}<div class='grid cols-2'>${card('現在の勤務状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' に出勤':'まだ出勤していません'}</div><p class='muted'>現在の実働：${liveWorkedText(a)}</p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>まだ打刻はありません。</p>')}</div><div class='grid cols-4 section-gap'>${metric('本日の実働',liveWorkedText(a),'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
+
+
+function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
+function loadWorklogs(options={}){
+  if(!state.worklog.date)state.worklog.date=state.data.today;
+  const key=worklogCacheKey();
+  if(!options.force&&cacheFresh('worklog',key))return;
+  const ticket=beginPageLoad('worklog',key);if(!ticket)return;
+  const hasCurrent=cacheHas('worklog',key);
+  state.worklog.loading=!hasCurrent;
+  if(!options.silent)renderPageIfActive('worklog');
+  google.script.run.withSuccessHandler(function(data){
+    endPageLoad(ticket);
+    if(worklogCacheKey()!==key)return;
+    state.worklog.items=data.items||[];
+    state.worklog.totalMinutes=data.totalMinutes||0;
+    state.worklog.loading=false;
+    markPageCache('worklog',key);
+    renderPageIfActive('worklog');
+  }).withFailureHandler(function(err){
+    endPageLoad(ticket);state.worklog.loading=false;
+    if(!handleApiError(err,'工数を読み込めませんでした')&&!options.silent)renderPageIfActive('worklog');
+  }).getWorklogs(state.sessionToken,{start:state.worklog.date,end:state.worklog.date});
+}
+function moveWorklogDate(n){state.worklog.date=addDays(state.worklog.date||state.data.today,n);loadWorklogs();}
+function worklogPage(){var w=state.worklog,date=w.date||state.data.today,attendance=state.data.attendance,attendanceMinutes=date===state.data.today?Number(attendance.workedMinutes||0):0,unentered=Math.max(0,attendanceMinutes-Number(w.totalMinutes||0)),projects=[...new Set((w.items||[]).map(function(x){return x.project;}))].length;var rows=(w.items||[]).map(function(x){return '<div class="list-item"><span class="status-dot" style="background:#1478ff"></span><div><strong>'+escapeHtml(x.project)+'　'+formatMinutesClient(x.minutes)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+escapeHtml(x.start)+'-'+escapeHtml(x.end)+' / '+escapeHtml(x.category||'未分類')+' / '+escapeHtml(x.description)+'</div></div><div class="admin-actions"><button class="small-button" onclick="openWorklogModal(\''+x.id+'\')">編集</button><button class="small-button" onclick="deleteWorklogItem(\''+x.id+'\')">削除</button></div></div>';}).join('');var action='<button class="primary-button" onclick="openWorklogModal()">＋ 工数追加</button>';var toolbar='<div class="schedule-toolbar"><div class="toolbar-group"><button class="secondary-button compact" onclick="moveWorklogDate(-1)">‹</button><button class="secondary-button compact" onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class="secondary-button compact" onclick="moveWorklogDate(1)">›</button><strong class="period-label">'+fmtDate(date)+'</strong></div></div>';if(w.loading&&!cacheHas('worklog',worklogCacheKey()))return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="loading-card"></div>';return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="grid cols-4">'+metric('入力済工数',formatMinutesClient(w.totalMinutes),'tone-green')+metric('本日の実働',date===state.data.today?attendance.worked:'—')+metric('未入力時間',date===state.data.today?formatMinutesClient(unentered):'—','tone-orange')+metric('プロジェクト数',projects+'件','tone-purple')+'</div><div class="grid cols-2 section-gap">'+card('工数一覧',rows||'<p class="muted">この日の工数はまだありません。</p>')+card('入力ルール','<p class="muted">プロジェクト・作業分類・開始/終了・作業内容を記録します。保存内容は「FM WORKS DB / 工数」に反映され、月次集計へ自動で利用されます。</p><div class="progress"><span style="width:'+(attendanceMinutes?Math.min(100,Math.round(w.totalMinutes/attendanceMinutes*100)):0)+'%"></span></div>')+'</div>';}
+function openWorklogModal(id){
+  id=id||'';
+  var item=id?(state.worklog.items||[]).find(function(x){return x.id===id;}):null;
+  var date=state.worklog.date||state.data.today;
+  var projects=(state.data.projects||[]).slice();
+  if(item&&item.project&&!projects.some(function(p){return p.name===item.project;})){
+    projects.push({name:item.project,status:'停止'});
+  }
+  var options=projects.map(function(p){
+    return '<option value="'+escapeHtml(p.name)+'" '+(item&&item.project===p.name?'selected':'')+'>'+escapeHtml(p.name)+(p.status&&p.status!=='進行中'?'（'+escapeHtml(p.status)+'）':'')+'</option>';
+  }).join('');
+  var r=ensureModal();
+  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>'+(item?'工数を編集':'工数を追加')+'</small><h2>'+fmtDate(date)+'</h2></div><button class="icon-button" onclick="closeModal()">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト</span><select id="wlProject">'+(options||'<option value="">プロジェクトが未登録です</option>')+'</select></label><label class="field"><span>作業分類</span><input id="wlCategory" value="'+escapeHtml(item?item.category:'')+'" placeholder="開発 / 営業 / 会議 等"></label><label class="field"><span>日付</span><input id="wlDate" type="date" value="'+(item?item.date:date)+'"></label><label class="field"><span>開始</span><input id="wlStart" type="time" value="'+escapeHtml(item?item.start:'09:00')+'"></label><label class="field"><span>終了</span><input id="wlEnd" type="time" value="'+escapeHtml(item?item.end:'10:00')+'"></label><label class="field full"><span>作業内容</span><textarea id="wlDescription" rows="3" placeholder="実施した内容を入力">'+escapeHtml(item?item.description:'')+'</textarea></label><label class="field full"><span>備考</span><textarea id="wlNote" rows="2">'+escapeHtml(item?item.note:'')+'</textarea></label></div><div class="modal-actions"><span class="muted">'+(projects.length?'':'管理者がプロジェクトを登録してください。')+'</span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" '+(projects.length?'':'disabled')+' onclick="saveWorklogFromModal(\''+id+'\')">保存</button></div></div></section>';
+}
+function saveWorklogFromModal(id){var payload={id:id,date:document.getElementById('wlDate').value,project:document.getElementById('wlProject').value,category:document.getElementById('wlCategory').value,start:document.getElementById('wlStart').value,end:document.getElementById('wlEnd').value,description:document.getElementById('wlDescription').value,note:document.getElementById('wlNote').value};google.script.run.withSuccessHandler(function(){closeModal();state.worklog.date=payload.date;showToast('工数を保存しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});}).withFailureHandler(function(err){handleApiError(err,'工数を保存できませんでした');}).saveWorklog(state.sessionToken,payload);}
+function deleteWorklogItem(id){openConfirmDialog('工数を削除','削除後も監査用データは保持されます。削除しますか？','削除',function(){google.script.run.withSuccessHandler(function(){showToast('工数を削除しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});}).withFailureHandler(function(err){handleApiError(err,'工数を削除できませんでした');}).deleteWorklog(state.sessionToken,id);},true);}
+
+function scheduleRange(){const s=state.schedule; if(s.view==='month'||s.view==='list')return monthGridRange(s.date); if(s.view==='week')return {start:startOfWeek(s.date),end:endOfWeek(s.date)}; return {start:s.date,end:s.date}}
+function loadSchedule(options={}){
+  if(!state.schedule.date)return;
+  const r=scheduleRange(),key=scheduleCacheKey();
+  if(!options.force&&cacheFresh('schedule',key))return;
+  const ticket=beginPageLoad('schedule',key);if(!ticket)return;
+  const hasCurrent=cacheHas('schedule',key);
+  state.schedule.loading=!hasCurrent;
+  if(!options.silent)renderPageIfActive('schedule');
+  google.script.run.withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    if(scheduleCacheKey()!==key)return;
+    state.schedule.events=data.events||[];
+    state.schedule.companyDays=data.companyDays||[];
+    state.schedule.employees=data.employees||[];
+    state.schedule.loading=false;
+    markPageCache('schedule',key);
+    renderPageIfActive('schedule');
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);state.schedule.loading=false;
+    if(!handleApiError(err,'予定表の読み込みに失敗しました')&&!options.silent)renderPageIfActive('schedule');
+  }).getScheduleBundle(state.sessionToken,{start:r.start,end:r.end,employeeId:state.schedule.employeeId,category:state.schedule.category});
+}
+function changeScheduleView(v){state.schedule.view=v;loadSchedule()}
+function moveSchedule(step){const s=state.schedule;if(s.view==='month'||s.view==='list')s.date=addMonths(s.date,step);else if(s.view==='week')s.date=addDays(s.date,7*step);else s.date=addDays(s.date,step);loadSchedule()}
+function scheduleToday(){state.schedule.date=state.data.today;loadSchedule()}
+function setScheduleFilter(kind,value){state.schedule[kind]=value;loadSchedule()}
+function companyDayMap(){return Object.fromEntries((state.schedule.companyDays||[]).map(d=>[d.date,d]))}
+function eventsFor(date){return (state.schedule.events||[]).filter(e=>e.date===date)}
+function eventChip(e){
+  const people=eventPeople(e),primary=people[0]||{id:'unknown'},color=personColor(primary.id);
+  return `<button class='schedule-event' style='--person-color:${color.line};--person-bg:${color.bg};--category-color:${categoryColor(e.category)}' onclick="event.stopPropagation();openScheduleEditor('${e.id}')">
+    <span class='schedule-event-time'>${e.allDay?'終日':escapeHtml(e.start||'')}</span>
+    <strong class='schedule-event-title'>${escapeHtml(e.title)}</strong>
+    <span class='schedule-event-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span>
+    <i class='schedule-category-dot' title='${escapeHtml(e.category)}'></i>
+  </button>`
+}
+function scheduleToolbar(){const s=state.schedule;const employees=s.employees.length?s.employees:(state.data.employees||[]);return `<div class='schedule-toolbar'><div class='toolbar-group'><button class='secondary-button compact' onclick='moveSchedule(-1)'>‹</button><button class='secondary-button compact' onclick='scheduleToday()'>今日</button><button class='secondary-button compact' onclick='moveSchedule(1)'>›</button><strong class='period-label'>${fmtMonth(s.date)}</strong></div><div class='toolbar-group'><div class='segmented'>${[['month','月'],['week','週'],['day','日'],['list','一覧']].map(x=>`<button class='${s.view===x[0]?'active':''}' onclick="changeScheduleView('${x[0]}')">${x[1]}</button>`).join('')}</div><select class='filter-select' onchange="setScheduleFilter('employeeId',this.value)"><option value='ALL'>全社員</option>${employees.map(e=>`<option value='${e.employeeId}' ${s.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select><select class='filter-select' onchange="setScheduleFilter('category',this.value)"><option value='ALL'>全カテゴリ</option>${Object.keys(CATEGORY_COLORS).map(c=>`<option value='${c}' ${s.category===c?'selected':''}>${c}</option>`).join('')}</select><button class='primary-button' onclick='openScheduleEditor()'>＋ 予定登録</button></div></div>`}
+function monthView(){const s=state.schedule,range=monthGridRange(s.date),map=companyDayMap(),curMonth=parseIso(s.date).getMonth(),cells=[];for(let d=range.start;;d=addDays(d,1)){const dt=parseIso(d),ev=eventsFor(d),cd=map[d];cells.push(`<div class='month-day ${dt.getMonth()!==curMonth?'outside':''} ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}' onclick="openDay('${d}')"><div class='day-head'><span>${dt.getDate()}</span>${cd&&cd.type!=='通常勤務'?`<em class='day-type ${cd.working?'workday':'offday'}'>${escapeHtml(cd.name||cd.type)}</em>`:''}</div><div class='day-events'>${ev.slice(0,3).map(eventChip).join('')}${ev.length>3?`<button class='more-events'>＋${ev.length-3}件</button>`:''}</div></div>`);if(d===range.end)break}return `<div class='weekday-row'>${['日','月','火','水','木','金','土'].map(x=>`<div>${x}</div>`).join('')}</div><div class='month-grid'>${cells.join('')}</div>`}
+function weekView(){const start=startOfWeek(state.schedule.date),map=companyDayMap();return `<div class='week-grid'>${Array.from({length:7},(_,i)=>{const d=addDays(start,i),cd=map[d],ev=eventsFor(d);return `<section class='week-day ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}'><header><strong>${fmtDate(d)}</strong><small>${cd?escapeHtml(cd.name||cd.type):''}</small></header><div>${ev.length?ev.map(eventChip).join(''):`<p class='muted empty-day'>予定なし</p>`}</div><button class='add-inline' onclick="openScheduleEditor('', '${d}')">＋</button></section>`}).join('')}</div>`}
+function dayView(){const d=state.schedule.date,cd=companyDayMap()[d],ev=eventsFor(d);return `<div class='day-view'><div class='day-summary'><div><h2>${fmtDate(d)}</h2><p class='muted'>${cd?`${escapeHtml(cd.type)}${cd.name?' / '+escapeHtml(cd.name):''}${cd.working?'  '+cd.start+'-'+cd.end:''}`:'会社カレンダー未登録'}</p></div><button class='primary-button' onclick="openScheduleEditor('', '${d}')">＋ この日に予定</button></div>${ev.length?ev.map(e=>{const p=eventPeople(e)[0]||{id:'unknown'},color=personColor(p.id);return `<article class='agenda-item' style='--person-color:${color.line};--person-bg:${color.bg}' onclick="openScheduleEditor('${e.id}')"><div class='agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</div><div><strong>${escapeHtml(e.title)}</strong><p class='agenda-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b>${e.location?' <span>・ '+escapeHtml(e.location)+'</span>':''}</p><span class='badge'><i class='inline-category-dot' style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></div></article>`}).join(''):`<div class='empty-state'><strong>予定はありません</strong><p>右上のボタンから予定を登録できます。</p></div>`}</div>`}
+function listView(){const ev=state.schedule.events||[];return `<div class='schedule-list'><div class='schedule-list-head'><span>日付</span><span>時間</span><span>予定</span><span>担当・参加者</span><span>分類</span></div>${ev.length?ev.map(e=>`<button class='schedule-list-row' onclick="openScheduleEditor('${e.id}')"><span><strong>${fmtDate(e.date)}</strong></span><span>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span><span><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</span><span class='list-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span><span><i style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></button>`).join(''):`<div class='empty-state'>該当する予定はありません。</div>`}</div>`}
+function schedulePage(){const s=state.schedule;let body=(s.loading&&!cacheHas('schedule',scheduleCacheKey()))?`<div class='loading-card'></div>`:s.view==='month'?monthView():s.view==='week'?weekView():s.view==='day'?dayView():listView();return `${pageHead('予定表','社員名を予定カードに直接表示し、色と名前の両方で誰の予定か判別できます。')} ${scheduleToolbar()} ${schedulePeopleLegend()} <div class='schedule-surface'>${body}</div><div class='calendar-legend'><span><i class='legend-dot holiday'></i>会社休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span><i class='legend-dot category'></i>右端の点は予定カテゴリ</span></div>`}
+function openDay(date){state.schedule.date=date;state.schedule.view='day';loadSchedule()}
+function openConfirmDialog(title,message,confirmLabel,onConfirm,danger){
+  state.confirmAction=onConfirm;
+  const r=ensureModal();
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>確認</small><h2>${escapeHtml(title)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <p class='confirm-message'>${escapeHtml(message)}</p>
+    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='${danger?'danger-button':'primary-button'}' onclick='runConfirmAction()'>${escapeHtml(confirmLabel||'実行')}</button></div></div>
+  </section>`;
+}
+function runConfirmAction(){
+  const fn=state.confirmAction;state.confirmAction=null;closeModal();if(typeof fn==='function')fn();
+}
+function openReasonDialog(title,message,submitLabel,onSubmit){
+  state.reasonAction=onSubmit;
+  const r=ensureModal();
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>理由入力</small><h2>${escapeHtml(title)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <p class='muted'>${escapeHtml(message||'')}</p>
+    <label class='field full'><span>理由</span><textarea id='reasonDialogText' rows='4' maxlength='500' placeholder='理由を入力してください'></textarea></label>
+    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick='runReasonAction()'>${escapeHtml(submitLabel||'送信')}</button></div></div>
+  </section>`;
+  setTimeout(()=>{const el=document.getElementById('reasonDialogText');if(el)el.focus()},0);
+}
+function runReasonAction(){
+  const input=document.getElementById('reasonDialogText');
+  const value=input?input.value.trim():'';
+  if(!value){showToast('理由を入力してください');return}
+  const fn=state.reasonAction;state.reasonAction=null;closeModal();if(typeof fn==='function')fn(value);
+}
+
+function ensureModal(){let r=document.getElementById('modalRoot');if(!r){r=document.createElement('div');r.id='modalRoot';document.body.appendChild(r)}return r}
+function closeModal(){const r=document.getElementById('modalRoot');if(r)r.innerHTML=''}
+function openScheduleEditor(id='',date=''){
+  const e=id?(state.schedule.events||[]).find(x=>x.id===id):null;
+  const employees=state.schedule.employees.length?state.schedule.employees:(state.data.employees||[]);
+  const d=date||(e&&e.date)||state.schedule.date||state.data.today;
+  const r=ensureModal();
+
+  if(e&&e.canEdit===false){
+    r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
+      <div class='modal-head'><div><small>予定 / 閲覧専用</small><h2>${fmtDate(d)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+      <div class='readonly-calendar-detail'>
+        <div><span>予定名</span><strong>${escapeHtml(e.title)}</strong></div>
+        <div><span>時間</span><strong>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</strong></div>
+        <div><span>参加者</span><strong>${escapeHtml((e.employeeNames||[]).join('、')||'—')}</strong></div>
+        <div><span>分類</span><strong>${escapeHtml(e.category||'予定')}</strong></div>
+        <div><span>場所</span><strong>${escapeHtml(e.location||'—')}</strong></div>
+        <div><span>公開範囲</span><strong>${escapeHtml(e.visibility||'社内')}</strong></div>
+      </div>
+      ${e.detail?`<div class='section-gap'><small class='muted'>詳細・メモ</small><p class='readonly-note'>${escapeHtml(e.detail)}</p></div>`:''}
+      <div class='modal-actions'><span class='muted'>この予定の編集権限はありません。</span><div><button class='primary-button' onclick='closeModal()'>閉じる</button></div></div>
+    </section>`;
+    return;
+  }
+
+  const checked=e?e.employeeIds:[state.data.user.employeeId];
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>${e?'予定を編集':'新しい予定'}</small><h2>${fmtDate(d)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+    <div class='form-grid'>
+      <label class='field full'><span>予定名</span><input id='schTitle' value='${escapeHtml(e?e.title:'')}' placeholder='例：お客様訪問'></label>
+      <label class='field'><span>日付</span><input id='schDate' type='date' value='${d}'></label>
+      <label class='field check-field'><input id='schAllDay' type='checkbox' ${!e||e.allDay?'checked':''} onchange='toggleScheduleTimes()'><span>終日</span></label>
+      <label class='field time-field'><span>開始</span><input id='schStart' type='time' value='${escapeHtml(e?e.start:'09:00')}'></label>
+      <label class='field time-field'><span>終了</span><input id='schEnd' type='time' value='${escapeHtml(e?e.end:'10:00')}'></label>
+      <label class='field'><span>分類</span><select id='schCategory'>${Object.keys(CATEGORY_COLORS).map(cat=>`<option value='${cat}' ${(e?e.category:'予定')===cat?'selected':''}>${cat}</option>`).join('')}</select></label>
+      <label class='field'><span>場所</span><input id='schLocation' value='${escapeHtml(e?e.location:'')}' placeholder='訪問先 / Zoom 等'></label>
+      <label class='field'><span>公開範囲</span><select id='schVisibility'><option value='社内' ${!e||!e.visibility||e.visibility==='社内'?'selected':''}>社内全員</option><option value='参加者のみ' ${e&&e.visibility==='参加者のみ'?'selected':''}>参加者のみ</option>${state.data.user.role==='ADMIN'?`<option value='管理者のみ' ${e&&e.visibility==='管理者のみ'?'selected':''}>管理者のみ</option>`:''}</select></label>
+      <div class='field full'><span>参加者</span><div class='attendee-grid'>${employees.map(emp=>`<label><input type='checkbox' name='schEmployee' value='${emp.employeeId}' ${checked.includes(emp.employeeId)?'checked':''}><span>${escapeHtml(emp.name)}</span></label>`).join('')}</div></div>
+      <label class='field full'><span>詳細・メモ</span><textarea id='schDetail' rows='4'>${escapeHtml(e?e.detail:'')}</textarea></label>
+    </div>
+    <div class='modal-actions'>${e?`<button class='danger-button' onclick="deleteScheduleFromModal('${e.id}')">削除</button>`:'<span></span>'}<div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="saveScheduleFromModal('${e?e.id:''}')">保存</button></div></div>
+  </section>`;
+  toggleScheduleTimes();
+}
+function toggleScheduleTimes(){const all=document.getElementById('schAllDay');document.querySelectorAll('.time-field').forEach(x=>x.style.display=all&&all.checked?'none':'grid')}
+function saveScheduleFromModal(id){const employeeIds=[...document.querySelectorAll("input[name='schEmployee']:checked")].map(x=>x.value);const payload={id:id,date:document.getElementById('schDate').value,title:document.getElementById('schTitle').value,allDay:document.getElementById('schAllDay').checked,start:document.getElementById('schStart').value,end:document.getElementById('schEnd').value,category:document.getElementById('schCategory').value,location:document.getElementById('schLocation').value,detail:document.getElementById('schDetail').value,visibility:document.getElementById('schVisibility').value,employeeIds};showToast('予定を保存しています...');google.script.run.withSuccessHandler(()=>{closeModal();showToast('予定を保存しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'保存に失敗しました')).saveSchedule(state.sessionToken,payload)}
+function deleteScheduleFromModal(id){openConfirmDialog('予定を削除','この予定を削除しますか？','削除',function(){google.script.run.withSuccessHandler(()=>{showToast('予定を削除しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'削除に失敗しました')).deleteSchedule(state.sessionToken,id);},true)}
+
+function canEditCompanyCalendar(){return !!(state.data&&state.data.permissions&&state.data.permissions.companyCalendarEdit)}
+function loadCompanyCalendar(year,options={}){
+  state.company.year=Number(year||state.company.year||parseIso(state.data.today).getFullYear());
+  const key=companyCacheKey();
+  if(!options.force&&cacheFresh('company',key))return;
+  const ticket=beginPageLoad('company',key);if(!ticket)return;
+  const hasCurrent=cacheHas('company',key);
+  state.company.loading=!hasCurrent;
+  if(!options.silent)renderPageIfActive('companyCalendar');
+  google.script.run.withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    if(String(state.company.year)!==String(key))return;
+    Object.assign(state.company,data,{loading:false});
+    markPageCache('company',String(data.year));
+    renderPageIfActive('companyCalendar');
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);state.company.loading=false;
+    if(!handleApiError(err,'会社カレンダーを読み込めませんでした')&&!options.silent)renderPageIfActive('companyCalendar');
+  }).getCompanyCalendar(state.sessionToken,state.company.year);
+}
+function moveCompanyYear(n){
+  const years=state.company.availableYears||[],idx=years.indexOf(Number(state.company.year));
+  const next=idx>=0?years[idx+n]:null;
+  if(next)loadCompanyCalendar(next);
+}
+function companyYearToolbar(){
+  const c=state.company,years=c.availableYears||[],idx=years.indexOf(Number(c.year));
+  const prev=idx>0?years[idx-1]:null,next=idx>=0&&idx<years.length-1?years[idx+1]:null;
+  const create=canEditCompanyCalendar()&&c.nextCreatableYear&&c.canGenerateNextStandard
+    ? `<button class='secondary-button compact create-year-button' onclick='generateCompanyCalendarYear(${Number(c.nextCreatableYear)})'>＋ ${Number(c.nextCreatableYear)}年を作成</button>`
+    : '';
+  return `<div class='company-year-toolbar'><button class='secondary-button compact' onclick='moveCompanyYear(-1)' ${prev?'':'disabled'}>‹</button><select class='company-year-select' onchange='loadCompanyCalendar(Number(this.value))'>${years.map(y=>`<option value='${y}' ${Number(c.year)===y?'selected':''}>${y}年</option>`).join('')}</select><button class='secondary-button compact' onclick='moveCompanyYear(1)' ${next?'':'disabled'}>›</button>${create}</div>`;
+}
+function miniMonth(year,month){const days=state.company.days||[],map=Object.fromEntries(days.map(d=>[d.date,d])),first=new Date(year,month-1,1),start=new Date(first);start.setDate(1-first.getDay());const cells=[];for(let i=0;i<42;i++){const dt=new Date(start);dt.setDate(start.getDate()+i);const ds=iso(dt),cd=map[ds],outside=dt.getMonth()!==month-1;cells.push(`<button class='mini-day ${outside?'outside':''} ${cd&&!cd.working?'off':''} ${cd&&cd.type==='調整出勤日'?'adjusted':''} ${isToday(ds)?'today':''}' onclick="openCompanyDay('${ds}')" ${outside?'disabled':''} aria-label="${fmtDate(ds)} ${cd?escapeHtml(cd.name||cd.type):'未登録'}"><span>${dt.getDate()}</span>${cd&&cd.name?`<small>${escapeHtml(cd.name)}</small>`:''}</button>`)}return `<section class='mini-month'><h3>${month}月</h3><div class='mini-weekdays'>${['日','月','火','水','木','金','土'].map(x=>`<span>${x}</span>`).join('')}</div><div class='mini-grid'>${cells.join('')}</div></section>`}
+function companyCalendarPage(){
+  const c=state.company,editable=canEditCompanyCalendar();
+  if(c.loading&&!cacheHas('company',companyCacheKey()))return `${pageHead('会社カレンダー','会社として登録済みの年度だけを表示します。')}<div class='loading-card'></div>`;
+  const permissionBadge=editable?`<span class='badge success'>編集権限あり</span>`:`<span class='badge'>閲覧専用</span>`;
+  return `${pageHead('会社カレンダー','登録済みの年度だけを表示します。未作成の年度は「作成」を実行するまで表示されません。','<button class=\'secondary-button\' onclick="navigate(\'schedule\')">予定表へ</button>')}<div class='permission-banner ${editable?'can-edit':'read-only'}'><div><strong>${permissionBadge}</strong><span>${editable?'管理者または会社カレンダー編集権限を持つユーザーです。':'このアカウントは閲覧のみです。会社カレンダーの変更はできません。'}</span></div></div>${companyYearToolbar()}<div class='grid cols-4 company-kpis'>${metric('年間稼働日数',`${c.workdays||0}日`,'tone-green')}${metric('年間休日',`${c.daysOff||0}日`,'tone-orange')}${metric('調整出勤日',`${c.adjustedWorkdays||0}日`,'')}${metric('会社独自休日',`${c.companyHolidays||0}日`,'tone-purple')}</div>${c.days&&c.days.length?`<div class='year-grid'>${Array.from({length:12},(_,i)=>miniMonth(c.year,i+1)).join('')}</div>`:`<div class='empty-state'><strong>会社カレンダーがまだありません。</strong><p>編集権限者が年度を作成すると表示されます。</p></div>`}<div class='calendar-legend'><span><i class='legend-dot holiday'></i>休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span>${editable?'日付をクリックすると確認・編集できます':'日付をクリックすると詳細を確認できます'}</span></div>`;
+}
+function generateCompanyCalendarYear(targetYear){
+  const year=Number(targetYear||state.company.nextCreatableYear);
+  if(!year){showToast('作成する年度を確認できませんでした');return}
+  openConfirmDialog('新しい年度を作成',year+'年の会社カレンダーを土日＋国民の祝日を基準に作成します。作成するまで社員画面には表示されません。会社独自休日・調整出勤日は作成後に設定してください。',''+year+'年を作成',function(){
+    showToast(year+'年の会社カレンダーを作成しています...');
+    google.script.run.withSuccessHandler(()=>{showToast(year+'年を作成しました');invalidatePageCache('company','schedule','monthly');state.company.year=year;loadCompanyCalendar(year,{force:true})}).withFailureHandler(err=>handleApiError(err,'会社カレンダーを生成できませんでした')).generateStandardCompanyCalendarYear(state.sessionToken,year);
+  },false);
+}
+function openCompanyDay(date){const cd=(state.company.days||[]).find(x=>x.date===date)||{date,type:'通常勤務',name:'',start:'09:00',end:'18:00',breakMinutes:60,working:true};const editable=canEditCompanyCalendar(),r=ensureModal();if(!editable){r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー / 閲覧専用</small><h2>${fmtDate(date)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div><div class='readonly-calendar-detail'><div><span>区分</span><strong>${escapeHtml(cd.type||'未登録')}</strong></div><div><span>名称</span><strong>${escapeHtml(cd.name||'—')}</strong></div><div><span>勤務時間</span><strong>${cd.working?`${escapeHtml(cd.start||'--:--')} - ${escapeHtml(cd.end||'--:--')}`:'休日'}</strong></div><div><span>休憩</span><strong>${cd.working?`${Number(cd.breakMinutes||0)}分`:'—'}</strong></div></div><div class='modal-actions'><span class='muted'>変更するには管理者または編集権限が必要です。</span><div><button class='primary-button' onclick='closeModal()'>閉じる</button></div></div></section>`;return}r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー編集</small><h2>${fmtDate(date)}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div><div class='form-grid'><label class='field full'><span>区分</span><select id='companyType'>${['通常勤務','法定祝日','法定休日','会社休日','調整出勤日','週末'].map(x=>`<option value='${x}' ${cd.type===x?'selected':''}>${x}</option>`).join('')}</select></label><label class='field full'><span>名称</span><input id='companyName' value='${escapeHtml(cd.name||'')}' placeholder='例：夏季休暇'></label><label class='field'><span>勤務開始</span><input id='companyStart' type='time' value='${escapeHtml(cd.start||'09:00')}'></label><label class='field'><span>勤務終了</span><input id='companyEnd' type='time' value='${escapeHtml(cd.end||'18:00')}'></label><label class='field'><span>休憩（分）</span><input id='companyBreak' type='number' min='0' value='${cd.breakMinutes||60}'></label></div><div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="saveCompanyDayFromModal('${date}')">保存</button></div></div></section>`}
+function saveCompanyDayFromModal(date){if(!canEditCompanyCalendar()){showToast('会社カレンダーの編集権限がありません');return}const payload={date,type:document.getElementById('companyType').value,name:document.getElementById('companyName').value,start:document.getElementById('companyStart').value,end:document.getElementById('companyEnd').value,breakMinutes:document.getElementById('companyBreak').value};google.script.run.withSuccessHandler(()=>{closeModal();showToast('会社カレンダーを更新しました');invalidatePageCache('company','schedule','monthly');loadCompanyCalendar(state.company.year,{force:true});if(state.page==='schedule')loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'更新に失敗しました')).saveCompanyCalendarDay(state.sessionToken,payload)}
+
+
+function loadRequests(options={}){
+  const key='current';
+  if(!options.force&&cacheFresh('requests',key))return;
+  const ticket=beginPageLoad('requests',key);if(!ticket)return;
+  const hasCurrent=cacheHas('requests',key);
+  state.requests.loading=!hasCurrent;
+  if(!options.silent)renderPageIfActive('requests');
+  google.script.run.withSuccessHandler(function(data){
+    endPageLoad(ticket);
+    state.requests.own=data&&data.own||[];
+    state.requests.team=data&&data.team||[];
+    state.requests.context=data&&data.context||null;
+    state.requests.loading=false;
+    markPageCache('requests',key);
+    renderPageIfActive('requests');
+  }).withFailureHandler(function(err){
+    endPageLoad(ticket);state.requests.loading=false;
+    if(!handleApiError(err,'申請を読み込めませんでした')&&!options.silent)renderPageIfActive('requests');
+  }).getRequestsBundle(state.sessionToken);
+}
+const REQUEST_UI={
+  '有給':{label:'有給休暇',mark:'休',desc:'1日・複数日の有給休暇',tone:'blue'},
+  '午前半休':{label:'午前半休',mark:'AM',desc:'午前を休む',tone:'purple'},
+  '午後半休':{label:'午後半休',mark:'PM',desc:'午後を休む',tone:'purple'},
+  '1/4日有給':{label:'1/4日有給',mark:'¼',desc:'4分の1日単位の有給',tone:'purple'},
+  '欠勤':{label:'欠勤',mark:'欠',desc:'有給を使わない欠勤',tone:'red'},
+  '打刻修正':{label:'打刻修正',mark:'修',desc:'出勤・退勤などを修正',tone:'orange'},
+  '在宅勤務':{label:'在宅勤務',mark:'在',desc:'在宅勤務を申請',tone:'green'},
+  '残業':{label:'残業',mark:'残',desc:'時間外勤務を申請',tone:'blue'},
+  '休日出勤':{label:'休日出勤',mark:'休出',desc:'休日の勤務を申請',tone:'orange'}
+};
+let requestPreviewSequence=0;
+function requestStatusBadge(status){
+  if(status==='承認済')return '<span class="badge success">承認済</span>';
+  if(status==='取消申請中')return '<span class="badge warning">取消確認待ち</span>';
+  if(status==='差戻し'||status==='取消'||status==='取消済')return '<span class="badge danger">'+escapeHtml(status)+'</span>';
+  return '<span class="badge warning">'+escapeHtml(status)+'</span>';
+}
+function formatLeaveDays(v){return v==null?'—':(Number(v)%1===0?Number(v).toFixed(0):Number(v).toFixed(2).replace(/0+$/,'').replace(/\.$/,''))+'日'}
+function requestTypeCard(type,label,desc){
+  const meta=REQUEST_UI[type]||{mark:'申',tone:'blue'};
+  return `<button class='request-quick-card ${meta.tone}' onclick="openRequestModal('${type}')"><span class='request-quick-mark'>${escapeHtml(meta.mark)}</span><span><strong>${escapeHtml(label||meta.label)}</strong><small>${escapeHtml(desc||meta.desc)}</small></span><i>›</i></button>`;
+}
+function leaveBalancePanel(){
+  const x=state.requests.context||{};
+  if(!x.leaveBalanceConfigured){
+    return `<section class='leave-overview unconfigured'><div><small>有給残日数</small><strong>未設定</strong><p>有給申請を使う前に、管理者が社員情報で残日数を設定してください。</p></div>${state.data.permissions&&state.data.permissions.employeeAdmin?`<button class='secondary-button compact' onclick="navigate('people')">社員設定を開く</button>`:''}</section>`;
+  }
+  return `<section class='leave-overview'><div class='leave-balance-main'><small>現在の有給残</small><strong>${formatLeaveDays(x.leaveBalance)}</strong></div><div class='leave-balance-stat'><span>承認待ち</span><b>${formatLeaveDays(x.pendingLeaveDays||0)}</b></div><div class='leave-balance-stat available'><span>申請可能残</span><b>${formatLeaveDays(x.availableLeaveDays)}</b></div><small class='leave-balance-note'>承認待ちの有給申請を差し引いた目安です。</small></section>`;
+}
+function requestHistoryRows(items,adminMode){
+  if(!items||!items.length)return '<div class="request-empty"><strong>まだ申請はありません</strong><span>上のカードからすぐ申請できます。</span></div>';
+  return items.map(x=>{
+    const meta=REQUEST_UI[x.type]||{mark:'申',tone:'blue'};
+    let actions='';
+    if(adminMode&&x.status==='承認待ち'){
+      actions=`<div class='admin-actions'><button class='small-button approve' onclick="approveTeamRequest('${x.id}')">承認</button><button class='small-button' onclick="rejectTeamRequest('${x.id}')">差戻し</button></div>`;
+    }else if(adminMode&&x.status==='取消申請中'){
+      actions=`<div class='admin-actions'><button class='small-button approve' onclick="approveCancellationRequest('${x.id}')">取消承認</button><button class='small-button' onclick="rejectCancellationRequest('${x.id}')">取消却下</button></div>`;
+    }else{
+      actions=`<div class='admin-actions'>${requestStatusBadge(x.status)}${x.status==='承認待ち'?`<button class='small-button' onclick="cancelOwnRequest('${x.id}')">取消</button>`:x.status==='承認済'&&x.type!=='打刻修正'?`<button class='small-button' onclick="requestApprovedCancel('${x.id}')">取消依頼</button>`:''}</div>`;
+    }
+    const cancelText=x.cancelReason?`<em>取消理由：${escapeHtml(x.cancelReason)}</em>`:'';
+    return `<div class='request-row'><span class='request-row-mark ${meta.tone}'>${escapeHtml(meta.mark)}</span><div class='request-row-main'><div><strong>${adminMode?escapeHtml(x.name)+' / ':''}${escapeHtml(meta.label||x.type)}</strong><span>${escapeHtml(x.startDate)}${x.endDate!==x.startDate?'〜'+escapeHtml(x.endDate):''}</span></div><p>${escapeHtml(x.reason||'理由なし')}${x.rejectReason?`<em>差戻し理由：${escapeHtml(x.rejectReason)}</em>`:''}${cancelText}</p></div>${actions}</div>`;
+  }).join('');
+}
+function requestsPage(){
+  const r=state.requests;
+  if(r.loading&&!cacheHas('requests','current'))return pageHead('申請','やりたいことから選ぶだけで申請できます。')+'<div class="loading-card"></div>';
+  const teamPending=(r.team||[]).filter(x=>x.status==='承認待ち');
+  const quick=[
+    requestTypeCard('有給','有給休暇','残日数を見ながら申請'),
+    requestTypeCard('午前半休','半休・1/4日','午前・午後・1/4日から選択'),
+    requestTypeCard('打刻修正'),
+    requestTypeCard('在宅勤務'),
+    requestTypeCard('残業'),
+    requestTypeCard('休日出勤'),
+    requestTypeCard('欠勤')
+  ].join('');
+  const canApprove=state.data.permissions&&state.data.permissions.requestApprove;
+  return pageHead('申請','申請種別を探すのではなく、やりたいことから選べます。')+
+    leaveBalancePanel()+
+    `<section class='request-launch'><div class='request-section-head'><div><span class='eyebrow'>QUICK REQUEST</span><h2>何を申請しますか？</h2></div><span>クリックすると必要な項目だけ表示します。</span></div><div class='request-quick-grid'>${quick}</div></section>`+
+    `<div class='grid cols-2 section-gap'>${card('自分の申請',requestHistoryRows(r.own||[],false), 'request-history-card')}${canApprove?card('承認待ち '+teamPending.length+'件',requestHistoryRows(teamPending,true),'request-history-card'):card('申請の流れ',"<div class='request-help-flow'><span><b>1</b>種類を選ぶ</span><i>→</i><span><b>2</b>日付と理由</span><i>→</i><span><b>3</b>申請</span></div><p class='muted'>申請後はこの画面で承認状況を確認できます。</p>")}</div>`;
+}
+function requestReasonSuggestions(type){
+  if(type==='打刻修正')return ['打刻漏れ','操作ミス','その他'];
+  if(type==='残業'||type==='休日出勤')return ['業務都合','納期対応','緊急対応','その他'];
+  if(type==='在宅勤務')return ['業務都合','外部予定','家庭の都合','その他'];
+  if(type==='欠勤')return ['私用','家庭の都合','体調不良','その他'];
+  return ['私用','家庭の都合','その他'];
+}
+function requestTypeHeader(type){
+  const meta=REQUEST_UI[type]||REQUEST_UI['有給'];
+  return `<div class='request-selected-type ${meta.tone}'><span class='request-modal-mark'>${escapeHtml(meta.mark)}</span><div><small>申請種別</small><strong>${escapeHtml(meta.label)}</strong><p>${escapeHtml(meta.desc)}</p></div></div>`;
+}
+function requestSubtypeSelector(type){
+  if(!['午前半休','午後半休','1/4日有給'].includes(type))return '';
+  return `<div class='request-subtypes' role='group' aria-label='休暇区分'>${['午前半休','午後半休','1/4日有給'].map(x=>`<button type='button' class='${x===type?'active':''}' onclick="changeRequestSubtype('${x}')">${escapeHtml(REQUEST_UI[x].label)}</button>`).join('')}</div>`;
+}
+function requestBalanceSummary(){
+  const x=state.requests.context||{};
+  if(!x.leaveBalanceConfigured)return `<div class='request-balance-strip warning'><span>有給残日数が未設定です</span><b>管理者の設定が必要</b></div>`;
+  return `<div class='request-balance-strip'><span>現在 ${formatLeaveDays(x.leaveBalance)}</span><span>承認待ち ${formatLeaveDays(x.pendingLeaveDays||0)}</span><b>申請可能 ${formatLeaveDays(x.availableLeaveDays)}</b></div>`;
+}
+function openRequestModal(type='有給',presetDate=''){
+  const meta=REQUEST_UI[type]?REQUEST_UI[type]:REQUEST_UI['有給'];
+  type=REQUEST_UI[type]?type:'有給';
+  const r=ensureModal(),today=presetDate||state.data.today;
+  const isPaid=['有給','午前半休','午後半休','1/4日有給'].includes(type);
+  const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
+  const reasonChips=requestReasonSuggestions(type).map(x=>`<button type='button' onclick="setRequestReason('${escapeHtml(x)}')">${escapeHtml(x)}</button>`).join('');
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card request-modal-card' role='dialog' aria-modal='true' aria-labelledby='requestModalTitle'>
+    <div class='modal-head request-modal-head'><div><small>新規申請</small><h2 id='requestModalTitle'>${escapeHtml(meta.label)}を申請</h2></div><button class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
+    <div id='requestFormError' class='request-form-error' role='alert' aria-live='assertive'></div>
+    ${requestTypeHeader(type)}
+    ${requestSubtypeSelector(type)}
+    ${isPaid?requestBalanceSummary():''}
+    <input id='reqType' type='hidden' value='${escapeHtml(type)}'>
+    <div class='request-form-body'>
+      <div class='request-date-grid ${single?'single':''}'>
+        <label id='reqStartField' class='field'><span>${single?'対象日':'開始日'} <em>必須</em></span><input id='reqStart' type='date' value='${today}' onchange='syncRequestDates()'></label>
+        <label id='reqEndField' class='field ${single?'is-hidden':''}'><span>終了日 <em>必須</em></span><input id='reqEnd' type='date' value='${today}' onchange='refreshRequestPreview()'></label>
+      </div>
+      <div id='requestPreview' class='request-preview ${isPaid?'':'is-hidden'}'></div>
+      <div id='correctionFields' class='request-correction ${type==='打刻修正'?'':'is-hidden'}'>
+        <div class='request-block-title'><strong>修正する打刻</strong><span>元の打刻を選ぶか、不足打刻として追加します。</span></div>
+        <div class='form-grid'>
+          <label class='field full'><span>元の打刻</span><select id='reqOriginalPunch'><option value=''>不足打刻として追加</option></select></label>
+          <label id='reqActionField' class='field'><span>打刻種別 <em>必須</em></span><select id='reqAction'><option>出勤</option><option>休憩開始</option><option>休憩終了</option><option>退勤</option></select></label>
+          <label id='reqTimeField' class='field'><span>修正後時刻 <em>必須</em></span><input id='reqTime' type='time'></label>
+          <label class='field'><span>勤務場所</span><select id='reqLocation'><option>出社</option><option>在宅</option><option>外出</option></select></label>
+        </div>
+      </div>
+      <label id='reqReasonField' class='field full request-reason-field'><span>申請理由 <em>必須</em></span><div class='request-reason-chips'>${reasonChips}</div><textarea id='reqReason' rows='2' maxlength='600' placeholder='例：私用のため'></textarea></label>
+      <label class='field full'><span>補足 <i>任意</i></span><textarea id='reqContent' rows='2' maxlength='1500' placeholder='承認者に伝えたいことがあれば入力'></textarea></label>
+    </div>
+    <div class='modal-actions request-modal-actions'><span class='request-submit-hint'>入力内容は申請後も履歴で確認できます。</span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button id='requestSubmitButton' class='primary-button' onclick='submitRequestFromModal()'>${escapeHtml(meta.label)}を申請</button></div></div>
+  </section>`;
+  if(type==='打刻修正')loadCorrectionPunchOptions();
+  if(isPaid)refreshRequestPreview();
+}
+function changeRequestSubtype(type){
+  const currentReason=document.getElementById('reqReason')?document.getElementById('reqReason').value:'';
+  const currentDate=document.getElementById('reqStart')?document.getElementById('reqStart').value:state.data.today;
+  openRequestModal(type);
+  const reason=document.getElementById('reqReason'),start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
+  if(reason)reason.value=currentReason;if(start)start.value=currentDate;if(end)end.value=currentDate;
+  refreshRequestPreview();
+}
+function setRequestReason(value){const el=document.getElementById('reqReason');if(!el)return;el.value=value==='その他'?'':value+(value.endsWith('ため')?'':'のため');el.focus()}
+function syncRequestDates(){
+  const type=document.getElementById('reqType')?document.getElementById('reqType').value:'';
+  const start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
+  const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
+  if(start&&end&&single)end.value=start.value;
+  if(type==='打刻修正')loadCorrectionPunchOptions();
+  refreshRequestPreview();
+}
+function requestPayloadFromForm(){
+  const type=document.getElementById('reqType').value;
+  const start=document.getElementById('reqStart').value;
+  const end=document.getElementById('reqEnd').value||start;
+  const payload={type,startDate:start,endDate:end,reason:document.getElementById('reqReason').value,content:document.getElementById('reqContent').value};
+  if(type==='打刻修正')payload.correction={originalPunchId:document.getElementById('reqOriginalPunch').value,action:document.getElementById('reqAction').value,time:document.getElementById('reqTime').value,workLocation:document.getElementById('reqLocation').value};
+  return payload;
+}
+function clearRequestFieldErrors(){document.querySelectorAll('.request-modal-card .field-error').forEach(x=>x.classList.remove('field-error'))}
+function showRequestError(message,fieldId){
+  clearRequestFieldErrors();
+  const box=document.getElementById('requestFormError');
+  if(box){box.innerHTML=`<strong>申請できません</strong><span>${escapeHtml(message)}</span>`;box.classList.add('show')}
+  const field=fieldId?document.getElementById(fieldId):null;
+  if(field){field.classList.add('field-error');const input=field.querySelector('input,select,textarea');if(input)input.focus()}
+  const card=document.querySelector('.request-modal-card');if(card)card.scrollTo({top:0,behavior:'smooth'});
+}
+function hideRequestError(){const box=document.getElementById('requestFormError');if(box)box.classList.remove('show');clearRequestFieldErrors()}
+function validateRequestForm(payload){
+  if(!payload.startDate)return ['対象日を選択してください。','reqStartField'];
+  if(payload.endDate&&payload.startDate>payload.endDate)return ['終了日は開始日以降にしてください。','reqEndField'];
+  if(!String(payload.reason||'').trim())return ['申請理由を入力してください。','reqReasonField'];
+  if(['有給','午前半休','午後半休','1/4日有給'].includes(payload.type)){
+    const x=state.requests.context||{};
+    if(!x.leaveBalanceConfigured)return ['有給残日数が未設定です。管理者に社員情報の有給残日数を設定してもらってください。',''];
+  }
+  if(payload.type==='打刻修正'&&!payload.correction.time)return ['修正後の時刻を入力してください。','reqTimeField'];
+  return null;
+}
+function refreshRequestPreview(){
+  const typeEl=document.getElementById('reqType'),box=document.getElementById('requestPreview');
+  if(!typeEl||!box)return;
+  const type=typeEl.value;
+  if(!['有給','午前半休','午後半休','1/4日有給'].includes(type)){box.classList.add('is-hidden');return}
+  const payload=requestPayloadFromForm();
+  if(!payload.startDate||!payload.endDate)return;
+  box.classList.remove('is-hidden');
+  box.innerHTML="<span class='preview-loading'>有給日数を確認しています…</span>";
+  const seq=++requestPreviewSequence;
+  google.script.run.withSuccessHandler(data=>{
+    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    if(!data.leaveBalanceConfigured){
+      box.innerHTML="<div class='preview-warning'><strong>有給残日数が未設定です</strong><span>管理者が社員情報から設定すると、有給を申請できます。</span></div>";
+      return;
+    }
+    const projected=data.projectedBalance;
+    const bad=projected<0;
+    box.innerHTML=`<div class='preview-item'><span>今回の消化</span><strong>${formatLeaveDays(data.requestedDays)}</strong></div><div class='preview-arrow'>→</div><div class='preview-item'><span>申請後の残数</span><strong class='${bad?'danger':''}'>${formatLeaveDays(projected)}</strong></div>${bad?"<div class='preview-warning full'><strong>残日数が不足しています</strong><span>日付または申請区分を変更してください。</span></div>":''}`;
+  }).withFailureHandler(err=>{
+    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    box.innerHTML=`<div class='preview-warning'><strong>日数を確認できません</strong><span>${escapeHtml(cleanApiErrorMessage(err,'会社カレンダーを確認してください。'))}</span></div>`;
+  }).previewRequest(state.sessionToken,payload);
+}
+function loadCorrectionPunchOptions(){
+  const date=document.getElementById('reqStart').value;if(!date)return;
+  const select=document.getElementById('reqOriginalPunch');if(select)select.innerHTML='<option value="">読み込み中…</option>';
+  google.script.run.withSuccessHandler(function(items){
+    const el=document.getElementById('reqOriginalPunch');if(!el)return;
+    el.innerHTML='<option value="">不足打刻として追加</option>'+items.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>').join('');
+  }).withFailureHandler(function(err){showRequestError(cleanApiErrorMessage(err,'打刻履歴を読み込めませんでした。'),'');}).getPunchesForDate(state.sessionToken,date);
+}
+function submitRequestFromModal(){
+  hideRequestError();
+  const payload=requestPayloadFromForm(),invalid=validateRequestForm(payload);
+  if(invalid){showRequestError(invalid[0],invalid[1]);return}
+  const button=document.getElementById('requestSubmitButton');
+  if(button){button.disabled=true;button.dataset.label=button.textContent;button.textContent='申請中…'}
+  google.script.run.withSuccessHandler(function(){
+    closeModal();showToast('申請を登録しました');
+    invalidatePageCache('requests','monthly');loadRequests({force:true});
+  }).withFailureHandler(function(err){
+    if(button){button.disabled=false;button.textContent=button.dataset.label||'申請する'}
+    const msg=cleanApiErrorMessage(err,'申請を登録できませんでした。');
+    const field=msg.includes('理由')?'reqReasonField':msg.includes('日')?'reqStartField':'';
+    showRequestError(msg,field);
+  }).submitRequest(state.sessionToken,payload);
+}
+function requestApprovedCancel(id){openReasonDialog('承認済み申請の取消を依頼','取消理由を入力してください。承認者の確認後に取消されます。','取消を依頼',function(reason){google.script.run.withSuccessHandler(function(){showToast('取消を依頼しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'取消依頼できませんでした');}).requestApprovedCancellation(state.sessionToken,id,reason);});}
+function approveCancellationRequest(id){openConfirmDialog('取消を承認','承認済み申請を取り消しますか？ 有給の場合は残日数を戻します。','取消を承認',function(){google.script.run.withSuccessHandler(function(){showToast('取消を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'取消承認できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'APPROVE','');},true);}
+function rejectCancellationRequest(id){openReasonDialog('取消を却下','申請者に表示する理由を入力してください。','取消を却下',function(reason){google.script.run.withSuccessHandler(function(){showToast('取消を却下しました');invalidatePageCache('requests');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'取消却下できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'REJECT',reason);});}
+function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){google.script.run.withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
+function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
+function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){google.script.run.withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
+
+
+</script>

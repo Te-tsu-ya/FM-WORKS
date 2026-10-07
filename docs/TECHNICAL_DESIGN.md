@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.0  
+**文書版:** 0.10.1  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -40,7 +40,12 @@ Google Sheets: FM WORKS DB
 | --- | --- |
 | `src/Index.html` | HTMLシェル、SVG、トップバー |
 | `src/Styles.html` | CSS、テーマ、レスポンシブ |
-| `src/App.html` | SPA状態、描画、イベント、キャッシュ |
+| `src/AppCore.html` | SPA状態、キャッシュ、共通UI、ナビ、ホーム |
+| `src/AppOperations.html` | 勤怠、工数、予定、会社カレンダー、申請 |
+| `src/AppPeopleMonthly.html` | 社員、月次 |
+| `src/AppAdmin.html` | 設定、認証管理、バックアップ、設計文書 |
+| `src/AppShell.html` | ページ描画、ログイン、検索、通知、プロフィール、起動 |
+| `src/App.html` | 旧モノリス廃止を示す互換スタブ |
 | `src/Code.gs` | 定数、初期データ、打刻、予定、会社カレンダー |
 | `src/Auth.gs` | PIN、セッション、権限 |
 | `src/Worklog.gs` | 工数 |
@@ -57,7 +62,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.0`
+`APP.version = 0.10.1`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -1079,3 +1084,19 @@ CIでは `validate.mjs` が以下を検査する。
 4. Readinessが設定状態と実効状態を分離している。
 
 `test_logic.mjs` は STAGING / PRODUCTION / OFF の境界条件を純粋関数で検証する。
+
+
+## 43. Client Module Boundaries v0.10.1
+
+旧 `App.html` 1700行超のクライアント実装を、機能境界に沿った5つのHTML Scriptモジュールへ分割した。
+
+読み込み順:
+1. AppCore
+2. AppOperations
+3. AppPeopleMonthly
+4. AppAdmin
+5. AppShell
+
+関数宣言は同一ブラウザGlobal Environment上で相互参照する。起動イベント `DOMContentLoaded -> bootstrap` は最後の `AppShell` のみに置き、全モジュールが読み込まれてから実行される。
+
+CIの `validate.mjs` はモジュールを読み込み順に連結して構文検査し、従来のUI契約マーカーも連結ソースへ対して検査する。これによりファイル分割そのものによる機能欠落を検知する。

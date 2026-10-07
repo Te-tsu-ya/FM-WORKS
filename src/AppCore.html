@@ -1,0 +1,394 @@
+<script>
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','設定','i-gear']];
+const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
+const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000,documents:600000};
+const pageCache={};
+const pendingLoads=new Set();
+let liveAttendanceTimer=null;
+let globalKeysBound=false;
+function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
+function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
+function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
+function invalidatePageCache(...names){names.forEach(name=>delete pageCache[name])}
+function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
+function endPageLoad(ticket){if(ticket)pendingLoads.delete(ticket)}
+function renderPageIfActive(page){if(state.page===page)renderPage()}
+function worklogCacheKey(){return state.worklog.date||state.data&&state.data.today||''}
+function scheduleCacheKey(){if(!state.schedule.date)return '';const r=scheduleRange();return [state.schedule.view,r.start,r.end,state.schedule.employeeId,state.schedule.category].join('|')}
+function companyCacheKey(){return String(state.company.year||state.data&&parseIso(state.data.today).getFullYear()||'')}
+function monthlyCacheKey(){return [state.monthly.yearMonth||state.data&&state.data.today.slice(0,7)||'',state.monthly.employeeId||state.data&&state.data.user.employeeId||''].join('|')}
+function scheduleIdleTask(fn,delay){setTimeout(()=>{if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout:1200});else fn()},delay)}
+function startMenuPrefetch(){
+  if(!state.data||!state.sessionToken)return;
+  scheduleIdleTask(()=>loadSchedule({silent:true}),950);
+  scheduleIdleTask(()=>loadWorklogs({silent:true}),1350);
+  scheduleIdleTask(()=>loadRequests({silent:true}),1800);
+  scheduleIdleTask(()=>loadMonthly({silent:true}),2300);
+  scheduleIdleTask(()=>loadCompanyCalendar(undefined,{silent:true}),2800);
+  if(state.data.permissions&&state.data.permissions.adminConsole){
+    scheduleIdleTask(()=>loadAuthAdmin({silent:true}),3400);
+  }
+}
+
+function getTheme(){return document.documentElement.dataset.theme==='dark'?'dark':'light'}
+function updateThemeButton(){
+  const b=document.getElementById('themeToggleButton');if(!b)return;
+  const dark=getTheme()==='dark';
+  b.setAttribute('aria-label',dark?'ライトモードに切り替え':'ダークモードに切り替え');
+  b.title=dark?'ライトモード':'ダークモード';
+}
+function setTheme(theme,animate=true){
+  const next=theme==='dark'?'dark':'light';
+  const apply=()=>{document.documentElement.dataset.theme=next;document.documentElement.style.colorScheme=next;localStorage.setItem('fmworks.theme',next);updateThemeButton()};
+  if(animate&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.documentElement.classList.remove('theme-to-light','theme-to-dark');
+    document.documentElement.classList.add(next==='dark'?'theme-to-dark':'theme-to-light','theme-changing');
+    if(document.startViewTransition)document.startViewTransition(apply);else apply();
+    setTimeout(()=>document.documentElement.classList.remove('theme-changing','theme-to-light','theme-to-dark'),720);
+  }else apply();
+}
+function toggleTheme(){setTheme(getTheme()==='dark'?'light':'dark',true)}
+function initTheme(){
+  const saved=localStorage.getItem('fmworks.theme');
+  const system=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  setTheme(saved||system,false);updateThemeButton();
+}
+function svg(id){return `<svg aria-hidden='true'><use href='#${id}'/></svg>`}
+function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
+function card(title,body,cls=''){return `<section class='card ${cls}'><h3>${title}</h3>${body}</section>`}
+function metric(label,value,iconTone=''){return `<section class='card metric'><div><small class='muted'>${label}</small><div><strong>${value}</strong></div></div><div class='metric-icon ${iconTone}'>●</div></section>`}
+function list(items){return `<div class='list'>${items.map(i=>`<div class='list-item'><span class='status-dot' style='background:${i.color||'var(--blue)'}'></span><div><strong>${i.title}</strong><div class='muted' style='font-size:12px;margin-top:3px'>${i.sub||''}</div></div>${i.right||''}</div>`).join('')}</div>`}
+function pageHead(title,desc,action=''){return `<div class='page-head'><div><div class='eyebrow'>FM WORKS</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2400)}
+function pad(n){return String(n).padStart(2,'0')}
+function parseIso(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
+function iso(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)}
+function addMonths(s,n){const d=parseIso(s);d.setDate(1);d.setMonth(d.getMonth()+n);return iso(d)}
+function startOfWeek(s){const d=parseIso(s);d.setDate(d.getDate()-d.getDay());return iso(d)}
+function endOfWeek(s){return addDays(startOfWeek(s),6)}
+function monthGridRange(s){const d=parseIso(s);const first=new Date(d.getFullYear(),d.getMonth(),1);const last=new Date(d.getFullYear(),d.getMonth()+1,0);first.setDate(first.getDate()-first.getDay());last.setDate(last.getDate()+(6-last.getDay()));return {start:iso(first),end:iso(last)}}
+function fmtDate(s){const d=parseIso(s);return `${d.getMonth()+1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`}
+function fmtMonth(s){const d=parseIso(s);return `${d.getFullYear()}年 ${d.getMonth()+1}月`}
+function isToday(s){return state.data&&s===state.data.today}
+function categoryColor(c){return CATEGORY_COLORS[c]||'#64748b'}
+const PERSON_COLORS=[
+  {line:'#2563eb',bg:'#eff6ff',text:'#1d4ed8'},
+  {line:'#7c3aed',bg:'#f5f3ff',text:'#6d28d9'},
+  {line:'#059669',bg:'#ecfdf5',text:'#047857'},
+  {line:'#db2777',bg:'#fdf2f8',text:'#be185d'},
+  {line:'#d97706',bg:'#fffbeb',text:'#b45309'},
+  {line:'#0891b2',bg:'#ecfeff',text:'#0e7490'},
+  {line:'#4f46e5',bg:'#eef2ff',text:'#4338ca'},
+  {line:'#dc2626',bg:'#fef2f2',text:'#b91c1c'}
+];
+function personColor(key){
+  const s=String(key||'unknown');let hash=0;
+  for(let i=0;i<s.length;i++)hash=((hash<<5)-hash+s.charCodeAt(i))|0;
+  return PERSON_COLORS[Math.abs(hash)%PERSON_COLORS.length];
+}
+function shortPersonName(name){return String(name||'').trim().replace(/さん$/,'').split(/\s+/).filter(Boolean)[0]||'未設定'}
+function eventPeople(e){
+  const employees=state.schedule.employees.length?state.schedule.employees:(state.data&&state.data.employees||[]);
+  const byId=Object.fromEntries(employees.map(x=>[x.employeeId,x]));
+  const ids=e.employeeIds||[],names=e.employeeNames||[];
+  if(ids.length)return ids.map((id,i)=>({id,name:(byId[id]&&byId[id].name)||names[i]||id}));
+  return names.map((name,i)=>({id:'name:'+name+':'+i,name}));
+}
+function eventPeopleLabel(e){
+  const people=eventPeople(e);if(!people.length)return '参加者未設定';
+  const labels=people.slice(0,2).map(p=>shortPersonName(p.name));
+  return labels.join('・')+(people.length>2?' +'+(people.length-2):'');
+}
+function eventPersonAvatar(e){
+  const people=eventPeople(e);const p=people[0]||{id:'unknown',name:'?'},color=personColor(p.id);
+  return `<span class='person-avatar' style='--person-bg:${color.bg};--person-text:${color.text}' aria-hidden='true'>${escapeHtml(shortPersonName(p.name).slice(0,1))}</span>`;
+}
+function schedulePeopleLegend(){
+  const s=state.schedule,employees=s.employees.length?s.employees:(state.data&&state.data.employees||[]);
+  const visible=s.employeeId==='ALL'?employees:employees.filter(e=>e.employeeId===s.employeeId);
+  if(!visible.length)return '';
+  return `<div class='people-legend'><span class='people-legend-label'>社員</span>${visible.map(e=>{const color=personColor(e.employeeId);return `<span class='person-chip' style='--person-color:${color.line};--person-bg:${color.bg};--person-text:${color.text}'><i></i><b>${escapeHtml(shortPersonName(e.name))}</b></span>`}).join('')}</div>`;
+}
+function roleLabel(role){return ({ADMIN:'管理者',MANAGER:'マネージャー',CALENDAR_EDITOR:'会社カレンダー編集者',USER:'社員'})[role]||role||'社員'}
+function clientInfo(){return [navigator.platform||'',navigator.userAgent||''].join(' | ').slice(0,240)}
+function sessionErrorMessage(err){return String(err&&err.message||err||'')}
+function cleanApiErrorMessage(err,fallback){
+  let msg=sessionErrorMessage(err).trim();
+  msg=msg.replace(/^(Exception|Error):\s*/,'').trim();
+  return msg||fallback||'処理に失敗しました。';
+}
+function handleApiError(err,fallback){
+  const raw=sessionErrorMessage(err);
+  if(raw.includes('AUTH_REQUIRED')||raw.includes('SESSION_EXPIRED')){
+    clearLocalSession();
+    showLogin('セッションの有効期限が切れました。もう一度ログインしてください。');
+    return true;
+  }
+  showToast(cleanApiErrorMessage(err,fallback));
+  return false;
+}
+function setSessionToken(token,persistent=false){
+  state.sessionToken=token||null;
+  sessionStorage.removeItem('fmworks.session');
+  localStorage.removeItem('fmworks.session');
+  if(token){
+    (persistent?localStorage:sessionStorage).setItem('fmworks.session',token);
+  }
+}
+function getStoredSessionToken(){return localStorage.getItem('fmworks.session')||sessionStorage.getItem('fmworks.session')||null}
+function clearLocalSession(){setSessionToken(null);stopLiveAttendanceTicker();state.data=null;state.authAdmin=null;state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
+function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 587" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg>`}
+
+
+function selectWorkLocation(location){if(!['出社','在宅','外出'].includes(location))return;state.workLocation=location;renderPage()}
+function performPunch(action){
+  if(state.busy)return;
+  state.busy=true;showToast(`${action}を登録しています...`);
+  google.script.run.withSuccessHandler(data=>{
+    if(data&&data.attendance){
+      state.data.attendance=data.attendance;
+      state.workLocation=data.attendance.workLocation||state.workLocation;
+    }
+    if(data&&data.serverTime)state.data.serverTime=data.serverTime;
+    state.busy=false;
+    invalidatePageCache('worklog','monthly');
+    renderPage();
+    showToast(`${action}をGoogle Sheetsへ保存しました`);
+    scheduleIdleTask(()=>loadHomeOverview({force:true,silent:true}),650);
+  }).withFailureHandler(err=>{
+    state.busy=false;
+    if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage();
+  }).recordPunch(state.sessionToken,action,state.workLocation);
+}
+function liveWorkedMinutes(attendance){
+  const a=attendance||{};
+  let minutes=Math.max(0,Number(a.workedMinutes||0));
+  if(a.state!=='working')return minutes;
+  const anchor=Date.parse(state.data&&state.data.serverTime||'');
+  if(!Number.isFinite(anchor))return minutes;
+  return minutes+Math.max(0,Math.floor((Date.now()-anchor)/60000));
+}
+function liveWorkedText(attendance){return formatMinutesClient(liveWorkedMinutes(attendance))}
+function stopLiveAttendanceTicker(){
+  if(liveAttendanceTimer){clearInterval(liveAttendanceTimer);liveAttendanceTimer=null;}
+}
+function startLiveAttendanceTicker(){
+  stopLiveAttendanceTicker();
+  liveAttendanceTimer=setInterval(()=>{
+    if(!state.data||document.hidden)return;
+    const a=state.data.attendance;
+    if(a&&a.state==='working'&&(state.page==='home'||state.page==='attendance'))renderPage();
+  },30000);
+}
+
+function workLocationSelector(){return `<div class='section-gap'><small class='muted'>勤務場所</small><div class='button-row' style='margin-top:8px'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'primary-button':'secondary-button'}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`}
+function punchButtons(a){if(a.state==='off')return `<button class='primary-button' onclick="performPunch('出勤')">出勤する</button>`;if(a.state==='working')return `<button class='secondary-button' onclick="performPunch('休憩開始')">休憩する</button><button class='primary-button' onclick="performPunch('退勤')">退勤する</button>`;if(a.state==='break')return `<button class='primary-button' onclick="performPunch('休憩終了')">休憩終了</button>`;return `<button class='secondary-button' disabled>本日の勤務は終了しました</button>`}
+
+function visibleNav(){
+  const p=state.data&&state.data.permissions||{};
+  return NAV.filter(([id])=>id!=='admin'||p.adminConsole);
+}
+function renderNav(){
+  const nav=visibleNav();
+  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>{
+    const main=`<button class='nav-button ${state.page===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`;
+    if(id!=='admin')return main;
+    return `<div class='nav-group'>${main}<div class='nav-submenu'>
+      <button class='${state.page==='admin'&&state.adminTab==='operation'?'active':''}' data-admin-tab='operation'>運用設定</button>
+      <button class='${state.page==='admin'&&state.adminTab==='requirements'?'active':''}' data-admin-tab='requirements'>要件定義書</button>
+      <button class='${state.page==='admin'&&state.adminTab==='technical'?'active':''}' data-admin-tab='technical'>技術設計書</button>
+    </div></div>`;
+  }).join('');
+  const allowedIds=new Set(nav.map(x=>x[0]));
+  const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
+  const mobile=document.getElementById('mobileNav');
+  mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
+  document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>navigate(b.dataset.route));
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.adminTab;navigate('admin')});
+}
+function navigate(page){
+  closeMobileDrawer();
+  if(page==='admin'&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
+  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage(true);window.scrollTo({top:0,behavior:'auto'});
+  const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
+  if(page==='schedule')loadSchedule();
+  if(page==='companyCalendar')loadCompanyCalendar();
+  if(page==='worklog')loadWorklogs();
+  if(page==='requests')loadRequests();
+  if(page==='monthly')loadMonthly();
+  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin();
+  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
+    if(['auth','projects'].includes(state.adminTab))loadAuthAdmin();
+    if(state.adminTab==='operation'){loadAuthAdmin();loadMaintenance();}
+    if(state.adminTab==='requirements')loadSystemDocument('requirements');
+    if(state.adminTab==='technical')loadSystemDocument('technical');
+  }
+}
+
+function syncGlobalActionBanner(){
+  const slot=document.getElementById('globalActionBannerSlot');
+  if(slot)slot.innerHTML=globalActionBanners();
+}
+function flushHomeOverviewCallbacks_(payload){
+  const callbacks=state.homeOverview.callbacks.splice(0);
+  callbacks.forEach(fn=>{try{fn(payload)}catch(_){}});
+}
+function loadHomeOverview(options={}){
+  if(!state.sessionToken||!state.data)return;
+  const key=[state.data.today,state.data.user&&state.data.user.employeeId||''].join('|');
+  if(typeof options.onDone==='function')state.homeOverview.callbacks.push(options.onDone);
+  if(!options.force&&cacheFresh('homeOverview',key)){
+    flushHomeOverviewCallbacks_(state.data);
+    return;
+  }
+  const ticket=beginPageLoad('homeOverview',key);
+  if(!ticket){
+    if(options.force)state.homeOverview.reloadRequested=true;
+    return;
+  }
+  state.homeOverview.loading=true;
+  state.homeOverview.error='';
+  if(!options.silent&&state.page==='home')renderPageIfActive('home');
+  google.script.run.withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    const rerun=state.homeOverview.reloadRequested;
+    state.homeOverview.reloadRequested=false;
+    state.homeOverview.loading=false;
+    if(rerun){
+      loadHomeOverview({force:true,silent:true});
+      return;
+    }
+    state.homeOverview.loaded=true;
+    state.homeOverview.error='';
+    if(data){
+      state.data.monthlyReview=data.monthlyReview||null;
+      state.data.month=data.month||null;
+      state.data.tasks=Array.isArray(data.tasks)?data.tasks:[];
+      state.data.overviewReady=true;
+    }
+    markPageCache('homeOverview',key);
+    syncGlobalActionBanner();
+    if(state.page==='home')renderPageIfActive('home');
+    flushHomeOverviewCallbacks_(data);
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);
+    state.homeOverview.loading=false;
+    state.homeOverview.reloadRequested=false;
+    state.homeOverview.error='集計を読み込めませんでした。再読込してください。';
+    flushHomeOverviewCallbacks_(null);
+    handleApiError(err,'ホーム集計を読み込めませんでした');
+    if(state.page==='home')renderPageIfActive('home');
+  }).getHomeOverview(state.sessionToken);
+}
+
+function globalActionBanners(){
+  const r=state.data&&state.data.monthlyReview;
+  if(!r||!r.needsAttention)return '';
+  const danger=r.urgency==='danger';
+  const backlog=!!r.isBacklog;
+  const count=Number(r.pendingCount||1);
+  const countText=count>1?' 未確認・再確認が必要な月が'+count+'か月あります。':'';
+  return `<section class='global-caution ${danger?'danger':'warning'}' role='status'>
+    <div class='caution-icon'>!</div>
+    <div><strong>${escapeHtml(r.targetMonth)}の勤怠確認が${r.stale?'再度必要です':backlog?'残っています':'未完了です'}</strong><p>${escapeHtml(r.message+countText)} 確認完了まで表示されます。</p></div>
+    <button class='primary-button compact' onclick='openPreviousMonthReview()'>${backlog?escapeHtml(r.targetMonth)+'を確認':'先月の勤怠を確認'}</button>
+  </section>`;
+}
+function openPreviousMonthReview(){
+  const r=state.data&&state.data.monthlyReview;if(!r)return;
+  state.monthly.yearMonth=r.targetMonth;
+  state.monthly.employeeId=state.data.user.employeeId;
+  state.monthly.view='calendar';
+  navigate('monthly');
+  loadMonthly({force:true});
+}
+
+function homeOverviewLoading(){
+  return `<div class='home-overview-loading' role='status' aria-label='集計を読み込み中'>
+    <span class='home-loading-line wide'></span>
+    <span class='home-loading-line'></span>
+    <span class='home-loading-line short'></span>
+  </div>`;
+}
+function homeOverviewError(){
+  return `<div class='home-overview-error' role='alert'>
+    <div><strong>集計を読み込めませんでした</strong><small>${escapeHtml(state.homeOverview.error||'通信状態を確認して再度お試しください。')}</small></div>
+    <button class='secondary-button compact' onclick="loadHomeOverview({force:true})">再読込</button>
+  </div>`;
+}
+function homeMetricLoading(){
+  return `<div class='home-stat home-stat-loading' aria-hidden='true'><span class='home-loading-line short'></span><span class='home-loading-value'></span></div>`;
+}
+function homeMetricInline(label,value,tone=''){
+  return `<div class='home-stat ${tone}'><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+function homeWorkLocationSelector(){
+  return `<div class='home-location'><span>勤務場所</span><div class='home-location-options'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
+}
+function homePunchHistory(a){
+  if(!a.history||!a.history.length)return `<div class='home-empty-mini'>本日の打刻はまだありません。</div>`;
+  return `<div class='home-punch-history'>${a.history.slice(0,5).map(x=>`<div><span class='status-dot' style='background:${x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}'></span><strong>${escapeHtml(x.time)} ${escapeHtml(x.action)}</strong><small>${escapeHtml(x.workLocation||'')}</small></div>`).join('')}</div>`;
+}
+function homeScheduleRows(events){
+  if(!events.length)return `<div class='home-empty-state'><strong>今日の予定はありません</strong><span>新しい予定は予定表から追加できます。</span></div>`;
+  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' onclick="state.schedule.date='${escapeHtml(e.date||state.data.today)}';navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
+}
+function homeTaskRows(tasks){
+  if(!tasks)return state.homeOverview.error?homeOverviewError():homeOverviewLoading();
+  return `<div class='home-task-list'>${tasks.map(x=>`<div class='home-task-row'><div><strong>${escapeHtml(x.label)}</strong><small>${x.label==='工数入力'?'今日・今月の工数入力状況':x.label==='勤怠の確認'?'打刻漏れ・勤怠確認':state.data.permissions&&state.data.permissions.requestApprove?'承認待ちの申請':'自分の申請状況'}</small></div><span class='badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}'>${escapeHtml(x.status)}</span></div>`).join('')}</div>`;
+}
+function homePage(){
+  const d=state.data,a=d.attendance,sched=(d.todaySchedule||[]),company=d.companyToday;
+  const month=d.month||null,tasks=Array.isArray(d.tasks)?d.tasks:null;
+  const metrics=month
+    ? homeMetricInline('今月の勤務',month.workHours,'success')+homeMetricInline('残業',month.overtime,'info')+homeMetricInline('有給残',month.leaveBalance,'warning')
+    : homeMetricLoading()+homeMetricLoading()+homeMetricLoading();
+
+  return `<div class='single-screen-layout home-screen'>
+    <section class='home-commandbar'>
+      <div class='home-command-copy'>
+        <div class='home-command-meta'><span class='live-chip compact'>● LIVE</span><span>${fmtDate(d.today)}</span><span>${company?`${escapeHtml(company.type)}${company.name?' / '+escapeHtml(company.name):''}`:'会社カレンダー未登録'}</span></div>
+        <h1>おはようございます、${escapeHtml(d.user.displayName)}</h1>
+        <p>今日の勤務・予定・確認事項を、この画面だけで把握できます。</p>
+      </div>
+      <div class='home-stats'>${metrics}</div>
+    </section>
+
+    <div class='home-dashboard'>
+      <section class='card home-panel home-attendance-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>ATTENDANCE</span><h2>現在の勤怠</h2></div><span class='home-state-pill ${a.state}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
+        <div class='home-attendance-main'>
+          <div><span>出勤</span><strong>${escapeHtml(a.clockIn||'--:--')}</strong></div>
+          <div><span>実働</span><strong>${escapeHtml(liveWorkedText(a))}</strong></div>
+          <div><span>退勤</span><strong>${escapeHtml(a.clockOut||'--:--')}</strong></div>
+        </div>
+        <div class='home-punch-actions'>${punchButtons(a)}</div>
+        ${homeWorkLocationSelector()}
+        <div class='home-subsection-head'><strong>今日の打刻履歴</strong><button onclick="navigate('attendance')">勤怠詳細</button></div>
+        <div class='home-panel-scroll'>${homePunchHistory(a)}</div>
+      </section>
+
+      <section class='card home-panel home-schedule-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>TODAY</span><h2>今日の予定</h2></div><span class='badge'>${sched.length}件</span></header>
+        <div class='home-panel-scroll home-schedule-scroll'>${homeScheduleRows(sched)}</div>
+        <div class='home-panel-footer'><button class='secondary-button compact' onclick="navigate('schedule')">予定表を開く</button></div>
+      </section>
+
+      <section class='card home-panel home-task-panel'>
+        <header class='home-panel-head'><div><span class='eyebrow'>TO DO</span><h2>やること</h2></div></header>
+        <div class='home-panel-scroll'>${homeTaskRows(tasks)}</div>
+        <div class='home-quick-actions'>
+          <button onclick="navigate('worklog')"><span>工数</span><strong>入力・確認</strong></button>
+          <button onclick="navigate('requests')"><span>申請</span><strong>申請する</strong></button>
+          <button onclick="navigate('monthly')"><span>月次</span><strong>勤怠確認</strong></button>
+        </div>
+      </section>
+    </div>
+  </div>`;
+}
+
+</script>

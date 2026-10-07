@@ -1,0 +1,185 @@
+<script>
+function peoplePage(){var admin=state.data.permissions&&state.data.permissions.employeeAdmin,emps=admin&&state.authAdmin?(state.authAdmin.employees||[]):(state.data.employees||[]);var action=admin?'<button class="primary-button" onclick="openEmployeeModal()">＋ 社員追加</button>':'';var rows=emps.map(function(e){var subtitle=escapeHtml(e.department||'未設定')+' / '+escapeHtml(roleLabel(e.role))+(e.payrollIncluded?' / 給与対象':'');var right=admin?'<div class="admin-actions"><button class="small-button" onclick="openEmployeeModal(\''+e.employeeId+'\')">編集</button><button class="small-button" onclick="openTempPinModal(\''+e.employeeId+'\')">PIN</button></div>':'';return '<div class="list-item"><span class="avatar" style="width:38px;height:38px">'+escapeHtml((e.displayName||e.name||'?').slice(0,1))+'</span><div><strong>'+escapeHtml(e.name)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+subtitle+(e.email?' / '+escapeHtml(e.email):'')+'</div></div>'+right+'</div>';}).join('');return pageHead('社員','社員情報・所属・権限を管理します。',action)+'<div class="grid cols-2">'+card('社員一覧',rows||'<p class="muted">社員が登録されていません。</p>')+card('運用ルール','<p class="muted">一般社員は社内の社員情報を閲覧できます。社員追加・権限変更・PIN再発行は管理者だけが行えます。</p><p class="muted">会社カレンダーだけ編集させる場合は「会社カレンダー編集者」を設定します。</p>')+'</div>';}
+function employeeManagerOptions(e){
+  const employees=state.authAdmin?(state.authAdmin.employees||[]):[];
+  return ['<option value="">未設定</option>'].concat(employees.filter(x=>!e||x.employeeId!==e.employeeId).map(x=>'<option value="'+escapeHtml(x.employeeId)+'" '+(e&&e.managerId===x.employeeId?'selected':'')+'>'+escapeHtml(x.name)+' / '+escapeHtml(roleLabel(x.role))+'</option>')).join('');
+}
+function openEmployeeModal(employeeId){if(!(state.data.permissions&&state.data.permissions.employeeAdmin)){showToast('社員編集の権限がありません');return;}var e=employeeId&&state.authAdmin?(state.authAdmin.employees||[]).find(function(x){return x.employeeId===employeeId;}):null,r=ensureModal();r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>社員マスター</small><h2>'+(e?'社員情報を編集':'社員を追加')+'</h2></div><button class="icon-button" onclick="closeModal()">×</button></div><div class="form-grid"><label class="field"><span>社員ID</span><input id="empId" value="'+escapeHtml(e?e.employeeId:'')+'" placeholder="FM0006" '+(e?'readonly':'')+'></label><label class="field"><span>氏名</span><input id="empName" value="'+escapeHtml(e?e.name:'')+'"></label><label class="field"><span>表示名</span><input id="empDisplayName" value="'+escapeHtml(e?e.displayName:'')+'"></label><label class="field"><span>部署</span><input id="empDepartment" value="'+escapeHtml(e?e.department:'')+'"></label><label class="field"><span>役職</span><input id="empTitle" value="'+escapeHtml(e?e.title:'')+'"></label><label class="field"><span>権限</span><select id="empRole"><option value="USER" '+((e?e.role:'USER')==='USER'?'selected':'')+'>社員</option><option value="CALENDAR_EDITOR" '+(e&&e.role==='CALENDAR_EDITOR'?'selected':'')+'>会社カレンダー編集者</option><option value="MANAGER" '+(e&&e.role==='MANAGER'?'selected':'')+'>マネージャー</option><option value="ADMIN" '+(e&&e.role==='ADMIN'?'selected':'')+'>管理者</option></select></label><label class="field full"><span>直属承認者</span><select id="empManagerId">'+employeeManagerOptions(e)+'</select><small>マネージャーまたは管理者を指定します。</small></label><label class="field"><span>標準勤務開始</span><input id="empWorkStart" type="time" value="'+escapeHtml(e?e.workStart:'09:00')+'"></label><label class="field"><span>標準勤務終了</span><input id="empWorkEnd" type="time" value="'+escapeHtml(e?e.workEnd:'18:00')+'"></label><label class="field"><span>休憩（分）</span><input id="empBreak" type="number" min="0" value="'+(e?e.breakMinutes:60)+'"></label><label class="field"><span>有給残日数</span><input id="empLeave" type="number" min="0" step="0.25" placeholder="未設定" value="'+(e&&e.leaveBalanceConfigured?e.leaveBalance:'')+'"></label><label class="field"><span>年休基準日</span><input id="empLeaveBasisDate" type="date" value="'+escapeHtml(e?e.leaveBasisDate:'')+'"></label><label class="field"><span>雇入日</span><input id="empHireDate" type="date" value="'+escapeHtml(e?e.hireDate:'')+'"></label><label class="field full"><span>メール</span><input id="empEmail" type="email" value="'+escapeHtml(e?e.email:'')+'"></label><label class="field full"><span>備考</span><textarea id="empNote" rows="2">'+escapeHtml(e?e.note:'')+'</textarea></label><label class="login-remember full"><input id="empActive" type="checkbox" '+(!e||e.active?'checked':'')+'><span>在籍（ログイン可能）</span></label><label class="login-remember full"><input id="empPayroll" type="checkbox" '+(e&&e.payrollIncluded?'checked':'')+'><span>給与集計対象（月次の税理士提出に含める）</span></label></div><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="saveEmployeeFromModal()">保存</button></div></div></section>';}
+function saveEmployeeFromModal(){
+  var payload={employeeId:document.getElementById('empId').value,name:document.getElementById('empName').value,displayName:document.getElementById('empDisplayName').value,department:document.getElementById('empDepartment').value,title:document.getElementById('empTitle').value,role:document.getElementById('empRole').value,managerId:document.getElementById('empManagerId').value,workStart:document.getElementById('empWorkStart').value,workEnd:document.getElementById('empWorkEnd').value,breakMinutes:document.getElementById('empBreak').value,leaveBalance:document.getElementById('empLeave').value,leaveBasisDate:document.getElementById('empLeaveBasisDate').value,hireDate:document.getElementById('empHireDate').value,payrollIncluded:document.getElementById('empPayroll').checked,email:document.getElementById('empEmail').value,note:document.getElementById('empNote').value,active:document.getElementById('empActive').checked};
+  var existing=state.authAdmin&&(state.authAdmin.employees||[]).find(function(x){return x.employeeId===payload.employeeId;});
+  var adminElevation=payload.role==='ADMIN'&&(!existing||existing.role!=='ADMIN');
+  var deactivation=existing&&existing.active&&!payload.active;
+  if(adminElevation){
+    openConfirmDialog('管理者権限を付与',payload.name+' に管理者権限を付与します。社員・認証・会社設定を変更できるようになります。','管理者として保存',function(){performEmployeeSave(payload);},false);
+    return;
+  }
+  if(deactivation){
+    openConfirmDialog('社員を無効化',payload.name+' を退職扱いにし、ログインできない状態にします。','無効化して保存',function(){performEmployeeSave(payload);},true);
+    return;
+  }
+  performEmployeeSave(payload);
+}
+function performEmployeeSave(payload){
+  google.script.run.withSuccessHandler(function(){closeModal();showToast('社員情報を保存しました');refreshAppData(function(){invalidatePageCache('authAdmin');loadAuthAdmin({force:true});});}).withFailureHandler(function(err){handleApiError(err,'社員情報を保存できませんでした');}).saveEmployee(state.sessionToken,payload);
+}
+function refreshAppData(callback){
+  const previous=state.data||{};
+  google.script.run.withSuccessHandler(function(data){
+    state.data={
+      ...data,
+      monthlyReview:previous.monthlyReview||data.monthlyReview||null,
+      month:previous.month||data.month||null,
+      tasks:Array.isArray(previous.tasks)?previous.tasks:(data.tasks||null),
+      overviewReady:!!(previous.overviewReady||data.overviewReady)
+    };
+    state.schedule.employees=data.employees||state.schedule.employees||[];
+    setProfileUi();renderNav();renderPage();
+    loadHomeOverview({force:true,silent:true});
+    if(callback)callback();
+  }).withFailureHandler(function(err){handleApiError(err,'最新情報を取得できませんでした');}).getInitialData(state.sessionToken);
+}
+
+function loadMonthly(options={}){
+  if(!state.monthly.yearMonth)state.monthly.yearMonth=state.data.today.slice(0,7);
+  if(!state.monthly.employeeId)state.monthly.employeeId=state.data.user.employeeId;
+  const key=monthlyCacheKey();
+  if(!options.force&&cacheFresh('monthly',key))return;
+  const ticket=beginPageLoad('monthly',key);if(!ticket)return;
+  const hasCurrent=cacheHas('monthly',key);
+  state.monthly.loading=!hasCurrent;
+  if(!options.silent)renderPageIfActive('monthly');
+  google.script.run.withSuccessHandler(function(data){
+    endPageLoad(ticket);
+    if(monthlyCacheKey()!==key)return;
+    state.monthly.data=data;state.monthly.loading=false;markPageCache('monthly',key);renderPageIfActive('monthly');
+  }).withFailureHandler(function(err){
+    endPageLoad(ticket);state.monthly.loading=false;
+    if(!handleApiError(err,'月次集計を読み込めませんでした')&&!options.silent)renderPageIfActive('monthly');
+  }).getMonthlySummary(state.sessionToken,state.monthly.yearMonth,state.monthly.employeeId);
+}
+function moveMonthly(n){var p=state.monthly.yearMonth.split('-').map(Number),d=new Date(p[0],p[1]-1+n,1);state.monthly.yearMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');loadMonthly();}
+function monthlyStatusTone(x){
+  if(x.issue)return 'danger';
+  if(x.worklogIssue)return 'warning';
+  if(x.leaveStatus)return 'leave';
+  if(!x.workingDay)return 'off';
+  if(x.workMinutes>0)return 'ok';
+  return 'neutral';
+}
+function monthlyCalendarView(d){
+  const p=d.yearMonth.split('-').map(Number),first=new Date(p[0],p[1]-1,1);
+  const blanks=Array.from({length:first.getDay()},()=>"<div class='monthly-day blank'></div>").join('');
+  const cells=d.daily.map(x=>{
+    const day=Number(x.date.slice(-2)),tone=monthlyStatusTone(x);
+    const primary=x.leaveStatus||x.issueType||(x.clockIn||x.clockOut?`${x.clockIn||'--:--'}–${x.clockOut||'--:--'}`:(x.workingDay?'未打刻':'休日'));
+    const sub=x.workMinutes>0?`実働 ${formatMinutesClient(x.workMinutes)}`:(x.companyName||x.companyType||'');
+    return `<button class='monthly-day ${tone}' onclick="openMonthlyDay('${x.date}')" aria-label='${escapeHtml(x.date+' '+primary)}'>
+      <span class='monthly-day-number'>${day}</span><i class='monthly-day-state'></i>
+      <strong>${escapeHtml(primary)}</strong><small>${escapeHtml(sub)}</small>
+    </button>`;
+  }).join('');
+  return `<div class='monthly-calendar-wrap'><div class='monthly-weekdays'>${['日','月','火','水','木','金','土'].map(x=>`<span>${x}</span>`).join('')}</div><div class='monthly-calendar'>${blanks}${cells}</div></div>`;
+}
+function monthlyListView(d){
+  const rows=d.daily.map(x=>`<button class='monthly-list-row ${monthlyStatusTone(x)}' onclick="openMonthlyDay('${x.date}')"><span><strong>${escapeHtml(x.date.slice(-2))}</strong><small>${escapeHtml('日月火水木金土'[parseIso(x.date).getDay()])}</small></span><span><b>${escapeHtml(x.leaveStatus||x.companyName||x.companyType||'通常')}</b><small>${escapeHtml(x.clockIn||'--:--')}–${escapeHtml(x.clockOut||'--:--')}</small></span><span>${formatMinutesClient(x.workMinutes)}</span><span>${x.issue?'<em>要確認</em>':x.worklogIssue?'<em class="warn">工数差異</em>':'<em class="ok">OK</em>'}</span></button>`).join('');
+  return `<div class='monthly-list-panel'>${rows}</div>`;
+}
+function monthlyReviewPanel(d){
+  const own=d.employee.employeeId===state.data.user.employeeId;
+  const admin=!!(state.data.permissions&&state.data.permissions.adminConsole);
+  const review=d.reviewStatus||{},past=d.yearMonth<state.data.today.slice(0,7);
+  if(!past||(!own&&!admin))return '';
+  const issueCount=Number(d.totals.missingPunchDays||0)+Number(d.totals.worklogMismatchDays||0);
+  const confirmed=review.confirmed&&!review.stale;
+  if(!own){
+    if(confirmed)return `<div class='monthly-review-state confirmed read-only'><div><span>✓</span><div><strong>${escapeHtml(d.employee.name)}さんは本人確認済みです</strong><small>${escapeHtml(review.confirmedAt||'')} に確認完了</small></div></div><span class='badge success'>本人確認済み</span></div>`;
+    return `<div class='monthly-review-state ${review.stale?'stale':'pending'} read-only'><div><span>!</span><div><strong>${escapeHtml(d.employee.name)}さんの本人確認が${review.stale?'再度必要です':'未完了です'}</strong><small>${issueCount?issueCount+'件の確認事項があります。本人の修正・確認完了を待ってください。':'内容確認後、本人が「確認完了」を行う必要があります。'}</small></div></div><span class='badge ${review.stale?'danger':'warning'}'>${review.stale?'再確認':'未確認'}</span></div>`;
+  }
+  if(confirmed)return `<div class='monthly-review-state confirmed'><div><span>✓</span><div><strong>この月の勤怠は確認済みです</strong><small>${escapeHtml(review.confirmedAt||'')} に本人確認済み</small></div></div></div>`;
+  return `<div class='monthly-review-state ${review.stale?'stale':'pending'}'><div><span>!</span><div><strong>${review.stale?'確認後に変更があります。再確認してください':'この月の勤怠を確認してください'}</strong><small>${issueCount?issueCount+'件の確認事項があります。赤・黄の日を確認してください。':'カレンダーを確認し、問題がなければ確認完了にしてください。'}</small></div></div><button class='primary-button compact' onclick='confirmMonthlyReviewFromPage()' ${issueCount?'disabled':''}>内容に誤りなし・確認完了</button></div>`;
+}
+function laborRulePanel(d){
+  const l=d&&d.labor||{},warnings=Array.isArray(l.warnings)?l.warnings:[];
+  return `<div class='monthly-close-banner ${l.ruleStatus==='CONFIGURED'?'open':'closed'}'><div><span class='badge ${l.ruleStatus==='CONFIGURED'?'success':'danger'}'>${l.ruleStatus==='CONFIGURED'?'労務ルール設定済み':'労務ルール未確定'}</span><strong>法定時間外 ${formatMinutesClient(d.totals.statutoryOvertimeMinutes||0)} / 深夜 ${formatMinutesClient(d.totals.lateNightMinutes||0)} / 法定休日 ${formatMinutesClient(d.totals.statutoryHolidayMinutes||0)}</strong></div><small>${escapeHtml(warnings.join(' / ')||'法定区分を確認できます。')}</small></div>`;
+}
+function monthlySummaryStrip(d){
+  return `<div class='monthly-summary-strip'>
+    <div><span>実働</span><strong>${formatMinutesClient(d.totals.totalMinutes)}</strong></div>
+    <div><span>残業</span><strong>${formatMinutesClient(d.totals.overtimeMinutes)}</strong></div>
+    <div><span>有給</span><strong>${d.totals.paidLeaveDays}日</strong></div>
+    <div><span>欠勤</span><strong>${d.totals.absenceDays}日</strong></div>
+    <div class='${d.totals.missingPunchDays?'alert':''}'><span>要確認</span><strong>${d.totals.missingPunchDays}日</strong></div>
+    <div class='${d.totals.worklogMismatchDays?'warn':''}'><span>工数差異</span><strong>${d.totals.worklogMismatchDays}日</strong></div>
+  </div>`;
+}
+function monthlyPage(){
+  const m=state.monthly,d=m.data,p=state.data.permissions||{},teamView=!!p.monthlyTeamView,admin=!!p.adminConsole,employees=state.data.employees||[];
+  const visibleEmployees=admin?employees:teamView?employees.filter(e=>e.employeeId===state.data.user.employeeId||e.managerId===state.data.user.employeeId):employees.filter(e=>e.employeeId===state.data.user.employeeId);
+  if(!visibleEmployees.some(e=>e.employeeId===state.monthly.employeeId))state.monthly.employeeId=state.data.user.employeeId;
+  const selector=teamView?`<select class='filter-select' onchange="state.monthly.employeeId=this.value;loadMonthly({force:true})">${visibleEmployees.map(e=>`<option value='${e.employeeId}' ${state.monthly.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select>`:'';
+  const closeStatus=d&&d.closeStatus?d.closeStatus:{closed:false,status:'OPEN'};
+  const closeButton=admin&&d?(closeStatus.closed?`<button class='secondary-button compact' onclick='reopenMonthly()'>締め解除</button>`:`<button class='secondary-button compact' onclick='closeMonthly()'>月次締め</button>`):'';
+  const actions=`<div class='button-row monthly-actions'>${selector}${closeButton}<button class='secondary-button compact' onclick='downloadMonthlyExport()'>Excel</button>${admin?`<button class='primary-button compact' onclick='downloadTeamMonthlyExport()'>給与対象を一括出力</button>`:''}</div>`;
+  const toolbar=`<div class='monthly-toolbar'><div><button class='secondary-button compact' onclick='moveMonthly(-1)'>‹</button><button class='secondary-button compact' onclick="state.monthly.yearMonth=state.data.today.slice(0,7);loadMonthly({force:true})">今月</button><button class='secondary-button compact' onclick='moveMonthly(1)'>›</button><strong>${escapeHtml(state.monthly.yearMonth||state.data.today.slice(0,7))}</strong></div><div class='segmented'><button class='${m.view==='calendar'?'active':''}' onclick="state.monthly.view='calendar';renderPage()">カレンダー</button><button class='${m.view==='list'?'active':''}' onclick="state.monthly.view='list';renderPage()">一覧</button></div></div>`;
+  if((m.loading&&!cacheHas('monthly',monthlyCacheKey()))||!d)return pageHead('月次','月ごとの勤怠を確認します。',actions)+toolbar+'<div class="loading-card"></div>';
+  const closeBanner=`<div class='monthly-close-banner ${closeStatus.closed?'closed':'open'}'><div><span class='badge ${closeStatus.closed?'success':'warning'}'>${closeStatus.closed?'締め済み':'未締め'}</span><strong>${escapeHtml(d.yearMonth)} 月次</strong></div><small>${closeStatus.closed?escapeHtml((closeStatus.closedAt||'')+' / '+(closeStatus.closedBy||'')):'管理者が締めるまで編集可能です。'}</small></div>`;
+  const body=m.view==='list'?monthlyListView(d):monthlyCalendarView(d);
+  return `<div class='single-screen-layout monthly-screen'>${pageHead('月次',escapeHtml(d.employee.name)+' / '+escapeHtml(d.yearMonth)+' の勤怠確認',actions)}${toolbar}${monthlyReviewPanel(d)}${monthlySummaryStrip(d)}${laborRulePanel(d)}${closeBanner}<div class='monthly-main'>${body}<div class='monthly-legend'><span><i class='ok'></i>正常</span><span><i class='leave'></i>休暇</span><span><i class='warn'></i>工数差異</span><span><i class='danger'></i>要確認</span></div></div></div>`;
+}
+function openMonthlyDay(date){
+  const d=state.monthly.data,x=d&&d.daily.find(v=>v.date===date);if(!x)return;
+  const r=ensureModal();
+  const issue=x.issue||x.worklogIssue;
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small monthly-day-modal' role='dialog' aria-modal='true'><div class='modal-head'><div><small>月次勤怠 / ${escapeHtml(d.yearMonth)}</small><h2>${escapeHtml(fmtDate(date))}</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
+  <div class='monthly-day-detail'>
+    <div><span>区分</span><strong>${escapeHtml(x.leaveStatus||x.companyName||x.companyType||'—')}</strong></div>
+    <div><span>出勤</span><strong>${escapeHtml(x.clockIn||'—')}</strong></div><div><span>退勤</span><strong>${escapeHtml(x.clockOut||'—')}</strong></div>
+    <div><span>休憩</span><strong>${formatMinutesClient(x.breakMinutes||0)}</strong></div><div><span>実働</span><strong>${formatMinutesClient(x.workMinutes)}</strong></div>
+    <div><span>所定外</span><strong>${formatMinutesClient(x.overtimeMinutes)}</strong></div><div><span>法定時間外</span><strong>${formatMinutesClient(Number(x.statutoryDailyOvertimeMinutes||0)+Number(x.statutoryWeeklyOvertimeMinutes||0))}</strong></div><div><span>深夜</span><strong>${formatMinutesClient(x.lateNightMinutes||0)}</strong></div><div><span>法定休日</span><strong>${formatMinutesClient(x.statutoryHolidayMinutes||0)}</strong></div><div><span>工数</span><strong>${formatMinutesClient(x.worklogMinutes||0)}</strong></div>
+    <div><span>勤務場所</span><strong>${escapeHtml(x.workLocation||'—')}</strong></div>
+  </div>
+  ${issue?`<div class='monthly-day-warning'><strong>確認が必要です</strong><span>${escapeHtml([x.issueType,x.worklogIssue?(x.worklogDifferenceMinutes>0?'工数超過 ':'工数不足 ')+formatMinutesClient(Math.abs(x.worklogDifferenceMinutes)):''].filter(Boolean).join(' / '))}</span></div>`:''}
+  <div class='modal-actions'><span></span><div>${x.issue?`<button class='secondary-button' onclick="closeModal();openRequestModal('打刻修正','${date}')">打刻修正を申請</button>`:''}${x.worklogIssue?`<button class='secondary-button' onclick="closeModal();state.worklog.date='${date}';navigate('worklog')">工数を確認</button>`:''}<button class='primary-button' onclick='closeModal()'>閉じる</button></div></div></section>`;
+}
+function confirmMonthlyReviewFromPage(){
+  const d=state.monthly.data;if(!d)return;
+  openConfirmDialog('勤怠確認を完了しますか？',d.yearMonth+' の出退勤・休暇・残業・工数を確認し、内容に誤りがないことを記録します。','確認完了',()=>{
+    google.script.run.withSuccessHandler(status=>{
+      d.reviewStatus=status;
+      renderPageIfActive('monthly');
+      showToast(d.yearMonth+'の勤怠確認を完了しました');
+      loadHomeOverview({force:true,silent:true,onDone:()=>loadNotifications()});
+    }).withFailureHandler(err=>handleApiError(err,'月次確認を完了できませんでした')).confirmMonthlyReview(state.sessionToken,d.yearMonth,'本人確認');
+  },false);
+}
+
+function closeMonthly(){
+  const ym=state.monthly.yearMonth;
+  openConfirmDialog('月次を締めますか？',ym+' の給与対象者について、要確認勤怠・工数差異・承認待ち申請がないか確認して締めます。','月次締めを実行',()=>{
+    google.script.run.withSuccessHandler(()=>{showToast(ym+'を締めました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'月次締めできませんでした')).closeMonthlyPeriod(state.sessionToken,ym);
+  },false);
+}
+function reopenMonthly(){
+  const ym=state.monthly.yearMonth;
+  openReasonDialog('月次締めを解除','解除理由を入力してください。','締め解除を実行',reason=>{
+    google.script.run.withSuccessHandler(()=>{showToast(ym+'の締めを解除しました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'締めを解除できませんでした')).reopenMonthlyPeriod(state.sessionToken,ym,reason);
+  });
+}
+
+function downloadTeamMonthlyExport(){
+  google.script.run.withSuccessHandler(function(result){
+    var binary=atob(result.base64),bytes=new Uint8Array(binary.length);
+    for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    var blob=new Blob([bytes],{type:result.mimeType||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=result.filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    openExportMessageModal(result.emailText);
+    showToast('給与対象者の提出データを作成しました');
+  }).withFailureHandler(function(err){handleApiError(err,'一括提出データを作成できませんでした');})
+    .createTeamMonthlyExport(state.sessionToken,state.monthly.yearMonth);
+}
+function downloadMonthlyExport(){google.script.run.withSuccessHandler(function(result){var binary=atob(result.base64),bytes=new Uint8Array(binary.length);for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);var blob=new Blob([bytes],{type:result.mimeType||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=result.filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);openExportMessageModal(result.emailText);}).withFailureHandler(function(err){handleApiError(err,'提出データを作成できませんでした');}).createMonthlyExport(state.sessionToken,state.monthly.yearMonth,state.monthly.employeeId);}
+function openExportMessageModal(text){var r=ensureModal();r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true"><div class="modal-head"><div><small>税理士提出用</small><h2>メール記載内容</h2></div><button class="icon-button" onclick="closeModal()">×</button></div><label class="field"><span>そのままコピーできます</span><textarea id="exportEmailText" rows="9">'+escapeHtml(text||'')+'</textarea></label><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="navigator.clipboard.writeText(document.getElementById(\'exportEmailText\').value);showToast(\'コピーしました\')">コピー</button><button class="primary-button" onclick="closeModal()">閉じる</button></div></div></section>';}
+
+</script>
