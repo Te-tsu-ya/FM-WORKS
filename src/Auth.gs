@@ -210,9 +210,27 @@ function requestPinHelp(employeeId, note, clientInfo) {
   const support = getSupportConfig_();
   const employee = getEmployeeAuthRecord_(id);
   if (employee && employee.active) {
-    const nowText = toTimestamp_(new Date());
+    const now = new Date();
+    const nowText = toTimestamp_(now);
     const requestId = 'R-' + Utilities.getUuid();
     const sheet = getDb_().getSheetByName(AUTH.resetSheet);
+    const lastRow = sheet.getLastRow();
+    let recentRequest = false;
+    if (lastRow >= 2) {
+      const rows = sheet.getRange(2,1,lastRow-1,9).getDisplayValues();
+      recentRequest = rows.some(r => {
+        if (r[2] !== employee.employeeId || r[4] !== '未対応') return false;
+        const at = parseTimestamp_(r[1]);
+        return at && (now.getTime() - at.getTime()) < 15 * 60 * 1000;
+      });
+    }
+    if (recentRequest) {
+      return {
+        ok: true,
+        message: 'PIN再発行の案内を確認してください。',
+        support: support
+      };
+    }
     sheet.appendRow([
       requestId,
       nowText,
