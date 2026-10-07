@@ -71,6 +71,7 @@ function saveWorklog(sessionToken, payload) {
       : employee.employeeId;
     const target = getEmployee_(targetEmployeeId);
     if (!target.active) throw new Error('在籍していない社員には工数を登録できません。');
+    assertNoWorklogOverlap_(sheet, target.employeeId, date, start, end, id);
 
     sheet.getRange(rowNumber, 1, 1, 15).setValues([[
       id, date, target.employeeId, target.name, project, category, description,
@@ -117,6 +118,29 @@ function deleteWorklog(sessionToken, worklogId) {
     SpreadsheetApp.flush();
     return { ok: true };
   });
+}
+
+function assertNoWorklogOverlap_(sheet, employeeId, date, start, end, excludeId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 15).getDisplayValues();
+  const startMin = timeToMinutes_(start);
+  const endMin = timeToMinutes_(end);
+
+  for (const r of rows) {
+    if (!r[0] || r[0] === excludeId || r[12] === '削除' || r[2] !== employeeId || r[1] !== date) continue;
+    const existingStart = timeToMinutes_(r[7]);
+    const existingEnd = timeToMinutes_(r[8]);
+    if (startMin < existingEnd && existingStart < endMin) {
+      throw new Error('同じ時間帯に別の工数が登録されています（' + r[7] + '–' + r[8] + ' / ' + r[4] + '）。');
+    }
+  }
+}
+
+function timeToMinutes_(value) {
+  const parts = String(value || '').split(':').map(Number);
+  if (parts.length !== 2 || parts.some(Number.isNaN)) return 0;
+  return parts[0] * 60 + parts[1];
 }
 
 function timeRangeMinutes_(start, end) {
