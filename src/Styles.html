@@ -47,3 +47,17 @@
 @media(max-width:1180px){.year-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-toolbar{align-items:flex-start}.toolbar-group:last-child{width:100%}}
 @media(max-width:760px){.brand-logo{width:30px;height:30px}.schedule-toolbar{padding:10px}.toolbar-group{width:100%}.toolbar-group .primary-button{margin-left:auto}.period-label{min-width:0}.filter-select{flex:1;min-width:120px}.schedule-surface{border-radius:14px}.month-day{min-height:90px;padding:5px}.day-type{display:none}.schedule-event{padding:4px}.schedule-event span{display:none}.schedule-event strong{font-size:9px}.week-grid{grid-template-columns:repeat(7,minmax(135px,1fr))}.day-summary{align-items:flex-start;flex-direction:column}.agenda-item{grid-template-columns:78px 1fr}.schedule-list-head,.schedule-list-row{grid-template-columns:115px 90px minmax(220px,1fr) 150px 90px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.attendee-grid{grid-template-columns:1fr 1fr}.year-grid{grid-template-columns:1fr}.modal-card{padding:16px}.modal-actions{align-items:stretch}.modal-actions>div{flex:1}.modal-actions button{flex:1}}
 </style>
+
+<style>
+.permission-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:-2px 0 14px;background:#fff}
+.permission-banner>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.permission-banner span:last-child{font-size:12px;color:#66758c}
+.permission-banner.can-edit{background:#f6fcf9;border-color:#d8efe4}
+.permission-banner.read-only{background:#f8fafc}
+.readonly-calendar-detail{display:grid;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.readonly-calendar-detail>div{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:13px 14px;border-top:1px solid #edf1f5;align-items:center}
+.readonly-calendar-detail>div:first-child{border-top:0}
+.readonly-calendar-detail span{color:#71809a;font-size:12px}
+.readonly-calendar-detail strong{font-size:14px}
+@media(max-width:760px){.readonly-calendar-detail>div{grid-template-columns:92px 1fr}.permission-banner>div{align-items:flex-start;flex-direction:column}}
+</style>
