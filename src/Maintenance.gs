@@ -43,6 +43,7 @@ function getSystemStatus(sessionToken) {
     backupMode: '管理者利用時に1日1回',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
+    monthlyReviewTeam: getMonthlyReviewTeamStatus_(previousYearMonth_(Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'))),
     readiness: getProductionReadiness_(),
     checkedAt: toTimestamp_(new Date()),
     checkedBy: admin.name
