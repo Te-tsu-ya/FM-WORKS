@@ -1,0 +1,71 @@
+<script>
+const NAV = [
+  ['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['calendar','カレンダー','i-calendar'],
+  ['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']
+];
+const MOBILE_NAV = ['home','attendance','worklog','requests','admin'];
+let state = {page:'home', data:null};
+
+function svg(id){return `<svg aria-hidden="true"><use href="#${id}"/></svg>`}
+function escapeHtml(v){return String(v ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function card(title,body,cls=''){return `<section class="card ${cls}"><h3>${title}</h3>${body}</section>`}
+function metric(label,value,iconTone=''){return `<section class="card metric"><div><small class="muted">${label}</small><div><strong>${value}</strong></div></div><div class="metric-icon ${iconTone}">●</div></section>`}
+function list(items){return `<div class="list">${items.map(i=>`<div class="list-item"><span class="status-dot" style="background:${i.color||'var(--blue)'}"></span><div><strong>${i.title}</strong><div class="muted" style="font-size:12px;margin-top:3px">${i.sub||''}</div></div>${i.right||''}</div>`).join('')}</div>`}
+function pageHead(title,desc,action=''){return `<div class="page-head"><div><div class="eyebrow">FM WORKS</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2200)}
+function demoAction(label){showToast(`${label}：デモ画面のため、まだ保存されません`)}
+
+function renderNav(){
+  const desktop=document.getElementById('desktopNav');
+  desktop.innerHTML=NAV.map(([id,label,icon])=>`<button class="nav-button ${state.page===id?'active':''}" data-route="${id}">${svg(icon)}<span>${label}</span></button>`).join('');
+  const mobile=document.getElementById('mobileNav');
+  mobile.innerHTML=MOBILE_NAV.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class="mobile-tab ${state.page===id?'active':''}" data-route="${id}">${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>navigate(b.dataset.route));
+}
+function navigate(page){state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();document.getElementById('content').focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
+
+function homePage(){const d=state.data;return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}
+<div class="hero"><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>今日も一日、やるべきことを確認してスムーズに進めましょう。</p></div>
+<div class="grid cols-3">
+${card('現在の勤怠状況',`<div class="status-row"><span class="status-dot"></span><strong>勤務中</strong></div><div class="attendance-time">${d.attendance.clockIn}</div><div class="button-row"><button class="primary-button" onclick="demoAction('退勤')">退勤する</button><button class="secondary-button" onclick="demoAction('休憩')">休憩する</button></div>`)}
+${card('今日の予定',list([{title:'10:00 定例ミーティング',sub:'会議室A / オンライン',color:'#1478ff'},{title:'13:00 プロジェクト進捗確認',sub:'オンライン',color:'#18a46d'},{title:'15:00 提案資料レビュー',sub:'Focus Time',color:'#f3a11b'}]))}
+${card('やること',d.tasks.map(x=>`<div class="list-item"><span></span><strong>${x.label}</strong><span class="badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}">${x.status}</span></div>`).join(''))}
+</div>
+<div class="grid cols-3 section-gap">${metric('勤務時間',d.month.workHours,'tone-green')}${metric('残業時間',d.month.overtime,'')}${metric('有給残',d.month.leaveBalance,'tone-orange')}</div>
+<div class="grid cols-2 section-gap">${card('チームの勤務状況',list([{title:'メンバーA',sub:'勤務中 09:02',color:'#18a46d'},{title:'メンバーB',sub:'勤務中 08:45',color:'#18a46d'},{title:'メンバーC',sub:'休憩中',color:'#f3a11b'}]))}${card('会社カレンダー',calendarMini())}</div>`}
+
+function attendancePage(){return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}
+<div class="grid cols-2">${card('現在の勤務状況',`<div class="status-row"><span class="status-dot"></span><strong>勤務中</strong></div><div class="attendance-time">08:57 に出勤</div><div class="button-row"><button class="primary-button" onclick="demoAction('退勤')">退勤</button><button class="secondary-button" onclick="demoAction('休憩開始')">休憩開始</button><button class="secondary-button" onclick="demoAction('休憩終了')">休憩終了</button></div><div class="section-gap"><small class="muted">勤務場所</small><div class="button-row" style="margin-top:8px"><button class="secondary-button">出社</button><button class="secondary-button">在宅</button><button class="secondary-button">外出</button></div></div>`)}${card('本日の打刻状況',list([{title:'08:57 出勤',sub:'出社',color:'#1478ff'},{title:'12:01 休憩開始',sub:'45分',color:'#8090a8'},{title:'12:46 休憩終了',sub:'勤務再開',color:'#18a46d'},{title:'退勤',sub:'未打刻',color:'#cbd4e1'}]))}</div>
+<div class="grid cols-4 section-gap">${metric('勤務日数','18 / 20日')}${metric('残業時間','12時間36分')}${metric('遅刻・早退','1回','tone-red')}${metric('在宅勤務','6日','tone-green')}</div>`}
+
+function worklogPage(){return `${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。','<button class="primary-button" onclick="demoAction(\'工数追加\')">＋ 工数追加</button>')}
+<div class="grid cols-4">${metric('今日の勤務時間','8時間36分','tone-green')}${metric('入力済工数','6時間30分')}${metric('未入力時間','2時間06分','tone-orange')}${metric('プロジェクト数','4件','tone-purple')}</div>
+<div class="grid cols-2 section-gap">${card('工数入力',list([{title:'会津屋アプリ　1.0h',sub:'要件定義・仕様検討',color:'#1478ff'},{title:'CoDoNa Lab　2.0h',sub:'デザインレビュー',color:'#18a46d'},{title:'社内業務　1.0h',sub:'資料作成・メール対応',color:'#7b61ff'},{title:'打ち合わせ　1.5h',sub:'クライアント定例',color:'#f3a11b'}]))}${card('入力進捗',`<div style="font-size:34px;font-weight:800">6.5h / 8.0h</div><p class="muted">進捗 81%</p><div class="progress"><span style="width:81%"></span></div><div class="section-gap">${list([{title:'会津屋アプリ',sub:'46%',color:'#1478ff'},{title:'CoDoNa Lab',sub:'31%',color:'#18a46d'},{title:'社内業務',sub:'15%',color:'#7b61ff'}])}</div>`)}</div>`}
+
+function calendarMini(){return `<div class="calendar">${Array.from({length:21},(_,i)=>`<div class="day ${i===11?'today':''}">${i+1}${[4,11,15].includes(i)?'<span class="event">予定</span>':''}</div>`).join('')}</div>`}
+function calendarPage(){return `${pageHead('カレンダー','会社休日・調整出勤日・有給・予定をひとつのカレンダーで確認します。','<button class="primary-button" onclick="demoAction(\'予定作成\')">＋ 予定を作成</button>')}
+<div class="grid cols-2"><section class="card"><h3>2026年10月</h3>${calendarMini()}<div class="section-gap muted">● 通常勤務　● 会社休日　● 有給　● 調整出勤日</div></section>${card('選択日の詳細',`<div class="status-row"><span class="status-dot"></span><strong>通常勤務日</strong></div><p class="muted">09:00 - 18:00（休憩 12:00 - 13:00）</p>${list([{title:'14:00 プロジェクト定例',sub:'会議室A / オンライン',color:'#1478ff'},{title:'16:00 提案資料レビュー',sub:'Focus Time',color:'#f3a11b'}])}`)}</div>`}
+
+function requestsPage(){return `${pageHead('申請','有給・半休・打刻修正・在宅・残業の申請をまとめます。','<button class="primary-button" onclick="demoAction(\'新規申請\')">＋ 新規申請</button>')}
+<div class="grid cols-4">${metric('有給申請','申請する','tone-green')}${metric('半休申請','申請する','')}${metric('打刻修正','申請する','tone-purple')}${metric('残業申請','申請する','tone-red')}</div>
+<div class="grid cols-2 section-gap">${card('申請一覧',list([{title:'有給申請',sub:'10/20（1日）',right:'<span class="badge warning">承認待ち</span>',color:'#18a46d'},{title:'在宅申請',sub:'10/15',right:'<span class="badge success">承認済</span>',color:'#f3a11b'},{title:'打刻修正',sub:'10/11',right:'<span class="badge danger">差戻し</span>',color:'#7b61ff'}]))}${card('承認状況',`<div class="grid cols-2">${metric('承認待ち','3件','tone-orange')}${metric('承認済','7件','tone-green')}</div>`)}</div>`}
+
+function peoplePage(){return `${pageHead('社員','社員情報・所属・連絡先・勤務状況を確認します。','<button class="primary-button" onclick="demoAction(\'社員追加\')">＋ 社員追加</button>')}
+<div class="grid cols-2">${card('社員一覧',list([{title:'坂井',sub:'管理 / 管理者',color:'#18a46d'},{title:'メンバーA',sub:'開発 / メンバー',color:'#18a46d'},{title:'メンバーB',sub:'企画 / メンバー',color:'#f3a11b'},{title:'メンバーC',sub:'管理 / メンバー',color:'#8090a8'}]))}${card('社員情報',`<div style="display:flex;gap:14px;align-items:center"><div class="avatar" style="width:58px;height:58px">坂</div><div><h2 style="margin:0">坂井</h2><p class="muted" style="margin:4px 0">管理者</p></div></div><div class="section-gap">${list([{title:'社員番号',sub:'FW0001'},{title:'勤務形態',sub:'通常勤務'},{title:'有給残',sub:'12日'}])}</div>`)}</div>`}
+
+function monthlyPage(){return `${pageHead('月次','月次締め前に勤怠・申請・工数の不足を確認します。','<button class="primary-button" onclick="demoAction(\'税理士提出データ作成\')">税理士提出データを作成</button>')}
+<div class="grid cols-4">${metric('勤務時間','168時間00分','tone-green')}${metric('残業時間','22時間30分')}${metric('有給取得','2日','tone-orange')}${metric('休日出勤','1日','tone-purple')}</div>
+<div class="grid cols-2 section-gap">${card('月次締めチェックリスト',list([{title:'未打刻を確認',sub:'完了',right:'✓',color:'#18a46d'},{title:'残業申請の承認',sub:'完了',right:'✓',color:'#18a46d'},{title:'工数の入力状況確認',sub:'未完了',right:'!',color:'#f3a11b'},{title:'税理士提出データ作成',sub:'未完了',right:'!',color:'#f3a11b'}]))}${card('注意が必要な項目',list([{title:'未打刻 3件',sub:'打刻確認が必要です',color:'#ef4d5b'},{title:'未承認申請 2件',sub:'承認待ちがあります',color:'#f3a11b'},{title:'工数不足 4件',sub:'基準工数未達です',color:'#ef4d5b'}]))}</div>`}
+
+function adminPage(){return `${pageHead('管理','総務・管理者向けの運用状況と各種設定です。')}
+<div class="grid cols-4">${metric('勤務中人数','4名','tone-green')}${metric('承認待ち','3件')}${metric('要確認','2件','tone-orange')}${metric('今月の申請','12件','tone-purple')}</div>
+<div class="grid cols-2 section-gap">${card('承認待ち',list([{title:'有給申請',sub:'メンバーA',right:'<span class="badge warning">確認</span>',color:'#7b61ff'},{title:'打刻修正',sub:'メンバーB',right:'<span class="badge warning">確認</span>',color:'#1478ff'}]))}${card('設定メニュー',list([{title:'会社カレンダー設定',sub:'休日・調整出勤日の管理',color:'#1478ff'},{title:'社員マスター',sub:'社員・権限・所属',color:'#18a46d'},{title:'システム設定',sub:'運用ルール',color:'#7b61ff'},{title:'データ管理・バックアップ',sub:'出力・バックアップ',color:'#f3a11b'}]))}</div>`}
+
+function renderPage(){const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,calendar:calendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;document.getElementById('content').innerHTML=fn()}
+function setLoading(){document.getElementById('content').innerHTML='<div class="grid cols-3"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>'}
+function bootstrap(){
+  state.page=(location.hash||'#home').slice(1); if(!NAV.some(n=>n[0]===state.page)) state.page='home'; renderNav(); setLoading();
+  google.script.run.withSuccessHandler(data=>{state.data=data;document.getElementById('profileName').textContent=data.user.displayName;document.getElementById('profileRole').textContent=data.user.role;document.getElementById('app').classList.remove('is-loading');renderPage()}).withFailureHandler(err=>{document.getElementById('content').innerHTML=`<section class="card"><h3>読み込みに失敗しました</h3><p class="muted">${escapeHtml(err&&err.message||'不明なエラー')}</p></section>`}).getInitialData();
+}
+document.addEventListener('DOMContentLoaded',bootstrap);
+</script>
