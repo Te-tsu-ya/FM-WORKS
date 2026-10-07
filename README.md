@@ -64,7 +64,7 @@ Fusion Mind社内向けの統合ワークポータルです。
 旧勤怠ファイル自体は変更せず、FM WORKSへ取り込んだスナップショットだけを匿名化しています。
 
 - 架空社員: `FM0001 青木 悠真 / FM0002 森川 彩乃 / FM0003 神谷 直人 / FM0004 小林 美月 / FM0005 中村 健太`
-- 架空プロジェクト: `Project Atlas / Nova / Orion / Bloom / Vega / Aurora / Internal Works`
+- 架空プロジェクト: `Project Atlas / Project Nova / Project Orion / Project Bloom / Project Vega / Project Aurora / Internal Works`
 - 顧客表示: `顧客A / 顧客B / 顧客C`
 - 実際の社員名・顧客名・案件名をGitHubへハードコードしない
 - 画面・テスト・サンプルデータに表示する人物名と案件名は、上記の架空データだけを使用する
