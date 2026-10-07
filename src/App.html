@@ -284,12 +284,14 @@ function monthlyPage(){
       '<td>'+escapeHtml(x.leaveStatus||'—')+'</td>'+
       '<td>'+escapeHtml(x.clockIn||'—')+'</td>'+
       '<td>'+escapeHtml(x.clockOut||'—')+'</td>'+
+      '<td>'+formatMinutesClient(x.breakMinutes||0)+'</td>'+
       '<td>'+formatMinutesClient(x.workMinutes)+'</td>'+
       '<td>'+formatMinutesClient(x.overtimeMinutes)+'</td>'+
       '<td>'+formatMinutesClient(x.holidayMinutes)+'</td>'+
       '<td>'+formatMinutesClient(x.lateEarlyMinutes||0)+'</td>'+
       '<td>'+escapeHtml(x.workLocation||'—')+'</td>'+
       '<td>'+(x.remote?'<span class="badge success">在宅</span>':'—')+'</td>'+
+      '<td>'+(x.worklogIssue?'<span class="badge warning">'+escapeHtml((x.worklogDifferenceMinutes>0?'工数超過 ':'工数不足 ')+formatMinutesClient(Math.abs(x.worklogDifferenceMinutes)))+'</span>':'—')+'</td>'+
       '<td>'+(x.issue?'<span class="badge danger">'+escapeHtml(x.issueType||'要確認')+'</span>':'')+'</td>'+
     '</tr>';
   }).join('');
@@ -310,11 +312,11 @@ function monthlyPage(){
     '</div>'+
     '<div class="grid cols-4 section-gap">'+
       metric('工数入力',formatMinutesClient(d.totals.worklogMinutes))+
-      metric('工数差分',formatMinutesClient(Math.abs(d.totals.totalMinutes-d.totals.worklogMinutes)))+
+      metric('工数差分',formatMinutesClient(Math.abs(d.totals.totalMinutes-d.totals.worklogMinutes)),d.totals.worklogMismatchDays?'tone-orange':'tone-green')+
+      metric('工数差異日',d.totals.worklogMismatchDays+'日',d.totals.worklogMismatchDays?'tone-orange':'tone-green')+
       metric('要確認日',d.totals.missingPunchDays+'日',d.totals.missingPunchDays?'tone-red':'tone-green')+
-      metric('提出準備',ready?'確認事項なし':'要確認あり',ready?'tone-green':'tone-red')+
     '</div>'+
-    '<div class="section-gap">'+card('日次明細','<div class="table-wrap"><table class="data-table"><thead><tr><th>日付</th><th>区分</th><th>休暇・欠勤</th><th>出勤</th><th>退勤</th><th>実働</th><th>残業</th><th>休日出勤</th><th>遅刻・早退</th><th>場所</th><th>在宅</th><th>確認</th></tr></thead><tbody>'+rows+'</tbody></table></div>')+'</div>';
+    '<div class="section-gap">'+card('日次明細','<div class="table-wrap"><table class="data-table"><thead><tr><th>日付</th><th>区分</th><th>休暇・欠勤</th><th>出勤</th><th>退勤</th><th>休憩</th><th>実働</th><th>残業</th><th>休日出勤</th><th>遅刻・早退</th><th>場所</th><th>在宅</th><th>工数</th><th>確認</th></tr></thead><tbody>'+rows+'</tbody></table></div>')+'</div>';
 }
 function downloadTeamMonthlyExport(){
   google.script.run.withSuccessHandler(function(result){
