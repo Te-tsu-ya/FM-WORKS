@@ -133,7 +133,7 @@ for (const performanceServerMarker of [
   'getPendingRequestCount_(employee)',
   "params.includeEmployees === false ? [] : getEmployees_()"
 ]) {
-  if (!(serverCode + requestCode).includes(performanceServerMarker)) {
+  if (!(serverCode + fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8')).includes(performanceServerMarker)) {
     console.error('v0.8.2 performance server marker missing: ' + performanceServerMarker);
     failed = true;
   }
