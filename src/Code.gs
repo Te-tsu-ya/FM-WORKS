@@ -731,7 +731,7 @@ function getEmployees_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 13).getDisplayValues()
+  return sheet.getRange(2, 1, lastRow - 1, 23).getDisplayValues()
     .filter(r => r[0] && r[6] === '在籍')
     .map(r => ({
       employeeId: r[0],
@@ -740,7 +740,8 @@ function getEmployees_() {
       shortName: String(r[1] || '').replace(/\s+/g, '').replace('達哉','').replace('弘典','') || r[2] || r[0],
       department: r[3] || '',
       title: r[4] || '',
-      role: r[5] || 'USER'
+      role: r[5] || 'USER',
+      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE'
     }));
 }
 
