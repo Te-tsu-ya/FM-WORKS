@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.8',
+  version: '0.9.9',
   locale: 'ja-JP'
 });
 
@@ -197,23 +197,12 @@ function getActivePunchRows_(employeeId, startDate, endDate) {
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-
-  const all = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
-    .filter(r => {
-      if (r[1] !== employeeId) return false;
-      if (startDate && r[3] < startDate) return false;
-      if (endDate && r[3] > endDate) return false;
-      return true;
-    });
-
-  const superseded = new Set(
-    all.map(r => String(r[9] || '').trim()).filter(Boolean)
-  );
-
-  return all.filter(r =>
-    String(r[8]).toUpperCase() !== 'TRUE' &&
-    !superseded.has(String(r[0] || '').trim())
-  );
+  const source=startDate&&endDate
+    ? readRowsByDateRange_(sheet,4,12,startDate,endDate)
+    : sheet.getRange(2,1,lastRow-1,12).getDisplayValues();
+  const all=source.filter(r=>r[1]===employeeId&&(!startDate||r[3]>=startDate)&&(!endDate||r[3]<=endDate));
+  const superseded=new Set(all.map(r=>String(r[9]||'').trim()).filter(Boolean));
+  return all.filter(r=>String(r[8]).toUpperCase()!=='TRUE'&&!superseded.has(String(r[0]||'').trim()));
 }
 
 function getPunchHistory(sessionToken, limit) {
@@ -856,7 +845,7 @@ function getCompanyCalendarRange_(start, end) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues()
+  return readRowsByDateRange_(sheet,1,10,start,end)
     .filter(r => r[0] && r[0] >= start && r[0] <= end)
     .map(r => ({
       date: r[0],

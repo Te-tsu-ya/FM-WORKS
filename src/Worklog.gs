@@ -1,4 +1,5 @@
 function getWorklogs(sessionToken, params) {
+  const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   params = params || {};
   const start = normalizeDate_(params.start || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd'));
@@ -10,7 +11,7 @@ function getWorklogs(sessionToken, params) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return { items: [], totalMinutes: 0 };
 
-  const items = sheet.getRange(2, 1, lastRow - 1, 15).getDisplayValues()
+  const items = readRowsByDateRange_(sheet,2,15,start,end)
     .filter(r => r[0] && r[12] !== '削除' && r[1] >= start && r[1] <= end && (employeeId === 'ALL' || r[2] === employeeId))
     .map(r => ({
       id: r[0], date: r[1], employeeId: r[2], name: r[3], project: r[4],
@@ -20,6 +21,7 @@ function getWorklogs(sessionToken, params) {
     }))
     .sort((a,b) => b.date.localeCompare(a.date) || (b.start||'').localeCompare(a.start||''));
 
+  logPerformance_('getWorklogs',perfStarted,PERFORMANCE_BUDGETS.worklogs,{items:items.length});
   return { items: items, totalMinutes: items.reduce((sum,x)=>sum+x.minutes,0) };
 }
 

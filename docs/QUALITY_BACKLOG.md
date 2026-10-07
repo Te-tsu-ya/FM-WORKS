@@ -22,7 +22,7 @@
 
 | ID | 問題 | Severity | 主担当 | 受入条件 | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| Q-011 | Sheets全件走査 | High | Atlas / Forge | 対象期間/対象社員のI/O削減、計測ログ、性能予算 | READY |
+| Q-011 | Sheets全件走査 | High | Atlas / Forge | 対象期間/対象社員のI/O削減、計測ログ、性能予算 | DONE v0.9.9 |
 | Q-012 | App.html 1,600行超の巨大フロント | High | Aster / Iris | UIモジュール分割、責務境界、回帰テスト | READY |
 | Q-013 | 列番号依存・Migration不足 | High | Atlas | スキーマ版、ヘッダ検証、Migrationを自動化 | DONE v0.9.8 |
 | Q-014 | 監査before/after不足 | High | Ledger | 重要更新は変更前後を再現可能 | DONE v0.9.7 |

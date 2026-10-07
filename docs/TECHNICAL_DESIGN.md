@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.8  
+**文書版:** 0.9.9  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.8`
+`APP.version = 0.9.9`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -1040,3 +1040,19 @@ DB:
 ### 40.1 Validation hardening
 
 `validate.mjs` は新設した `Labor.gs` / `Schema.gs` / `LeaveLedger.gs` / `MonthlySnapshot.gs` をrequired fileおよびJavaScript構文検査対象に含める。管理画面のSchema状態検査は `Maintenance.gs` の実ソースを明示的に読み込んで検証する。
+
+
+## 41. Date-scoped Data Access
+
+`DataAccess.gs` に `dateRangeStrings_`、`dateRangeRegex_`、`contiguousRowBlocks_`、`readRowsByDateRange_`、`logPerformance_` を配置する。
+
+補正データは古い日付でも末尾へ追記され得るため、単純な先頭/末尾行推定ではなく日付列TextFinderを使う。該当行が48ブロック以下ならRangeListで必要行だけ取得し、それ以上はfull-scan fallbackとする。
+
+適用先:
+- `getActivePunchRows_`
+- `getCompanyCalendarRange_`
+- `getWorklogs`
+- `getLatestMonthlyDataUpdateMap_` の打刻/工数/会社カレンダー
+- `getMonthlySummary` の工数
+
+Performance Budget超過は処理失敗にせずJSON logで観測する。

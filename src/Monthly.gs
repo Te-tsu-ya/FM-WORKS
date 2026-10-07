@@ -79,7 +79,7 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const punchSheet=db.getSheetByName(DB.sheets.punches);
   if(punchSheet&&punchSheet.getLastRow()>=2){
-    punchSheet.getRange(2,1,punchSheet.getLastRow()-1,12).getDisplayValues().forEach(r=>{
+    readRowsByDateRange_(punchSheet,4,12,rangeStart,rangeEnd).forEach(r=>{
       if(r[1]!==employeeId||r[3]<rangeStart||r[3]>rangeEnd)return;
       consider(String(r[3]).slice(0,7),r[11]||r[5]);
     });
@@ -87,7 +87,7 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const worklogSheet=db.getSheetByName('工数');
   if(worklogSheet&&worklogSheet.getLastRow()>=2){
-    worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues().forEach(r=>{
+    readRowsByDateRange_(worklogSheet,2,15,rangeStart,rangeEnd).forEach(r=>{
       if(r[2]!==employeeId||r[1]<rangeStart||r[1]>rangeEnd)return;
       consider(String(r[1]).slice(0,7),r[14]||r[11]);
     });
@@ -108,7 +108,7 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const calendarSheet=db.getSheetByName(DB.sheets.companyCalendar);
   if(calendarSheet&&calendarSheet.getLastRow()>=2){
-    calendarSheet.getRange(2,1,calendarSheet.getLastRow()-1,10).getDisplayValues().forEach(r=>{
+    readRowsByDateRange_(calendarSheet,1,10,rangeStart,rangeEnd).forEach(r=>{
       if(!r[0]||r[0]<rangeStart||r[0]>rangeEnd)return;
       consider(String(r[0]).slice(0,7),r[9]);
     });
@@ -394,6 +394,7 @@ function getLegacyDailySnapshots_(employeeId, start, end) {
 }
 
 function getMonthlySummary(sessionToken, yearMonth, employeeId) {
+  const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const ym = String(yearMonth || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM'));
   if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('対象月を確認してください。');
@@ -421,7 +422,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const requests = getApprovedRequestsForMonth_(targetId,start,end);
 
   const worklogSheet=getDb_().getSheetByName('工数');
-  const worklogRows=worklogSheet.getLastRow()<2?[]:worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues()
+  const worklogRows=worklogSheet.getLastRow()<2?[]:readRowsByDateRange_(worklogSheet,2,15,start,end)
     .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end&&r[12]!=='削除');
   const worklogByDate={};
   worklogRows.forEach(r=>{ worklogByDate[r[1]]=(worklogByDate[r[1]]||0)+Number(r[9]||0); });
@@ -579,6 +580,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   }
 
   const labor=applyLaborModelToMonthlyDaily_(daily,targetId,start,end,systemToday);
+  logPerformance_('getMonthlySummary',perfStarted,PERFORMANCE_BUDGETS.monthlySummary,{days:lastDay,punchRows:punchRows.length,worklogs:worklogRows.length});
 
   return {
     yearMonth:ym,

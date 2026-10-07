@@ -11,7 +11,8 @@ const files = [
   'src/LeaveLedger.gs',
   'src/Maintenance.gs',
   'src/Labor.gs',
-  'src/Schema.gs'
+  'src/Schema.gs',
+  'src/DataAccess.gs'
 ];
 
 const context = vm.createContext({
@@ -67,7 +68,11 @@ globalThis.__fmTest = {
   dailyStatutoryOvertimeMinutes_,
   lateNightOverlapMinutes_,
   applyWeeklyStatutoryOvertimeToFacts_,
-  schemaHeaderIssues_
+  schemaHeaderIssues_,
+  dateRangeStrings_,
+  dateRangeRegex_,
+  contiguousRowBlocks_,
+  columnLetter_
 };
 `, context);
 
@@ -188,6 +193,10 @@ api.applyWeeklyStatutoryOvertimeToFacts_(weekFacts,'MONDAY');
 expect('week over 40h allocates 120m weekly overtime', weekFacts[5].statutoryWeeklyOvertimeMinutes===120);
 expect('schema header validation accepts exact header', api.schemaHeaderIssues_(['A','B'],['A','B']).length===0);
 expect('schema header validation identifies wrong column', api.schemaHeaderIssues_(['A','X'],['A','B']).length===1);
+expect('date range includes both endpoints', JSON.stringify(Array.from(api.dateRangeStrings_('2026-10-01','2026-10-03',10)))===JSON.stringify(['2026-10-01','2026-10-02','2026-10-03']));
+expect('date range regex matches target date', new RegExp(api.dateRangeRegex_('2026-10-01','2026-10-03',10)).test('2026-10-02'));
+expect('row blocks group contiguous rows', JSON.stringify(api.contiguousRowBlocks_([2,3,5,6,7]))===JSON.stringify([{start:2,end:3},{start:5,end:7}]));
+expect('column letter handles AB', api.columnLetter_(28)==='AB');
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

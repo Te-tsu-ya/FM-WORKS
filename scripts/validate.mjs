@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -30,7 +30,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -60,6 +60,7 @@ const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'
 const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
 const laborCodeText = fs.readFileSync(path.join(root,'src/Labor.gs'),'utf8');
 const schemaCodeText = fs.readFileSync(path.join(root,'src/Schema.gs'),'utf8');
+const dataAccessCodeText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
@@ -157,6 +158,16 @@ for (const marker of ['const DB_SCHEMA_VERSION = 9','function getDatabaseSchemaS
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
   console.error('Schema status must block production readiness and be repairable from admin UI.');
+  failed=true;
+}
+
+for (const marker of ['function readRowsByDateRange_(','function dateRangeRegex_(','function logPerformance_(','PERFORMANCE_BUDGETS']) {
+  if (!dataAccessCodeText.includes(marker)) { console.error('Data access marker missing: '+marker); failed=true; }
+}
+if (!serverCode.includes('readRowsByDateRange_(sheet,4,12,startDate,endDate)') ||
+    !serverCode.includes('readRowsByDateRange_(sheet,1,10,start,end)') ||
+    !monthlySnapshotMainCode.includes('readRowsByDateRange_(worklogSheet,2,15,start,end)')) {
+  console.error('Date-scoped reads are not wired into high-volume flows.');
   failed=true;
 }
 
