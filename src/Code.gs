@@ -649,13 +649,33 @@ function deleteSchedule(sessionToken, scheduleId) {
 }
 function getCompanyCalendar(sessionToken, year) {
   requireSession_(sessionToken);
-  const y = Number(year || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
-  if (!Number.isInteger(y) || y < 2024 || y > 2100) throw new Error('年の指定が不正です。');
+  const requestedYear = Number(year || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
+  if (!Number.isInteger(requestedYear) || requestedYear < 2024 || requestedYear > 2100) throw new Error('年の指定が不正です。');
+
+  const availableYears = getCompanyCalendarYears_();
+  const currentYear = Number(Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
+  let y = requestedYear;
+  if (availableYears.length && !availableYears.includes(y)) {
+    if (availableYears.includes(currentYear)) {
+      y = currentYear;
+    } else {
+      y = availableYears.reduce((best, candidate) =>
+        Math.abs(candidate - requestedYear) < Math.abs(best - requestedYear) ? candidate : best
+      , availableYears[0]);
+    }
+  }
+
   const start = y + '-01-01';
   const end = y + '-12-31';
   const days = getCompanyCalendarRange_(start, end);
+  const nextCreatableYear = availableYears.length ? Math.max.apply(null, availableYears) + 1 : currentYear;
+
   return {
     year: y,
+    requestedYear: requestedYear,
+    availableYears: availableYears,
+    nextCreatableYear: nextCreatableYear,
+    canGenerateNextStandard: hasOfficialHolidayData_(nextCreatableYear),
     days: days,
     workdays: days.filter(d => d.working).length,
     daysOff: days.filter(d => !d.working).length,
@@ -664,6 +684,18 @@ function getCompanyCalendar(sessionToken, year) {
     canGenerateStandard: days.length === 0 && hasOfficialHolidayData_(y),
     standardSource: hasOfficialHolidayData_(y) ? JAPAN_HOLIDAY_SOURCE : ''
   };
+}
+
+function getCompanyCalendarYears_() {
+  const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const years = new Set();
+  sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues().forEach(r => {
+    const match = String(r[0] || '').match(/^(\d{4})-/);
+    if (match) years.add(Number(match[1]));
+  });
+  return Array.from(years).filter(y => Number.isInteger(y)).sort((a,b) => a-b);
 }
 
 function saveCompanyCalendarDay(sessionToken, payload) {
