@@ -501,7 +501,7 @@ function saveSchedule(sessionToken, payload) {
 
   try {
     const date = normalizeDate_(payload.date);
-    const title = String(payload.title || '').trim();
+    const title = safeSheetText_(payload.title, 200);
     if (!title) throw new Error('予定名を入力してください。');
 
     const allDay = payload.allDay === true || String(payload.allDay).toUpperCase() === 'TRUE';
@@ -568,8 +568,8 @@ function saveSchedule(sessionToken, payload) {
       names.join('、'),
       title,
       category,
-      String(payload.location || '').trim().slice(0, 150),
-      String(payload.detail || '').trim().slice(0, 1000),
+      safeSheetText_(payload.location, 150),
+      safeSheetText_(payload.detail, 1000),
       '社内',
       '有効',
       createdBy,
@@ -671,7 +671,7 @@ function saveCompanyCalendarDay(sessionToken, payload) {
     const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
     const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
     const working = type === '通常勤務' || type === '調整出勤日';
-    const name = String(payload.name || '').trim().slice(0, 100);
+    const name = safeSheetText_(payload.name, 100);
     const start = working ? normalizeTime_(payload.start || '09:00') : '';
     const end = working ? normalizeTime_(payload.end || '18:00') : '';
     if (working && start >= end) throw new Error('勤務終了時刻は開始時刻より後に設定してください。');
