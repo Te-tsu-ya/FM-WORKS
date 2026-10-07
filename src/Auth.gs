@@ -36,7 +36,7 @@ function initializeFirstAdmin(employeeId, pin, clientInfo, support) {
     support = support || {};
     const supportEmail = String(support.email || '').trim().slice(0, 200);
     const supportPhone = String(support.phone || '').trim().slice(0, 80);
-    const supportName = String(support.name || record.displayName || record.name).trim().slice(0, 80);
+    const supportName = safeSheetText_(support.name || record.displayName || record.name, 80);
     if (!supportEmail && !supportPhone) {
       throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を入力してください。');
     }
@@ -260,7 +260,7 @@ function requestPinHelp(employeeId, note, clientInfo) {
           employee.employeeId,
           employee.name,
           '未対応',
-          String(note || '').slice(0, 300),
+          safeSheetText_(note, 300),
           '',
           '',
           'WEB'
@@ -425,10 +425,10 @@ function saveAuthSupportSettings(sessionToken, payload) {
   payload = payload || {};
   return withScriptLock_(function() {
     const values = {
-      SUPPORT_CONTACT_NAME: String(payload.name || '').trim().slice(0, 80) || 'FM WORKS管理者',
+      SUPPORT_CONTACT_NAME: safeSheetText_(payload.name, 80) || 'FM WORKS管理者',
       SUPPORT_EMAIL: String(payload.email || '').trim().slice(0, 200),
       SUPPORT_PHONE: String(payload.phone || '').trim().slice(0, 80),
-      SUPPORT_NOTE: String(payload.note || '').trim().slice(0, 300) || 'PINを忘れた場合は、社内のFM WORKS管理者へご連絡ください。'
+      SUPPORT_NOTE: safeSheetText_(payload.note, 300) || 'PINを忘れた場合は、社内のFM WORKS管理者へご連絡ください。'
     };
     if (!values.SUPPORT_EMAIL && !values.SUPPORT_PHONE) {
       throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を1つ以上登録してください。');
