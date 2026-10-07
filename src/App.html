@@ -70,10 +70,34 @@ function openCompanyDay(date){const cd=(state.company.days||[]).find(x=>x.date==
 function saveCompanyDayFromModal(date){const payload={date,type:document.getElementById('companyType').value,name:document.getElementById('companyName').value,start:document.getElementById('companyStart').value,end:document.getElementById('companyEnd').value,breakMinutes:document.getElementById('companyBreak').value};google.script.run.withSuccessHandler(()=>{closeModal();showToast('会社カレンダーを更新しました');loadCompanyCalendar(state.company.year);if(state.page==='schedule')loadSchedule()}).withFailureHandler(err=>showToast(err&&err.message?err.message:'更新に失敗しました')).saveCompanyCalendarDay(payload)}
 
 function requestsPage(){return `${pageHead('申請','有給・半休・打刻修正・在宅・残業の申請をまとめます。','<button class=\'primary-button\' onclick="demoAction(\'新規申請\')">＋ 新規申請</button>')}<div class='grid cols-4'>${metric('有給申請','申請する','tone-green')}${metric('半休申請','申請する','')}${metric('打刻修正','申請する','tone-purple')}${metric('残業申請','申請する','tone-red')}</div>`}
-function peoplePage(){const emps=state.data.employees||[];return `${pageHead('社員','社員情報・所属・連絡先・勤務状況を確認します。')}<div class='grid cols-2'>${card('社員一覧',list(emps.map(e=>({title:escapeHtml(e.name),sub:`${escapeHtml(e.department||'未設定')} / ${escapeHtml(e.role)}`,color:'#18a46d'})))}${card('共有の考え方',`<p class='muted'>予定表は社員単位で絞り込みでき、複数社員を参加者として登録できます。</p>`)}</div>`}
+function peoplePage(){
+  const emps=state.data.employees||[];
+  const items=emps.map(e=>({
+    title:escapeHtml(e.name),
+    sub:(escapeHtml(e.department||'未設定')+' / '+escapeHtml(e.role)),
+    color:'#18a46d'
+  }));
+  return `${pageHead('社員','社員情報・所属・連絡先・勤務状況を確認します。')}
+  <div class='grid cols-2'>
+    ${card('社員一覧',list(items))}
+    ${card('共有の考え方',`<p class='muted'>予定表は社員単位で絞り込みでき、複数社員を参加者として登録できます。</p>`)}
+  </div>`;
+}
 function monthlyPage(){return `${pageHead('月次','月次締め前に勤怠・申請・工数の不足を確認します。','<button class=\'primary-button\' onclick="demoAction(\'税理士提出データ作成\')">税理士提出データを作成</button>')}<div class='grid cols-4'>${metric('勤務時間','168時間00分','tone-green')}${metric('残業時間','22時間30分')}${metric('有給取得','2日','tone-orange')}${metric('休日出勤','1日','tone-purple')}</div>`}
-function adminPage(){return `${pageHead('管理','総務・管理者向けの運用状況と各種設定です。')}<div class='grid cols-4'>${metric('社員','${(state.data.employees||[]).length}名','tone-green')}${metric('予定表','共有DB','')}${metric('会社カレンダー','2026年登録済','tone-orange')}${metric('監査ログ','記録中','tone-purple')}</div><div class='grid cols-2 section-gap'>${card('管理メニュー',`<div class='button-row'><button class='secondary-button' onclick="navigate('companyCalendar')">会社カレンダー</button><button class='secondary-button' onclick="navigate('people')">社員マスター</button></div>`)}${card('データ基盤',`<p class='muted'>勤怠・予定表・会社カレンダーはGoogle Sheetsの「FM WORKS DB」に保存されています。</p>`)}</div>`}
-
+function adminPage(){
+  const employeeCount=(state.data.employees||[]).length;
+  return `${pageHead('管理','総務・管理者向けの運用状況と各種設定です。')}
+  <div class='grid cols-4'>
+    ${metric('社員',employeeCount+'名','tone-green')}
+    ${metric('予定表','共有DB','')}
+    ${metric('会社カレンダー','2026年登録済','tone-orange')}
+    ${metric('監査ログ','記録中','tone-purple')}
+  </div>
+  <div class='grid cols-2 section-gap'>
+    ${card('管理メニュー',`<div class='button-row'><button class='secondary-button' onclick="navigate('companyCalendar')">会社カレンダー</button><button class='secondary-button' onclick="navigate('people')">社員マスター</button></div>`)}
+    ${card('データ基盤',`<p class='muted'>勤怠・予定表・会社カレンダーはGoogle Sheetsの「FM WORKS DB」に保存されています。</p>`)}
+  </div>`;
+}
 function renderPage(){const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;document.getElementById('content').innerHTML=fn()}
 function setLoading(){document.getElementById('content').innerHTML='<div class=\'grid cols-3\'><div class=\'loading-card\'></div><div class=\'loading-card\'></div><div class=\'loading-card\'></div></div>'}
 function bootstrap(){state.page=(location.hash||'#home').slice(1);if(!NAV.some(n=>n[0]===state.page))state.page='home';renderNav();setLoading();google.script.run.withSuccessHandler(data=>{state.data=data;state.workLocation=data.attendance.workLocation||'出社';state.schedule.date=data.today;state.schedule.employees=data.employees||[];state.company.year=parseIso(data.today).getFullYear();document.getElementById('profileName').textContent=data.user.displayName;document.getElementById('profileRole').textContent=data.user.role;document.getElementById('app').classList.remove('is-loading');renderPage();if(state.page==='schedule')loadSchedule();if(state.page==='companyCalendar')loadCompanyCalendar()}).withFailureHandler(err=>{document.getElementById('content').innerHTML=`<section class='card'><h3>読み込みに失敗しました</h3><p class='muted'>${escapeHtml(err&&err.message||'不明なエラー')}</p></section>`}).getInitialData()}
