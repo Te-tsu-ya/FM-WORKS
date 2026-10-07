@@ -199,7 +199,7 @@ if (!app.includes('generateCompanyCalendarYear')) {
   console.error('Company calendar generation UI missing');
   failed = true;
 }
-const employeeCode = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
+const employeeCodeAll = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
 const authCodeAll = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
 const monthlyCodeAll = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeAll = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
@@ -218,7 +218,7 @@ for (const markerText of [
     failed = true;
   }
 }
-if (!employeeCode.includes('payrollIncluded') || !authCodeAll.includes('payrollIncluded') || !codeAll.includes('payrollIncluded')) {
+if (!employeeCodeAll.includes('payrollIncluded') || !authCodeAll.includes('payrollIncluded') || !codeAll.includes('payrollIncluded')) {
   console.error('Payroll inclusion is not propagated through employee data.');
   failed = true;
 }
