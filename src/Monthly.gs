@@ -1,3 +1,153 @@
+function previousYearMonth_(dateText) {
+  const s=String(dateText||'');
+  const m=s.match(/^(\d{4})-(\d{2})/);
+  if(!m)throw new Error('日付を確認してください。');
+  const d=new Date(Number(m[1]),Number(m[2])-2,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+function monthlyReviewUrgency_(day, dueDay) {
+  const d=Math.max(1,Number(day||1));
+  const due=Math.max(1,Math.min(31,Number(dueDay||5)));
+  return d<=due?'warning':'danger';
+}
+
+function getMonthlyReviewPrompt_(employeeId) {
+  const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
+  const day=Number(today.slice(8,10));
+  const targetMonth=previousYearMonth_(today);
+  const dueDay=Math.max(1,Math.min(31,Number(getSettingsMap_().MONTHLY_REVIEW_DUE_DAY||5)));
+  const status=getMonthlyReviewStatusInternal_(targetMonth,employeeId);
+  return {
+    targetMonth:targetMonth,
+    dueDay:dueDay,
+    urgency:monthlyReviewUrgency_(day,dueDay),
+    needsAttention:!status.confirmed||status.stale,
+    confirmed:status.confirmed,
+    stale:status.stale,
+    confirmedAt:status.confirmedAt,
+    lastUpdatedAt:status.lastUpdatedAt,
+    message:status.stale
+      ? targetMonth+'の勤怠は確認後に変更があります。もう一度確認してください。'
+      : status.confirmed
+        ? targetMonth+'の勤怠確認は完了しています。'
+        : targetMonth+'の勤怠内容に誤りがないか確認してください。'
+  };
+}
+
+function getMonthlyReviewStatus(sessionToken, yearMonth, employeeId) {
+  const session=requireSession_(sessionToken);
+  const ym=normalizeYearMonth_(yearMonth);
+  const target=session.employee.role==='ADMIN'&&employeeId?String(employeeId):session.employee.employeeId;
+  return getMonthlyReviewStatusInternal_(ym,target);
+}
+
+function getMonthlyReviewStatusInternal_(yearMonth, employeeId) {
+  const ym=normalizeYearMonth_(yearMonth);
+  const sheet=getDb_().getSheetByName(DB.sheets.monthlyReview);
+  const lastRow=sheet?sheet.getLastRow():0;
+  let row=null;
+  if(lastRow>=2){
+    const rows=sheet.getRange(2,1,lastRow-1,10).getDisplayValues();
+    row=rows.find(r=>r[0]===ym&&r[1]===employeeId)||null;
+  }
+  const confirmedAt=row&&row[3]==='CONFIRMED'?row[4]||'':'';
+  const lastUpdatedAt=getLatestMonthlyDataUpdate_(employeeId,ym);
+  const confirmedDate=parseTimestamp_(confirmedAt);
+  const lastDate=parseTimestamp_(lastUpdatedAt);
+  const stale=!!(confirmedDate&&lastDate&&lastDate>confirmedDate);
+  return {
+    yearMonth:ym,
+    employeeId:employeeId,
+    recorded:!!row,
+    status:row?row[3]||'PENDING':'PENDING',
+    confirmed:!!confirmedAt&&!stale,
+    stale:stale,
+    confirmedAt:confirmedAt,
+    confirmedBy:row?row[5]||'':'',
+    lastUpdatedAt:lastUpdatedAt,
+    note:row?row[7]||'':''
+  };
+}
+
+function confirmMonthlyReview(sessionToken, yearMonth, note) {
+  const session=requireSession_(sessionToken);
+  const employee=session.employee;
+  const ym=normalizeYearMonth_(yearMonth);
+  const current=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM');
+  if(ym>=current)throw new Error('当月または未来の勤怠は月次確認できません。');
+
+  return withScriptLock_(function(){
+    const summary=getMonthlySummary(sessionToken,ym,employee.employeeId);
+    const blockers=[];
+    if(summary.totals.missingPunchDays>0)blockers.push('要確認日 '+summary.totals.missingPunchDays+'日');
+    if(summary.totals.worklogMismatchDays>0)blockers.push('工数差異 '+summary.totals.worklogMismatchDays+'日');
+    if(blockers.length){
+      throw new Error('確認未完了の項目があります（'+blockers.join(' / ')+'）。赤・黄の付いた日を確認してください。');
+    }
+
+    const sheet=getDb_().getSheetByName(DB.sheets.monthlyReview);
+    const lastRow=sheet.getLastRow();
+    const values=lastRow>=2?sheet.getRange(2,1,lastRow-1,10).getDisplayValues():[];
+    const idx=values.findIndex(r=>r[0]===ym&&r[1]===employee.employeeId);
+    const rowNumber=idx>=0?idx+2:Math.max(2,lastRow+1);
+    const nowText=toTimestamp_(new Date());
+    const latest=getLatestMonthlyDataUpdate_(employee.employeeId,ym);
+    const createdAt=idx>=0?(values[idx][8]||nowText):nowText;
+    const memo=safeSheetText_(note,500);
+    sheet.getRange(rowNumber,1,1,10).setValues([[
+      ym,employee.employeeId,employee.name,'CONFIRMED',nowText,employee.name,latest,memo,createdAt,nowText
+    ]]);
+    appendAudit_({
+      employeeId:employee.employeeId,employeeName:employee.name,operation:'月次勤怠確認',
+      target:'月次確認',targetId:ym,before:idx>=0?(values[idx][3]||'PENDING'):'PENDING',
+      after:'CONFIRMED',source:'WEB',result:'SUCCESS',note:memo
+    });
+    SpreadsheetApp.flush();
+    return getMonthlyReviewStatusInternal_(ym,employee.employeeId);
+  });
+}
+
+function getLatestMonthlyDataUpdate_(employeeId, yearMonth) {
+  const p=yearMonth.split('-').map(Number);
+  const start=yearMonth+'-01';
+  const end=yearMonth+'-'+String(new Date(p[0],p[1],0).getDate()).padStart(2,'0');
+  let latest='';
+
+  function consider(value){
+    const d=parseTimestamp_(value);
+    const current=parseTimestamp_(latest);
+    if(d&&(!current||d>current))latest=toTimestamp_(d);
+  }
+
+  const db=getDb_();
+  const punchSheet=db.getSheetByName(DB.sheets.punches);
+  if(punchSheet&&punchSheet.getLastRow()>=2){
+    punchSheet.getRange(2,1,punchSheet.getLastRow()-1,12).getDisplayValues().forEach(r=>{
+      if(r[1]===employeeId&&r[3]>=start&&r[3]<=end)consider(r[11]||r[5]);
+    });
+  }
+  const worklogSheet=db.getSheetByName('工数');
+  if(worklogSheet&&worklogSheet.getLastRow()>=2){
+    worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues().forEach(r=>{
+      if(r[2]===employeeId&&r[1]>=start&&r[1]<=end)consider(r[14]||r[11]);
+    });
+  }
+  const requestSheet=db.getSheetByName('申請');
+  if(requestSheet&&requestSheet.getLastRow()>=2){
+    requestSheet.getRange(2,1,requestSheet.getLastRow()-1,14).getDisplayValues().forEach(r=>{
+      if(r[2]===employeeId&&r[5]<=end&&r[6]>=start){consider(r[13]);consider(r[11]);}
+    });
+  }
+  const calendarSheet=db.getSheetByName(DB.sheets.companyCalendar);
+  if(calendarSheet&&calendarSheet.getLastRow()>=2){
+    calendarSheet.getRange(2,1,calendarSheet.getLastRow()-1,10).getDisplayValues().forEach(r=>{
+      if(r[0]>=start&&r[0]<=end)consider(r[9]);
+    });
+  }
+  return latest;
+}
+
 function getMonthlyCloseStatus(sessionToken, yearMonth) {
   requireSession_(sessionToken);
   const ym=normalizeYearMonth_(yearMonth);
@@ -338,7 +488,8 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     },
     daily:daily,
     requests:requests,
-    closeStatus:getMonthlyCloseStatusInternal_(ym)
+    closeStatus:getMonthlyCloseStatusInternal_(ym),
+    reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)
   };
 }
 function appendMonthlyIssue_(current, next) {
