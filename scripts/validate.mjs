@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Index.html','src/Styles.html','src/App.html',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -29,7 +29,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -244,6 +244,49 @@ for (const file of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs',
       console.error(`Public server function lacks explicit authentication: ${file} / ${name}`);
       failed = true;
     }
+  }
+}
+const projectsCode = fs.readFileSync(path.join(root,'src/Projects.gs'),'utf8');
+for (const projectMarker of [
+  'function getProjectsInternal_(',
+  'function saveProject(sessionToken',
+  'PROJECT_STATUS',
+  'nextProjectId_'
+]) {
+  if (!projectsCode.includes(projectMarker)) {
+    console.error(`Project master implementation missing: ${projectMarker}`);
+    failed = true;
+  }
+}
+for (const integrationMarker of [
+  "projects: 'プロジェクト'",
+  'projects: getProjectsInternal_(false)'
+]) {
+  if (!serverCode.includes(integrationMarker)) {
+    console.error(`Project master integration missing: ${integrationMarker}`);
+    failed = true;
+  }
+}
+for (const worklogMarker of ['getProjectByName_', "status !== '進行中'"]) {
+  if (!worklogCode.includes(worklogMarker)) {
+    console.error(`Worklog project validation missing: ${worklogMarker}`);
+    failed = true;
+  }
+}
+for (const monthlyMarker of ['function createTeamMonthlyExport(', 'function getPayrollEmployees_(', 'assertMonthlyReadyForExport_']) {
+  if (!monthlyCode.includes(monthlyMarker)) {
+    console.error(`Payroll team export missing: ${monthlyMarker}`);
+    failed = true;
+  }
+}
+if (!requestCode.includes("'1/4日有給'") || !employeeCode.includes('Math.round(parsedLeave * 4) / 4')) {
+  console.error('Quarter-day paid leave support is incomplete.');
+  failed = true;
+}
+for (const forbiddenRealData of ['会津屋','ラクッショ','キキラク','CoDoNa','坂井','金子','五十嵐']) {
+  if (app.includes(forbiddenRealData)) {
+    console.error(`Real demo-identifying term remains in UI source: ${forbiddenRealData}`);
+    failed = true;
   }
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
