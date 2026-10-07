@@ -19,6 +19,11 @@ function saveEmployee(sessionToken, payload) {
   if (email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) throw new Error('メールアドレスの形式を確認してください。');
   const note = String(payload.note || '').trim().slice(0,500);
 
+  const existingBefore = getEmployeeAuthRecord_(employeeId);
+  if (existingBefore && existingBefore.role === 'ADMIN' && existingBefore.active && (role !== 'ADMIN' || status !== '在籍')) {
+    assertAnotherActiveAdmin_(employeeId);
+  }
+
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   let rowNumber = 0;
@@ -27,7 +32,7 @@ function saveEmployee(sessionToken, payload) {
     if (found) rowNumber=found.getRow();
   }
   const isNew = !rowNumber;
-  const existingEmployee = !isNew ? getEmployeeAuthRecord_(employeeId) : null;
+  const existingEmployee = !isNew ? existingBefore : null;
   if (isNew) rowNumber=Math.max(2,lastRow+1);
   const existingAuth = isNew ? Array(9).fill('') : sheet.getRange(rowNumber,14,1,9).getValues()[0];
   existingAuth[7] = status === '在籍'
@@ -56,6 +61,7 @@ function setEmployeeActiveState(sessionToken, employeeId, active) {
   const target = getEmployeeAuthRecord_(employeeId);
   if (!target) throw new Error('社員が見つかりません。');
   if (target.employeeId === admin.employeeId && !active) throw new Error('自分自身を無効化することはできません。');
+  if (target.role === 'ADMIN' && target.active && !active) assertAnotherActiveAdmin_(target.employeeId);
   const sheet=getDb_().getSheetByName(DB.sheets.employees);
   sheet.getRange(target.rowNumber,7).setValue(active?'在籍':'退職');
   sheet.getRange(target.rowNumber,21).setValue(active?'ACTIVE':'DISABLED');
@@ -67,3 +73,12 @@ function setEmployeeActiveState(sessionToken, employeeId, active) {
   });
   return {ok:true};
 }
+function assertAnotherActiveAdmin_(excludeEmployeeId) {
+  const sheet = getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error('管理者を最低1名残す必要があります。');
+  const admins = sheet.getRange(2,1,lastRow-1,7).getDisplayValues()
+    .filter(r => r[0] !== excludeEmployeeId && r[5] === 'ADMIN' && r[6] === '在籍');
+  if (!admins.length) throw new Error('管理者を最低1名残す必要があります。');
+}
+
