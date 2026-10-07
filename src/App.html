@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 
 function svg(id){return `<svg aria-hidden='true'><use href='#${id}'/></svg>`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
