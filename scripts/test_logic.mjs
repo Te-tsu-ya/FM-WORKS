@@ -10,7 +10,8 @@ const files = [
   'src/MonthlySnapshot.gs',
   'src/LeaveLedger.gs',
   'src/Maintenance.gs',
-  'src/Labor.gs'
+  'src/Labor.gs',
+  'src/Schema.gs'
 ];
 
 const context = vm.createContext({
@@ -65,7 +66,8 @@ globalThis.__fmTest = {
   normalizeLaborWeekStartDay_,
   dailyStatutoryOvertimeMinutes_,
   lateNightOverlapMinutes_,
-  applyWeeklyStatutoryOvertimeToFacts_
+  applyWeeklyStatutoryOvertimeToFacts_,
+  schemaHeaderIssues_
 };
 `, context);
 
@@ -184,6 +186,8 @@ expect('23:00-06:00 has 360m late night', api.lateNightOverlapMinutes_(1380,1800
 const weekFacts=['2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-10'].map((date,i)=>({date,workMinutes:i<5?480:120,statutoryHoliday:false}));
 api.applyWeeklyStatutoryOvertimeToFacts_(weekFacts,'MONDAY');
 expect('week over 40h allocates 120m weekly overtime', weekFacts[5].statutoryWeeklyOvertimeMinutes===120);
+expect('schema header validation accepts exact header', api.schemaHeaderIssues_(['A','B'],['A','B']).length===0);
+expect('schema header validation identifies wrong column', api.schemaHeaderIssues_(['A','X'],['A','B']).length===1);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

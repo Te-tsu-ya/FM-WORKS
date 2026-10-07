@@ -59,6 +59,7 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
 const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
 const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
 const laborCodeText = fs.readFileSync(path.join(root,'src/Labor.gs'),'utf8');
+const schemaCodeText = fs.readFileSync(path.join(root,'src/Schema.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
@@ -148,6 +149,14 @@ if (!serverCode.includes('function auditJson_(') ||
     !fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8').includes('before:existingEmployee ? auditJson_')) {
   console.error('Structured before/after audit evidence is incomplete for important update flows.');
   failed = true;
+}
+
+for (const marker of ['const DB_SCHEMA_VERSION = 9','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+  if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
+}
+if (!maintenance.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
+  console.error('Schema status must block production readiness and be repairable from admin UI.');
+  failed=true;
 }
 
 for (const authMarker of [

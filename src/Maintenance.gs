@@ -50,6 +50,7 @@ function getSystemStatus(sessionToken) {
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
     environment: runtime.environment,
     laborConfig: getLaborRuleConfig_(),
+    schemaStatus: getDatabaseSchemaStatus_(),
     explicitDb: runtime.explicitDb,
     usingDefaultStagingDb: runtime.usingDefaultStagingDb,
     readiness: getProductionReadiness_(),
@@ -70,6 +71,9 @@ function getProductionReadiness_() {
   const sheetNames=new Set(db.getSheets().map(s=>s.getName()));
   const blockers=[];
   const warnings=[];
+
+  const schemaStatus=getDatabaseSchemaStatus_();
+  if(!schemaStatus.ready)blockers.push('DBスキーマ不整合: '+schemaStatus.issues.slice(0,3).join(' / '));
 
   const missingSheets=requiredSheets.filter(name=>!sheetNames.has(name));
   if(missingSheets.length)blockers.push('必須シート不足: '+missingSheets.join('、'));
@@ -129,6 +133,7 @@ function getProductionReadiness_() {
     environment:runtime.environment,
     backupTriggerInstalled:triggerState.installed,
     laborConfig:laborConfig,
+    schemaStatus:schemaStatus,
     blockers:blockers,
     warnings:warnings,
     activeEmployees:employeeRows.length,

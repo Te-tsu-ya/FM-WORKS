@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.7  
+**文書版:** 0.9.8  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.7`
+`APP.version = 0.9.8`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -1024,3 +1024,14 @@ DB:
 予定・工数・プロジェクト・社員の更新では、更新前の行から業務フィールドを抽出して `before` に保存し、書込後の業務状態を `after` に保存する。
 
 社員のPINソルト、PINハッシュ、セッショントークン等は監査状態JSONへ含めない。申請承認/取消、月次締め等の状態遷移は既存の明示的before/afterを継続する。
+
+
+## 40. Schema Contract / Migration
+
+`Schema.gs` に `DB_SCHEMA_VERSION=9` と `DB_SCHEMA_SPECS` を保持する。
+
+`getDatabaseSchemaStatus_` は設定のDB_VERSIONと、進化対象シートの1行目ヘッダを比較する。`schemaHeaderIssues_` は純粋関数としてロジックテストする。
+
+`migrateDatabaseToCurrent` はADMIN専用、Script Lock内で実行し、変更前に `createDatabaseBackup_` を実行する。`ensureSchemaSheet_` は欠けた列/シートを追加するが、既存の非空欄ヘッダが契約と異なる場合は破壊的上書きを行わず例外停止する。
+
+`getProductionReadiness_` はSchema Contract不一致をblockerにする。
