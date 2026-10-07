@@ -604,7 +604,9 @@ function getCompanyCalendar(sessionToken, year) {
     workdays: days.filter(d => d.working).length,
     daysOff: days.filter(d => !d.working).length,
     adjustedWorkdays: days.filter(d => d.type === '調整出勤日').length,
-    companyHolidays: days.filter(d => d.type === '会社休日').length
+    companyHolidays: days.filter(d => d.type === '会社休日').length,
+    canGenerateStandard: days.length === 0 && hasOfficialHolidayData_(y),
+    standardSource: hasOfficialHolidayData_(y) ? JAPAN_HOLIDAY_SOURCE : ''
   };
 }
 
