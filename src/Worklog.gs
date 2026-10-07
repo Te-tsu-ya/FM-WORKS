@@ -40,7 +40,6 @@ function saveWorklog(sessionToken, payload) {
     if (!project) throw new Error('プロジェクトを選択してください。');
     const projectRecord = getProjectByName_(project);
     if (!projectRecord) throw new Error('プロジェクトマスタに存在しないプロジェクトです。');
-    if (projectRecord.status !== '進行中') throw new Error('停止・完了したプロジェクトには新しい工数を登録できません。');
     if (!description) throw new Error('作業内容を入力してください。');
     if (!start || !end) throw new Error('開始時刻と終了時刻を入力してください。');
 
@@ -52,6 +51,7 @@ function saveWorklog(sessionToken, payload) {
     let id = String(payload.id || '').trim();
     let rowNumber = 0;
     let createdAt = nowText;
+    let existingProject = '';
 
     if (id) {
       const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
@@ -63,10 +63,15 @@ function saveWorklog(sessionToken, payload) {
       if (employee.role !== 'ADMIN' && existing[2] !== employee.employeeId) {
         throw new Error('この工数を編集する権限がありません。');
       }
+      existingProject = existing[4] || '';
       createdAt = existing[11] || nowText;
     } else {
       id = createId_('W');
       rowNumber = Math.max(2, sheet.getLastRow() + 1);
+    }
+
+    if (projectRecord.status !== '進行中' && (!id || existingProject !== project)) {
+      throw new Error('停止・完了したプロジェクトには新しい工数を登録できません。');
     }
 
     const targetEmployeeId = employee.role === 'ADMIN' && payload.employeeId
