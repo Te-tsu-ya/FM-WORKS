@@ -529,12 +529,13 @@ function setLoading(){
 }
 
 function renderLogin(message=''){
-  const cfg=state.publicConfig||{needsSetup:false,pinLength:6,support:{name:'FM WORKS管理者',email:'',phone:'',note:''}};
+  const cfg=state.publicConfig||{needsSetup:false,pinLength:6,prototypeMode:false,prototypePin:'',support:{name:'FM WORKS管理者',email:'',phone:'',note:''}};
   const support=cfg.support||{};
-  const remembered=localStorage.getItem('fmworks.employeeId')||(cfg.needsSetup?'FM0001':'');
-  const heading=cfg.needsSetup?'初期管理者設定':'FM WORKSへログイン';
-  const intro=cfg.needsSetup?"初回のみ、管理者の社員番号と新しいPINを設定してください。設定後は通常のログイン画面になります。":"";
+  const remembered=localStorage.getItem('fmworks.employeeId')||(cfg.prototypeMode?'FM0001':(cfg.needsSetup?'FM0001':''));
+  const heading=cfg.prototypeMode?'試作版ログイン':(cfg.needsSetup?'初期管理者設定':'FM WORKSへログイン');
+  const intro=cfg.prototypeMode?`試作版の共通PINは <strong>${escapeHtml(cfg.prototypePin||'000000')}</strong> です。`:(cfg.needsSetup?"初回のみ、管理者の社員番号と新しいPINを設定してください。設定後は通常のログイン画面になります。":"");
   const shell=document.getElementById('loginShell');
+  document.body.classList.add('login-mode');
   shell.hidden=false;
   shell.innerHTML=`<div class='login-stage'>
     <section class='login-visual'>
@@ -546,10 +547,10 @@ function renderLogin(message=''){
         <div class='login-brand'>${svgLogo()}<h2>FM WORKS</h2><div class='brand-line'></div><p>人・時間・仕事をひとつに。</p></div>
         <div class='login-divider'></div>
         <h3>${heading}</h3>
-        ${intro?`<div class='setup-note'>${intro}</div>`:''}
+        ${intro?`<div class='${cfg.prototypeMode?'prototype-note':'setup-note'}'>${intro}</div>`:''}
         <div id='loginError' class='login-error ${message?'show':''}'>${escapeHtml(message)}</div>
         <label class='login-field'><span>社員番号</span><div class='login-input-wrap'>${svg('i-user')}<input id='loginEmployeeId' value='${escapeHtml(remembered)}' autocomplete='username' autocapitalize='characters' spellcheck='false' placeholder='FM0001' required></div></label>
-        <label class='login-field'><span>${cfg.needsSetup?'新しいPIN':'PIN'}</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPin' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='${cfg.needsSetup?'new-password':'current-password'}' required><button class='toggle-password' type='button' onclick="togglePassword('loginPin')" aria-label='PINを表示'>${svg('i-eye')}</button></div></label>
+        <label class='login-field'><span>${cfg.needsSetup?'新しいPIN':'PIN'}</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPin' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' value='${cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000'):''}' autocomplete='${cfg.needsSetup?'new-password':'current-password'}' required><button class='toggle-password' type='button' onclick="togglePassword('loginPin')" aria-label='PINを表示'>${svg('i-eye')}</button></div></label>
         ${cfg.needsSetup?`<label class='login-field'><span>新しいPIN（確認）</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPinConfirm' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='new-password' required></div></label>
         <div class='setup-note'>PINを忘れた社員が迷わないように、問い合わせ先を1つ以上登録してください。</div>
         <label class='login-field'><span>管理者メール（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportEmail' type='email' autocomplete='email' placeholder='admin@example.jp'></div></label>
@@ -619,6 +620,7 @@ function loadAuthenticatedApp(mustChangePin){
     state.page=NAV.some(n=>n[0]===requested)?requested:'home';
     if(state.page==='admin'&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
     document.getElementById('loginShell').hidden=true;
+    document.body.classList.remove('login-mode');
     document.getElementById('app').hidden=false;
     setProfileUi();
     initTopbarInteractions();
