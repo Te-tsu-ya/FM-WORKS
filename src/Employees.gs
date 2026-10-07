@@ -23,7 +23,13 @@ function saveEmployee(sessionToken, payload) {
     const breakMinutes = Math.max(0,Math.min(480,Number(payload.breakMinutes||60)));
     if (breakMinutes >= totalMinutes) throw new Error('標準休憩時間は勤務時間より短く設定してください。');
 
-    const leaveBalance = Math.max(0,Math.min(999,Number(payload.leaveBalance||0)));
+    const leaveText = String(payload.leaveBalance == null ? '' : payload.leaveBalance).trim();
+    let leaveBalance = '';
+    if (leaveText !== '') {
+      const parsedLeave = Number(leaveText);
+      if (!Number.isFinite(parsedLeave) || parsedLeave < 0 || parsedLeave > 999) throw new Error('有給残日数を確認してください。');
+      leaveBalance = Math.round(parsedLeave * 2) / 2;
+    }
     const email = String(payload.email || '').trim().slice(0,200);
     if (email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) {
       throw new Error('メールアドレスの形式を確認してください。');
