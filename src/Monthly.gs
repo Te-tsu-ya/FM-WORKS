@@ -588,7 +588,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     daily:daily,
     requests:requests,
     closeStatus:getMonthlyCloseStatusInternal_(ym),
-    reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)
+    reviewStatus:ym<systemToday.slice(0,7)?getMonthlyReviewStatusInternal_(ym,targetId):null
   };
 }
 function appendMonthlyIssue_(current, next) {
