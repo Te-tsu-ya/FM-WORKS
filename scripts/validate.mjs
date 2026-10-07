@@ -57,6 +57,7 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
   }
 }
 const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
+const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
 for (const marker of [
@@ -102,9 +103,9 @@ for (const marker of [
     failed = true;
   }
 }
-if (!monthlyCode.includes('persistMonthlyCloseSnapshots_(ym,summaries,admin)') ||
-    !monthlyCode.includes('snapshotId') ||
-    !monthlyCode.includes('給与対象の一括出力は月次締め後に実行してください。')) {
+if (!monthlySnapshotMainCode.includes('persistMonthlyCloseSnapshots_(ym,summaries,admin)') ||
+    !monthlySnapshotMainCode.includes('snapshotId') ||
+    !monthlySnapshotMainCode.includes('給与対象の一括出力は月次締め後に実行してください。')) {
   console.error('Monthly close must persist immutable snapshots and exports must use closed data.');
   failed = true;
 }
