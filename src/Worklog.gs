@@ -53,6 +53,8 @@ function saveWorklog(sessionToken, payload) {
     let rowNumber = 0;
     let createdAt = nowText;
     let existingProject = '';
+    let auditBefore = '';
+
 
     if (id) {
       const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
@@ -60,6 +62,7 @@ function saveWorklog(sessionToken, payload) {
       if (!found) throw new Error('編集対象の工数が見つかりません。');
       rowNumber = found.getRow();
       const existing = sheet.getRange(rowNumber, 1, 1, 15).getDisplayValues()[0];
+      auditBefore = auditJson_({date:existing[1],employeeId:existing[2],project:existing[4],category:existing[5],description:existing[6],start:existing[7],end:existing[8],minutes:Number(existing[9]||0),note:existing[10],status:existing[12]});
       assertMonthOpenForDate_(existing[1],'工数を編集');
       if (existing[12] === '削除') throw new Error('削除済みの工数は編集できません。');
       if (employee.role !== 'ADMIN' && existing[2] !== employee.employeeId) {
@@ -91,7 +94,7 @@ function saveWorklog(sessionToken, payload) {
     appendAudit_({
       employeeId: employee.employeeId, employeeName: employee.name,
       operation: payload.id ? '工数更新' : '工数登録', target: '工数', targetId: id,
-      before: '', after: date + ' ' + project + ' ' + minutes + '分',
+      before: auditBefore, after: auditJson_({date:date,employeeId:target.employeeId,project:project,category:category,description:description,start:start,end:end,minutes:minutes,note:note,status:'有効'}),
       source: 'WEB', result: 'SUCCESS', note: target.name
     });
     SpreadsheetApp.flush();

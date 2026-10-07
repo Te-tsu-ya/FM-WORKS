@@ -93,8 +93,16 @@ function saveEmployee(sessionToken, payload) {
     appendAudit_({
       employeeId:admin.employeeId,employeeName:admin.name,operation:isNew?'社員追加':'社員更新',
       target:'社員マスタ',targetId:employeeId,
-      before:existingEmployee ? [existingEmployee.name,existingEmployee.role,existingEmployee.active?'在籍':'退職'].join(' / ') : '',
-      after:name+' / '+role+' / '+status+' / approver:'+(managerId||'none'),
+      before:existingEmployee ? auditJson_({
+        name:existingEmployee.name,displayName:existingEmployee.displayName,department:existingEmployee.department,title:existingEmployee.title,
+        role:existingEmployee.role,status:existingEmployee.active?'在籍':'退職',workStart:existingEmployee.workStart,workEnd:existingEmployee.workEnd,
+        breakMinutes:existingEmployee.breakMinutes,leaveBalance:existingEmployee.leaveBalanceConfigured?existingEmployee.leaveBalance:null,
+        email:existingEmployee.email,payrollIncluded:!!existingEmployee.payrollIncluded,managerId:existingEmployee.managerId||'',
+        leaveBasisDate:existingEmployee.leaveBasisDate||'',hireDate:existingEmployee.hireDate||''
+      }) : '',
+      after:auditJson_({name:name,displayName:displayName,department:department,title:title,role:role,status:status,workStart:workStart,workEnd:workEnd,
+        breakMinutes:breakMinutes,leaveBalance:leaveText!==''?leaveBalance:null,email:email,payrollIncluded:payrollIncluded,managerId:managerId,
+        leaveBasisDate:leaveBasisDate,hireDate:hireDate}),
       source:'WEB',result:'SUCCESS',note:''
     });
     SpreadsheetApp.flush();

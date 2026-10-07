@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.6',
+  version: '0.9.7',
   locale: 'ja-JP'
 });
 
@@ -413,6 +413,11 @@ function getEmployee_(employeeId) {
   return employee;
 }
 
+function auditJson_(value) {
+  try { return safeSheetText_(JSON.stringify(value == null ? null : value), 4000); }
+  catch (_) { return safeSheetText_(String(value == null ? '' : value), 4000); }
+}
+
 function appendAudit_(item) {
   try {
     const now = new Date();
@@ -632,6 +637,8 @@ function saveSchedule(sessionToken, payload) {
     let createdBy = employee.employeeId;
     let createdAt = nowText;
     let source = 'FM WORKS';
+    let auditBefore = '';
+
 
     if (id) {
       const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
@@ -639,6 +646,7 @@ function saveSchedule(sessionToken, payload) {
       if (!found) throw new Error('編集対象の予定が見つかりません。');
       rowNumber = found.getRow();
       const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
+      auditBefore = auditJson_({date:old[1],start:old[2],end:old[3],allDay:old[4],employeeIds:old[5],title:old[7],category:old[8],location:old[9],detail:old[10],visibility:old[11],status:old[12]});
       const owner = old[13] || '';
       const oldIds = String(old[5] || '').split(',').map(x => x.trim()).filter(Boolean);
       const oldSource = old[16] || '';
@@ -682,8 +690,8 @@ function saveSchedule(sessionToken, payload) {
       operation: payload.id ? '予定更新' : '予定登録',
       target: '予定',
       targetId: id,
-      before: '',
-      after: date + ' ' + title,
+      before: auditBefore,
+      after: auditJson_({date:date,start:start,end:end,allDay:allDay,employeeIds:employeeIds,title:title,category:category,location:row[9],detail:row[10],visibility:visibility,status:'有効'}),
       source: 'WEB',
       result: 'SUCCESS',
       note: names.join('、')

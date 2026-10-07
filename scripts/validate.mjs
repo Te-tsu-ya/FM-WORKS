@@ -141,6 +141,15 @@ if (!serverCode.includes("'法定休日'") || !app.includes("'法定休日'")) {
 if (!monthlySnapshotMainCode.includes('applyLaborModelToMonthlyDaily_') || !monthlySnapshotMainCode.includes('laborBlocked=summaries.filter')) { console.error('Monthly labor gate missing.'); failed=true; }
 if (!app.includes('function laborRulePanel(') || !app.includes('function saveLaborRulesFromAdmin(')) { console.error('Labor UI missing.'); failed=true; }
 
+if (!serverCode.includes('function auditJson_(') ||
+    !serverCode.includes('before: auditBefore') ||
+    !fs.readFileSync(path.join(root,'src/Worklog.gs'),'utf8').includes('before: auditBefore') ||
+    !fs.readFileSync(path.join(root,'src/Projects.gs'),'utf8').includes('before = auditJson_') ||
+    !fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8').includes('before:existingEmployee ? auditJson_')) {
+  console.error('Structured before/after audit evidence is incomplete for important update flows.');
+  failed = true;
+}
+
 for (const authMarker of [
   'function login(',
   'function requireSession_(',

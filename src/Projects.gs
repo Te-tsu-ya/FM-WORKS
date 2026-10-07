@@ -60,7 +60,7 @@ function saveProject(sessionToken, payload) {
       rows.forEach((r,idx) => {
         if (projectId && r[0] === projectId) {
           rowNumber = idx + 2;
-          before = [r[1],r[2],r[3]].join(' / ');
+          before = auditJson_({name:r[1],client:r[2],status:r[3],startDate:r[4],endDate:r[5],note:r[6]});
         }
         if ((!projectId || r[0] !== projectId) && String(r[1] || '').trim().toLowerCase() === name.toLowerCase()) {
           throw new Error('同じプロジェクト名がすでに登録されています。');
@@ -80,7 +80,7 @@ function saveProject(sessionToken, payload) {
       employeeId:admin.employeeId,employeeName:admin.name,
       operation:before?'プロジェクト更新':'プロジェクト追加',
       target:'プロジェクト',targetId:projectId,before:before,
-      after:[name,client,status].join(' / '),source:'WEB',result:'SUCCESS',note:''
+      after:auditJson_({name:name,client:client,status:status,startDate:startDate,endDate:endDate,note:note}),source:'WEB',result:'SUCCESS',note:''
     });
     SpreadsheetApp.flush();
     return {ok:true,projectId:projectId};
