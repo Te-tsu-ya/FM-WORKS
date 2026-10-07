@@ -911,6 +911,14 @@ function adminPage(){
   return `<div class='single-screen-layout settings-screen'>${pageHead('設定','運用設定と設計文書を管理者だけが確認できます。')}${settingsTabs()}<div class='settings-content'>${content}</div></div>`;
 }
 
+function openAdminMonthlyEmployee(employeeId,yearMonth){
+  state.monthly.employeeId=employeeId;
+  state.monthly.yearMonth=yearMonth;
+  state.monthly.view='calendar';
+  navigate('monthly');
+  loadMonthly({force:true});
+}
+
 function maintenanceSection(){
   const m=state.maintenance||{},s=m.status;
   if(m.loading&&!s)return `<div class='section-gap'>${card('システム保守',"<div class='loading-card'></div>")}</div>`;
@@ -936,7 +944,11 @@ function maintenanceSection(){
   const prototypeAction=readiness.prototypeMode
     ? `<button class='primary-button' ${remainingBlockers.length?'disabled':''} onclick='switchToProductionMode()'>試作モードを終了</button>`
     : '';
+  const reviewTeam=s.monthlyReviewTeam||{yearMonth:'',total:0,confirmed:0,pending:0,items:[]};
+  const pendingReviewers=(reviewTeam.items||[]).filter(x=>!x.confirmed);
+  const reviewCard=card('先月の勤怠確認状況',`<div class='review-team-head'><div><strong>${escapeHtml(reviewTeam.yearMonth||'—')}</strong><span>${reviewTeam.confirmed} / ${reviewTeam.total}名 確認済み</span></div><span class='badge ${reviewTeam.pending?'warning':'success'}'>${reviewTeam.pending?reviewTeam.pending+'名 未確認':'全員確認済み'}</span></div><div class='review-team-list'>${pendingReviewers.length?pendingReviewers.map(x=>`<button class='review-person-chip' onclick="openAdminMonthlyEmployee('${x.employeeId}','${reviewTeam.yearMonth}')"><span>${escapeHtml((x.displayName||x.name||'?').slice(0,1))}</span><b>${escapeHtml(x.name)}</b><small>${x.stale?'再確認':'未確認'}</small></button>`).join(''):"<div class='readiness-row ok'><span>OK</span><strong>先月の勤怠確認は全員完了しています。</strong></div>"}</div>`);
   return `<div class='section-gap'>
+    ${reviewCard}
     ${card('本番運用チェック',`<div class='readiness-head'><div><span class='badge ${readiness.ready?'success':blockers.length?'danger':'warning'}'>${readiness.ready?'READY':blockers.length?'要対応':'確認あり'}</span><strong>${readiness.ready?'本番運用の内部条件を満たしています':'公開前に確認が必要です'}</strong></div><small>ここではアプリ内部の準備状態を確認します。公開範囲の変更は別工程です。</small></div>${readinessRows||"<div class='readiness-row ok'><span>OK</span><strong>重大な未対応項目はありません。</strong></div>"}<div class='button-row section-gap'>${prototypeAction}<button class='secondary-button' onclick="navigate('companyCalendar')">会社カレンダーを確認</button></div>`)}
     <div class='grid cols-4'>
       ${metric('DBレコード',Object.values(s.sheets||{}).reduce((a,b)=>a+Number(b||0),0)+'件','tone-green')}
