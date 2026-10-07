@@ -3,6 +3,7 @@ import vm from 'node:vm';
 
 const files = [
   'src/Code.gs',
+  'src/Auth.gs',
   'src/Worklog.gs',
   'src/Requests.gs',
   'src/Monthly.gs'
@@ -39,7 +40,9 @@ globalThis.__fmTest = {
   addDateString_,
   dateSpanDays_,
   safeSheetText_,
-  safeSheetName_
+  safeSheetName_,
+  parseTimestamp_,
+  isPrototypeLogin_
 };
 `, context);
 
@@ -95,6 +98,10 @@ const protectedFormula = api.safeSheetText_('=IMPORTDATA("https://example.invali
 expect('spreadsheet formula injection guarded', protectedFormula.startsWith("'="));
 expect('normal sheet text unchanged', api.safeSheetText_('Project Atlas', 100) === 'Project Atlas');
 expect('sheet name sanitizes forbidden characters', !/[\\\/\?\*\[\]\:]/.test(api.safeSheetName_('FM/WORKS:*?')));
+const singleDigitHourTimestamp = api.parseTimestamp_('2026-10-08 3:19:57');
+expect('session timestamp accepts single-digit Sheets hour', !!singleDigitHourTimestamp && !Number.isNaN(singleDigitHourTimestamp.getTime()));
+expect('prototype PIN accepts fictional employee', api.isPrototypeLogin_({employeeId:'FM0001'}, '000000') === true);
+expect('prototype PIN rejects unknown employee', api.isPrototypeLogin_({employeeId:'FM9999'}, '000000') === false);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
