@@ -9,9 +9,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const lastDay = new Date(parts[0], parts[1], 0).getDate();
   const end = ym + '-' + String(lastDay).padStart(2,'0');
 
-  const punchSheet = getDb_().getSheetByName(DB.sheets.punches);
-  const punchRows = punchSheet.getLastRow() < 2 ? [] : punchSheet.getRange(2,1,punchSheet.getLastRow()-1,12).getDisplayValues()
-    .filter(r=>r[1]===targetId && r[3]>=start && r[3]<=end && String(r[8]).toUpperCase()!=='TRUE');
+  const punchRows = getActivePunchRows_(targetId, start, end);
 
   const byDate = {};
   punchRows.forEach(r=>{
