@@ -496,7 +496,7 @@ for (const marker of [
   'function yearMonthsBetween_(',
   'pendingCount:outstanding.length',
   'isBacklog:isBacklog',
-  'reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)'
+  'reviewStatus:ym<systemToday.slice(0,7)?getMonthlyReviewStatusInternal_(ym,targetId):null'
 ]) {
   if (!monthlyCode.includes(marker)) {
     console.error('Monthly review implementation missing: ' + marker);
