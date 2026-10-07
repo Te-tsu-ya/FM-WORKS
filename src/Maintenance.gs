@@ -32,6 +32,7 @@ function getSystemStatus(sessionToken) {
   const props = PropertiesService.getScriptProperties();
   const backupSetting = props.getProperty(MAINTENANCE.autoBackupProperty);
   const backupEnabled = backupSetting === null ? true : backupSetting === 'true';
+  const runtime = getRuntimeInfo_();
 
   return {
     dbName: db.getName(),
@@ -43,6 +44,9 @@ function getSystemStatus(sessionToken) {
     backupMode: '管理者利用時に1日1回',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
+    environment: runtime.environment,
+    explicitDb: runtime.explicitDb,
+    usingDefaultStagingDb: runtime.usingDefaultStagingDb,
     readiness: getProductionReadiness_(),
     checkedAt: toTimestamp_(new Date()),
     checkedBy: admin.name
@@ -96,6 +100,9 @@ function getProductionReadiness_() {
   }
 
   const props=PropertiesService.getScriptProperties();
+  const runtime=getRuntimeInfo_();
+  if(runtime.environment!=='PRODUCTION')blockers.push('実行環境が'+runtime.environment+'です');
+  if(runtime.environment==='PRODUCTION'&&runtime.usingDefaultStagingDb)blockers.push('PRODUCTION用DBが分離されていません');
   const lastBackup=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
   const backupAt=parseTimestamp_(lastBackup);
   const backupAgeHours=backupAt?Math.floor((now-backupAt)/3600000):null;
@@ -108,6 +115,7 @@ function getProductionReadiness_() {
   return {
     ready:blockers.length===0,
     prototypeMode:prototypeMode,
+    environment:runtime.environment,
     blockers:blockers,
     warnings:warnings,
     activeEmployees:employeeRows.length,

@@ -57,7 +57,8 @@ globalThis.__fmTest = {
   normalizeLeaveDays_,
   leaveBalanceAfterDelta_,
   normalizeScheduleVisibility_,
-  canViewScheduleRow_
+  canViewScheduleRow_,
+  normalizeRuntimeEnvironment_
 };
 `, context);
 
@@ -162,6 +163,9 @@ expect('participant-only hidden from unrelated user', api.canViewScheduleRow_({e
 const adminOnlyRow=[...participantRow]; adminOnlyRow[11]='管理者のみ';
 expect('admin-only visible to admin', api.canViewScheduleRow_({employeeId:'FM0002',name:'森川 彩乃',role:'ADMIN'},adminOnlyRow)===true);
 expect('admin-only hidden from participant', api.canViewScheduleRow_({employeeId:'FM0003',name:'神谷 直人',role:'USER'},adminOnlyRow)===false);
+expect('runtime environment defaults to staging', api.normalizeRuntimeEnvironment_('')==='STAGING');
+expect('runtime environment accepts production', api.normalizeRuntimeEnvironment_('production')==='PRODUCTION');
+expect('unknown runtime environment falls back to staging', api.normalizeRuntimeEnvironment_('UNKNOWN')==='STAGING');
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

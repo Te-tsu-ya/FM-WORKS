@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.3',
+  version: '0.9.4',
   locale: 'ja-JP'
 });
 
@@ -447,9 +447,36 @@ function withScriptLock_(fn, timeoutMs) {
   }
 }
 
+function normalizeRuntimeEnvironment_(value) {
+  const raw=String(value||'STAGING').trim().toUpperCase();
+  return ['DEVELOPMENT','STAGING','PRODUCTION'].includes(raw)?raw:'STAGING';
+}
+
+function getRuntimeEnvironment_() {
+  return normalizeRuntimeEnvironment_(PropertiesService.getScriptProperties().getProperty('FM_WORKS_ENVIRONMENT'));
+}
+
 function getDatabaseSpreadsheetId_() {
-  const configured = PropertiesService.getScriptProperties().getProperty('FM_WORKS_DB_ID');
-  return configured || DB.spreadsheetId;
+  const props=PropertiesService.getScriptProperties();
+  const environment=getRuntimeEnvironment_();
+  const configured=String(props.getProperty('FM_WORKS_DB_ID')||'').trim();
+  if(environment==='PRODUCTION'){
+    if(!configured)throw new Error('PRODUCTION環境では FM_WORKS_DB_ID の明示設定が必要です。');
+    if(configured===DB.spreadsheetId)throw new Error('PRODUCTION環境ではSTAGING既定DBを使用できません。');
+  }
+  return configured||DB.spreadsheetId;
+}
+
+function getRuntimeInfo_() {
+  const props=PropertiesService.getScriptProperties();
+  const environment=getRuntimeEnvironment_();
+  const configured=String(props.getProperty('FM_WORKS_DB_ID')||'').trim();
+  return {
+    environment:environment,
+    explicitDb:!!configured,
+    databaseId:configured||DB.spreadsheetId,
+    usingDefaultStagingDb:!configured||configured===DB.spreadsheetId
+  };
 }
 
 function getDb_() {
@@ -895,6 +922,7 @@ function healthCheck(sessionToken) {
     ok: true,
     app: APP.name,
     version: APP.version,
+    environment: getRuntimeEnvironment_(),
     timestamp: new Date().toISOString()
   };
 }

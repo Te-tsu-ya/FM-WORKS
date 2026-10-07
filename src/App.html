@@ -1163,7 +1163,7 @@ function maintenanceSection(){
   const readiness=s.readiness||{ready:false,blockers:[],warnings:[],prototypeMode:true};
   const blockers=(readiness.blockers||[]);
   const warnings=(readiness.warnings||[]);
-  const remainingBlockers=blockers.filter(x=>!String(x).includes('試作版共通PIN'));
+  const remainingBlockers=blockers.filter(x=>!String(x).includes('試作版共通PIN')&&!String(x).includes('実行環境が'));
   const readinessRows=[
     ...blockers.map(x=>`<div class='readiness-row blocker'><span>要対応</span><strong>${escapeHtml(x)}</strong></div>`),
     ...warnings.map(x=>`<div class='readiness-row warning'><span>確認</span><strong>${escapeHtml(x)}</strong></div>`)
@@ -1188,6 +1188,7 @@ function maintenanceSection(){
       ${card('システム状態',`<div class='maintenance-detail'>
         <div><span>データベース</span><strong>${escapeHtml(s.dbName)}</strong></div>
         <div><span>アプリバージョン</span><strong>${escapeHtml(state.data.app.version)}</strong></div>
+        <div><span>実行環境</span><strong>${escapeHtml(s.environment||'STAGING')}</strong></div>
         <div><span>最終確認</span><strong>${escapeHtml(s.checkedAt)}</strong></div>
       </div><div class='section-gap'><button class='secondary-button' onclick='loadMaintenance()'>状態を再確認</button></div>`)}
     </div>

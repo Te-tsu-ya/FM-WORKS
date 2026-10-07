@@ -476,6 +476,22 @@ if (requestCode.includes('setValue(true)') && requestCode.includes('修正対象
   console.error('Punch correction must not mutate the original punch row.');
   failed = true;
 }
+for (const runtimeMarker of [
+  'function normalizeRuntimeEnvironment_(',
+  'function getRuntimeEnvironment_(',
+  'FM_WORKS_ENVIRONMENT',
+  'PRODUCTION環境では FM_WORKS_DB_ID',
+  'PRODUCTION環境ではSTAGING既定DBを使用できません'
+]) {
+  if (!serverCode.includes(runtimeMarker)) {
+    console.error('Runtime environment boundary missing: ' + runtimeMarker);
+    failed = true;
+  }
+}
+if (!maintenanceCode.includes("runtime.environment!=='PRODUCTION'")) {
+  console.error('Production readiness must reject non-production runtime.');
+  failed = true;
+}
 if (!app.includes('generateCompanyCalendarYear')) {
   console.error('Company calendar generation UI missing');
   failed = true;

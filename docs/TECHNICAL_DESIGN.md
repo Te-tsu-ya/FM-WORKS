@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.3  
+**文書版:** 0.9.4  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.3`
+`APP.version = 0.9.4`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -970,3 +970,17 @@ DB:
 ## 35. Schedule Visibility Authorization
 
 `canViewScheduleRow_` を共通認可関数とし、L列visibilityを `社内 / 参加者のみ / 管理者のみ` として解釈する。`getScheduleBundle` と `searchApp` は非公開予定をレスポンスから除外する。`normalizeScheduleVisibility_` は非ADMINによる管理者限定予定の作成を拒否する。
+
+
+## 36. Runtime Environment Boundary
+
+`normalizeRuntimeEnvironment_` は許可値を DEVELOPMENT / STAGING / PRODUCTION に限定する。
+
+`getRuntimeEnvironment_` はScript Propertiesの `FM_WORKS_ENVIRONMENT` を読む。
+
+`getDatabaseSpreadsheetId_`:
+- DEVELOPMENT/STAGING: `FM_WORKS_DB_ID` があれば使用し、なければ既定STAGING DBへフォールバック。
+- PRODUCTION: `FM_WORKS_DB_ID` 必須。
+- PRODUCTION: 既定STAGING DBと同一IDを拒否。
+
+`getRuntimeInfo_` をSystem Statusへ返し、管理者が環境を常時確認できる。Production ReadinessはPRODUCTION以外をblockerとする。

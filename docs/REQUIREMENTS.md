@@ -1,6 +1,6 @@
 # FM WORKS 要件定義書
 
-**文書版:** 0.9.3  
+**文書版:** 0.9.4  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/REQUIREMENTS.md`
 
@@ -529,3 +529,16 @@ ADMINの設定画面をタブ化する。
 ## 25. 予定の公開範囲
 
 予定は `社内 / 参加者のみ / 管理者のみ` を選択できる。公開範囲はサーバーで強制し、予定表とグローバル検索の双方で同じ認可を適用する。非ADMINは `管理者のみ` を作成できない。
+
+
+## 26. 実行環境とDB分離
+
+実行環境は `DEVELOPMENT / STAGING / PRODUCTION` のいずれかとする。
+
+- Script Property `FM_WORKS_ENVIRONMENT` 未設定時はSTAGING。
+- DEVELOPMENT/STAGINGは既定DBへフォールバック可能。
+- PRODUCTIONは `FM_WORKS_DB_ID` の明示設定を必須とする。
+- PRODUCTIONでSTAGING既定DBを再利用することは禁止する。
+- システム状態に現在の実行環境を表示する。
+- 本番運用チェックはPRODUCTION以外を未完了として扱う。
+- 試作PIN終了と実行環境昇格は別工程とし、誤って本番設定へ切り替わらないようにする。
