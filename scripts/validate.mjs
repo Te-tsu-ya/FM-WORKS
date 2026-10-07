@@ -110,6 +110,38 @@ if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('functio
   console.error('Request page must use a single bundled server read.');
   failed = true;
 }
+for (const requestUxMarker of [
+  'const REQUEST_UI=',
+  "id='requestFormError'",
+  'function showRequestError(',
+  'function refreshRequestPreview(',
+  '何を申請しますか？',
+  '申請可能残'
+]) {
+  if (!app.includes(requestUxMarker)) {
+    console.error(`Request UX regression: ${requestUxMarker}`);
+    failed = true;
+  }
+}
+for (const requestServerMarker of [
+  'function getLeaveRequestContext_(',
+  'function previewRequest(sessionToken, payload)',
+  'availableLeaveDays',
+  '承認待ちを含む申請可能残数'
+]) {
+  if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes(requestServerMarker)) {
+    console.error(`Request leave-balance control missing: ${requestServerMarker}`);
+    failed = true;
+  }
+}
+if (!styles.includes('z-index:140')) {
+  console.error('Global toast must stay visible above modal backdrops.');
+  failed = true;
+}
+if (!styles.includes('.request-form-error.show{display:grid}')) {
+  console.error('Request errors must render inside the request modal.');
+  failed = true;
+}
 if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
   failed = true;
