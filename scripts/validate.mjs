@@ -100,7 +100,7 @@ for (const performanceMarker of [
   'requestIdleCallback',
   'function loadHomeOverview(',
   'reloadRequested:false',
-  "error:'',",
+  "error:''",
   "getHomeOverview(state.sessionToken)",
   '.getRequestsBundle(state.sessionToken)',
   "invalidatePageCache('worklog','monthly')"
