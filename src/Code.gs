@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.6.0',
+  version: '0.7.0',
   locale: 'ja-JP'
 });
 
@@ -508,7 +508,7 @@ function saveSchedule(sessionToken, payload) {
     const start = allDay ? '' : normalizeTime_(payload.start || '');
     const end = allDay ? '' : normalizeTime_(payload.end || '');
     if (!allDay && !start) throw new Error('開始時刻を入力してください。');
-    if (start && end && start > end) throw new Error('終了時刻は開始時刻以降にしてください。');
+    if (start && end && start >= end) throw new Error('終了時刻は開始時刻より後にしてください。');
 
     let employeeIds = payload.employeeIds;
     if (!Array.isArray(employeeIds)) {
@@ -545,8 +545,8 @@ function saveSchedule(sessionToken, payload) {
       const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
       const owner = old[13] || '';
       const oldIds = String(old[5] || '').split(',').map(x => x.trim()).filter(Boolean);
-      const source = old[16] || '';
-      const canEditLegacyOwn = source === '予定表(仮)' && oldIds.includes(employee.employeeId);
+      const oldSource = old[16] || '';
+      const canEditLegacyOwn = oldSource === '予定表(仮)' && oldIds.includes(employee.employeeId);
       if (!isAdmin && owner !== employee.employeeId && owner !== employee.name && !canEditLegacyOwn) {
         throw new Error('この予定を編集する権限がありません。');
       }
@@ -746,12 +746,22 @@ function getEmployees_() {
       employeeId: r[0],
       name: r[1],
       displayName: r[2] || r[1],
-      shortName: String(r[1] || '').replace(/\s+/g, '').replace('達哉','').replace('弘典','') || r[2] || r[0],
+      shortName: shortEmployeeName_(r[1], r[2], r[0]),
       department: r[3] || '',
       title: r[4] || '',
       role: r[5] || 'USER',
       payrollIncluded: String(r[22]).toUpperCase() === 'TRUE'
     }));
+}
+
+function shortEmployeeName_(fullName, displayName, employeeId) {
+  const full = String(fullName || '').trim();
+  if (full) {
+    const parts = full.split(/\s+/).filter(Boolean);
+    if (parts.length) return parts[0];
+  }
+  const display = String(displayName || '').trim().replace(/さん$/, '');
+  return display || String(employeeId || '');
 }
 
 function normalizeDate_(value) {
