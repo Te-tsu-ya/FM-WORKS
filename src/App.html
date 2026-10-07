@@ -832,76 +832,83 @@ function authStateBadge(emp){
   return "<span class='auth-state'>利用可能</span>";
 }
 
-function adminPage(){
-  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){
-    return pageHead('管理','この画面を表示する権限がありません。');
-  }
-  if(!state.authAdmin){
-    return `${pageHead('管理','社員認証・サポート・権限設定を管理します。')}<div class='loading-card'></div>`;
-  }
-  const a=state.authAdmin;
-  const configured=a.employees.filter(e=>e.pinConfigured).length;
-  const locked=a.employees.filter(e=>e.lockedUntil).length;
-  const pending=(a.resetRequests||[]).filter(r=>r.status==='未対応').length;
-  const employeeRows=a.employees.map(e=>`<tr>
-    <td><strong>${escapeHtml(e.name)}</strong><br><small class='muted'>${escapeHtml(e.employeeId)}</small></td>
-    <td>${escapeHtml(roleLabel(e.role))}</td>
-    <td>${authStateBadge(e)}</td>
-    <td>${escapeHtml(e.lastLogin||'—')}</td>
-    <td><div class='admin-actions'>
-      <button class='small-button' onclick="openTempPinModal('${e.employeeId}')">仮PIN発行</button>
-      ${e.lockedUntil?`<button class='small-button' onclick="unlockAccount('${e.employeeId}')">ロック解除</button>`:''}
-    </div></td>
-  </tr>`).join('');
-  const requestRows=(a.resetRequests||[]).slice(0,12).map(r=>`<tr>
-    <td>${escapeHtml(r.requestedAt)}</td><td><strong>${escapeHtml(r.name)}</strong><br><small class='muted'>${escapeHtml(r.employeeId)}</small></td>
-    <td>${r.status==='未対応'?'<span class="badge warning">未対応</span>':'<span class="badge success">対応済</span>'}</td>
-    <td>${escapeHtml(r.note||'—')}</td>
-    <td>${r.status==='未対応'?`<button class='small-button' onclick="openTempPinModal('${r.employeeId}')">仮PIN発行</button>`:'—'}</td>
-  </tr>`).join('');
+function settingsTabs(){
+  const tabs=[['auth','認証・サポート'],['projects','プロジェクト'],['operation','運用設定'],['requirements','要件定義書'],['technical','技術設計書']];
+  return `<div class='settings-tabs'>${tabs.map(([id,label])=>`<button class='${state.adminTab===id?'active':''}' onclick="setAdminTab('${id}')">${escapeHtml(label)}</button>`).join('')}</div>`;
+}
+function setAdminTab(tab){
+  state.adminTab=tab;renderNav();renderPage(true);
+  if(['auth','projects'].includes(tab))loadAuthAdmin();
+  if(tab==='operation'){loadAuthAdmin();loadMaintenance();}
+  if(tab==='requirements')loadSystemDocument('requirements');
+  if(tab==='technical')loadSystemDocument('technical');
+}
+function authSettingsSection(){
+  if(!state.authAdmin)return "<div class='loading-card'></div>";
+  const a=state.authAdmin,configured=a.employees.filter(e=>e.pinConfigured).length,locked=a.employees.filter(e=>e.lockedUntil).length,pending=(a.resetRequests||[]).filter(r=>r.status==='未対応').length;
+  const employeeRows=a.employees.map(e=>`<tr><td><strong>${escapeHtml(e.name)}</strong><br><small class='muted'>${escapeHtml(e.employeeId)}</small></td><td>${escapeHtml(roleLabel(e.role))}</td><td>${authStateBadge(e)}</td><td>${escapeHtml(e.lastLogin||'—')}</td><td><div class='admin-actions'><button class='small-button' onclick="openTempPinModal('${e.employeeId}')">仮PIN発行</button>${e.lockedUntil?`<button class='small-button' onclick="unlockAccount('${e.employeeId}')">ロック解除</button>`:''}</div></td></tr>`).join('');
+  const requestRows=(a.resetRequests||[]).slice(0,12).map(r=>`<tr><td>${escapeHtml(r.requestedAt)}</td><td><strong>${escapeHtml(r.name)}</strong><br><small class='muted'>${escapeHtml(r.employeeId)}</small></td><td>${r.status==='未対応'?'<span class="badge warning">未対応</span>':'<span class="badge success">対応済</span>'}</td><td>${escapeHtml(r.note||'—')}</td><td>${r.status==='未対応'?`<button class='small-button' onclick="openTempPinModal('${r.employeeId}')">仮PIN発行</button>`:'—'}</td></tr>`).join('');
   const s=a.support||{};
-  return `${pageHead('管理','社員認証・サポート・権限設定を管理します。')}
-  <div class='security-summary'>
-    <div class='security-item'><strong>${configured} / ${a.employees.length}</strong><small>PIN設定済み</small></div>
-    <div class='security-item'><strong>${locked}</strong><small>ロック中アカウント</small></div>
-    <div class='security-item'><strong>${pending}</strong><small>PIN再発行依頼</small></div>
-  </div>
-  <div class='grid cols-2 section-gap'>
-    ${card('認証設定',`<div class='table-wrap'><table class='auth-table'><thead><tr><th>社員</th><th>権限</th><th>認証状態</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>${employeeRows}</tbody></table></div>`)}
-    ${card('PINを忘れた場合の連絡先',`<div class='form-grid'>
-      <label class='field full'><span>表示名</span><input id='supportName' value='${escapeHtml(s.name||'FM WORKS管理者')}'></label>
-      <label class='field'><span>メール</span><input id='supportEmail' type='email' value='${escapeHtml(s.email||'')}' placeholder='例：admin@example.jp'></label>
-      <label class='field'><span>電話番号</span><input id='supportPhone' value='${escapeHtml(s.phone||'')}' placeholder='例：0254-xx-xxxx'></label>
-      <label class='field full'><span>案内文</span><textarea id='supportNote' rows='4'>${escapeHtml(s.note||'')}</textarea></label>
-    </div><div class='section-gap'><button class='primary-button' onclick='saveSupportSettingsFromAdmin()'>連絡先を保存</button></div>`)}
-  </div>
-  <div class='section-gap'>
-    ${card('PIN再発行依頼',requestRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>依頼日時</th><th>社員</th><th>状態</th><th>メモ</th><th>操作</th></tr></thead><tbody>${requestRows}</tbody></table></div>`:"<p class='muted'>再発行依頼はありません。</p>")}
-  </div>
-  ${projectAdminSection()}
-  ${maintenanceSection()}
-  `;
+  return `<div class='security-summary compact-security'><div class='security-item'><strong>${configured} / ${a.employees.length}</strong><small>PIN設定済み</small></div><div class='security-item'><strong>${locked}</strong><small>ロック中</small></div><div class='security-item'><strong>${pending}</strong><small>再発行依頼</small></div></div>
+  <div class='settings-panel-grid'><section class='card settings-panel'><h3>認証設定</h3><div class='table-wrap panel-scroll'><table class='auth-table'><thead><tr><th>社員</th><th>権限</th><th>認証状態</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>${employeeRows}</tbody></table></div></section>
+  <section class='card settings-panel'><h3>PINを忘れた場合の連絡先</h3><div class='form-grid'><label class='field full'><span>表示名</span><input id='supportName' value='${escapeHtml(s.name||'FM WORKS管理者')}'></label><label class='field'><span>メール</span><input id='supportEmail' type='email' value='${escapeHtml(s.email||'')}'></label><label class='field'><span>電話番号</span><input id='supportPhone' value='${escapeHtml(s.phone||'')}'></label><label class='field full'><span>案内文</span><textarea id='supportNote' rows='3'>${escapeHtml(s.note||'')}</textarea></label></div><div class='section-gap'><button class='primary-button compact' onclick='saveSupportSettingsFromAdmin()'>連絡先を保存</button></div><h3 class='subhead'>PIN再発行依頼</h3><div class='table-wrap panel-scroll small'><table class='auth-table'><tbody>${requestRows||"<tr><td class='muted'>再発行依頼はありません。</td></tr>"}</tbody></table></div></section></div>`;
 }
-
-function projectAdminSection(){
-  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return '';
-  var projects=(state.authAdmin&&state.authAdmin.projects)||[];
-  var rows=projects.map(function(p){
-    var badge=p.status==='進行中'?'<span class="badge success">進行中</span>':p.status==='完了'?'<span class="badge">完了</span>':'<span class="badge warning">停止</span>';
-    return '<tr><td><strong>'+escapeHtml(p.name)+'</strong><br><small class="muted">'+escapeHtml(p.projectId)+'</small></td><td>'+escapeHtml(p.client||'—')+'</td><td>'+badge+'</td><td>'+escapeHtml(p.startDate||'—')+'</td><td>'+escapeHtml(p.endDate||'—')+'</td><td><button class="small-button" onclick="openProjectModal(\''+p.projectId+'\')">編集</button></td></tr>';
-  }).join('');
-  return '<div class="section-gap">'+card('プロジェクト管理','<div class="card-toolbar"><p class="muted">工数入力で利用するプロジェクトを管理します。停止・完了した案件は新規工数の選択肢から外れます。</p><button class="primary-button" onclick="openProjectModal()">＋ プロジェクト追加</button></div>'+(rows?'<div class="table-wrap"><table class="auth-table"><thead><tr><th>プロジェクト</th><th>顧客</th><th>状態</th><th>開始</th><th>終了</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="muted">プロジェクトが登録されていません。</p>'))+'</div>';
+function inlineMarkdown(text){
+  let s=escapeHtml(text);
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  return s;
 }
-
-function openProjectModal(projectId){
-  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){showToast('管理者権限が必要です');return;}
-  var p=projectId&&state.authAdmin?(state.authAdmin.projects||[]).find(function(x){return x.projectId===projectId;}):null;
-  var r=ensureModal();
-  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>プロジェクトマスタ</small><h2>'+(p?'プロジェクトを編集':'プロジェクトを追加')+'</h2></div><button class="icon-button" onclick="closeModal()">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト名</span><input id="prjName" maxlength="120" value="'+escapeHtml(p?p.name:'')+'" placeholder="例：Project Atlas"></label><label class="field"><span>顧客表示名</span><input id="prjClient" maxlength="100" value="'+escapeHtml(p?p.client:'')+'" placeholder="例：顧客A"></label><label class="field"><span>ステータス</span><select id="prjStatus"><option '+(!p||p.status==='進行中'?'selected':'')+'>進行中</option><option '+(p&&p.status==='停止'?'selected':'')+'>停止</option><option '+(p&&p.status==='完了'?'selected':'')+'>完了</option></select></label><label class="field"><span>開始日</span><input id="prjStart" type="date" value="'+escapeHtml(p?p.startDate:'')+'"></label><label class="field"><span>終了日</span><input id="prjEnd" type="date" value="'+escapeHtml(p?p.endDate:'')+'"></label><label class="field full"><span>備考</span><textarea id="prjNote" maxlength="500" rows="3">'+escapeHtml(p?p.note:'')+'</textarea></label></div><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="saveProjectFromModal(\''+(p?p.projectId:'')+'\')">保存</button></div></div></section>';
+function renderMarkdownDoc(markdown){
+  const lines=String(markdown||'').replace(/\r/g,'').split('\n');
+  let out='',i=0,inCode=false,code=[],list=null;
+  const closeList=()=>{if(list){out+=`</${list}>`;list=null}};
+  while(i<lines.length){
+    const line=lines[i];
+    if(line.startsWith('```')){
+      closeList();
+      if(!inCode){inCode=true;code=[];}else{out+=`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`;inCode=false;}
+      i++;continue;
+    }
+    if(inCode){code.push(line);i++;continue}
+    if(/^\|.+\|$/.test(line)&&i+1<lines.length&&/^\|\s*:?-+/.test(lines[i+1])){
+      closeList();
+      const rows=[];rows.push(line);i+=2;
+      while(i<lines.length&&/^\|.+\|$/.test(lines[i])){rows.push(lines[i]);i++}
+      const cells=r=>r.slice(1,-1).split('|').map(x=>inlineMarkdown(x.trim()));
+      out+='<div class="doc-table-wrap"><table><thead><tr>'+cells(rows[0]).map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.slice(1).map(r=>'<tr>'+cells(r).map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';continue;
+    }
+    const h=line.match(/^(#{1,4})\s+(.+)$/);
+    if(h){closeList();out+=`<h${h[1].length}>${inlineMarkdown(h[2])}</h${h[1].length}>`;i++;continue}
+    const ul=line.match(/^[-*]\s+(.+)$/),ol=line.match(/^\d+\.\s+(.+)$/);
+    if(ul||ol){const t=ul?'ul':'ol';if(list!==t){closeList();list=t;out+=`<${t}>`};out+=`<li>${inlineMarkdown((ul||ol)[1])}</li>`;i++;continue}
+    if(!line.trim()){closeList();out+='<div class="doc-spacer"></div>';i++;continue}
+    closeList();out+=`<p>${inlineMarkdown(line)}</p>`;i++;
+  }
+  closeList();if(inCode)out+=`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`;return out;
 }
-function saveProjectFromModal(projectId){
-  var payload={projectId:projectId||'',name:document.getElementById('prjName').value,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:document.getElementById('prjStart').value,endDate:document.getElementById('prjEnd').value,note:document.getElementById('prjNote').value};
-  google.script.run.withSuccessHandler(function(){closeModal();showToast('プロジェクトを保存しました');refreshAppData(function(){loadAuthAdmin();});}).withFailureHandler(function(err){handleApiError(err,'プロジェクトを保存できませんでした');}).saveProject(state.sessionToken,payload);
+function loadSystemDocument(type){
+  if(!['requirements','technical'].includes(type))return;
+  if(state.documents[type]){renderPageIfActive('admin');return}
+  if(state.documents.loading===type)return;
+  state.documents.loading=type;renderPageIfActive('admin');
+  google.script.run.withSuccessHandler(doc=>{state.documents[type]=doc;state.documents.loading=null;renderPageIfActive('admin')}).withFailureHandler(err=>{state.documents.loading=null;handleApiError(err,'文書を読み込めませんでした');renderPageIfActive('admin')}).getSystemDocument(state.sessionToken,type);
+}
+function documentPane(type){
+  const doc=state.documents[type];
+  if(!doc)return `<div class='document-loading'><div class='loading-card'></div><p>文書を読み込んでいます…</p></div>`;
+  return `<section class='document-shell'><header><div><span class='badge'>${escapeHtml(doc.version||state.data.app.version)}</span><strong>${escapeHtml(doc.title)}</strong><small>最終更新 ${escapeHtml(doc.updatedAt||'—')}</small></div><button class='secondary-button compact' onclick="loadSystemDocument('${type}')">再読込</button></header><article class='document-reader'>${renderMarkdownDoc(doc.markdown)}</article></section>`;
+}
+function adminPage(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('設定','この画面を表示する権限がありません。');
+  let content='';
+  if(state.adminTab==='auth')content=authSettingsSection();
+  else if(state.adminTab==='projects')content=projectAdminSection();
+  else if(state.adminTab==='operation')content=maintenanceSection();
+  else if(state.adminTab==='requirements')content=documentPane('requirements');
+  else if(state.adminTab==='technical')content=documentPane('technical');
+  else content=authSettingsSection();
+  return `<div class='single-screen-layout settings-screen'>${pageHead('設定','運用設定と設計文書を管理者だけが確認できます。')}${settingsTabs()}<div class='settings-content'>${content}</div></div>`;
 }
 
 function maintenanceSection(){
