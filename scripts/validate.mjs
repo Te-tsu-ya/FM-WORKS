@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Index.html','src/Styles.html','src/App.html',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -29,12 +29,14 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-try {
-  const server = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
-  new Function(server);
-} catch (err) {
-  console.error('Server JavaScript syntax error:', err.message);
-  failed = true;
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs']) {
+  try {
+    const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
+    new Function(server);
+  } catch (err) {
+    console.error(`Server JavaScript syntax error in ${serverFile}:`, err.message);
+    failed = true;
+  }
 }
 const serverCode = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
 const authCode = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
@@ -81,6 +83,12 @@ for (const protectedMarker of [
 for (const uiMarker of ['renderLogin', 'performLogout', 'openChangePinModal', 'openPinHelpModal']) {
   if (!app.includes(uiMarker)) {
     console.error(`Login UI missing: ${uiMarker}`);
+    failed = true;
+  }
+}
+for (const dataMarker of ['loadWorklogs','loadRequests','loadMonthly','saveEmployeeFromModal']) {
+  if (!app.includes(dataMarker)) {
+    console.error(`Live module UI missing: ${dataMarker}`);
     failed = true;
   }
 }
