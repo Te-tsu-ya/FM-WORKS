@@ -15,8 +15,8 @@ function leaveBalanceAfterDelta_(currentBalance, delta) {
 function getLeaveLedgerRows_(employeeId) {
   const sheet = getDb_().getSheetByName(DB.sheets.leaveLedger);
   if (!sheet || sheet.getLastRow() < 2) return [];
-  return sheet.getRange(2,1,sheet.getLastRow()-1,13).getDisplayValues()
-    .filter(r => r[0] && r[1] === employeeId)
+  return readRowsByColumnValues_(sheet,2,13,[employeeId])
+    .filter(r => r[0])
     .map(r => ({
       ledgerId:r[0], employeeId:r[1], name:r[2], basisDate:r[3], transactionDate:r[4],
       type:r[5], days:Number(r[6]||0), balance:Number(r[7]||0), requestId:r[8]||'',
@@ -155,9 +155,9 @@ function getAnnualLeaveFiveDayStatus_(employee, asOfDate) {
     return {status:'DATA_INCOMPLETE',requiredDays:5,takenDays:0,remainingDays:5,periodStart,periodEnd,daysRemaining:null,reason:'年5日判定に必要な会社カレンダーが不足しています。'};
   }
   const sheet=getDb_().getSheetByName('申請');
-  const rows=sheet&&sheet.getLastRow()>=2?sheet.getRange(2,1,sheet.getLastRow()-1,19).getDisplayValues():[];
+  const rows=sheet&&sheet.getLastRow()>=2?readRowsByColumnValues_(sheet,3,19,[employee.employeeId]):[];
   const requests=rows
-    .filter(r=>r[0]&&r[2]===employee.employeeId&&['承認済','取消申請中'].includes(r[9])&&r[5]<=through&&r[6]>=periodStart)
+    .filter(r=>r[0]&&['承認済','取消申請中'].includes(r[9])&&r[5]<=through&&r[6]>=periodStart)
     .map(r=>({type:r[4],startDate:r[5],endDate:r[6]}));
   const usage=annualLeaveQualifyingUsage_(requests,calendar,periodStart,through);
   const takenDays=usage.qualifyingDays,remainingDays=Math.max(0,Math.round((5-takenDays)*2)/2);

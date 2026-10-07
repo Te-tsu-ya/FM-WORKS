@@ -16,13 +16,14 @@ function loadWorklogs(options={}){
     if(worklogCacheKey()!==key)return;
     state.worklog.items=data.items||[];
     state.worklog.totalMinutes=data.totalMinutes||0;
+    if(Array.isArray(data.projects))state.data.projects=data.projects;
     state.worklog.loading=false;
     markPageCache('worklog',key);
     renderPageIfActive('worklog');
   }).withFailureHandler(function(err){
     endPageLoad(ticket);state.worklog.loading=false;
     if(!handleApiError(err,'工数を読み込めませんでした')&&!options.silent)renderPageIfActive('worklog');
-  }).getWorklogs(state.sessionToken,{start:state.worklog.date,end:state.worklog.date});
+  }).getWorklogs(state.sessionToken,{start:state.worklog.date,end:state.worklog.date,includeProjects:true});
 }
 function moveWorklogDate(n){state.worklog.date=addDays(state.worklog.date||state.data.today,n);loadWorklogs();}
 function worklogPage(){var w=state.worklog,date=w.date||state.data.today,attendance=state.data.attendance,attendanceMinutes=date===state.data.today?Number(attendance.workedMinutes||0):0,unentered=Math.max(0,attendanceMinutes-Number(w.totalMinutes||0)),projects=[...new Set((w.items||[]).map(function(x){return x.project;}))].length;var rows=(w.items||[]).map(function(x){return '<div class="list-item"><span class="status-dot" style="background:#1478ff"></span><div><strong>'+escapeHtml(x.project)+'　'+formatMinutesClient(x.minutes)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+escapeHtml(x.start)+'-'+escapeHtml(x.end)+' / '+escapeHtml(x.category||'未分類')+' / '+escapeHtml(x.description)+'</div></div><div class="admin-actions"><button class="small-button" onclick="openWorklogModal(\''+x.id+'\')">編集</button><button class="small-button" onclick="deleteWorklogItem(\''+x.id+'\')">削除</button></div></div>';}).join('');var action='<button class="primary-button" onclick="openWorklogModal()">＋ 工数追加</button>';var toolbar='<div class="schedule-toolbar"><div class="toolbar-group"><button class="secondary-button compact" onclick="moveWorklogDate(-1)">‹</button><button class="secondary-button compact" onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class="secondary-button compact" onclick="moveWorklogDate(1)">›</button><strong class="period-label">'+fmtDate(date)+'</strong></div></div>';if(w.loading&&!cacheHas('worklog',worklogCacheKey()))return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="loading-card"></div>';return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="grid cols-4">'+metric('入力済工数',formatMinutesClient(w.totalMinutes),'tone-green')+metric('本日の実働',date===state.data.today?attendance.worked:'—')+metric('未入力時間',date===state.data.today?formatMinutesClient(unentered):'—','tone-orange')+metric('プロジェクト数',projects+'件','tone-purple')+'</div><div class="grid cols-2 section-gap">'+card('工数一覧',rows||'<p class="muted">この日の工数はまだありません。</p>')+card('入力ルール','<p class="muted">プロジェクト・作業分類・開始/終了・作業内容を記録します。保存内容は「FM WORKS DB / 工数」に反映され、月次集計へ自動で利用されます。</p><div class="progress"><span style="width:'+(attendanceMinutes?Math.min(100,Math.round(w.totalMinutes/attendanceMinutes*100)):0)+'%"></span></div>')+'</div>';}
@@ -57,14 +58,14 @@ function loadSchedule(options={}){
     if(scheduleCacheKey()!==key)return;
     state.schedule.events=data.events||[];
     state.schedule.companyDays=data.companyDays||[];
-    state.schedule.employees=data.employees||[];
+    if(Array.isArray(data.employees)&&data.employees.length)state.schedule.employees=data.employees;
     state.schedule.loading=false;
     markPageCache('schedule',key);
     renderPageIfActive('schedule');
   }).withFailureHandler(err=>{
     endPageLoad(ticket);state.schedule.loading=false;
     if(!handleApiError(err,'予定表の読み込みに失敗しました')&&!options.silent)renderPageIfActive('schedule');
-  }).getScheduleBundle(state.sessionToken,{start:r.start,end:r.end,employeeId:state.schedule.employeeId,category:state.schedule.category});
+  }).getScheduleBundle(state.sessionToken,{start:r.start,end:r.end,employeeId:state.schedule.employeeId,category:state.schedule.category,includeEmployees:false});
 }
 function changeScheduleView(v){state.schedule.view=v;loadSchedule()}
 function moveSchedule(step){const s=state.schedule;if(s.view==='month'||s.view==='list')s.date=addMonths(s.date,step);else if(s.view==='week')s.date=addDays(s.date,7*step);else s.date=addDays(s.date,step);loadSchedule()}

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.10.4',
+  version: '0.10.5',
   locale: 'ja-JP'
 });
 
@@ -50,19 +50,22 @@ function include_(filename) {
 
 function getInitialData(sessionToken) {
   const session = requireSession_(sessionToken);
-  const employee = session.employee;
+  return buildInitialDataForEmployee_(session.employee);
+}
+
+function buildInitialDataForEmployee_(employee) {
+  const perfStarted=Date.now();
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   const attendance = getAttendanceState_(employee.employeeId);
   const employees = getEmployees_();
-  const scheduleBundle = getScheduleBundle(sessionToken, {
+  const scheduleBundle = getScheduleBundleForViewer_(employee, {
     start: today,
     end: today,
     employeeId: employee.employeeId,
     includeEmployees: false
   });
   const companyToday = scheduleBundle.companyDays.find(d => d.date === today) || null;
-
-  return {
+  const data={
     app: APP,
     demo: false,
     serverTime: new Date().toISOString(),
@@ -77,7 +80,7 @@ function getInitialData(sessionToken) {
     },
     permissions: getPermissions_(employee),
     employees: employees,
-    projects: getProjectsInternal_(false),
+    projects: [],
     attendance: attendance,
     todaySchedule: scheduleBundle.events.slice(0, 8),
     companyToday: companyToday,
@@ -86,37 +89,102 @@ function getInitialData(sessionToken) {
     tasks: null,
     overviewReady: false
   };
+  logPerformance_('getInitialData',perfStarted,PERFORMANCE_BUDGETS.initialData,{employees:employees.length,todayEvents:scheduleBundle.events.length});
+  return data;
+}
+function getHomeMonthStats_(employee,today) {
+  const ym=today.slice(0,7),start=ym+'-01',end=today,targetId=employee.employeeId;
+  const punches=getActivePunchRows_(targetId,start,end),byDate={};
+  punches.forEach(r=>(byDate[r[3]]||(byDate[r[3]]=[])).push({id:r[0],action:r[4],timestamp:r[5],workLocation:r[6]}));
+  Object.values(byDate).forEach(rows=>rows.sort((a,b)=>a.timestamp.localeCompare(b.timestamp)));
+  const legacy=getLegacyDailySnapshots_(targetId,start,end);
+  const calendar=getCompanyCalendarRange_(start,end),calendarMap=Object.fromEntries(calendar.map(d=>[d.date,d]));
+  const requests=getApprovedRequestsForMonth_(targetId,start,end);
+  const fullDayOff=new Set();
+  requests.forEach(req=>{
+    if(!['有給','欠勤'].includes(req.type))return;
+    const from=req.startDate<start?start:req.startDate,to=req.endDate>end?end:req.endDate;
+    if(from>to)return;
+    for(let d=from;;d=addDateString_(d,1)){
+      if(calendarMap[d]&&calendarMap[d].working)fullDayOff.add(d);
+      if(d===to)break;
+    }
+  });
+
+  const worklogSheet=getDb_().getSheetByName('工数');
+  const worklogRows=worklogSheet&&worklogSheet.getLastRow()>=2
+    ? readRowsByDateRange_(worklogSheet,2,15,start,end).filter(r=>r[2]===targetId&&r[12]!=='削除')
+    : [];
+  const worklogMinutes=worklogRows.reduce((sum,r)=>sum+Number(r[9]||0),0);
+
+  let totalMinutes=0,overtimeMinutes=0,missingPunchDays=0;
+  for(let date=start;;date=addDateString_(date,1)){
+    const rows=byDate[date]||[],snapshot=rows.length?null:(legacy[date]||null),company=calendarMap[date]||null,past=date<today;
+    let minutes=0,overtime=0,clockIn='',clockOut='',breakMinutes=0,issue=false;
+    if(snapshot){
+      minutes=Number(snapshot.workMinutes||0);
+      overtime=Number(snapshot.overtimeMinutes||0);
+      clockIn=snapshot.clockIn||'';
+      clockOut=snapshot.clockOut||'';
+      breakMinutes=Number(snapshot.breakMinutes||0);
+      const hasAnyPunch=!!clockIn||!!clockOut;
+      if(!company)issue=true;
+      else if(hasAnyPunch&&(!clockIn||!clockOut)&&past)issue=true;
+      else if(company.working&&past&&!hasAnyPunch&&minutes===0&&!fullDayOff.has(date))issue=true;
+    }else{
+      const clockInRow=rows.find(x=>x.action===PUNCH.CLOCK_IN);
+      const clockOutRow=[...rows].reverse().find(x=>x.action===PUNCH.CLOCK_OUT);
+      clockIn=clockInRow?clockInRow.timestamp.slice(11,16):'';
+      clockOut=clockOutRow?clockOutRow.timestamp.slice(11,16):'';
+      minutes=rows.length?calculateMonthlyDayMinutes_(rows,date===today):0;
+      breakMinutes=rows.length?calculateBreakMinutesForRows_(rows,date===today):0;
+      if(company&&company.working){
+        const standard=company.start&&company.end?Math.max(0,timeRangeMinutes_(company.start,company.end)-Number(company.breakMinutes||0)):0;
+        overtime=Math.max(0,minutes-standard);
+      }
+      if(!company)issue=true;
+      else if(fullDayOff.has(date)&&rows.length>0)issue=true;
+      else if(rows.length>0&&(!clockIn||(!clockOut&&past)))issue=true;
+      else if(company.working&&past&&rows.length===0&&!fullDayOff.has(date))issue=true;
+    }
+    const requiredBreak=requiredBreakMinutes_(minutes);
+    const dayFinished=!!clockOut||!!snapshot||past;
+    if(dayFinished&&minutes>0&&requiredBreak>0&&breakMinutes<requiredBreak)issue=true;
+    if(issue)missingPunchDays++;
+    totalMinutes+=minutes;
+    overtimeMinutes+=overtime;
+    if(date===end)break;
+  }
+  return {totalMinutes,overtimeMinutes,missingPunchDays,worklogMinutes};
 }
 
 function getHomeOverview(sessionToken) {
+  const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
-  const yearMonth = today.slice(0, 7);
-  const monthSummary = getMonthlySummary(sessionToken, yearMonth, employee.employeeId);
+  const monthStats = getHomeMonthStats_(employee,today);
   const pendingRequests = getPendingRequestCount_(employee);
-  const worklogGap = Math.max(0, monthSummary.totals.totalMinutes - monthSummary.totals.worklogMinutes);
-
-  return {
+  const worklogGap = Math.max(0, monthStats.totalMinutes - monthStats.worklogMinutes);
+  const result={
     generatedAt: new Date().toISOString(),
-    monthlyReview: getMonthlyReviewPrompt_(employee.employeeId),
     month: {
-      workHours: formatMinutes_(monthSummary.totals.totalMinutes),
-      overtime: formatMinutes_(monthSummary.totals.overtimeMinutes),
+      workHours: formatMinutes_(monthStats.totalMinutes),
+      overtime: formatMinutes_(monthStats.overtimeMinutes),
       leaveBalance: employee.leaveBalanceConfigured ? employee.leaveBalance + '日' : '未設定',
-      paidLeaveDays: monthSummary.totals.paidLeaveDays,
-      worklogMinutes: monthSummary.totals.worklogMinutes,
+      worklogMinutes: monthStats.worklogMinutes,
       worklogGapMinutes: worklogGap,
-      missingPunchDays: monthSummary.totals.missingPunchDays
+      missingPunchDays: monthStats.missingPunchDays
     },
     tasks: [
       { label: '工数入力', status: worklogGap > 0 ? formatMinutes_(worklogGap) + '不足' : '完了', tone: worklogGap > 0 ? 'danger' : 'info' },
-      { label: '勤怠の確認', status: monthSummary.totals.missingPunchDays + '件', tone: monthSummary.totals.missingPunchDays > 0 ? 'warning' : 'info' },
+      { label: '勤怠の確認', status: monthStats.missingPunchDays + '件', tone: monthStats.missingPunchDays > 0 ? 'warning' : 'info' },
       { label: getPermissions_(employee).requestApprove ? '申請の承認' : '申請の確認', status: pendingRequests + '件', tone: pendingRequests > 0 ? 'warning' : 'info' }
     ]
   };
+  logPerformance_('getHomeOverview',perfStarted,PERFORMANCE_BUDGETS.homeOverview,{punchIssues:monthStats.missingPunchDays});
+  return result;
 }
-
 function recordPunch(sessionToken, action, workLocation) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
@@ -130,7 +198,8 @@ function recordPunch(sessionToken, action, workLocation) {
 
   lock.waitLock(10000);
   try {
-    const before = getAttendanceState_(employee.employeeId);
+    const context = getAttendanceContext_(employee.employeeId);
+    const before = context.attendance;
     validatePunchTransition_(before, action);
 
     const now = new Date();
@@ -167,12 +236,12 @@ function recordPunch(sessionToken, action, workLocation) {
       note: location
     });
 
-    SpreadsheetApp.flush();
+    const nextRows=context.rows.concat([{id:punchId,action:action,timestamp:timestampText,workLocation:location}]);
     return {
       ok: true,
       today: dateText,
       serverTime: new Date().toISOString(),
-      attendance: getAttendanceState_(employee.employeeId)
+      attendance: buildAttendanceStateFromRows_(dateText,nextRows)
     };
   } catch (err) {
     appendAudit_({
@@ -192,7 +261,6 @@ function recordPunch(sessionToken, action, workLocation) {
     lock.releaseLock();
   }
 }
-
 function getActivePunchRows_(employeeId, startDate, endDate) {
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const lastRow = sheet.getLastRow();
@@ -223,31 +291,20 @@ function getPunchHistory(sessionToken, limit) {
   }));
 }
 
-function getAttendanceState_(employeeId) {
-  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+function buildAttendanceStateFromRows_(today,rows) {
+  const ordered=(rows||[]).slice().sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  if (!ordered.length) return emptyAttendance_(today);
 
-  const rows = getActivePunchRows_(employeeId, today, today)
-    .map(r => ({
-      id: r[0],
-      action: r[4],
-      timestamp: r[5],
-      workLocation: r[6]
-    }))
-    .sort((a,b) => a.timestamp.localeCompare(b.timestamp));
-
-  if (!rows.length) return emptyAttendance_(today);
-
-  const last = rows[rows.length - 1];
-  const clockIn = rows.find(r => r.action === PUNCH.CLOCK_IN);
-  const clockOut = [...rows].reverse().find(r => r.action === PUNCH.CLOCK_OUT);
+  const last = ordered[ordered.length - 1];
+  const clockIn = ordered.find(r => r.action === PUNCH.CLOCK_IN);
+  const clockOut = [...ordered].reverse().find(r => r.action === PUNCH.CLOCK_OUT);
 
   let state = 'off';
   if (last.action === PUNCH.CLOCK_IN || last.action === PUNCH.BREAK_END) state = 'working';
   if (last.action === PUNCH.BREAK_START) state = 'break';
   if (last.action === PUNCH.CLOCK_OUT) state = 'finished';
 
-  const workedMinutes = calculateWorkedMinutes_(rows);
-
+  const workedMinutes = calculateWorkedMinutes_(ordered);
   return {
     state,
     stateLabel: state === 'working' ? '勤務中' : state === 'break' ? '休憩中' : state === 'finished' ? '退勤済み' : '勤務外',
@@ -257,7 +314,7 @@ function getAttendanceState_(employeeId) {
     workedMinutes,
     worked: formatMinutes_(workedMinutes),
     today,
-    history: rows.slice().reverse().map(r => ({
+    history: ordered.slice().reverse().map(r => ({
       action: r.action,
       time: r.timestamp.slice(11, 16),
       workLocation: r.workLocation
@@ -265,6 +322,17 @@ function getAttendanceState_(employeeId) {
   };
 }
 
+function getAttendanceContext_(employeeId) {
+  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const rows = getActivePunchRows_(employeeId, today, today)
+    .map(r => ({id:r[0],action:r[4],timestamp:r[5],workLocation:r[6]}))
+    .sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  return {today:today,rows:rows,attendance:buildAttendanceStateFromRows_(today,rows)};
+}
+
+function getAttendanceState_(employeeId) {
+  return getAttendanceContext_(employeeId).attendance;
+}
 function emptyAttendance_(today) {
   return {
     state: 'off',
@@ -517,47 +585,37 @@ function canViewScheduleRow_(viewer,row) {
 
 function getScheduleBundle(sessionToken, params) {
   const session = requireSession_(sessionToken);
-  const viewer = session.employee;
+  return getScheduleBundleForViewer_(session.employee,params);
+}
+
+function getScheduleBundleForViewer_(viewer, params) {
+  const perfStarted=Date.now();
   params = params || {};
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   const start = normalizeDate_(params.start || today);
   const end = normalizeDate_(params.end || start);
   if (start > end) throw new Error('期間指定が不正です。');
-
   const employeeId = String(params.employeeId || 'ALL');
   const category = String(params.category || 'ALL');
   const sheet = getDb_().getSheetByName(DB.sheets.schedule);
   const lastRow = sheet.getLastRow();
   const events = [];
-
   if (lastRow >= 2) {
-    const rows = sheet.getRange(2, 1, lastRow - 1, 18).getDisplayValues();
+    const rows = readRowsByDateRange_(sheet,2,18,start,end);
     rows.forEach(r => {
       if (!r[0] || !r[1] || r[12] === '削除') return;
       if (!canViewScheduleRow_(viewer,r)) return;
-      if (r[1] < start || r[1] > end) return;
       const ids = String(r[5] || '').split(',').map(x => x.trim()).filter(Boolean);
       if (employeeId !== 'ALL' && !ids.includes(employeeId)) return;
       if (category !== 'ALL' && r[8] !== category) return;
       events.push({
-        id: r[0],
-        date: r[1],
-        start: r[2] || '',
-        end: r[3] || '',
+        id: r[0], date: r[1], start: r[2] || '', end: r[3] || '',
         allDay: String(r[4]).toUpperCase() === 'TRUE',
         employeeIds: ids,
         employeeNames: r[6] ? String(r[6]).split('、').filter(Boolean) : [],
-        title: r[7] || '',
-        category: r[8] || '予定',
-        location: r[9] || '',
-        detail: r[10] || '',
-        visibility: r[11] || '社内',
-        status: r[12] || '有効',
-        createdBy: r[13] || '',
-        createdAt: r[14] || '',
-        updatedAt: r[15] || '',
-        source: r[16] || '',
-        colorKey: r[17] || r[8] || '予定',
+        title: r[7] || '', category: r[8] || '予定', location: r[9] || '', detail: r[10] || '',
+        visibility: r[11] || '社内', status: r[12] || '有効', createdBy: r[13] || '', createdAt: r[14] || '',
+        updatedAt: r[15] || '', source: r[16] || '', colorKey: r[17] || r[8] || '予定',
         canEdit: viewer.role === 'ADMIN' ||
           (r[13] || '') === viewer.employeeId ||
           (r[13] || '') === viewer.name ||
@@ -565,22 +623,15 @@ function getScheduleBundle(sessionToken, params) {
       });
     });
   }
-
-  events.sort((a, b) =>
-    a.date.localeCompare(b.date) ||
-    (a.start || '99:99').localeCompare(b.start || '99:99') ||
-    a.title.localeCompare(b.title)
-  );
-
-  return {
-    start,
-    end,
-    events,
+  events.sort((a, b) => a.date.localeCompare(b.date) || (a.start || '99:99').localeCompare(b.start || '99:99') || a.title.localeCompare(b.title));
+  const result={
+    start, end, events,
     companyDays: getCompanyCalendarRange_(start, end),
     employees: params.includeEmployees === false ? [] : getEmployees_()
   };
+  logPerformance_('getScheduleBundle',perfStarted,PERFORMANCE_BUDGETS.scheduleBundle,{events:events.length,start:start,end:end});
+  return result;
 }
-
 function saveSchedule(sessionToken, payload) {
   payload = payload || {};
   const employee = requireSession_(sessionToken).employee;
@@ -775,6 +826,9 @@ function getCompanyCalendar(sessionToken, year) {
 }
 
 function getCompanyCalendarYears_() {
+  const cacheKey='fm:calendar-years:v2';
+  const cached=cacheJsonGet_(cacheKey);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
@@ -783,9 +837,10 @@ function getCompanyCalendarYears_() {
     const match = String(r[0] || '').match(/^(\d{4})-/);
     if (match) years.add(Number(match[1]));
   });
-  return Array.from(years).filter(y => Number.isInteger(y)).sort((a,b) => a-b);
+  const result=Array.from(years).filter(y => Number.isInteger(y)).sort((a,b) => a-b);
+  cacheJsonPut_(cacheKey,result,600);
+  return result;
 }
-
 function saveCompanyCalendarDay(sessionToken, payload) {
   payload = payload || {};
   const employee = requireSession_(sessionToken).employee;
@@ -823,6 +878,7 @@ function saveCompanyCalendarDay(sessionToken, payload) {
       date, type, name, start, end, breakMinutes, working,
       'FM WORKS編集', employee.name, nowText
     ]]);
+    invalidateCompanyCalendarCache_(date.slice(0,4));
 
     appendAudit_({
       employeeId: employee.employeeId,
@@ -841,47 +897,58 @@ function saveCompanyCalendarDay(sessionToken, payload) {
   });
 }
 function getCompanyCalendarRange_(start, end) {
+  const from=normalizeDate_(start),to=normalizeDate_(end);
+  if(from>to)return [];
+  const startYear=Number(from.slice(0,4)),endYear=Number(to.slice(0,4)),rows=[];
+  for(let year=startYear;year<=endYear;year++)rows.push(...getCompanyCalendarYearCached_(year));
+  return rows.filter(d=>d.date>=from&&d.date<=to).sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+function getCompanyCalendarYearCached_(year) {
+  const y=Number(year);
+  if(!Number.isInteger(y))return [];
+  const key='fm:calendar:'+y+':v2';
+  const cached=cacheJsonGet_(key);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-
-  return readRowsByDateRange_(sheet,1,10,start,end)
+  const start=y+'-01-01',end=y+'-12-31';
+  const rows=readRowsByDateRange_(sheet,1,10,start,end)
     .filter(r => r[0] && r[0] >= start && r[0] <= end)
     .map(r => ({
-      date: r[0],
-      type: r[1] || '',
-      name: r[2] || '',
-      start: r[3] || '',
-      end: r[4] || '',
-      breakMinutes: Number(r[5] || 0),
-      working: String(r[6]).toUpperCase() === 'TRUE',
-      note: r[7] || ''
-    }))
-    .sort((a,b) => a.date.localeCompare(b.date));
+      date:r[0], type:r[1]||'', name:r[2]||'', start:r[3]||'', end:r[4]||'',
+      breakMinutes:Number(r[5]||0), working:String(r[6]).toUpperCase()==='TRUE', note:r[7]||''
+    })).sort((a,b)=>a.date.localeCompare(b.date));
+  cacheJsonPut_(key,rows,600);
+  return rows;
 }
 
+function invalidateCompanyCalendarCache_(year) {
+  cacheRemove_('fm:calendar:'+Number(year)+':v2');
+  cacheRemove_('fm:calendar-years:v2');
+}
 function getEmployees_() {
+  const cacheKey='fm:employees:v2';
+  const cached=cacheJsonGet_(cacheKey);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-
-  return sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues()
+  const employees=sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues()
     .filter(r => r[0] && r[6] === '在籍')
     .map(r => ({
-      employeeId: r[0],
-      name: r[1],
-      displayName: r[2] || r[1],
-      shortName: shortEmployeeName_(r[1], r[2], r[0]),
-      department: r[3] || '',
-      title: r[4] || '',
-      role: r[5] || 'USER',
-      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-      managerId: r[23] || '',
-      leaveBasisDate: r[24] || '',
-      hireDate: r[25] || ''
+      employeeId:r[0], name:r[1], displayName:r[2]||r[1], shortName:shortEmployeeName_(r[1],r[2],r[0]),
+      department:r[3]||'', title:r[4]||'', role:r[5]||'USER', payrollIncluded:String(r[22]).toUpperCase()==='TRUE',
+      managerId:r[23]||'', leaveBasisDate:r[24]||'', hireDate:r[25]||''
     }));
+  cacheJsonPut_(cacheKey,employees,120);
+  return employees;
 }
 
+function invalidateEmployeeDirectoryCache_() {
+  cacheRemove_('fm:employees:v2');
+}
 function shortEmployeeName_(fullName, displayName, employeeId) {
   const full = String(fullName || '').trim();
   if (full) {

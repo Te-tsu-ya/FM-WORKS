@@ -95,8 +95,8 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const requestSheet=db.getSheetByName('申請');
   if(requestSheet&&requestSheet.getLastRow()>=2){
-    requestSheet.getRange(2,1,requestSheet.getLastRow()-1,14).getDisplayValues().forEach(r=>{
-      if(r[2]!==employeeId||!r[5]||!r[6]||r[5]>rangeEnd||r[6]<rangeStart)return;
+    readRowsByColumnValues_(requestSheet,3,14,[employeeId]).forEach(r=>{
+      if(!r[5]||!r[6]||r[5]>rangeEnd||r[6]<rangeStart)return;
       months.forEach(ym=>{
         if(r[5]<=monthEndString_(ym)&&r[6]>=ym+'-01'){
           consider(ym,r[13]);
@@ -123,7 +123,7 @@ function getMonthlyReviewHistoryInternal_(employeeId, startMonth, endMonth) {
 
   const sheet=getMonthlyReviewSheet_(false);
   const rows=sheet&&sheet.getLastRow()>=2
-    ? sheet.getRange(2,1,sheet.getLastRow()-1,10).getDisplayValues().filter(r=>r[1]===employeeId&&months.includes(r[0]))
+    ? readRowsByColumnValues_(sheet,2,10,[employeeId]).filter(r=>months.includes(r[0]))
     : [];
   const rowByMonth=Object.fromEntries(rows.map(r=>[r[0],r]));
   const latestByMonth=getLatestMonthlyDataUpdateMap_(employeeId,months[0],months[months.length-1]);
@@ -371,7 +371,7 @@ function getLegacyDailySnapshots_(employeeId, start, end) {
   const map = {};
   if (lastRow < 2) return map;
 
-  sheet.getRange(2,1,lastRow-1,16).getDisplayValues().forEach(r=>{
+  readRowsByDateRange_(sheet,1,16,start,end).forEach(r=>{
     if (!r[0] || r[1] !== employeeId || r[0] < start || r[0] > end || !['移行済','確定'].includes(r[14])) return;
     map[r[0]] = {
       date:r[0],
@@ -756,12 +756,7 @@ function createTeamMonthlyExport(sessionToken, yearMonth) {
 }
 
 function getPayrollEmployees_() {
-  const sheet = getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  return sheet.getRange(2,1,lastRow-1,23).getDisplayValues()
-    .filter(r => r[0] && r[6] === '在籍' && String(r[22]).toUpperCase() === 'TRUE')
-    .map(r => ({ employeeId:r[0], name:r[1] }));
+  return getEmployees_().filter(e=>e.payrollIncluded).map(e=>({employeeId:e.employeeId,name:e.name}));
 }
 
 function assertMonthlyReadyForExport_(summary) {
@@ -903,8 +898,8 @@ function minutesToExcelTime_(minutes){
 function getApprovedRequestsForMonth_(employeeId,start,end) {
   const sheet=getDb_().getSheetByName('申請');
   if(sheet.getLastRow()<2)return [];
-  return sheet.getRange(2,1,sheet.getLastRow()-1,19).getDisplayValues()
-    .filter(r=>r[2]===employeeId&&['承認済','取消申請中'].includes(r[9])&&r[5]<=end&&r[6]>=start)
+  return readRowsByColumnValues_(sheet,3,19,[employeeId])
+    .filter(r=>['承認済','取消申請中'].includes(r[9])&&r[5]<=end&&r[6]>=start)
     .map(r=>({id:r[0],type:r[4],startDate:r[5],endDate:r[6],reason:r[8]}));
 }
 

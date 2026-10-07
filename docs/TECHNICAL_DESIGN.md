@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.4  
+**文書版:** 0.10.5  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1231,3 +1231,53 @@ ADMINは社員一覧の「年休」からGRANT / EXPIRE / ADJUSTを登録し、�
 CIとDeployの双方で `test_logic.mjs` と `test_client_contract.mjs` を実行する。workflowは `actions/checkout@v5`、`actions/setup-node@v6`、Node 24を使用する。
 
 静的Gateは、承認通知スコープ、承認経路整合性、年休5日監視、バックアップ整合性、法定休日READY、モーダル閉じるボタンのアクセシブルネームを検査する。
+
+## 48. Response-First Architecture v0.10.5
+
+### 48.1 Auth bootstrap fast path
+
+`login` と `resumeSession` は認証完了後、ロック外で `buildInitialDataForEmployee_` を実行して `initialData` を同じレスポンスに同梱する。クライアントは `mountAuthenticatedApp` へ直接渡し、追加の `getInitialData` 往復を避ける。
+
+保存セッション起動時は公開ログイン設定を先に取得しない。`resumeSession` が失敗した場合だけ `getPublicAuthConfig` を取得してログイン画面へフォールバックする。
+
+### 48.2 User-intent scheduling
+
+`startMenuPrefetch` の全画面先読みは無効化する。`queueRoutePrefetch` は schedule / worklog / requests のナビゲーションへ pointerenter または focus が220ms継続した場合のみ先読みする。
+
+`scheduleBackgroundTask` は `state.busy`、`pendingLoads`、`document.hidden` を確認し、ユーザー操作中または前景通信中なら後ろへ送る。通知は初期表示後2.4秒を起点とするが、前景通信を優先する。
+
+### 48.3 Server caches and indexed reads
+
+`DataAccess.gs` に `cacheJsonGet_` / `cacheJsonPut_` / `cacheRemove_` と `readRowsByColumnValues_` を追加する。
+
+- Settings: 90秒
+- Employees: 120秒
+- Projects: 180秒
+- Company calendar per year: 600秒
+- Calendar available years: 600秒
+
+更新APIは対応キャッシュを明示的に削除する。社員IDや日付が既知の読込では TextFinder → contiguous row blocks → RangeList を優先し、分散が大きい場合だけ全件読込へフォールバックする。
+
+### 48.4 Lightweight home aggregation
+
+`getHomeOverview` は `getMonthlySummary` を呼ばず、`getHomeMonthStats_` で当月開始日〜今日の打刻・旧日次・会社カレンダー・承認済休暇・工数だけを集計する。年次36協定履歴、月次締め状態、詳細日次配列はホームでは計算しない。
+
+月次確認通知は `getNotifications` 側へ分離し、ホームの主要KPI表示を通知計算でブロックしない。
+
+### 48.5 Punch fast path
+
+`getAttendanceContext_` が打刻前の当日行と表示用stateを1回で返す。書込後は新規行をそのタイムラインへメモリ上で追加して `buildAttendanceStateFromRows_` で応答を生成する。書込後の当日シート再読込と `SpreadsheetApp.flush()` を廃止する。
+
+### 48.6 Performance observability
+
+`FM_WORKS_PERF` の警告予算を次へ更新する。
+
+- getInitialData: 900ms
+- getHomeOverview: 1000ms
+- getScheduleBundle: 1200ms
+- getRequestsBundle: 1200ms
+- getMonthlySummary: 2500ms
+- getWorklogs: 900ms
+- date/index read: 800ms
+
+これはネットワーク往復を含むUX時間ではなく、Apps Scriptサーバー実行の警告予算である。

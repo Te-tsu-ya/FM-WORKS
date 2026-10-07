@@ -7,12 +7,15 @@ function getProjects(sessionToken, includeInactive) {
 }
 
 function getProjectsInternal_(includeInactive) {
+  const cacheKey='fm:projects:'+(includeInactive?'all':'active')+':v2';
+  const cached=cacheJsonGet_(cacheKey);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(DB.sheets.projects);
   if (!sheet) return [];
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2,1,lastRow-1,9).getDisplayValues()
+  const projects=sheet.getRange(2,1,lastRow-1,9).getDisplayValues()
     .filter(r => r[0] && (includeInactive || r[3] === '進行中'))
     .map(r => ({
       projectId: r[0],
@@ -26,6 +29,13 @@ function getProjectsInternal_(includeInactive) {
       updatedAt: r[8] || ''
     }))
     .sort((a,b) => a.name.localeCompare(b.name, 'ja'));
+  cacheJsonPut_(cacheKey,projects,180);
+  return projects;
+}
+
+function invalidateProjectCache_() {
+  cacheRemove_('fm:projects:active:v2');
+  cacheRemove_('fm:projects:all:v2');
 }
 
 function getProjectByName_(name) {
@@ -75,6 +85,7 @@ function saveProject(sessionToken, payload) {
     sheet.getRange(rowNumber,1,1,9).setValues([[
       projectId,name,client,status,startDate,endDate,note,admin.name,nowText
     ]]);
+    invalidateProjectCache_();
 
     appendAudit_({
       employeeId:admin.employeeId,employeeName:admin.name,

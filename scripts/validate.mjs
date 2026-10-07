@@ -368,6 +368,71 @@ if (!initialDataBlock) {
     failed = true;
   }
 }
+const dataAccessText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
+const authPerfText = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
+const worklogPerfText = fs.readFileSync(path.join(root,'src/Worklog.gs'),'utf8');
+const monthlyPerfText = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
+
+for (const marker of [
+  'function cacheJsonGet_(',
+  'function cacheJsonPut_(',
+  'CacheService.getScriptCache()',
+  'function readRowsByColumnValues_('
+]) {
+  if (!dataAccessText.includes(marker)) {
+    console.error('Server cache/index performance primitive missing: ' + marker);
+    failed = true;
+  }
+}
+const homeOverviewStart=serverCode.indexOf('function getHomeOverview(sessionToken)');
+const homeOverviewEnd=serverCode.indexOf('\nfunction ',homeOverviewStart+20);
+const homeOverviewBlock=homeOverviewStart>=0&&homeOverviewEnd>homeOverviewStart?serverCode.slice(homeOverviewStart,homeOverviewEnd):'';
+if(homeOverviewBlock.includes('getMonthlySummary(')){
+  console.error('Home overview must not invoke full monthly summary.');
+  failed=true;
+}
+for (const marker of [
+  'function buildInitialDataForEmployee_(',
+  'function getHomeMonthStats_(',
+  'function getScheduleBundleForViewer_(',
+  'readRowsByDateRange_(sheet,2,18,start,end)',
+  "cacheJsonPut_(cacheKey,employees,120)",
+  'function getAttendanceContext_(',
+  'buildAttendanceStateFromRows_(dateText,nextRows)'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('v0.10.5 response optimization missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  "cacheJsonGet_('fm:settings:v2')",
+  'createTextFinder(id).matchEntireCell(true).findNext()',
+  'result.initialData = buildInitialDataForEmployee_(session.employee)'
+]) {
+  if (!authPerfText.includes(marker)) {
+    console.error('Authentication fast-path missing: ' + marker);
+    failed = true;
+  }
+}
+if (!worklogPerfText.includes('projects:includeProjects?getProjectsInternal_(false):[]')) {
+  console.error('Worklog must lazy-load projects with its own page bundle.');
+  failed = true;
+}
+for (const marker of [
+  'readRowsByDateRange_(sheet,1,16,start,end)',
+  'readRowsByColumnValues_(sheet,3,19,[employeeId])'
+]) {
+  if (!monthlyPerfText.includes(marker)) {
+    console.error('Monthly indexed-read optimization missing: ' + marker);
+    failed = true;
+  }
+}
+if (!app.includes('includeEmployees:false') || !app.includes('includeProjects:true')) {
+  console.error('Client page bundles must avoid redundant master-data reads.');
+  failed = true;
+}
+
 for (const performanceServerMarker of [
   'function getHomeOverview(sessionToken)',
   'getPendingRequestCount_(employee)',
@@ -409,9 +474,28 @@ if (!app.includes("state.adminTab==='operation'))loadMaintenance")) {
   console.error('Admin data load must not fetch maintenance outside the operation tab.');
   failed = true;
 }
-if (!app.includes("scheduleIdleTask(()=>loadNotifications(),900)") || !app.includes("scheduleIdleTask(()=>loadHomeOverview(),420)")) {
-  console.error('Authenticated startup must stage noncritical calls after first paint.');
-  failed = true;
+for (const marker of [
+  'function scheduleBackgroundTask(',
+  'function prefetchRouteOnIntent(',
+  'function queueRoutePrefetch(',
+  'User intent gets priority over background GAS calls',
+  'scheduleBackgroundTask(()=>loadNotifications(),2400)',
+  'function mountAuthenticatedApp(',
+  'result&&result.initialData||null'
+]) {
+  if (!app.includes(marker)) {
+    console.error('Perceived-performance startup guard missing: ' + marker);
+    failed = true;
+  }
+}
+const prefetchStart=app.indexOf('function startMenuPrefetch()');
+const prefetchEnd=app.indexOf('\nfunction ',prefetchStart+20);
+const prefetchBlock=prefetchStart>=0&&prefetchEnd>prefetchStart?app.slice(prefetchStart,prefetchEnd):'';
+for (const forbidden of ['loadSchedule({silent:true})','loadWorklogs({silent:true})','loadRequests({silent:true})','loadMonthly({silent:true})','loadCompanyCalendar(undefined,{silent:true})','loadAuthAdmin({silent:true})']) {
+  if(prefetchBlock.includes(forbidden)){
+    console.error('Eager multi-page prefetch must stay disabled: '+forbidden);
+    failed=true;
+  }
 }
 
 if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('function getRequestsBundle(sessionToken)')) {
@@ -450,6 +534,18 @@ if (!styles.includes('.request-form-error.show{display:grid}')) {
   console.error('Request errors must render inside the request modal.');
   failed = true;
 }
+const punchStart=serverCode.indexOf('function recordPunch(sessionToken');
+const punchEnd=serverCode.indexOf('\nfunction ',punchStart+20);
+const punchBlock=punchStart>=0&&punchEnd>punchStart?serverCode.slice(punchStart,punchEnd):'';
+if(punchBlock.includes('SpreadsheetApp.flush()')){
+  console.error('Punch fast-path must not force SpreadsheetApp.flush().');
+  failed=true;
+}
+if((punchBlock.match(/getAttendanceState_\(/g)||[]).length>0){
+  console.error('Punch fast-path must not re-read attendance after writing.');
+  failed=true;
+}
+
 if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
   failed = true;

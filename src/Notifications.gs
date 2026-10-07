@@ -1,4 +1,5 @@
 function getNotifications(sessionToken) {
+  const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const items = [];
@@ -36,9 +37,13 @@ function getNotifications(sessionToken) {
   }
 
   const canApproveRequests = !!getPermissions_(employee).requestApprove;
-  const requestScope = canApproveRequests ? 'ALL' : 'SELF';
-  getRequests(sessionToken, { scope: requestScope })
-    .filter(r => canApproveRequests ? r.status === '承認待ち' : ['承認待ち','差戻し'].includes(r.status))
+  const requestIds=canApproveRequests?[...getManagedEmployeeIds_(employee)]:[employee.employeeId];
+  const requestSheet=getDb_().getSheetByName('申請');
+  const requestRows=requestSheet&&requestSheet.getLastRow()>=2?readRowsByColumnValues_(requestSheet,3,19,requestIds):[];
+  requestRows
+    .filter(r => canApproveRequests ? r[9] === '承認待ち' : ['承認待ち','差戻し'].includes(r[9]))
+    .map(requestRowToObject_)
+    .sort((a,b)=>b.createdAt.localeCompare(a.createdAt))
     .slice(0, 12)
     .forEach(r => items.push({
       type: '申請',
@@ -64,5 +69,6 @@ function getNotifications(sessionToken) {
     }
   }
 
-  return { count: items.length, items: items.slice(0, 20) };
+  logPerformance_('getNotifications',perfStarted,1200,{items:items.length});
+  return { count: items.length, items: items.slice(0, 20), monthlyReview:monthlyReview };
 }

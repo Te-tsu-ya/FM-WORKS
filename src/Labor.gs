@@ -194,7 +194,7 @@ function getClosedLaborHistory_(employeeId,targetYearMonth,monthsBack){
   const start=laborShiftYearMonth_(targetYearMonth,-Math.max(0,Number(monthsBack||11)));
   const sheet=getDb_().getSheetByName(DB.sheets.monthlySnapshot);
   if(!sheet||sheet.getLastRow()<2)return [];
-  const rows=sheet.getRange(2,1,sheet.getLastRow()-1,24).getDisplayValues();
+  const rows=readRowsByColumnValues_(sheet,3,24,[employeeId]);
   const latest={};
   rows.forEach(r=>{
     const ym=r[1],id=r[2];

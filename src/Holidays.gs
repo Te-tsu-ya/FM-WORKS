@@ -103,6 +103,7 @@ function generateStandardCompanyCalendarYear(sessionToken, year) {
     const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
     const rowStart = Math.max(2, sheet.getLastRow() + 1);
     sheet.getRange(rowStart, 1, rows.length, 10).setValues(rows);
+    invalidateCompanyCalendarCache_(y);
 
     appendAudit_({
       employeeId: employee.employeeId,

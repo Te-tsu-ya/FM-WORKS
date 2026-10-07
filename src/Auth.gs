@@ -82,6 +82,7 @@ function login(employeeId, pin, clientInfo, rememberSession) {
   lock.waitLock(10000);
 
   let record;
+  let result;
   try {
     record = getEmployeeAuthRecord_(id);
     if (!record || !record.active) {
@@ -151,7 +152,7 @@ function login(employeeId, pin, clientInfo, rememberSession) {
       result: 'SUCCESS',
       note: prototypeAccess ? '試作版共通PIN / ' + sanitizeClientInfo_(clientInfo) : sanitizeClientInfo_(clientInfo)
     });
-    return {
+    result = {
       ok: true,
       sessionToken: sessionToken,
       remembered: keepSignedIn,
@@ -161,6 +162,13 @@ function login(employeeId, pin, clientInfo, rememberSession) {
   } finally {
     lock.releaseLock();
   }
+
+  try {
+    result.initialData = buildInitialDataForEmployee_(record);
+  } catch (e) {
+    console.warn('login bootstrap preload failed', e);
+  }
+  return result;
 }
 
 function prototypeSettingEnabled_(value) {
@@ -194,11 +202,17 @@ function isPrototypeLogin_(record, pin) {
 
 function resumeSession(sessionToken) {
   const session = requireSession_(sessionToken);
-  return {
+  const result = {
     ok: true,
     mustChangePin: session.employee.mustChangePin,
     user: publicEmployee_(session.employee)
   };
+  try {
+    result.initialData = buildInitialDataForEmployee_(session.employee);
+  } catch (e) {
+    console.warn('resume bootstrap preload failed', e);
+  }
+  return result;
 }
 
 function logout(sessionToken) {
@@ -638,39 +652,36 @@ function getEmployeeAuthRecord_(employeeId) {
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (r[0] !== id) continue;
-    return {
-      rowNumber: i + 2,
-      employeeId: r[0],
-      name: r[1],
-      displayName: r[2] || r[1],
-      department: r[3] || '',
-      title: r[4] || '',
-      role: r[5] || 'USER',
-      active: r[6] === '在籍',
-      leaveBalance: Number(r[10] || 0),
-      leaveBalanceConfigured: String(r[10] || '').trim() !== '',
-      email: r[11] || '',
-      pinSalt: r[13] || '',
-      pinHash: r[14] || '',
-      mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
-      failures: Number(r[16] || 0),
-      lockUntil: r[17] || '',
-      lastLogin: r[18] || '',
-      pinUpdatedAt: r[19] || '',
-      authState: r[20] || '',
-      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-      managerId: r[23] || '',
-      leaveBasisDate: r[24] || '',
-      hireDate: r[25] || ''
-    };
-  }
-  return null;
+  const found=sheet.getRange(2,1,lastRow-1,1).createTextFinder(id).matchEntireCell(true).findNext();
+  if(!found)return null;
+  const rowNumber=found.getRow();
+  const r=sheet.getRange(rowNumber,1,1,26).getDisplayValues()[0];
+  return {
+    rowNumber: rowNumber,
+    employeeId: r[0],
+    name: r[1],
+    displayName: r[2] || r[1],
+    department: r[3] || '',
+    title: r[4] || '',
+    role: r[5] || 'USER',
+    active: r[6] === '在籍',
+    leaveBalance: Number(r[10] || 0),
+    leaveBalanceConfigured: String(r[10] || '').trim() !== '',
+    email: r[11] || '',
+    pinSalt: r[13] || '',
+    pinHash: r[14] || '',
+    mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
+    failures: Number(r[16] || 0),
+    lockUntil: r[17] || '',
+    lastLogin: r[18] || '',
+    pinUpdatedAt: r[19] || '',
+    authState: r[20] || '',
+    payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
+    managerId: r[23] || '',
+    leaveBasisDate: r[24] || '',
+    hireDate: r[25] || ''
+  };
 }
-
 function setEmployeePin_(record, pin, mustChange) {
   const salt = Utilities.getUuid().replace(/-/g, '');
   const nowText = toTimestamp_(new Date());
@@ -748,17 +759,23 @@ function getSupportConfig_() {
 }
 
 function getSettingsMap_() {
+  const cacheKey='fm:settings:v2';
+  const cached=cacheJsonGet_(cacheKey);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(AUTH.settingsSheet);
   const lastRow = sheet.getLastRow();
   const map = {};
-  if (lastRow < 2) return map;
-  sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues().forEach(r => {
-    if (r[0]) map[r[0]] = r[1];
-  });
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues().forEach(r => {
+      if (r[0]) map[r[0]] = r[1];
+    });
+  }
+  cacheJsonPut_(cacheKey,map,90);
   return map;
 }
 
 function saveSettings_(values) {
+  cacheRemove_('fm:settings:v2');
   const sheet = getDb_().getSheetByName(AUTH.settingsSheet);
   const lastRow = sheet.getLastRow();
   const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues() : [];

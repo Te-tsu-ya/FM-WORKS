@@ -20,8 +20,9 @@ function getRequests(sessionToken, params) {
   const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(session.employee) : new Set();
   const teamScope = permissions.requestApprove && params.scope === 'ALL';
   const status = String(params.status || 'ALL');
-  return sheet.getRange(2, 1, lastRow - 1, 19).getDisplayValues()
-    .filter(r => r[0] && (teamScope ? managedIds.has(r[2]) : r[2] === session.employee.employeeId) && (status === 'ALL' || r[9] === status))
+  const ids=teamScope?[...managedIds]:[session.employee.employeeId];
+  return readRowsByColumnValues_(sheet,3,19,ids)
+    .filter(r => r[0] && (status === 'ALL' || r[9] === status))
     .map(requestRowToObject_)
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
@@ -32,13 +33,9 @@ function getPendingRequestCount_(employee) {
   if (lastRow < 2) return 0;
   const permissions = getPermissions_(employee);
   const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
-  const rows = sheet.getRange(2, 3, lastRow - 1, 8).getDisplayValues();
-  return rows.reduce((count, r) => {
-    const visible = permissions.requestApprove ? managedIds.has(r[0]) : r[0] === employee.employeeId;
-    return count + (r[7] === '承認待ち' && visible ? 1 : 0);
-  }, 0);
+  const ids=permissions.requestApprove?[...managedIds]:[employee.employeeId];
+  return readRowsByColumnValues_(sheet,3,10,ids).reduce((count,r)=>count+(r[9]==='承認待ち'?1:0),0);
 }
-
 function assertCanApproveRequest_(approver, requesterEmployeeId) {
   const requesterId = String(requesterEmployeeId || '').trim().toUpperCase();
   if (!requesterId) throw new Error('申請者を確認できません。');
@@ -48,19 +45,23 @@ function assertCanApproveRequest_(approver, requesterEmployeeId) {
   return requester;
 }
 function getRequestsBundle(sessionToken) {
+  const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const permissions = getPermissions_(employee);
   const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
-  const items = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 19).getDisplayValues()
-    .filter(r => r[0] && (r[2] === employee.employeeId || managedIds.has(r[2])))
+  const ids=[employee.employeeId,...managedIds];
+  const items = lastRow < 2 ? [] : readRowsByColumnValues_(sheet,3,19,ids)
+    .filter(r=>r[0])
     .map(requestRowToObject_)
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const own = items.filter(r => r.employeeId === employee.employeeId);
   const team = items.filter(r => managedIds.has(r.employeeId));
-  return { own: own, team: team, context: getLeaveRequestContext_(employee.employeeId, own) };
+  const result={ own: own, team: team, context: getLeaveRequestContext_(employee.employeeId, own) };
+  logPerformance_('getRequestsBundle',perfStarted,PERFORMANCE_BUDGETS.requestsBundle,{own:own.length,team:team.length});
+  return result;
 }
 function getLeaveRequestContext_(employeeId, ownRequests) {
   const employee = getEmployee_(employeeId);
@@ -97,11 +98,10 @@ function getRequestsForEmployee_(employeeId) {
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(2,1,lastRow-1,19).getDisplayValues()
-    .filter(r => r[0] && r[2] === employeeId)
+  return readRowsByColumnValues_(sheet,3,19,[employeeId])
+    .filter(r => r[0])
     .map(requestRowToObject_);
 }
-
 function previewRequest(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
   payload = payload || {};

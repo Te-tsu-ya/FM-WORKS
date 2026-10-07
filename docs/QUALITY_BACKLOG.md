@@ -22,7 +22,7 @@
 
 | ID | 問題 | Severity | 主担当 | 受入条件 | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| Q-011 | Sheets全件走査 | High | Atlas / Forge | 対象期間/対象社員のI/O削減、計測ログ、性能予算 | DONE v0.9.9 |
+| Q-011 | Sheets全件走査 | High | Atlas / Forge | 対象期間/対象社員のI/O削減、計測ログ、性能予算 | DONE v0.10.5（日付索引に加え社員ID索引、予定期間限定取得、会社カレンダー/社員/案件/設定キャッシュ、月次・年休・申請の対象社員限定読込まで拡張） |
 | Q-012 | App.html 1,600行超の巨大フロント | High | Aster / Iris | UIモジュール分割、責務境界、回帰テスト | DONE v0.10.1（5モジュールへ責務分割、旧App.htmlはスタブ化、CIは連結構文/既存UI契約を検証） |
 | Q-013 | 列番号依存・Migration不足 | High | Atlas | スキーマ版、ヘッダ検証、Migrationを自動化 | DONE v0.9.8 |
 | Q-014 | 監査before/after不足 | High | Ledger | 重要更新は変更前後を再現可能 | DONE v0.9.7 |
@@ -39,6 +39,7 @@
 | Q-027 | MANAGERに部下の承認通知が届かない | High | Kite / Ledger / Probe | requestApprove権限を持つMANAGER/ADMINへ管理対象の承認待ちを通知 | DONE v0.10.4 |
 | Q-028 | 承認者の降格/退職で承認経路が壊れる | High | Ledger / Sentinel | 直属部下を残した降格・無効化を拒否し、承認者循環も拒否 | DONE v0.10.4 |
 | Q-029 | 法定休日未指定でもREADYになれる | High | Lex / Orbit | 会社カレンダーの法定休日明示を本番Gateで検査 | DONE v0.10.4 |
+| Q-030 | 起動直後の通信集中と画面遷移待ち | High | Iris / Forge / Atlas / Probe | 起動往復削減、未表示画面の自動先読み廃止、SWR、サーバーI/O削減、性能回帰Gate | DONE v0.10.5 |
 
 ## P2 / 経営価値
 

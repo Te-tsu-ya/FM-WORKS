@@ -131,6 +131,7 @@ function saveEmployee(sessionToken, payload) {
       employeeId,name,displayName,department,title,role,status,workStart,workEnd,
       breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded,managerId,leaveBasisDate,hireDate
     ]]);
+    invalidateEmployeeDirectoryCache_();
 
     recordLeaveBalanceAdminChange_(
       employeeId,name,leaveBasisDate,
@@ -175,6 +176,7 @@ function setEmployeeActiveState(sessionToken, employeeId, active) {
     const sheet=getDb_().getSheetByName(DB.sheets.employees);
     sheet.getRange(target.rowNumber,7).setValue(active?'在籍':'退職');
     sheet.getRange(target.rowNumber,21).setValue(active?'ACTIVE':'DISABLED');
+    invalidateEmployeeDirectoryCache_();
     if(!active) invalidateEmployeeSessions_(target.employeeId,0);
 
     appendAudit_({

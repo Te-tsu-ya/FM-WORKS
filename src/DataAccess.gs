@@ -1,7 +1,12 @@
 const PERFORMANCE_BUDGETS = Object.freeze({
-  monthlySummary:3500,
-  worklogs:1500,
-  dateRangeRead:1200
+  initialData:900,
+  homeOverview:1000,
+  scheduleBundle:1200,
+  requestsBundle:1200,
+  monthlySummary:2500,
+  worklogs:900,
+  dateRangeRead:800,
+  indexedRead:800
 });
 
 function dateRangeStrings_(start,end,maxDays){
@@ -21,6 +26,66 @@ function dateRangeRegex_(start,end,maxDays){
   return '^(?:'+days.join('|')+')$';
 }
 
+function regexEscape_(value){
+  return String(value==null?'':value).replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
+}
+
+function cacheJsonGet_(key){
+  try{
+    const raw=CacheService.getScriptCache().get(String(key||''));
+    return raw?JSON.parse(raw):null;
+  }catch(e){
+    console.warn('cache get failed',key,e);
+    return null;
+  }
+}
+
+function cacheJsonPut_(key,value,ttlSeconds){
+  try{
+    const raw=JSON.stringify(value);
+    if(raw.length>90000)return false;
+    CacheService.getScriptCache().put(String(key||''),raw,Math.max(1,Number(ttlSeconds||60)));
+    return true;
+  }catch(e){
+    console.warn('cache put failed',key,e);
+    return false;
+  }
+}
+
+function cacheRemove_(key){
+  try{CacheService.getScriptCache().remove(String(key||''));}catch(e){console.warn('cache remove failed',key,e);}
+}
+
+function readRowsByColumnValues_(sheet,column,width,values){
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return [];
+  const wanted=[...new Set((values||[]).map(v=>String(v||'').trim()).filter(Boolean))];
+  if(!wanted.length)return [];
+  const wantedSet=new Set(wanted);
+  const pattern='^(?:'+wanted.map(regexEscape_).join('|')+')$';
+  const started=Date.now();
+  if(pattern.length>5000||wanted.length>80){
+    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(String(r[column-1]||'')));
+    logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',values:wanted.length});
+    return rows;
+  }
+  const cells=sheet.getRange(2,column,lastRow-1,1).createTextFinder(pattern).useRegularExpression(true).matchEntireCell(true).findAll();
+  if(!cells.length){
+    logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:0,source:'TEXT_FINDER',values:wanted.length});
+    return [];
+  }
+  const blocks=contiguousRowBlocks_(cells.map(c=>c.getRow()));
+  if(blocks.length>48){
+    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(String(r[column-1]||'')));
+    logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',blocks:blocks.length,values:wanted.length});
+    return rows;
+  }
+  const endCol=columnLetter_(width);
+  const rows=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges().flatMap(range=>range.getDisplayValues())
+    .filter(r=>wantedSet.has(String(r[column-1]||'')));
+  logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'VALUE_INDEX',blocks:blocks.length,values:wanted.length});
+  return rows;
+}
 function contiguousRowBlocks_(rowNumbers){
   const rows=[...new Set((rowNumbers||[]).map(Number).filter(Number.isFinite))].sort((a,b)=>a-b),blocks=[];
   rows.forEach(row=>{

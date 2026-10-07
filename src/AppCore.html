@@ -9,6 +9,7 @@ const pendingLoads=new Set();
 let liveAttendanceTimer=null;
 let globalKeysBound=false;
 let modalReturnFocus=null;
+let routePrefetchTimer=null;
 function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
 function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
 function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
@@ -21,16 +22,28 @@ function scheduleCacheKey(){if(!state.schedule.date)return '';const r=scheduleRa
 function companyCacheKey(){return String(state.company.year||state.data&&parseIso(state.data.today).getFullYear()||'')}
 function monthlyCacheKey(){return [state.monthly.yearMonth||state.data&&state.data.today.slice(0,7)||'',state.monthly.employeeId||state.data&&state.data.user.employeeId||''].join('|')}
 function scheduleIdleTask(fn,delay){setTimeout(()=>{if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout:1200});else fn()},delay)}
+function scheduleBackgroundTask(fn,delay,attempt=0){
+  scheduleIdleTask(()=>{
+    if((state.busy||pendingLoads.size>0||document.hidden)&&attempt<4){
+      scheduleBackgroundTask(fn,700,attempt+1);
+      return;
+    }
+    if(!state.busy&&pendingLoads.size===0&&!document.hidden)fn();
+  },delay);
+}
+function prefetchRouteOnIntent(page){
+  if(!state.data||!state.sessionToken||state.busy||pendingLoads.size>0)return;
+  if(page==='schedule')loadSchedule({silent:true});
+  else if(page==='worklog')loadWorklogs({silent:true});
+  else if(page==='requests')loadRequests({silent:true});
+}
+function queueRoutePrefetch(page){
+  clearTimeout(routePrefetchTimer);
+  if(!['schedule','worklog','requests'].includes(page))return;
+  routePrefetchTimer=setTimeout(()=>prefetchRouteOnIntent(page),220);
+}
 function startMenuPrefetch(){
-  if(!state.data||!state.sessionToken)return;
-  scheduleIdleTask(()=>loadSchedule({silent:true}),950);
-  scheduleIdleTask(()=>loadWorklogs({silent:true}),1350);
-  scheduleIdleTask(()=>loadRequests({silent:true}),1800);
-  scheduleIdleTask(()=>loadMonthly({silent:true}),2300);
-  scheduleIdleTask(()=>loadCompanyCalendar(undefined,{silent:true}),2800);
-  if(state.data.permissions&&state.data.permissions.adminConsole){
-    scheduleIdleTask(()=>loadAuthAdmin({silent:true}),3400);
-  }
+  // Eager multi-page prefetch is intentionally disabled. User intent gets priority over background GAS calls.
 }
 
 function getTheme(){return document.documentElement.dataset.theme==='dark'?'dark':'light'}
@@ -158,7 +171,7 @@ function performPunch(action){
     invalidatePageCache('worklog','monthly');
     renderPage();
     showToast(`${action}をGoogle Sheetsへ保存しました`);
-    scheduleIdleTask(()=>loadHomeOverview({force:true,silent:true}),650);
+    scheduleBackgroundTask(()=>loadHomeOverview({force:true,silent:true}),1200);
   }).withFailureHandler(err=>{
     state.busy=false;
     if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage();
@@ -213,7 +226,12 @@ function renderNav(){
   const mobile=document.getElementById('mobileNav');
   mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
   mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
-  document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>navigate(b.dataset.route));
+  document.querySelectorAll('[data-route]').forEach(b=>{
+    b.onclick=()=>navigate(b.dataset.route);
+    b.onpointerenter=()=>queueRoutePrefetch(b.dataset.route);
+    b.onfocus=()=>queueRoutePrefetch(b.dataset.route);
+    b.onpointerleave=()=>clearTimeout(routePrefetchTimer);
+  });
   document.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.adminTab;navigate('admin')});
 }
 function navigate(page){
@@ -271,7 +289,7 @@ function loadHomeOverview(options={}){
     state.homeOverview.loaded=true;
     state.homeOverview.error='';
     if(data){
-      state.data.monthlyReview=data.monthlyReview||null;
+      if(Object.prototype.hasOwnProperty.call(data,'monthlyReview'))state.data.monthlyReview=data.monthlyReview||null;
       state.data.month=data.month||null;
       state.data.tasks=Array.isArray(data.tasks)?data.tasks:[];
       state.data.overviewReady=true;
