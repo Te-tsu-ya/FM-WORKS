@@ -465,12 +465,12 @@ function switchToProductionMode(){
   const readiness=state.maintenance&&state.maintenance.status&&state.maintenance.status.readiness;
   const blockers=((readiness&&readiness.blockers)||[]).filter(x=>!String(x).includes('試作版共通PIN'));
   if(blockers.length){showToast('先に本番運用チェックの要対応項目を解消してください');return}
-  openConfirmDialog('試作モードを終了しますか？','共通PIN 000000 は使えなくなり、現在のセッションも終了します。社員ごとのPIN設定が必要です。',()=>{
+  openConfirmDialog('試作モードを終了しますか？','共通PIN 000000 は使えなくなり、現在のセッションも終了します。社員ごとのPIN設定が必要です。','試作モードを終了',()=>{
     google.script.run.withSuccessHandler(()=>{
       clearLocalSession();
       showLogin('試作モードを終了しました。社員ごとのPINでログインしてください。');
     }).withFailureHandler(err=>handleApiError(err,'試作モードを終了できませんでした')).setPrototypeMode(state.sessionToken,false);
-  });
+  },true);
 }
 
 function loadMaintenance(){
