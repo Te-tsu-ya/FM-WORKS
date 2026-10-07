@@ -113,7 +113,10 @@ for (const [label, source, requiredMarkers] of [
   ['request concurrency', requestCode, ['withScriptLock_', "['APPROVE','REJECT']"]],
   ['worklog audit preservation', worklogCode, ["r[12] !== '削除'", "'削除', nowText", 'withScriptLock_']],
   ['employee concurrency', employeeCode, ['withScriptLock_', '標準勤務終了時刻は開始時刻より後']],
-  ['monthly deleted-worklog exclusion', monthlyCode, ["r[12]!=='削除'", "date!==systemToday"]],
+  ['monthly attendance integrity', monthlyCode, ["r[12]!=='削除'", 'missingAllPunches', 'lateEarlyMinutes', 'absenceDays']],
+  ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_']],
+  ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_']],
+  ['punch correction resolution', serverCode, ['getActivePunchRows_', 'superseded.has', 'validatePunchSequence_']],
   ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_']]
 ]) {
   for (const item of requiredMarkers) {
@@ -121,6 +124,23 @@ for (const [label, source, requiredMarkers] of [
       console.error(`Regression guard failed (${label}): ${item}`);
       failed = true;
     }
+  }
+}
+
+const definedClientFunctions = new Set([...app.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1]));
+const allowedHandlerGlobals = new Set(['if','navigator']);
+const handlerPattern = /(?:onclick|onchange|onsubmit)=["']([A-Za-z_$][\w$]*)\s*\(/g;
+for (const match of app.matchAll(handlerPattern)) {
+  const name = match[1];
+  if (!allowedHandlerGlobals.has(name) && !definedClientFunctions.has(name)) {
+    console.error(`Undefined UI event handler: ${name}`);
+    failed = true;
+  }
+}
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction']) {
+  if (!definedClientFunctions.has(requiredHandler)) {
+    console.error(`Required client function missing: ${requiredHandler}`);
+    failed = true;
   }
 }
 
@@ -166,6 +186,14 @@ for (const holidayMarker of [
     console.error(`Holiday calendar implementation missing: ${holidayMarker}`);
     failed = true;
   }
+}
+if (maintenanceCode.includes('ScriptApp.newTrigger') || maintenanceCode.includes('getProjectTriggers')) {
+  console.error('Maintenance must not require installable-trigger authorization in zero-touch deployment.');
+  failed = true;
+}
+if (requestCode.includes('setValue(true)') && requestCode.includes('修正対象')) {
+  console.error('Punch correction must not mutate the original punch row.');
+  failed = true;
 }
 if (!app.includes('generateCompanyCalendarYear')) {
   console.error('Company calendar generation UI missing');
