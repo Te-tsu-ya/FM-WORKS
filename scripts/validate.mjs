@@ -100,6 +100,7 @@ for (const performanceMarker of [
   'requestIdleCallback',
   'function loadHomeOverview(',
   'reloadRequested:false',
+  "error:''",
   "getHomeOverview(state.sessionToken)",
   '.getRequestsBundle(state.sessionToken)',
   "invalidatePageCache('worklog','monthly')"
@@ -139,6 +140,27 @@ for (const performanceServerMarker of [
     failed = true;
   }
 }
+for (const resilienceMarker of [
+  'function liveWorkedText(',
+  'function startLiveAttendanceTicker()',
+  'function initGlobalKeyboardShortcuts()',
+  'function homeOverviewError()',
+  "loadHomeOverview({force:true})"
+]) {
+  if (!app.includes(resilienceMarker)) {
+    console.error('v0.8.3 resilience/interaction marker missing: ' + resilienceMarker);
+    failed = true;
+  }
+}
+if (!serverCode.includes('serverTime: new Date().toISOString()')) {
+  console.error('Punch response must refresh the live attendance time anchor.');
+  failed = true;
+}
+if (!styles.includes('.home-overview-error')) {
+  console.error('Home overview failure must have a persistent inline recovery state.');
+  failed = true;
+}
+
 if (!app.includes("if(options.force)state.homeOverview.reloadRequested=true") ||
     !app.includes("if(rerun){") ||
     !app.includes("flushHomeOverviewCallbacks_")) {
@@ -298,7 +320,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','projectAdminSection','openProjectModal','saveProjectFromModal']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','projectAdminSection','openProjectModal','saveProjectFromModal','loadHomeOverview']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.2  
+**文書版:** 0.8.3  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.2`
+`APP.version = 0.8.3`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -192,6 +192,8 @@ DBスキーマ目安: 4。
 クライアントの `loadHomeOverview` は `pageCache.homeOverview` と `pendingLoads` で重複通信を抑止する。概要取得後は `syncGlobalActionBanner` で月次確認コーションだけを更新でき、別画面を表示中でもページ全体を再描画しない。
 
 強制再取得が既存のホーム概要通信と重なった場合は `state.homeOverview.reloadRequested=true` とし、先行レスポンスを画面へ確定反映せず、直後に再取得する。`callbacks` は最終的に確定したレスポンス後にまとめて実行し、打刻・月次確認直後の古い集計値による上書きを防ぐ。
+
+取得失敗時は `state.homeOverview.error` に復旧可能な状態を保存し、ホームの「やること」カード内に再読込ボタンを表示する。月次指標は `—` にフォールバックし、無限スケルトンを禁止する。
 
 
 ## 9. 通知
@@ -419,6 +421,20 @@ disabledは `cursor:not-allowed`。
 
 `startMenuPrefetch` は初回描画とホーム概要通信を優先するため、予定表950ms、工数1350ms、申請1800ms、月次2300ms、会社カレンダー2800ms、ADMIN情報3400msを目安に段階実行する。通知は約900ms、自動バックアップ確認は約1800ms以降に遅延する。
 
+## 17.1 ライブ勤怠表示とキーボード操作
+
+`recordPunch` は `attendance` と同時に `serverTime` を返す。
+
+クライアントの `liveWorkedMinutes(attendance)` は、サーバーが返した `workedMinutes` を基準値とし、状態が `working` の場合だけ `Date.now() - state.data.serverTime` の経過分を加算する。休憩中・退勤済みは加算しない。
+
+`startLiveAttendanceTicker()` は30秒間隔で、表示中ページがホームまたは勤怠かつ勤務中の場合だけ再描画する。タブが非表示のときは再描画しない。
+
+`initGlobalKeyboardShortcuts()` は1回だけdocumentへ登録する。
+
+- `Escape`: モーダルを最優先で閉じ、その後検索結果・通知・プロフィール・モバイルドロワーを閉じる。
+- `/`: input / textarea / select / contentEditable以外からデスクトップ検索へフォーカス。
+- ナビ移動後は `main#content` へフォーカスし、キーボード/支援技術の現在位置を明確にする。
+
 ## 18. 認証
 
 ### PIN
@@ -532,6 +548,9 @@ Apps Scriptの原則:
 - ADMINによる他社員の月次確認状態表示
 - 初期シェルから重い月次/申請読込が除外されていること
 - ホーム概要API・段階先読み・管理保守APIの遅延条件
+- ホーム概要失敗時のインライン再読込
+- ライブ実働時間のserverTime基準更新
+- Escape / 検索ショートカット / ナビ後フォーカス
 
 `scripts/validate.mjs`:
 

@@ -488,3 +488,13 @@ html[data-theme="dark"] .home-loading-dot{
   .home-loading-line,.home-loading-value,.home-loading-dot{animation:none}
 }
 </style>
+
+<style>
+/* v0.8.3 recovery and live status polish */
+.home-overview-error{min-height:86px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #f0c7cd;border-radius:12px;background:#fff5f6}
+.home-overview-error>div{display:grid;gap:3px}.home-overview-error strong{font-size:11px;color:#a63142}.home-overview-error small{font-size:9px;color:#8d5a63}
+html[data-theme="dark"] .home-overview-error{background:#2b181d;border-color:#63313b}
+html[data-theme="dark"] .home-overview-error strong{color:#ff9ca8}
+html[data-theme="dark"] .home-overview-error small{color:#cfa1a8}
+@media(max-width:560px){.home-overview-error{align-items:stretch;flex-direction:column}.home-overview-error button{width:100%}}
+</style>
