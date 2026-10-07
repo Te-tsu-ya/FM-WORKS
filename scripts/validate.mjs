@@ -36,6 +36,22 @@ try {
   console.error('Server JavaScript syntax error:', err.message);
   failed = true;
 }
+const serverCode = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
+for (const requiredPermissionMarker of [
+  "assertPermission_(employee, 'companyCalendarEdit')",
+  "COMPANY_CALENDAR_EDIT_ROLES"
+]) {
+  if (!serverCode.includes(requiredPermissionMarker)) {
+    console.error(`Permission enforcement missing: ${requiredPermissionMarker}`);
+    failed = true;
+  }
+}
+for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
+  if (!app.includes(requiredUiMarker)) {
+    console.error(`Read-only company calendar UI missing: ${requiredUiMarker}`);
+    failed = true;
+  }
+}
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
 if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.executeAs !== 'USER_DEPLOYING') {
