@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Index.html','src/Styles.html','src/App.html',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -29,7 +29,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -153,6 +153,22 @@ for (const uiMarker of ['loadMaintenance','createBackupNow','toggleDailyBackup',
     console.error(`Production administration UI missing: ${uiMarker}`);
     failed = true;
   }
+}
+const holidayCode = fs.readFileSync(path.join(root,'src/Holidays.gs'),'utf8');
+for (const holidayMarker of [
+  "2027-03-22':'振替休日'",
+  "2027-09-23':'秋分の日'",
+  'function generateStandardCompanyCalendarYear(sessionToken',
+  'requiresCompanyReview: true'
+]) {
+  if (!holidayCode.includes(holidayMarker)) {
+    console.error(`Holiday calendar implementation missing: ${holidayMarker}`);
+    failed = true;
+  }
+}
+if (!app.includes('generateCompanyCalendarYear')) {
+  console.error('Company calendar generation UI missing');
+  failed = true;
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
