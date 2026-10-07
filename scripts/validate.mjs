@@ -141,7 +141,7 @@ for (const [label, source, requiredMarkers] of [
   ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_']],
   ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_']],
   ['punch correction resolution', serverCode, ['getActivePunchRows_', 'superseded.has', 'validatePunchSequence_']],
-  ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_']]
+  ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_', 'const oldSource = old[16]']]
 ]) {
   for (const item of requiredMarkers) {
     if (!source.includes(item)) {
@@ -174,6 +174,10 @@ for (const forbidden of ['confirm(', 'prompt(', 'demoAction', 'TODO', 'FIXME']) 
     failed = true;
   }
 }
+if (serverCode.includes("const source = old[16] || ''")) {
+  console.error('Schedule edit regression: block-scoped source shadow would break existing schedule updates.');
+  failed = true;
+}
 if (worklogCode.includes('deleteRow(')) {
   console.error('Worklog must use soft-delete, not deleteRow().');
   failed = true;
@@ -186,6 +190,8 @@ for (const requiredMaintenanceMarker of [
   'function setDailyBackupEnabled(sessionToken',
   "autoBackupProperty: 'FM_WORKS_AUTO_BACKUP'",
   'function ensureDailyBackup(sessionToken)',
+  'function getProductionReadiness_()',
+  'backupRetentionDays: 90',
   'requireAdminSession_(sessionToken)'
 ]) {
   if (!maintenanceCode.includes(requiredMaintenanceMarker)) {
@@ -193,7 +199,7 @@ for (const requiredMaintenanceMarker of [
     failed = true;
   }
 }
-for (const uiMarker of ['loadMaintenance','createBackupNow','toggleDailyBackup','openMobileDrawer']) {
+for (const uiMarker of ['loadMaintenance','createBackupNow','toggleDailyBackup','openMobileDrawer','switchToProductionMode']) {
   if (!app.includes(uiMarker)) {
     console.error(`Production administration UI missing: ${uiMarker}`);
     failed = true;
@@ -297,6 +303,17 @@ for (const worklogMarker of ['getProjectByName_', "status !== '進行中'"]) {
     failed = true;
   }
 }
+for (const operationalMonthlyMarker of [
+  'function requiredBreakMinutes_(',
+  'function calculateBreakMinutesForRows_(',
+  'worklogMismatchDays',
+  '休憩不足'
+]) {
+  if (!monthlyCode.includes(operationalMonthlyMarker)) {
+    console.error(`Operational monthly control missing: ${operationalMonthlyMarker}`);
+    failed = true;
+  }
+}
 for (const monthlyMarker of ['function createTeamMonthlyExport(', 'function getPayrollEmployees_(', 'assertMonthlyReadyForExport_']) {
   if (!monthlyCode.includes(monthlyMarker)) {
     console.error(`Payroll team export missing: ${monthlyMarker}`);
@@ -320,7 +337,7 @@ const demoIdentitySources = [
 ];
 const forbiddenRealDemoTerms = [
   '会津屋','ラクッショ','キキラク','CoDoNa',
-  '坂井','池田','金子','五十嵐',
+  '坂井','池田','金子','五十嵐','達哉','弘典','裕也','舩山',
   '丸栄','MARUEI','INSIGHT LAB','イデアル','旅人屋','まいぷれ'
 ];
 for (const forbiddenRealData of forbiddenRealDemoTerms) {
@@ -360,6 +377,8 @@ if (authCode.includes('prototypeMode: true')) {
     "prototypePin: '000000'",
     "prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']",
     'function isPrototypeLogin_(',
+    'function setPrototypeMode(sessionToken, enabled)',
+    "saveSettings_({PROTOTYPE_MODE:'FALSE'})",
     'mustChangePin: prototypeAccess ? false : record.mustChangePin'
   ]) {
     if (!authCode.includes(prototypeAuthMarker)) {
