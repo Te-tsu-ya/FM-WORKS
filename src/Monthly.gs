@@ -51,6 +51,13 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const calendarMap = Object.fromEntries(calendar.map(d=>[d.date,d]));
   const requests = getApprovedRequestsForMonth_(targetId,start,end);
 
+  const worklogSheet=getDb_().getSheetByName('工数');
+  const worklogRows=worklogSheet.getLastRow()<2?[]:worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues()
+    .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end&&r[12]!=='削除');
+  const worklogByDate={};
+  worklogRows.forEach(r=>{ worklogByDate[r[1]]=(worklogByDate[r[1]]||0)+Number(r[9]||0); });
+  const worklogMinutes=worklogRows.reduce((sum,r)=>sum+Number(r[9]||0),0);
+
   const fullLeaveDates = new Set();
   const absenceDates = new Set();
   const partialLeaveByDate = {};
@@ -74,7 +81,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
 
   const daily = [];
   let totalMinutes=0,overtimeMinutes=0,holidayMinutes=0,lateEarlyMinutes=0;
-  let workDays=0,missingPunchDays=0,remoteDays=0,paidLeaveDays=0,absenceDays=0;
+  let workDays=0,missingPunchDays=0,remoteDays=0,paidLeaveDays=0,absenceDays=0,worklogMismatchDays=0;
 
   for(let day=1;day<=lastDay;day++){
     const date=ym+'-'+String(day).padStart(2,'0');
@@ -84,8 +91,9 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     const company=registeredCompany||{date:date,type:'未登録',working:false,start:'',end:'',breakMinutes:0,name:''};
     const past=date<systemToday;
 
-    let clockIn='',clockOut='',minutes=0,overtime=0,holiday=0,lateEarly=0,workLocation='',remote=false;
+    let clockIn='',clockOut='',minutes=0,overtime=0,holiday=0,lateEarly=0,breakMinutes=0,workLocation='',remote=false;
     let absence=false,leaveStatus='',issueType='';
+    const worklogDayMinutes=Number(worklogByDate[date]||0);
 
     if(snapshot){
       clockIn=snapshot.clockIn;
@@ -94,6 +102,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       overtime=snapshot.overtimeMinutes;
       holiday=snapshot.holidayMinutes;
       lateEarly=snapshot.lateEarlyMinutes;
+      breakMinutes=Number(snapshot.breakMinutes||0);
       workLocation=snapshot.workLocation;
       remote=snapshot.remote&&minutes>0;
       const legacyPaid=Math.max(0,Number(snapshot.paidLeave||0));
@@ -118,6 +127,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       clockIn=clockInRow?clockInRow.timestamp.slice(11,16):'';
       clockOut=clockOutRow?clockOutRow.timestamp.slice(11,16):'';
       minutes=rows.length?calculateMonthlyDayMinutes_(rows,date===systemToday):0;
+      breakMinutes=rows.length?calculateBreakMinutesForRows_(rows,date===systemToday):0;
       const standard=company.working&&company.start&&company.end
         ? Math.max(0,timeRangeMinutes_(company.start,company.end)-Number(company.breakMinutes||0))
         : 0;
@@ -152,6 +162,15 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       remote=minutes>0&&rows.some(x=>x.workLocation==='在宅');
     }
 
+    const requiredBreak=requiredBreakMinutes_(minutes);
+    const dayFinished=!!clockOut||!!snapshot||past;
+    if(dayFinished&&minutes>0&&requiredBreak>0&&breakMinutes<requiredBreak){
+      issueType=appendMonthlyIssue_(issueType,'休憩不足 '+breakMinutes+'分 / 必要'+requiredBreak+'分');
+    }
+    const worklogDifference=worklogDayMinutes-minutes;
+    const worklogIssue=minutes>0&&Math.abs(worklogDifference)>5;
+    if(worklogIssue)worklogMismatchDays++;
+
     const issue=!!issueType;
     if(minutes>0)workDays++;
     if(issue)missingPunchDays++;
@@ -172,6 +191,11 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       overtimeMinutes:overtime,
       holidayMinutes:holiday,
       lateEarlyMinutes:lateEarly,
+      breakMinutes:breakMinutes,
+      requiredBreakMinutes:requiredBreak,
+      worklogMinutes:worklogDayMinutes,
+      worklogDifferenceMinutes:worklogDifference,
+      worklogIssue:worklogIssue,
       workLocation:workLocation,
       remote:remote,
       leaveStatus:leaveStatus,
@@ -181,11 +205,6 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       issueType:issueType
     });
   }
-
-  const worklogSheet=getDb_().getSheetByName('工数');
-  const worklogRows=worklogSheet.getLastRow()<2?[]:worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues()
-    .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end&&r[12]!=='削除');
-  const worklogMinutes=worklogRows.reduce((sum,r)=>sum+Number(r[9]||0),0);
 
   return {
     yearMonth:ym,
@@ -200,12 +219,45 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       paidLeaveDays:paidLeaveDays,
       remoteDays:remoteDays,
       missingPunchDays:missingPunchDays,
-      worklogMinutes:worklogMinutes
+      worklogMinutes:worklogMinutes,
+      worklogMismatchDays:worklogMismatchDays
     },
     daily:daily,
     requests:requests
   };
 }
+function appendMonthlyIssue_(current, next) {
+  const items=String(current||'').split(' / ').filter(Boolean);
+  if(next&&!items.includes(next))items.push(next);
+  return items.join(' / ');
+}
+
+function requiredBreakMinutes_(workMinutes) {
+  const minutes=Math.max(0,Number(workMinutes||0));
+  if(minutes>480)return 60;
+  if(minutes>360)return 45;
+  return 0;
+}
+
+function calculateBreakMinutesForRows_(rows, isToday) {
+  const ordered=(rows||[]).slice().sort((a,b)=>String(a.timestamp).localeCompare(String(b.timestamp)));
+  let start=null,totalMs=0;
+  ordered.forEach(r=>{
+    if(r.action===PUNCH.BREAK_START){
+      start=parseTimestamp_(r.timestamp);
+    }else if(r.action===PUNCH.BREAK_END&&start){
+      const end=parseTimestamp_(r.timestamp);
+      if(end&&end>=start)totalMs+=end-start;
+      start=null;
+    }
+  });
+  if(start&&isToday){
+    const now=new Date();
+    if(now>=start)totalMs+=now-start;
+  }
+  return Math.max(0,Math.floor(totalMs/60000));
+}
+
 function inferLegacyLeaveLabel_(snapshot, company) {
   const paid = Math.max(0, Number(snapshot && snapshot.paidLeave || 0));
   if (paid >= 1) return '有給';
