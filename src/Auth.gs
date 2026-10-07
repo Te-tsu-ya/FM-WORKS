@@ -279,8 +279,25 @@ function getAuthAdminData(sessionToken) {
       });
     });
   }
+  const resetSheet = getDb_().getSheetByName(AUTH.resetSheet);
+  const resetLastRow = resetSheet.getLastRow();
+  const resetRequests = resetLastRow < 2 ? [] : resetSheet.getRange(2, 1, resetLastRow - 1, 9).getDisplayValues()
+    .filter(r => r[0])
+    .slice(-50)
+    .reverse()
+    .map(r => ({
+      requestId: r[0],
+      requestedAt: r[1],
+      employeeId: r[2],
+      name: r[3],
+      status: r[4],
+      note: r[5],
+      handledBy: r[6],
+      handledAt: r[7]
+    }));
   return {
     employees: employees,
+    resetRequests: resetRequests,
     support: getSupportConfig_(),
     currentUser: publicEmployee_(session.employee)
   };
@@ -293,6 +310,7 @@ function adminSetTemporaryPin(sessionToken, targetEmployeeId, temporaryPin) {
   validatePin_(temporaryPin, target.employeeId);
   setEmployeePin_(target, temporaryPin, true);
   invalidateEmployeeSessions_(target.employeeId, 0);
+  markPinHelpRequestsHandled_(target.employeeId, admin);
   appendAudit_({
     employeeId: admin.employeeId,
     employeeName: admin.name,
@@ -306,6 +324,20 @@ function adminSetTemporaryPin(sessionToken, targetEmployeeId, temporaryPin) {
     note: target.name
   });
   return { ok: true };
+}
+
+function markPinHelpRequestsHandled_(employeeId, admin) {
+  const sheet = getDb_().getSheetByName(AUTH.resetSheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 9).getDisplayValues();
+  const nowText = toTimestamp_(new Date());
+  rows.forEach((r, idx) => {
+    if (r[2] === employeeId && r[4] === '未対応') {
+      const rowNumber = idx + 2;
+      sheet.getRange(rowNumber, 5, 1, 4).setValues([['対応済', r[5] || '', admin.name, nowText]]);
+    }
+  });
 }
 
 function adminUnlockAccount(sessionToken, targetEmployeeId) {
