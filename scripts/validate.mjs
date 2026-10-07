@@ -627,8 +627,8 @@ if (!app.includes("content.classList.toggle('one-screen',['home','monthly','admi
   console.error('Desktop home must opt into the one-screen layout.');
   failed = true;
 }
-if (!styles.includes('@media(max-width:900px){.home-screen{height:auto}')) {
-  console.error('Home dashboard must fall back to normal scrolling on tablet/mobile.');
+if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-screen){height:auto;overflow:visible}')) {
+  console.error('Home dashboard must fall back to normal scrolling before the desktop columns become too narrow.');
   failed = true;
 }
 if (!styles.includes('@media(max-height:760px) and (min-width:901px)')) {

@@ -292,11 +292,11 @@ home-screen
 - 各 `home-panel`: overflow hidden
 - `home-panel-scroll`: パネル内部のみoverflow auto
 - 画面高760px以下はcompact rulesを適用
-- 幅901〜1180pxは3カラム比率とクイック導線を圧縮
+- 幅1141〜1180pxは3カラム比率とクイック導線を圧縮
 
-タブレット/モバイル:
+狭いデスクトップ/タブレット/モバイル:
 
-- 幅900px以下で `home-screen{height:auto}`
+- 幅1140px以下で `:has(>.home-screen)` を使い、ホームの `.content.one-screen` だけ `height:auto / overflow:visible` へ戻す
 - `home-dashboard` を1カラム化
 - ページ全体の通常スクロールを許可
 - パネル内部は必要に応じて最大高を設定
@@ -587,7 +587,7 @@ Apps Scriptの原則:
 - ホーム概要失敗時のインライン再読込
 - ライブ実働時間のserverTime基準更新
 - Escape / 検索ショートカット / ナビ後フォーカス
-- ホームの1画面レイアウト / 760px compact / 900px mobile fallback
+- ホームの1画面レイアウト / 760px compact / 1140px narrow-screen fallback
 - ホーム統合後も打刻履歴・予定表・工数・申請・月次の導線を保持
 
 `scripts/validate.mjs`:
