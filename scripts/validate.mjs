@@ -113,7 +113,8 @@ const ciWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/ci.yml'
 
 for (const marker of [
   'const canApproveRequests = !!getPermissions_(employee).requestApprove',
-  "const requestScope = canApproveRequests ? 'ALL' : 'SELF'"
+  'const requestIds=canApproveRequests?',
+  'readRowsByColumnValues_(requestSheet,3,19,requestIds)'
 ]) {
   if (!notificationCodeText.includes(marker)) {
     console.error('Manager approval notification scope missing: ' + marker);
@@ -406,7 +407,8 @@ for (const marker of [
   }
 }
 for (const marker of [
-  "cacheJsonGet_('fm:settings:v2')",
+  "const cacheKey='fm:settings:v2'",
+  'cacheJsonGet_(cacheKey)',
   'createTextFinder(id).matchEntireCell(true).findNext()',
   'result.initialData = buildInitialDataForEmployee_(session.employee)'
 ]) {
@@ -826,7 +828,7 @@ for (const integrationMarker of [
   "projects: 'プロジェクト'",
   "monthlyClose: '月次締め'",
   "monthlyReview: '月次確認'",
-  'projects: getProjectsInternal_(false)'
+  'projects: []'
 ]) {
   if (!serverCode.includes(integrationMarker)) {
     console.error(`Project master integration missing: ${integrationMarker}`);
@@ -923,14 +925,13 @@ for (const [label, doc] of [['要件定義書',requirementsDoc],['技術設計�
   }
 }
 
-for (const marker of [
-  "monthlyReview: '月次確認'",
-  'getMonthlyReviewPrompt_(employee.employeeId)'
-]) {
-  if (!serverCode.includes(marker)) {
-    console.error('Monthly review integration missing: ' + marker);
-    failed = true;
-  }
+if (!serverCode.includes("monthlyReview: '月次確認'")) {
+  console.error("Monthly review integration missing: monthlyReview sheet mapping");
+  failed = true;
+}
+if (!notificationCodeText.includes('getMonthlyReviewPrompt_(employee.employeeId)')) {
+  console.error('Monthly review notification integration missing.');
+  failed = true;
 }
 
 for (const marker of [
