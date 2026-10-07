@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'scripts/**'
+      - 'docs/**'
       - '.github/workflows/deploy.yml'
 
 concurrency:
@@ -18,9 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Enforce design document sync
+        run: node scripts/check_docs_sync.mjs
+      - name: Generate in-app design documents
+        run: node scripts/generate_docs.mjs
       - name: Validate repository
         run: node scripts/validate.mjs
       - name: Run logic tests
