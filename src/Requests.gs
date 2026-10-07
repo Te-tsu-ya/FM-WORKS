@@ -18,6 +18,20 @@ function getRequests(sessionToken, params) {
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
 
+function getPendingRequestCount_(employee) {
+  if (!employee || !employee.employeeId) return 0;
+  const sheet = getDb_().getSheetByName('申請');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  const admin = employee.role === 'ADMIN';
+  const rows = sheet.getRange(2, 3, lastRow - 1, 8).getDisplayValues();
+  return rows.reduce((count, r) => {
+    const employeeId = r[0];
+    const status = r[7];
+    return count + (status === '承認待ち' && (admin || employeeId === employee.employeeId) ? 1 : 0);
+  }, 0);
+}
+
 function getRequestsBundle(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;

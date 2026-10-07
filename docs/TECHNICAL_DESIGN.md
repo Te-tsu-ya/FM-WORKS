@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.1  
+**文書版:** 0.8.2  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.1`
+`APP.version = 0.8.2`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -141,9 +141,11 @@ DBスキーマ目安: 4。
 
 この方式により、確認後の打刻修正、工数変更、休暇承認、会社休日変更を再確認へ戻す。
 
-## 8. 初期データ
+## 8. 初期表示とホーム概要
 
-`getInitialData(sessionToken)` は以下を返す。
+### 8.1 高速初期シェル
+
+`getInitialData(sessionToken)` は、ログイン後の最初の画面を早く出すために次だけを返す。
 
 - app
 - serverTime
@@ -155,11 +157,42 @@ DBスキーマ目安: 4。
 - attendance
 - todaySchedule
 - companyToday
-- monthlyReview
-- month
-- tasks
+- `monthlyReview: null`
+- `month: null`
+- `tasks: null`
+- `overviewReady: false`
 
-`monthlyReview` は全画面コーション表示に使う。
+初期シェルでは `getMonthlySummary` と `getRequests` を呼ばない。今日の予定取得では `getScheduleBundle(..., includeEmployees:false)` を指定し、社員マスタを二重読込しない。
+
+### 8.2 ホーム概要
+
+`getHomeOverview(sessionToken)` は初期描画後に別通信で取得する。
+
+戻り値:
+
+```
+{
+  generatedAt,
+  monthlyReview,
+  month: {
+    workHours,
+    overtime,
+    leaveBalance,
+    paidLeaveDays,
+    worklogMinutes,
+    worklogGapMinutes,
+    missingPunchDays
+  },
+  tasks
+}
+```
+
+申請の「承認待ち件数」は `getPendingRequestCount_(employee)` でC:J列だけを読み、ホーム表示のために申請14列全件をオブジェクト化しない。
+
+クライアントの `loadHomeOverview` は `pageCache.homeOverview` と `pendingLoads` で重複通信を抑止する。概要取得後は `syncGlobalActionBanner` で月次確認コーションだけを更新でき、別画面を表示中でもページ全体を再描画しない。
+
+強制再取得が既存のホーム概要通信と重なった場合は `state.homeOverview.reloadRequested=true` とし、先行レスポンスを画面へ確定反映せず、直後に再取得する。`callbacks` は最終的に確定したレスポンス後にまとめて実行し、打刻・月次確認直後の古い集計値による上書きを防ぐ。
+
 
 ## 9. 通知
 
@@ -372,6 +405,7 @@ disabledは `cursor:not-allowed`。
 
 | 対象 | TTL |
 | --- | ---: |
+| homeOverview | 45秒 |
 | worklog | 90秒 |
 | schedule | 90秒 |
 | requests | 90秒 |
@@ -383,7 +417,7 @@ disabledは `cursor:not-allowed`。
 
 `pendingLoads` で同一キーの重複通信を抑止。
 
-`startMenuPrefetch` でログイン直後に段階的に先読み。
+`startMenuPrefetch` は初回描画とホーム概要通信を優先するため、予定表950ms、工数1350ms、申請1800ms、月次2300ms、会社カレンダー2800ms、ADMIN情報3400msを目安に段階実行する。通知は約900ms、自動バックアップ確認は約1800ms以降に遅延する。
 
 ## 18. 認証
 
@@ -424,6 +458,12 @@ UI非表示だけで権限を守らない。
 
 Apps Scriptの原則:
 
+- ログイン後のFirst Paintを月次集計・申請全件読込でブロックしない。
+- `getInitialData` は高速シェル、`getHomeOverview` は重い集計、という2段階に分離する。
+- 今日の予定取得と社員マスタ取得の重複を避ける。
+- ホームの承認待ち件数は専用の軽量カウントを使う。
+- 管理画面は表示中タブに不要な保守APIを呼ばない。
+- 通知・バックアップ確認・先読みは初回描画後に段階実行する。
 - Sheets呼び出しを減らす。
 - 範囲を一括read。
 - JS配列で加工。
@@ -490,6 +530,8 @@ Apps Scriptの原則:
 - 設定画面のプロジェクト管理関数の存在
 - 文書再読込のforce指定
 - ADMINによる他社員の月次確認状態表示
+- 初期シェルから重い月次/申請読込が除外されていること
+- ホーム概要API・段階先読み・管理保守APIの遅延条件
 
 `scripts/validate.mjs`:
 
