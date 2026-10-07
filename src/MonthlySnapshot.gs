@@ -13,7 +13,11 @@ function monthlySnapshotPayload_(summary) {
       remoteDays: Number(summary && summary.totals && summary.totals.remoteDays || 0),
       missingPunchDays: Number(summary && summary.totals && summary.totals.missingPunchDays || 0),
       worklogMinutes: Number(summary && summary.totals && summary.totals.worklogMinutes || 0),
-      worklogMismatchDays: Number(summary && summary.totals && summary.totals.worklogMismatchDays || 0)
+      worklogMismatchDays: Number(summary && summary.totals && summary.totals.worklogMismatchDays || 0),
+      statutoryOvertimeMinutes: Number(summary && summary.totals && summary.totals.statutoryOvertimeMinutes || 0),
+      lateNightMinutes: Number(summary && summary.totals && summary.totals.lateNightMinutes || 0),
+      statutoryHolidayMinutes: Number(summary && summary.totals && summary.totals.statutoryHolidayMinutes || 0),
+      overtimeHolidayMinutes: Number(summary && summary.totals && summary.totals.overtimeHolidayMinutes || 0)
     },
     daily: (summary && summary.daily || []).map(d => ({
       date: String(d.date || ''),
@@ -31,7 +35,12 @@ function monthlySnapshotPayload_(summary) {
       workLocation: String(d.workLocation || ''),
       leaveStatus: String(d.leaveStatus || ''),
       issueType: String(d.issueType || ''),
-      source: String(d.source || '')
+      source: String(d.source || ''),
+      statutoryDailyOvertimeMinutes: Number(d.statutoryDailyOvertimeMinutes || 0),
+      statutoryWeeklyOvertimeMinutes: Number(d.statutoryWeeklyOvertimeMinutes || 0),
+      lateNightMinutes: Number(d.lateNightMinutes || 0),
+      statutoryHolidayMinutes: Number(d.statutoryHolidayMinutes || 0),
+      laborIssue: String(d.laborIssue || '')
     }))
   };
 }
@@ -58,24 +67,28 @@ function persistMonthlyCloseSnapshots_(yearMonth, summaries, admin) {
       snapshotId, ym, summary.employee.employeeId, summary.employee.name, nowText, admin.name,
       t.workDays, t.absenceDays, t.totalMinutes, t.overtimeMinutes, t.holidayMinutes, t.lateEarlyMinutes,
       t.paidLeaveDays, t.remoteDays, t.missingPunchDays, t.worklogMinutes, t.worklogMismatchDays,
-      monthlySnapshotHash_(summary), nowText
+      monthlySnapshotHash_(summary), nowText,
+      Number(t.statutoryOvertimeMinutes||0),Number(t.lateNightMinutes||0),Number(t.statutoryHolidayMinutes||0),
+      Number(t.overtimeHolidayMinutes||0),summary.labor&&summary.labor.ruleStatus||'UNCONFIGURED'
     ]);
     summary.daily.forEach(d => dailyRows.push([
       snapshotId, ym, summary.employee.employeeId, d.date, d.companyName || d.companyType || '',
       !!d.workingDay, d.clockIn || '', d.clockOut || '', Number(d.workMinutes || 0), Number(d.overtimeMinutes || 0),
       Number(d.holidayMinutes || 0), Number(d.lateEarlyMinutes || 0), Number(d.breakMinutes || 0),
       Number(d.worklogMinutes || 0), d.workLocation || '', d.leaveStatus || '', d.issueType || '',
-      d.source || '', Number(d.worklogDifferenceMinutes || 0)
+      d.source || '', Number(d.worklogDifferenceMinutes || 0),
+      Number(d.statutoryDailyOvertimeMinutes||0),Number(d.statutoryWeeklyOvertimeMinutes||0),Number(d.lateNightMinutes||0),
+      Number(d.statutoryHolidayMinutes||0),d.laborIssue||''
     ]));
   });
 
   if (summaryRows.length) {
     const start = Math.max(2, summarySheet.getLastRow() + 1);
-    summarySheet.getRange(start,1,summaryRows.length,19).setValues(summaryRows);
+    summarySheet.getRange(start,1,summaryRows.length,24).setValues(summaryRows);
   }
   if (dailyRows.length) {
     const start = Math.max(2, dailySheet.getLastRow() + 1);
-    dailySheet.getRange(start,1,dailyRows.length,19).setValues(dailyRows);
+    dailySheet.getRange(start,1,dailyRows.length,24).setValues(dailyRows);
   }
   SpreadsheetApp.flush();
   return snapshotId;
@@ -91,10 +104,10 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
   if (!summarySheet || !dailySheet) throw new Error('月次確定スナップショットが利用できません。');
 
   const summaryRows = summarySheet.getLastRow() < 2 ? [] :
-    summarySheet.getRange(2,1,summarySheet.getLastRow()-1,19).getDisplayValues()
+    summarySheet.getRange(2,1,summarySheet.getLastRow()-1,24).getDisplayValues()
       .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
   const dailyRows = dailySheet.getLastRow() < 2 ? [] :
-    dailySheet.getRange(2,1,dailySheet.getLastRow()-1,19).getDisplayValues()
+    dailySheet.getRange(2,1,dailySheet.getLastRow()-1,24).getDisplayValues()
       .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
 
   const dailyByEmployee = {};
@@ -107,7 +120,9 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
       requiredBreakMinutes:requiredBreakMinutes_(Number(r[8]||0)), worklogMinutes:Number(r[13]||0),
       worklogDifferenceMinutes:diff, worklogIssue:Math.abs(diff)>5, workLocation:r[14]||'',
       remote:(r[14]||'')==='在宅', leaveStatus:r[15]||'', absence:String(r[15]||'').includes('欠勤'),
-      source:r[17]||'SNAPSHOT', issue:!!r[16], issueType:r[16]||''
+      source:r[17]||'SNAPSHOT', issue:!!r[16], issueType:r[16]||'',
+      statutoryDailyOvertimeMinutes:Number(r[19]||0),statutoryWeeklyOvertimeMinutes:Number(r[20]||0),
+      lateNightMinutes:Number(r[21]||0),statutoryHolidayMinutes:Number(r[22]||0),laborIssue:r[23]||''
     };
     (dailyByEmployee[r[2]]||(dailyByEmployee[r[2]]=[])).push(item);
   });
@@ -122,8 +137,11 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
       workDays:Number(r[6]||0), absenceDays:Number(r[7]||0), totalMinutes:Number(r[8]||0),
       overtimeMinutes:Number(r[9]||0), holidayMinutes:Number(r[10]||0), lateEarlyMinutes:Number(r[11]||0),
       paidLeaveDays:Number(r[12]||0), remoteDays:Number(r[13]||0), missingPunchDays:Number(r[14]||0),
-      worklogMinutes:Number(r[15]||0), worklogMismatchDays:Number(r[16]||0)
+      worklogMinutes:Number(r[15]||0), worklogMismatchDays:Number(r[16]||0),
+      statutoryOvertimeMinutes:Number(r[19]||0),lateNightMinutes:Number(r[20]||0),
+      statutoryHolidayMinutes:Number(r[21]||0),overtimeHolidayMinutes:Number(r[22]||0)
     },
+    labor:{ruleStatus:r[23]||'UNCONFIGURED',profile:'SNAPSHOT',weekStartDay:'',warnings:[]},
     daily:dailyByEmployee[r[2]]||[],
     requests:[],
     closeStatus:getMonthlyCloseStatusInternal_(ym),

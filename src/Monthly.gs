@@ -276,6 +276,8 @@ function closeMonthlyPeriod(sessionToken, yearMonth) {
     const employees=getPayrollEmployees_();
     if(!employees.length)throw new Error('給与集計対象の社員が設定されていません。');
     const summaries=employees.map(e=>getMonthlySummary(sessionToken,ym,e.employeeId));
+    const laborBlocked=summaries.filter(s=>!s.labor||s.labor.ruleStatus!=='CONFIGURED');
+    if(laborBlocked.length)throw new Error('労務ルールが未確定です。設定 → 運用設定で就業規則・36協定を確認してから月次締めしてください。');
     const attendanceBlockers=summaries.filter(s=>s.totals.missingPunchDays>0);
     if(attendanceBlockers.length){
       throw new Error('要確認の勤怠が残っています: '+attendanceBlockers.map(s=>s.employee.name+' '+s.totals.missingPunchDays+'日').join(' / '));
@@ -458,7 +460,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     const company=registeredCompany||{date:date,type:'未登録',working:false,start:'',end:'',breakMinutes:0,name:''};
     const past=date<systemToday;
 
-    let clockIn='',clockOut='',minutes=0,overtime=0,holiday=0,lateEarly=0,breakMinutes=0,workLocation='',remote=false;
+    let clockIn='',clockOut='',minutes=0,overtime=0,holiday=0,lateEarly=0,breakMinutes=0,lateNight=0,workLocation='',remote=false;
     let absence=false,leaveStatus='',issueType='';
     const worklogDayMinutes=Number(worklogByDate[date]||0);
 
@@ -470,6 +472,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       holiday=snapshot.holidayMinutes;
       lateEarly=snapshot.lateEarlyMinutes;
       breakMinutes=Number(snapshot.breakMinutes||0);
+      lateNight=estimateLateNightMinutesFromClockTimes_(clockIn,clockOut);
       workLocation=snapshot.workLocation;
       remote=snapshot.remote&&minutes>0;
       const legacyPaid=Math.max(0,Number(snapshot.paidLeave||0));
@@ -495,6 +498,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       clockOut=clockOutRow?clockOutRow.timestamp.slice(11,16):'';
       minutes=rows.length?calculateMonthlyDayMinutes_(rows,date===systemToday):0;
       breakMinutes=rows.length?calculateBreakMinutesForRows_(rows,date===systemToday):0;
+      lateNight=rows.length?calculateLateNightMinutesForRows_(rows,date===systemToday):0;
       const standard=company.working&&company.start&&company.end
         ? Math.max(0,timeRangeMinutes_(company.start,company.end)-Number(company.breakMinutes||0))
         : 0;
@@ -559,6 +563,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       holidayMinutes:holiday,
       lateEarlyMinutes:lateEarly,
       breakMinutes:breakMinutes,
+      lateNightMinutes:lateNight,
       requiredBreakMinutes:requiredBreak,
       worklogMinutes:worklogDayMinutes,
       worklogDifferenceMinutes:worklogDifference,
@@ -572,6 +577,8 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       issueType:issueType
     });
   }
+
+  const labor=applyLaborModelToMonthlyDaily_(daily,targetId,start,end,systemToday);
 
   return {
     yearMonth:ym,
@@ -587,8 +594,13 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
       remoteDays:remoteDays,
       missingPunchDays:missingPunchDays,
       worklogMinutes:worklogMinutes,
-      worklogMismatchDays:worklogMismatchDays
+      worklogMismatchDays:worklogMismatchDays,
+      statutoryOvertimeMinutes:labor.statutoryOvertimeMinutes,
+      lateNightMinutes:labor.lateNightMinutes,
+      statutoryHolidayMinutes:labor.statutoryHolidayMinutes,
+      overtimeHolidayMinutes:labor.overtimeHolidayMinutes
     },
+    labor:labor,
     daily:daily,
     requests:requests,
     closeStatus:getMonthlyCloseStatusInternal_(ym),

@@ -9,7 +9,8 @@ const files = [
   'src/Monthly.gs',
   'src/MonthlySnapshot.gs',
   'src/LeaveLedger.gs',
-  'src/Maintenance.gs'
+  'src/Maintenance.gs',
+  'src/Labor.gs'
 ];
 
 const context = vm.createContext({
@@ -60,7 +61,11 @@ globalThis.__fmTest = {
   normalizeScheduleVisibility_,
   canViewScheduleRow_,
   normalizeRuntimeEnvironment_,
-  isBackupDue_
+  isBackupDue_,
+  normalizeLaborWeekStartDay_,
+  dailyStatutoryOvertimeMinutes_,
+  lateNightOverlapMinutes_,
+  applyWeeklyStatutoryOvertimeToFacts_
 };
 `, context);
 
@@ -170,6 +175,15 @@ expect('runtime environment accepts production', api.normalizeRuntimeEnvironment
 expect('unknown runtime environment falls back to staging', api.normalizeRuntimeEnvironment_('UNKNOWN')==='STAGING');
 expect('backup due when last backup is prior day', api.isBackupDue_('2026-10-06 03:12:00','2026-10-07')===true);
 expect('backup skipped when already backed up today', api.isBackupDue_('2026-10-07 03:12:00','2026-10-07')===false);
+expect('labor week start normalizes', api.normalizeLaborWeekStartDay_('monday')==='MONDAY');
+expect('8h has no daily statutory overtime', api.dailyStatutoryOvertimeMinutes_(480,false)===0);
+expect('9h has 60m daily statutory overtime', api.dailyStatutoryOvertimeMinutes_(540,false)===60);
+expect('statutory holiday work is not daily overtime', api.dailyStatutoryOvertimeMinutes_(600,true)===0);
+expect('22:00-23:30 has 90m late night', api.lateNightOverlapMinutes_(1320,1410)===90);
+expect('23:00-06:00 has 360m late night', api.lateNightOverlapMinutes_(1380,1800)===360);
+const weekFacts=['2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-10'].map((date,i)=>({date,workMinutes:i<5?480:120,statutoryHoliday:false}));
+api.applyWeeklyStatutoryOvertimeToFacts_(weekFacts,'MONDAY');
+expect('week over 40h allocates 120m weekly overtime', weekFacts[5].statutoryWeeklyOvertimeMinutes===120);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

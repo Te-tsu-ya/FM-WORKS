@@ -49,6 +49,7 @@ function getSystemStatus(sessionToken) {
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
     environment: runtime.environment,
+    laborConfig: getLaborRuleConfig_(),
     explicitDb: runtime.explicitDb,
     usingDefaultStagingDb: runtime.usingDefaultStagingDb,
     readiness: getProductionReadiness_(),
@@ -64,7 +65,7 @@ function getProductionReadiness_() {
   const horizon=Utilities.formatDate(new Date(now.getTime()+90*86400000),DB.timeZone,'yyyy-MM-dd');
   const requiredSheets=[
     DB.sheets.employees,DB.sheets.punches,'日次勤怠','工数','申請',DB.sheets.companyCalendar,
-    DB.sheets.audit,AUTH.settingsSheet,DB.sheets.schedule,AUTH.sessionSheet,AUTH.resetSheet,DB.sheets.projects,DB.sheets.monthlyReview
+    DB.sheets.audit,AUTH.settingsSheet,DB.sheets.schedule,AUTH.sessionSheet,AUTH.resetSheet,DB.sheets.projects,DB.sheets.monthlyReview,DB.sheets.monthlySnapshot,DB.sheets.monthlySnapshotDaily,DB.sheets.leaveLedger
   ];
   const sheetNames=new Set(db.getSheets().map(s=>s.getName()));
   const blockers=[];
@@ -116,6 +117,9 @@ function getProductionReadiness_() {
   if(!backupAt)warnings.push('バックアップがまだありません');
   else if(backupAgeHours>36)warnings.push('最終バックアップから36時間以上経過しています');
 
+  const laborConfig=getLaborRuleConfig_();
+  if(!laborConfig.configured)blockers.push('労務ルールが未確定です（就業規則・36協定の確認が必要）');
+
   const prototypeMode=isPrototypeMode_();
   if(prototypeMode)blockers.push('試作版共通PINモードが有効です');
 
@@ -124,6 +128,7 @@ function getProductionReadiness_() {
     prototypeMode:prototypeMode,
     environment:runtime.environment,
     backupTriggerInstalled:triggerState.installed,
+    laborConfig:laborConfig,
     blockers:blockers,
     warnings:warnings,
     activeEmployees:employeeRows.length,

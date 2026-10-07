@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.5',
+  version: '0.9.6',
   locale: 'ja-JP'
 });
 
@@ -796,7 +796,7 @@ function saveCompanyCalendarDay(sessionToken, payload) {
 
   return withScriptLock_(function() {
     const date = normalizeDate_(payload.date);
-    const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
+    const allowedTypes = ['通常勤務', '法定祝日', '法定休日', '会社休日', '調整出勤日', '週末'];
     const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
     const working = type === '通常勤務' || type === '調整出勤日';
     const name = safeSheetText_(payload.name, 100);

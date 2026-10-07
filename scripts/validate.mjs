@@ -58,6 +58,7 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
 }
 const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
 const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
+const laborCodeText = fs.readFileSync(path.join(root,'src/Labor.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
@@ -132,6 +133,13 @@ if (!authCode.includes('leaveBasisDate: r[24]') || !authCode.includes('hireDate:
   console.error('Employee leave basis/hire dates are not persisted.');
   failed = true;
 }
+
+for (const marker of ['function getLaborRuleConfig_(','function saveLaborRuleConfig(','function applyLaborModelToMonthlyDaily_(','monthlyOvertimePrincipleMinutes:2700','nightStartMinutes:1320']) {
+  if (!laborCodeText.includes(marker)) { console.error('Labor model marker missing: '+marker); failed=true; }
+}
+if (!serverCode.includes("'法定休日'") || !app.includes("'法定休日'")) { console.error('Statutory holiday calendar type missing.'); failed=true; }
+if (!monthlySnapshotMainCode.includes('applyLaborModelToMonthlyDaily_') || !monthlySnapshotMainCode.includes('laborBlocked=summaries.filter')) { console.error('Monthly labor gate missing.'); failed=true; }
+if (!app.includes('function laborRulePanel(') || !app.includes('function saveLaborRulesFromAdmin(')) { console.error('Labor UI missing.'); failed=true; }
 
 for (const authMarker of [
   'function login(',
