@@ -89,12 +89,11 @@ function login(employeeId, pin, clientInfo) {
     }
     if (record.authState === 'DISABLED') throw loginError_();
 
+    const prototypeAccess = isPrototypeLogin_(record, value);
     const now = new Date();
-    if (record.lockUntil && parseTimestamp_(record.lockUntil) > now) {
+    if (!prototypeAccess && record.lockUntil && parseTimestamp_(record.lockUntil) > now) {
       throw new Error('ログインできません。しばらく待ってから再度お試しください。');
     }
-
-    const prototypeAccess = isPrototypeLogin_(record, value);
     if ((!record.pinHash || !record.pinSalt) && !prototypeAccess) {
       throw loginError_();
     }
@@ -480,7 +479,7 @@ function requireSession_(sessionToken) {
   if (!found) throw new Error('AUTH_REQUIRED');
 
   const rowNumber = found.getRow();
-  const row = sheet.getRange(rowNumber, 1, 1, 10).getDisplayValues()[0];
+  const row = sheet.getRange(rowNumber, 1, 1, 10).getValues()[0];
   const now = new Date();
   const absoluteExpiry = parseTimestamp_(row[4]);
   const idleExpiry = parseTimestamp_(row[5]);
@@ -538,7 +537,7 @@ function cleanupExpiredSessions_() {
   const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
   const now = new Date();
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
@@ -774,8 +773,19 @@ function toTimestamp_(date) {
 }
 
 function parseTimestamp_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(value.getTime());
+  }
   const s = String(value || '').trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+  const date = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+    Number(m[6] || 0)
+  );
+  return isNaN(date.getTime()) ? null : date;
 }
