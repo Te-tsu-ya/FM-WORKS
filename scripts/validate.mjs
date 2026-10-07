@@ -115,7 +115,7 @@ for (const compactLoginStyleMarker of [
   '.login-mode{overflow:hidden!important',
   '.login-shell{height:100svh;min-height:0',
   'height:min(590px,calc(100svh - 24px))',
-  '@media(max-height:620px) and (max-width:900px)'
+  '@media(max-height:560px) and (max-width:900px)'
 ]) {
   if (!styles.includes(compactLoginStyleMarker)) {
     console.error(`Single-viewport login style missing: ${compactLoginStyleMarker}`);
