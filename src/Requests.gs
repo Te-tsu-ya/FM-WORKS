@@ -18,6 +18,28 @@ function getRequests(sessionToken, params) {
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
 
+function getRequestsBundle(sessionToken) {
+  const session = requireSession_(sessionToken);
+  const employee = session.employee;
+  const sheet = getDb_().getSheetByName('申請');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { own: [], team: [] };
+
+  const items = sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues()
+    .filter(r => r[0] && (employee.role === 'ADMIN' || r[2] === employee.employeeId))
+    .map(r => ({
+      id:r[0], requestDate:r[1], employeeId:r[2], name:r[3], type:r[4],
+      startDate:r[5], endDate:r[6], content:r[7], reason:r[8], status:r[9],
+      approver:r[10], approvedAt:r[11], rejectReason:r[12], createdAt:r[13]
+    }))
+    .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+
+  return {
+    own: items.filter(r => r.employeeId === employee.employeeId),
+    team: employee.role === 'ADMIN' ? items : []
+  };
+}
+
 function submitRequest(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
   payload = payload || {};
