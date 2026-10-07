@@ -250,7 +250,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','projectAdminSection','openProjectModal','saveProjectFromModal']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;
@@ -505,6 +505,9 @@ for (const marker of [
   'function monthlyCalendarView(',
   'function confirmMonthlyReviewFromPage()',
   'function loadSystemDocument(',
+  'function projectAdminSection()',
+  'function openProjectModal(',
+  'function saveProjectFromModal(',
   '要件定義書',
   '技術設計書',
   'function toggleTheme()'
@@ -526,6 +529,15 @@ for (const marker of [
     console.error('Required v0.8 style missing: ' + marker);
     failed = true;
   }
+}
+
+if (!app.includes("loadSystemDocument('${type}',{force:true})")) {
+  console.error('Design document reload button must bypass the client cache.');
+  failed = true;
+}
+if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了です'}")) {
+  console.error('Admin monthly view must expose the selected employee review status.');
+  failed = true;
 }
 
 if (!docsCode.includes('requireAdminSession_(sessionToken)')) {
