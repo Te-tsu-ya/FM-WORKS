@@ -50,8 +50,12 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const requests = getApprovedRequestsForMonth_(targetId,start,end);
   let paidLeaveDays=0;
   requests.forEach(r=>{
-    if(r.type==='有給') paidLeaveDays += dateSpanDays_(r.startDate,r.endDate);
-    if(r.type==='午前半休'||r.type==='午後半休') paidLeaveDays += 0.5;
+    if(r.type==='有給') {
+      paidLeaveDays += countWorkingLeaveDays_(r.startDate,r.endDate,calendarMap,start,end);
+    }
+    if((r.type==='午前半休'||r.type==='午後半休') && calendarMap[r.startDate] && calendarMap[r.startDate].working) {
+      paidLeaveDays += 0.5;
+    }
   });
 
   const worklogSheet=getDb_().getSheetByName('工数');
@@ -82,27 +86,74 @@ function calculateMonthlyDayMinutes_(rows, isToday) {
 
 function createMonthlyExport(sessionToken, yearMonth, employeeId) {
   const summary=getMonthlySummary(sessionToken,yearMonth,employeeId);
-  const header=['日付','会社区分','出勤','退勤','実働分','残業分','休日出勤分','勤務場所','要確認'];
+  const header=['日付','会社区分','出勤','退勤','実働時間','残業時間','休日出勤時間','勤務場所','要確認'];
   const rows=[header];
   summary.daily.forEach(d=>rows.push([
-    d.date,d.companyName||d.companyType,d.clockIn,d.clockOut,d.workMinutes,d.overtimeMinutes,d.holidayMinutes,d.workLocation,d.issue?'要確認':''
+    d.date,
+    d.companyName||d.companyType,
+    d.clockIn,
+    d.clockOut,
+    minutesToExcelTime_(d.workMinutes),
+    minutesToExcelTime_(d.overtimeMinutes),
+    minutesToExcelTime_(d.holidayMinutes),
+    d.workLocation,
+    d.issue?'要確認':''
   ]));
   rows.push([]);
   rows.push(['社員',summary.employee.name]);
   rows.push(['勤務日数',summary.totals.workDays]);
-  rows.push(['実働分',summary.totals.totalMinutes]);
-  rows.push(['残業分',summary.totals.overtimeMinutes]);
-  rows.push(['休日出勤分',summary.totals.holidayMinutes]);
+  rows.push(['実働時間',minutesToExcelTime_(summary.totals.totalMinutes)]);
+  rows.push(['残業時間',minutesToExcelTime_(summary.totals.overtimeMinutes)]);
+  rows.push(['休日出勤時間',minutesToExcelTime_(summary.totals.holidayMinutes)]);
   rows.push(['有給取得日数',summary.totals.paidLeaveDays]);
-  rows.push(['工数入力分',summary.totals.worklogMinutes]);
+  rows.push(['工数入力時間',minutesToExcelTime_(summary.totals.worklogMinutes)]);
 
-  const csv='\uFEFF'+rows.map(r=>r.map(csvEscape_).join(',')).join('\r\n');
+  const fileName='FM_WORKS_'+summary.employee.employeeId+'_'+summary.yearMonth+'.xlsx';
+  let blob;
+  let tempFileId='';
+  try {
+    const temp=SpreadsheetApp.create('FM_WORKS_EXPORT_'+Utilities.getUuid());
+    tempFileId=temp.getId();
+    const sheet=temp.getSheets()[0];
+    sheet.setName('勤怠集計');
+    sheet.getRange(1,1,rows.length,header.length).clear();
+    rows.forEach((row,index)=>{
+      if(!row.length)return;
+      sheet.getRange(index+1,1,1,row.length).setValues([row]);
+    });
+    sheet.setFrozenRows(1);
+    sheet.getRange(1,1,1,header.length).setFontWeight('bold').setBackground('#10294f').setFontColor('#ffffff');
+    sheet.autoResizeColumns(1,header.length);
+    if(summary.daily.length){
+      sheet.getRange(2,5,summary.daily.length,3).setNumberFormat('[h]:mm');
+    }
+    SpreadsheetApp.flush();
+
+    const exportUrl='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(tempFileId)+'/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const response=UrlFetchApp.fetch(exportUrl,{
+      headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},
+      muteHttpExceptions:false
+    });
+    blob=response.getBlob().setName(fileName);
+  } finally {
+    if(tempFileId){
+      try{DriveApp.getFileById(tempFileId).setTrashed(true);}catch(e){console.warn('temporary export cleanup failed',e);}
+    }
+  }
+
+  if(!blob) throw new Error('Excelファイルを作成できませんでした。');
+
   const emailLines=summary.requests.length?summary.requests.map(r=>'・'+r.startDate+(r.endDate!==r.startDate?'〜'+r.endDate:'')+' '+r.type):['・特になし'];
   return {
-    filename:'FM_WORKS_'+summary.employee.employeeId+'_'+summary.yearMonth+'.csv',
-    base64:Utilities.base64Encode(csv,Utilities.Charset.UTF_8),
+    filename:fileName,
+    mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    base64:Utilities.base64Encode(blob.getBytes()),
     emailText:'■有給・残業・休日出勤等\n【'+summary.employee.name+'】\n'+emailLines.join('\n')+'\n・在宅勤務日数 '+summary.daily.filter(d=>d.workLocation==='在宅').length+'日'
   };
+}
+
+function minutesToExcelTime_(minutes){
+  return Math.max(0,Number(minutes||0))/1440;
 }
 
 function getApprovedRequestsForMonth_(employeeId,start,end) {
@@ -111,6 +162,24 @@ function getApprovedRequestsForMonth_(employeeId,start,end) {
   return sheet.getRange(2,1,sheet.getLastRow()-1,14).getDisplayValues()
     .filter(r=>r[2]===employeeId&&r[9]==='承認済'&&r[5]<=end&&r[6]>=start)
     .map(r=>({id:r[0],type:r[4],startDate:r[5],endDate:r[6],reason:r[8]}));
+}
+
+function countWorkingLeaveDays_(requestStart,requestEnd,calendarMap,monthStart,monthEnd){
+  const start=requestStart<monthStart?monthStart:requestStart;
+  const end=requestEnd>monthEnd?monthEnd:requestEnd;
+  if(start>end)return 0;
+  let count=0;
+  for(let d=start;;d=addDateString_(d,1)){
+    if(calendarMap[d]&&calendarMap[d].working)count++;
+    if(d===end)break;
+  }
+  return count;
+}
+
+function addDateString_(dateString,days){
+  const p=String(dateString).split('-').map(Number);
+  const d=new Date(Date.UTC(p[0],p[1]-1,p[2]+days));
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
 }
 
 function dateSpanDays_(start,end){
