@@ -960,3 +960,8 @@ DB:
 ```
 
 有給系の取消承認ではRESTOREを台帳へ記録する。打刻修正は補償処理の複雑性から直接取消対象外とし、新規打刻修正で訂正する。
+
+
+### 34.1 Export entrypoint authentication
+
+`createMonthlyExport` は公開API入口で `requireSession_` を実行し、その後 `getMonthlySummaryForExport_` へ委譲する。

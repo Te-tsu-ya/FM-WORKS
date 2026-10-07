@@ -660,6 +660,7 @@ function calculateMonthlyDayMinutes_(rows, isToday) {
 }
 
 function createMonthlyExport(sessionToken, yearMonth, employeeId) {
+  requireSession_(sessionToken);
   const summary = getMonthlySummaryForExport_(sessionToken, yearMonth, employeeId);
   assertMonthlyReadyForExport_(summary);
 
