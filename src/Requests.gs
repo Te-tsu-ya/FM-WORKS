@@ -23,9 +23,7 @@ function getRequestsBundle(sessionToken) {
   const employee = session.employee;
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { own: [], team: [] };
-
-  const items = sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues()
+  const items = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues()
     .filter(r => r[0] && (employee.role === 'ADMIN' || r[2] === employee.employeeId))
     .map(r => ({
       id:r[0], requestDate:r[1], employeeId:r[2], name:r[3], type:r[4],
@@ -34,9 +32,88 @@ function getRequestsBundle(sessionToken) {
     }))
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 
+  const own = items.filter(r => r.employeeId === employee.employeeId);
   return {
-    own: items.filter(r => r.employeeId === employee.employeeId),
-    team: employee.role === 'ADMIN' ? items : []
+    own: own,
+    team: employee.role === 'ADMIN' ? items : [],
+    context: getLeaveRequestContext_(employee.employeeId, own)
+  };
+}
+
+function getLeaveRequestContext_(employeeId, ownRequests) {
+  const employee = getEmployee_(employeeId);
+  if (!employee) throw new Error('社員情報が見つかりません。');
+
+  const paidTypes = new Set(['有給','午前半休','午後半休','1/4日有給']);
+  let pendingDays = 0;
+  let pendingUnknown = 0;
+  const items = Array.isArray(ownRequests) ? ownRequests : getRequestsForEmployee_(employeeId);
+
+  items.filter(r => r.status === '承認待ち' && paidTypes.has(r.type)).forEach(r => {
+    try {
+      pendingDays += calculateLeaveDaysForRequest_(r.type, r.startDate, r.endDate);
+    } catch (e) {
+      pendingUnknown++;
+    }
+  });
+
+  pendingDays = Math.round(pendingDays * 4) / 4;
+  const balance = employee.leaveBalanceConfigured ? Number(employee.leaveBalance || 0) : null;
+  const available = balance == null ? null : Math.max(0, Math.round((balance - pendingDays) * 4) / 4);
+
+  return {
+    leaveBalanceConfigured: !!employee.leaveBalanceConfigured,
+    leaveBalance: balance,
+    pendingLeaveDays: pendingDays,
+    availableLeaveDays: available,
+    pendingUnknownCount: pendingUnknown
+  };
+}
+
+function getRequestsForEmployee_(employeeId) {
+  const sheet = getDb_().getSheetByName('申請');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2,1,lastRow-1,14).getDisplayValues()
+    .filter(r => r[0] && r[2] === employeeId)
+    .map(r => ({
+      id:r[0], requestDate:r[1], employeeId:r[2], name:r[3], type:r[4],
+      startDate:r[5], endDate:r[6], content:r[7], reason:r[8], status:r[9],
+      approver:r[10], approvedAt:r[11], rejectReason:r[12], createdAt:r[13]
+    }));
+}
+
+function previewRequest(sessionToken, payload) {
+  const employee = requireSession_(sessionToken).employee;
+  payload = payload || {};
+  const type = String(payload.type || '');
+  if (!REQUEST_TYPES.includes(type)) throw new Error('申請種別を確認してください。');
+
+  const startDate = normalizeDate_(payload.startDate);
+  const endDate = normalizeDate_(payload.endDate || startDate);
+  if (startDate > endDate) throw new Error('終了日は開始日以降にしてください。');
+
+  const paidTypes = ['有給','午前半休','午後半休','1/4日有給'];
+  const context = getLeaveRequestContext_(employee.employeeId);
+  let requestedDays = null;
+  let projectedBalance = context.availableLeaveDays;
+
+  if (paidTypes.includes(type)) {
+    requestedDays = calculateLeaveDaysForRequest_(type, startDate, endDate);
+    projectedBalance = context.availableLeaveDays == null
+      ? null
+      : Math.round((context.availableLeaveDays - requestedDays) * 4) / 4;
+  }
+
+  return {
+    type:type,
+    requestedDays:requestedDays,
+    leaveBalanceConfigured:context.leaveBalanceConfigured,
+    leaveBalance:context.leaveBalance,
+    pendingLeaveDays:context.pendingLeaveDays,
+    availableLeaveDays:context.availableLeaveDays,
+    projectedBalance:projectedBalance,
+    sufficient:projectedBalance == null ? false : projectedBalance >= 0
   };
 }
 
@@ -55,6 +132,22 @@ function submitRequest(sessionToken, payload) {
     }
     if (['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(type)) {
       assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
+    }
+    if (['有給','午前半休','午後半休','1/4日有給'].includes(type)) {
+      const leaveContext = getLeaveRequestContext_(employee.employeeId);
+      if (!leaveContext.leaveBalanceConfigured) {
+        throw new Error('有給残日数が未設定です。管理者に社員情報の有給残日数を設定してもらってください。');
+      }
+      const requestedDays = calculateLeaveDaysForRequest_(type, startDate, endDate);
+      if (requestedDays <= 0) {
+        throw new Error('この日付では有給を消化しません。会社カレンダーの勤務日を確認してください。');
+      }
+      if (leaveContext.availableLeaveDays < requestedDays) {
+        throw new Error(
+          '有給残日数が不足しています。承認待ちを含む申請可能残数は ' +
+          leaveContext.availableLeaveDays + '日、今回の申請は ' + requestedDays + '日です。'
+        );
+      }
     }
     const reason = safeSheetText_(payload.reason, 600);
     if (!reason) throw new Error('申請理由を入力してください。');
