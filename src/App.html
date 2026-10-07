@@ -208,10 +208,13 @@ function globalActionBanners(){
   const r=state.data&&state.data.monthlyReview;
   if(!r||!r.needsAttention)return '';
   const danger=r.urgency==='danger';
+  const backlog=!!r.isBacklog;
+  const count=Number(r.pendingCount||1);
+  const countText=count>1?' 未確認・再確認が必要な月が'+count+'か月あります。':'';
   return `<section class='global-caution ${danger?'danger':'warning'}' role='status'>
     <div class='caution-icon'>!</div>
-    <div><strong>${escapeHtml(r.targetMonth)}の勤怠確認が${r.stale?'再度必要です':'未完了です'}</strong><p>${escapeHtml(r.message)} 月初の確認が終わるまで表示されます。</p></div>
-    <button class='primary-button compact' onclick='openPreviousMonthReview()'>先月の勤怠を確認</button>
+    <div><strong>${escapeHtml(r.targetMonth)}の勤怠確認が${r.stale?'再度必要です':backlog?'残っています':'未完了です'}</strong><p>${escapeHtml(r.message+countText)} 確認完了まで表示されます。</p></div>
+    <button class='primary-button compact' onclick='openPreviousMonthReview()'>${backlog?escapeHtml(r.targetMonth)+'を確認':'先月の勤怠を確認'}</button>
   </section>`;
 }
 function openPreviousMonthReview(){
@@ -795,10 +798,10 @@ function confirmMonthlyReviewFromPage(){
   openConfirmDialog('勤怠確認を完了しますか？',d.yearMonth+' の出退勤・休暇・残業・工数を確認し、内容に誤りがないことを記録します。','確認完了',()=>{
     google.script.run.withSuccessHandler(status=>{
       d.reviewStatus=status;
-      if(state.data.monthlyReview&&state.data.monthlyReview.targetMonth===d.yearMonth){
-        state.data.monthlyReview={...state.data.monthlyReview,needsAttention:false,confirmed:true,stale:false,confirmedAt:status.confirmedAt};
-      }
-      renderPage();loadNotifications();showToast(d.yearMonth+'の勤怠確認を完了しました');
+      refreshAppData(()=>{
+        loadNotifications();
+        showToast(d.yearMonth+'の勤怠確認を完了しました');
+      });
     }).withFailureHandler(err=>handleApiError(err,'月次確認を完了できませんでした')).confirmMonthlyReview(state.sessionToken,d.yearMonth,'本人確認');
   },false);
 }
