@@ -36,7 +36,15 @@ function handleApiError(err,fallback){
   showToast(msg&& !msg.includes('Exception:')?msg:fallback);
   return false;
 }
-function setSessionToken(token){state.sessionToken=token||null;if(token)sessionStorage.setItem('fmworks.session',token);else sessionStorage.removeItem('fmworks.session')}
+function setSessionToken(token,persistent=false){
+  state.sessionToken=token||null;
+  sessionStorage.removeItem('fmworks.session');
+  localStorage.removeItem('fmworks.session');
+  if(token){
+    (persistent?localStorage:sessionStorage).setItem('fmworks.session',token);
+  }
+}
+function getStoredSessionToken(){return localStorage.getItem('fmworks.session')||sessionStorage.getItem('fmworks.session')||null}
 function clearLocalSession(){setSessionToken(null);state.data=null;state.authAdmin=null}
 function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 587" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg>`}
 
@@ -613,7 +621,8 @@ function renderLogin(message=''){
         <div class='setup-note'>PINを忘れた社員が迷わないように、問い合わせ先を1つ以上登録してください。</div>
         <label class='login-field'><span>管理者メール（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportEmail' type='email' autocomplete='email' placeholder='admin@example.jp'></div></label>
         <label class='login-field'><span>管理者電話番号（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportPhone' inputmode='tel' autocomplete='tel' placeholder='0254-xx-xxxx'></div></label>`:''}
-        <label class='login-remember'><input id='rememberEmployeeId' type='checkbox' ${remembered?'checked':''}><span>社員番号を記憶する</span></label>
+        <label class='login-remember'><input id='rememberLogin' type='checkbox' checked><span>この端末でログイン状態を保持する（30日）</span></label>
+        <small class='login-device-note'>共有PCではチェックを外してください。</small>
         <button id='loginSubmit' class='login-submit' type='submit'>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
         <div class='login-help'>
           <button type='button' onclick='openPinHelpModal()'>PINを忘れた場合</button>
@@ -644,7 +653,7 @@ function submitLogin(event){
   event.preventDefault();
   const id=document.getElementById('loginEmployeeId').value.trim().toUpperCase();
   const pin=document.getElementById('loginPin').value;
-  const remember=document.getElementById('rememberEmployeeId').checked;
+  const remember=document.getElementById('rememberLogin').checked;
   let initialSupport=null;
   if(state.publicConfig&&state.publicConfig.needsSetup){
     const confirmPin=document.getElementById('loginPinConfirm').value;
@@ -657,12 +666,12 @@ function submitLogin(event){
   if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
   setLoginBusy(true);
   const runner=google.script.run.withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
-  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport);
-  else runner.login(id,pin,clientInfo());
+  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport,remember);
+  else runner.login(id,pin,clientInfo(),remember);
 }
 
 function acceptLogin(result){
-  setSessionToken(result.sessionToken);
+  setSessionToken(result.sessionToken,!!result.remembered);
   loadAuthenticatedApp(!!result.mustChangePin);
 }
 
@@ -877,7 +886,7 @@ function submitPinHelp(){
 }
 
 function bootstrap(){
-  state.sessionToken=sessionStorage.getItem('fmworks.session')||null;
+  state.sessionToken=getStoredSessionToken();
   const button=document.getElementById('profileButton');
   if(button)button.addEventListener('click',e=>{e.stopPropagation();toggleProfileMenu()});
   document.addEventListener('click',e=>{
