@@ -94,6 +94,17 @@ function approveRequest(sessionToken, requestId, decision, comment) {
   if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
   const approve = decision === 'APPROVE';
   const nowText = toTimestamp_(new Date());
+  let leaveDaysToConsume = 0;
+  let leaveEmployee = null;
+  if (approve && ['有給','午前半休','午後半休'].includes(r[4])) {
+    leaveEmployee = getEmployee_(r[2]);
+    leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
+    if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
+    if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
+      throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
+    }
+  }
+
   rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
     approve ? '承認済' : '差戻し',
     admin.name,
@@ -103,6 +114,10 @@ function approveRequest(sessionToken, requestId, decision, comment) {
 
   if (approve && r[4] === '打刻修正') {
     applyApprovedPunchCorrection_(r);
+  }
+  if (approve && leaveEmployee && leaveDaysToConsume > 0) {
+    const employeeSheet = getDb_().getSheetByName(DB.sheets.employees);
+    employeeSheet.getRange(leaveEmployee.rowNumber,11).setValue(leaveEmployee.leaveBalance - leaveDaysToConsume);
   }
 
   appendAudit_({
@@ -123,6 +138,28 @@ function getPunchesForDate(sessionToken, date) {
   return sheet.getRange(2,1,lastRow-1,12).getDisplayValues()
     .filter(r=>r[1]===employee.employeeId && r[3]===targetDate && String(r[8]).toUpperCase()!=='TRUE')
     .map(r=>({id:r[0],action:r[4],timestamp:r[5],workLocation:r[6]}));
+}
+
+function calculateLeaveDaysForRequest_(type, startDate, endDate) {
+  if (type === '午前半休' || type === '午後半休') {
+    const days = getCompanyCalendarRange_(startDate, startDate);
+    if (days.length !== 1) throw new Error('対象日の会社カレンダーが未登録です。');
+    return days[0].working ? 0.5 : 0;
+  }
+  const expected = inclusiveDateCount_(startDate, endDate);
+  const days = getCompanyCalendarRange_(startDate, endDate);
+  if (days.length !== expected) {
+    throw new Error('申請期間の会社カレンダーが未登録です。');
+  }
+  return days.filter(d => d.working).length;
+}
+
+function inclusiveDateCount_(startDate, endDate) {
+  const a = startDate.split('-').map(Number);
+  const b = endDate.split('-').map(Number);
+  const start = Date.UTC(a[0],a[1]-1,a[2]);
+  const end = Date.UTC(b[0],b[1]-1,b[2]);
+  return Math.floor((end-start)/86400000)+1;
 }
 
 function findRequestRow_(requestId) {
