@@ -1,4 +1,4 @@
-const REQUEST_TYPES = Object.freeze(['有給','午前半休','午後半休','打刻修正','在宅勤務','残業','休日出勤']);
+const REQUEST_TYPES = Object.freeze(['有給','午前半休','午後半休','欠勤','打刻修正','在宅勤務','残業','休日出勤']);
 
 function getRequests(sessionToken, params) {
   const session = requireSession_(sessionToken);
@@ -30,7 +30,7 @@ function submitRequest(sessionToken, payload) {
     if (['午前半休','午後半休','打刻修正'].includes(type) && startDate !== endDate) {
       throw new Error(type + 'は1日単位で申請してください。');
     }
-    if (['有給','午前半休','午後半休'].includes(type)) {
+    if (['有給','午前半休','午後半休','欠勤'].includes(type)) {
       assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
     }
     const reason = String(payload.reason || '').trim().slice(0, 600);
@@ -113,10 +113,12 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     const nowText = toTimestamp_(new Date());
     let leaveDaysToConsume = 0;
     let leaveEmployee = null;
-    if (approve && ['有給','午前半休','午後半休'].includes(r[4])) {
-      leaveEmployee = getEmployee_(r[2]);
+    if (approve && ['有給','午前半休','午後半休','欠勤'].includes(r[4])) {
       assertNoLeaveConflict_(r[2], r[4], r[5], r[6], r[0], true);
-      leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
+      if (r[4] !== '欠勤') {
+        leaveEmployee = getEmployee_(r[2]);
+        leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
+      }
       if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
       if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
         throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
@@ -163,8 +165,8 @@ function getPunchesForDate(sessionToken, date) {
     }));
 }
 function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeRequestId, approvedOnly) {
-  const leaveTypes = ['有給','午前半休','午後半休'];
-  if (!leaveTypes.includes(type)) return;
+  const dayOffTypes = ['有給','午前半休','午後半休','欠勤'];
+  if (!dayOffTypes.includes(type)) return;
 
   const sheet = getDb_().getSheetByName('申請');
   const lastRow = sheet.getLastRow();
@@ -172,12 +174,14 @@ function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeReq
 
   const rows = sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues();
   for (const r of rows) {
-    if (!r[0] || r[0] === excludeRequestId || r[2] !== employeeId || !leaveTypes.includes(r[4])) continue;
+    if (!r[0] || r[0] === excludeRequestId || r[2] !== employeeId || !dayOffTypes.includes(r[4])) continue;
     if (approvedOnly ? r[9] !== '承認済' : !['承認待ち','承認済'].includes(r[9])) continue;
     if (r[6] < startDate || r[5] > endDate) continue;
 
-    if (type === '有給' || r[4] === '有給') {
-      throw new Error('同じ期間に有給・半休の申請がすでに存在します。');
+    const newFullDay = type === '有給' || type === '欠勤';
+    const existingFullDay = r[4] === '有給' || r[4] === '欠勤';
+    if (newFullDay || existingFullDay) {
+      throw new Error('同じ期間に有給・半休・欠勤の申請がすでに存在します。');
     }
     if (type === r[4] && startDate === r[5]) {
       throw new Error('同じ日の' + type + '申請がすでに存在します。');
