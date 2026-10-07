@@ -33,10 +33,10 @@ function submitRequest(sessionToken, payload) {
     if (['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(type)) {
       assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
     }
-    const reason = String(payload.reason || '').trim().slice(0, 600);
+    const reason = safeSheetText_(payload.reason, 600);
     if (!reason) throw new Error('申請理由を入力してください。');
 
-    let content = String(payload.content || '').trim().slice(0, 1500);
+    let content = safeSheetText_(payload.content, 1500);
     if (type === '打刻修正') {
       const correction = payload.correction || {};
       const action = String(correction.action || '');
@@ -107,7 +107,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     const r = rowInfo.values;
     if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
     const approve = normalizedDecision === 'APPROVE';
-    const rejectReason = String(comment || '').trim().slice(0,500);
+    const rejectReason = safeSheetText_(comment, 500);
     if (!approve && !rejectReason) throw new Error('差戻し理由を入力してください。');
 
     const nowText = toTimestamp_(new Date());
