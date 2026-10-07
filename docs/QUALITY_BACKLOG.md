@@ -14,7 +14,7 @@
 | Q-005 | 承認済申請の取消/変更が弱い | High | Kite / Ledger | 取消理由、取消承認、休暇残数の補償トランザクションを記録 | DONE v0.9.2 |
 | Q-006 | 月次締めが状態フラグのみ | Critical | Ledger / Atlas | 締め時点の月次/日次スナップショットを保存し再現可能 | DONE v0.9.1 |
 | Q-007 | 労務計算モデルが単純 | High | Lex / Forge | 深夜・法定休日・法定時間外等を区分可能なデータモデルを実装。会社固有ルール未設定時は「法令対応済み」と表示しない | IN PROGRESS v0.10.3（1日8h/週40h/深夜22-5/法定休日/月45h・60h・単月100hに加え、36協定起算月・特別条項設定、年360h/720h、45h超6か月、2〜6か月平均80hを監視。変形/フレックス/業種特例・会社固有条項詳細は未実装） |
-| Q-008 | Browser E2Eがない | High | Probe | ログイン/打刻/申請/承認/月次/テーマの自動E2Eまたは同等の実行可能テスト | READY |
+| Q-008 | Browser E2Eがない | High | Probe | ログイン/打刻/申請/承認/月次/テーマの自動E2Eまたは同等の実行可能テスト | IN PROGRESS v0.10.3（Node VMヘッドレスClient Contractでログイン/打刻/申請/承認/月次確認/テーマ/予定キーボード契約をCI実行。実デプロイBrowser E2EはMYSELF制限のため未実施） |
 | Q-009 | 開発/検証/本番の境界が弱い | High | Orbit / Sentinel | ENVを明示し、Production Gateで危険設定を拒否 | IN PROGRESS v0.9.4（Runtime ENVとProduction DB guard実装。専用Production Script/DBの実配置は未実施） |
 | Q-010 | DBバックアップが管理者利用依存 | High | Orbit | 時間トリガー + 最終成功時刻 + 失敗可視化 + 復元手順 | IN PROGRESS v0.9.5（時間トリガー・重複防止・監査実装。実環境でのTrigger認可と復元試験待ち） |
 

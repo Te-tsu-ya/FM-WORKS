@@ -24,3 +24,5 @@ jobs:
         run: node scripts/validate.mjs
       - name: Run logic tests
         run: node scripts/test_logic.mjs
+      - name: Run client contract tests
+        run: node scripts/test_client_contract.mjs

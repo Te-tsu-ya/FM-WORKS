@@ -1171,3 +1171,20 @@ CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査
 対象月そのものは最新のライブ集計でスナップショット値を上書きする。過去確定月が欠ける場合は年次判定の完全性をfalseにし、警告を返す。
 
 本モデルは一般則の早期警告であり、会社の個別36協定や変形/フレックス/業種特例の法令適合判定を代替しない。
+
+
+## 46. Headless Client Contract Test
+
+`scripts/test_client_contract.mjs` は外部依存を追加せず、Node.js `vm` 上へ5つのクライアントモジュールを実際の読み込み順でロードする。
+
+最小DOM、Storage、`google.script.run` チェーンをテストダブルとして与え、以下のユーザーフローが期待するGAS API契約へ到達することをCIで検査する。
+
+- 社員ID + PINログイン → `login`
+- 打刻 → `recordPunch`
+- 有給申請 → `submitRequest`
+- 承認 → `approveRequest`
+- 月次本人確認 → `confirmMonthlyReview`
+- ライト/ダーク切替
+- 予定表の日付/予定のキーボード操作用HTML
+
+これは実ブラウザのレイアウト・axe・視覚差分を代替しない。Webアプリ公開範囲が `MYSELF` の現在は、デプロイ済み環境のBrowser E2Eを別Gateとして残す。
