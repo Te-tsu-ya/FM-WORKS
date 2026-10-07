@@ -16,6 +16,7 @@ for (const file of required) {
   }
 }
 const app = fs.readFileSync(path.join(root,'src/App.html'),'utf8');
+const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','管理']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
 }
@@ -95,6 +96,29 @@ for (const dataMarker of ['loadWorklogs','loadRequests','loadMonthly','saveEmplo
 for (const uiMarker of ['performGlobalSearch','toggleNotificationMenu','renderLogin','openPinHelpModal']) {
   if (!app.includes(uiMarker)) {
     console.error(`Required interactive UI missing: ${uiMarker}`);
+    failed = true;
+  }
+}
+
+for (const compactLoginMarker of [
+  "document.body.classList.add('login-mode')",
+  "document.body.classList.remove('login-mode')",
+  "prototypeMode?'試作版ログイン'",
+  "cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000')"
+]) {
+  if (!app.includes(compactLoginMarker)) {
+    console.error(`Compact prototype login UI missing: ${compactLoginMarker}`);
+    failed = true;
+  }
+}
+for (const compactLoginStyleMarker of [
+  '.login-mode{overflow:hidden!important',
+  '.login-shell{height:100svh;min-height:0',
+  'height:min(640px,calc(100svh - 28px))',
+  '@media(max-height:620px) and (max-width:900px)'
+]) {
+  if (!styles.includes(compactLoginStyleMarker)) {
+    console.error(`Single-viewport login style missing: ${compactLoginStyleMarker}`);
     failed = true;
   }
 }
@@ -331,6 +355,23 @@ for (const [label, source] of [
 }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
+if (authCode.includes('prototypeMode: true')) {
+  for (const prototypeAuthMarker of [
+    "prototypePin: '000000'",
+    "prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']",
+    'function isPrototypeLogin_(',
+    'mustChangePin: prototypeAccess ? false : record.mustChangePin'
+  ]) {
+    if (!authCode.includes(prototypeAuthMarker)) {
+      console.error(`Prototype authentication guard missing: ${prototypeAuthMarker}`);
+      failed = true;
+    }
+  }
+  if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
+    console.error('Prototype PIN must never be enabled when the web app is accessible beyond MYSELF.');
+    failed = true;
+  }
+}
 if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
   console.error('Pre-release safety gate: web app access must remain MYSELF until human acceptance testing is explicitly started.');
   failed = true;
