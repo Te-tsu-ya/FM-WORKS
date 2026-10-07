@@ -20,7 +20,7 @@ function getPublicAuthConfig() {
   };
 }
 
-function initializeFirstAdmin(employeeId, pin, clientInfo) {
+function initializeFirstAdmin(employeeId, pin, clientInfo, support) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -32,6 +32,22 @@ function initializeFirstAdmin(employeeId, pin, clientInfo) {
       throw new Error('初期管理者として設定できません。');
     }
     validatePin_(pin, record.employeeId);
+    support = support || {};
+    const supportEmail = String(support.email || '').trim().slice(0, 200);
+    const supportPhone = String(support.phone || '').trim().slice(0, 80);
+    const supportName = String(support.name || record.displayName || record.name).trim().slice(0, 80);
+    if (!supportEmail && !supportPhone) {
+      throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を入力してください。');
+    }
+    if (supportEmail && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(supportEmail)) {
+      throw new Error('連絡先メールアドレスの形式を確認してください。');
+    }
+    saveSettings_({
+      SUPPORT_CONTACT_NAME: supportName || 'FM WORKS管理者',
+      SUPPORT_EMAIL: supportEmail,
+      SUPPORT_PHONE: supportPhone,
+      SUPPORT_NOTE: 'PINを忘れた場合は、下記のFM WORKS管理者へご連絡いただくか、再発行依頼を送信してください。'
+    });
     setEmployeePin_(record, pin, false);
     appendAudit_({
       employeeId: record.employeeId,
