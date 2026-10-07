@@ -346,6 +346,16 @@ function appendAudit_(item) {
   }
 }
 
+function withScriptLock_(fn, timeoutMs) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(Number(timeoutMs || 15000));
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getDb_() {
   return SpreadsheetApp.openById(DB.spreadsheetId);
 }
