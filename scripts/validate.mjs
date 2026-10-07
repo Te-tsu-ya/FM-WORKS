@@ -106,7 +106,7 @@ for (const performanceMarker of [
     failed = true;
   }
 }
-if (!requestCode.includes('function getRequestsBundle(sessionToken)')) {
+if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('function getRequestsBundle(sessionToken)')) {
   console.error('Request page must use a single bundled server read.');
   failed = true;
 }
