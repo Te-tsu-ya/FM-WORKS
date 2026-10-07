@@ -18,10 +18,10 @@ function getPublicAuthConfig() {
   const config = getAuthConfig_();
   return {
     appName: APP.name,
-    needsSetup: AUTH.prototypeMode ? false : !hasAnyPinConfigured_(),
+    needsSetup: isPrototypeMode_() ? false : !hasAnyPinConfigured_(),
     pinLength: config.pinLength,
-    prototypeMode: AUTH.prototypeMode,
-    prototypePin: AUTH.prototypeMode ? AUTH.prototypePin : '',
+    prototypeMode: isPrototypeMode_(),
+    prototypePin: isPrototypeMode_() ? AUTH.prototypePin : '',
     support: getSupportConfig_()
   };
 }
@@ -160,8 +160,15 @@ function login(employeeId, pin, clientInfo) {
   }
 }
 
+function isPrototypeMode_() {
+  const raw=String(getSettingsMap_().PROTOTYPE_MODE||'').trim().toUpperCase();
+  if(['FALSE','0','OFF'].includes(raw))return false;
+  if(['TRUE','1','ON'].includes(raw))return true;
+  return !!AUTH.prototypeMode;
+}
+
 function isPrototypeLogin_(record, pin) {
-  return !!(AUTH.prototypeMode &&
+  return !!(isPrototypeMode_() &&
     record &&
     AUTH.prototypeEmployeeIds.includes(record.employeeId) &&
     String(pin || '') === AUTH.prototypePin);
@@ -369,6 +376,7 @@ function getAuthAdminData(sessionToken) {
     projects: getProjectsInternal_(true),
     resetRequests: resetRequests,
     support: getSupportConfig_(),
+    prototypeMode: isPrototypeMode_(),
     currentUser: publicEmployee_(session.employee)
   };
 }
@@ -434,6 +442,33 @@ function adminUnlockAccount(sessionToken, targetEmployeeId) {
     return { ok: true };
   });
 }
+function setPrototypeMode(sessionToken, enabled) {
+  const admin=requireAdminSession_(sessionToken).employee;
+  const next=!!enabled;
+  if(next)throw new Error('試作モードの再有効化はソース管理側で行ってください。');
+
+  const sheet=getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow=sheet.getLastRow();
+  const rows=lastRow<2?[]:sheet.getRange(2,1,lastRow-1,23).getDisplayValues().filter(r=>r[0]&&r[6]==='在籍');
+  const missingPin=rows.filter(r=>!r[14]).map(r=>r[1]||r[0]);
+  if(missingPin.length){
+    throw new Error('本番モードへ切り替える前に、全社員へPINを設定してください: '+missingPin.join('、'));
+  }
+  const support=getSupportConfig_();
+  if(!support.email&&!support.phone){
+    throw new Error('本番モードへ切り替える前に、PIN再発行の連絡先を設定してください。');
+  }
+
+  saveSettings_({PROTOTYPE_MODE:'FALSE'});
+  appendAudit_({
+    employeeId:admin.employeeId,employeeName:admin.name,operation:'試作モード終了',
+    target:'設定',targetId:'PROTOTYPE_MODE',before:'TRUE',after:'FALSE',
+    source:'WEB',result:'SUCCESS',note:'本番認証へ切替'
+  });
+  invalidateEmployeeSessions_(admin.employeeId,0);
+  return {ok:true,prototypeMode:false,requiresRelogin:true};
+}
+
 function saveAuthSupportSettings(sessionToken, payload) {
   const admin = requireAdminSession_(sessionToken).employee;
   payload = payload || {};
