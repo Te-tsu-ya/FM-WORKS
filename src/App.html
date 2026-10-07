@@ -432,7 +432,7 @@ function maintenanceSection(){
       ${metric('最終バックアップ',backupText?s.lastBackupAt?'実施済み':'未実施':'未実施',s.lastBackupAt?'tone-green':'tone-orange')}
     </div>
     <div class='grid cols-2 section-gap'>
-      ${card('バックアップ・復旧',`<div class='maintenance-detail'>
+      ${card('バックアップ',`<div class='maintenance-detail'>
         <div><span>最終バックアップ</span><strong>${escapeHtml(backupText)}</strong></div>
         <div><span>自動バックアップ</span><strong>${s.backupEnabled?escapeHtml(s.backupMode||'管理者利用時に1日1回')+' / 有効':'無効'}</strong></div>
         <div><span>保持期間</span><strong>${s.backupRetentionDays}日</strong></div>
