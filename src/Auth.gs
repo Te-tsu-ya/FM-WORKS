@@ -196,99 +196,109 @@ function logout(sessionToken) {
 function changeOwnPin(sessionToken, currentPin, newPin) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
-  const currentHash = hashPin_(employee.employeeId, employee.pinSalt, String(currentPin || ''));
-  if (!employee.pinHash || !safeEqual_(currentHash, employee.pinHash)) {
-    throw new Error('現在のPINが正しくありません。');
-  }
-  validatePin_(newPin, employee.employeeId);
-  if (String(currentPin) === String(newPin)) {
-    throw new Error('現在と異なるPINを設定してください。');
-  }
-  setEmployeePin_(employee, newPin, false);
-  invalidateEmployeeSessions_(employee.employeeId, session.rowNumber);
-  appendAudit_({
-    employeeId: employee.employeeId,
-    employeeName: employee.name,
-    operation: 'PIN変更',
-    target: '認証',
-    targetId: employee.employeeId,
-    before: '',
-    after: '変更済み',
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: ''
+  return withScriptLock_(function() {
+    const fresh = getEmployeeAuthRecord_(employee.employeeId);
+    if (!fresh || !fresh.active) throw new Error('AUTH_REQUIRED');
+    const currentHash = hashPin_(fresh.employeeId, fresh.pinSalt, String(currentPin || ''));
+    if (!fresh.pinHash || !safeEqual_(currentHash, fresh.pinHash)) {
+      throw new Error('現在のPINが正しくありません。');
+    }
+    validatePin_(newPin, fresh.employeeId);
+    if (String(currentPin) === String(newPin)) {
+      throw new Error('現在と異なるPINを設定してください。');
+    }
+    setEmployeePin_(fresh, newPin, false);
+    invalidateEmployeeSessions_(fresh.employeeId, session.rowNumber);
+    appendAudit_({
+      employeeId: fresh.employeeId,
+      employeeName: fresh.name,
+      operation: 'PIN変更',
+      target: '認証',
+      targetId: fresh.employeeId,
+      before: '',
+      after: '変更済み',
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: ''
+    });
+    SpreadsheetApp.flush();
+    return { ok: true };
   });
-  return { ok: true };
 }
-
 function requestPinHelp(employeeId, note, clientInfo) {
   const id = normalizeEmployeeId_(employeeId);
   const support = getSupportConfig_();
-  const employee = getEmployeeAuthRecord_(id);
-  if (employee && employee.active) {
-    const now = new Date();
-    const nowText = toTimestamp_(now);
-    const requestId = 'R-' + Utilities.getUuid();
-    const sheet = getDb_().getSheetByName(AUTH.resetSheet);
-    const lastRow = sheet.getLastRow();
-    let recentRequest = false;
-    if (lastRow >= 2) {
-      const rows = sheet.getRange(2,1,lastRow-1,9).getDisplayValues();
-      recentRequest = rows.some(r => {
-        if (r[2] !== employee.employeeId || r[4] !== '未対応') return false;
-        const at = parseTimestamp_(r[1]);
-        return at && (now.getTime() - at.getTime()) < 15 * 60 * 1000;
-      });
-    }
-    if (recentRequest) {
-      return {
-        ok: true,
-        message: 'PIN再発行の案内を確認してください。',
-        support: support
-      };
-    }
-    sheet.appendRow([
-      requestId,
-      nowText,
-      employee.employeeId,
-      employee.name,
-      '未対応',
-      String(note || '').slice(0, 300),
-      '',
-      '',
-      'WEB'
-    ]);
-    appendAudit_({
-      employeeId: employee.employeeId,
-      employeeName: employee.name,
-      operation: 'PIN再発行依頼',
-      target: 'PIN再発行',
-      targetId: requestId,
-      before: '',
-      after: '未対応',
-      source: 'WEB',
-      result: 'SUCCESS',
-      note: sanitizeClientInfo_(clientInfo)
-    });
-    if (support.email) {
-      try {
-        MailApp.sendEmail({
-          to: support.email,
-          subject: '[FM WORKS] PIN再発行依頼 ' + employee.employeeId,
-          body: 'FM WORKSでPIN再発行依頼が登録されました。\n\n社員ID: ' + employee.employeeId + '\n氏名: ' + employee.name + '\n日時: ' + nowText + '\n\n管理画面から仮PINを再発行してください。'
+
+  return withScriptLock_(function() {
+    const employee = getEmployeeAuthRecord_(id);
+    if (employee && employee.active) {
+      const now = new Date();
+      const nowText = toTimestamp_(now);
+      const requestId = 'R-' + Utilities.getUuid();
+      const sheet = getDb_().getSheetByName(AUTH.resetSheet);
+      const lastRow = sheet.getLastRow();
+      let recentRequest = false;
+      let requestsToday = 0;
+
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2,1,lastRow-1,9).getDisplayValues();
+        const today = Utilities.formatDate(now, DB.timeZone, 'yyyy-MM-dd');
+        rows.forEach(r => {
+          if (r[2] !== employee.employeeId) return;
+          if (String(r[1] || '').slice(0,10) === today) requestsToday++;
+          if (r[4] !== '未対応') return;
+          const at = parseTimestamp_(r[1]);
+          if (at && (now.getTime() - at.getTime()) < 15 * 60 * 1000) recentRequest = true;
         });
-      } catch (e) {
-        console.warn('PIN help email failed', e);
+      }
+
+      if (!recentRequest && requestsToday < 5) {
+        sheet.appendRow([
+          requestId,
+          nowText,
+          employee.employeeId,
+          employee.name,
+          '未対応',
+          String(note || '').slice(0, 300),
+          '',
+          '',
+          'WEB'
+        ]);
+        appendAudit_({
+          employeeId: employee.employeeId,
+          employeeName: employee.name,
+          operation: 'PIN再発行依頼',
+          target: 'PIN再発行',
+          targetId: requestId,
+          before: '',
+          after: '未対応',
+          source: 'WEB',
+          result: 'SUCCESS',
+          note: sanitizeClientInfo_(clientInfo)
+        });
+
+        if (support.email) {
+          try {
+            MailApp.sendEmail({
+              to: support.email,
+              subject: '[FM WORKS] PIN再発行依頼 ' + employee.employeeId,
+              body: 'FM WORKSでPIN再発行依頼が登録されました。\n\n社員ID: ' + employee.employeeId + '\n氏名: ' + employee.name + '\n日時: ' + nowText + '\n\n管理画面から仮PINを再発行してください。'
+            });
+          } catch (e) {
+            console.warn('PIN help email failed', e);
+          }
+        }
       }
     }
-  }
-  return {
-    ok: true,
-    message: 'PIN再発行の案内を確認してください。',
-    support: support
-  };
-}
 
+    SpreadsheetApp.flush();
+    return {
+      ok: true,
+      message: 'PIN再発行の案内を確認してください。',
+      support: support
+    };
+  });
+}
 function getAuthAdminData(sessionToken) {
   const session = requireAdminSession_(sessionToken);
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
@@ -347,27 +357,29 @@ function getAuthAdminData(sessionToken) {
 
 function adminSetTemporaryPin(sessionToken, targetEmployeeId, temporaryPin) {
   const admin = requireAdminSession_(sessionToken).employee;
-  const target = getEmployeeAuthRecord_(targetEmployeeId);
-  if (!target || !target.active) throw new Error('対象社員が見つかりません。');
-  validatePin_(temporaryPin, target.employeeId);
-  setEmployeePin_(target, temporaryPin, true);
-  invalidateEmployeeSessions_(target.employeeId, 0);
-  markPinHelpRequestsHandled_(target.employeeId, admin);
-  appendAudit_({
-    employeeId: admin.employeeId,
-    employeeName: admin.name,
-    operation: '仮PIN発行',
-    target: '社員マスタ',
-    targetId: target.employeeId,
-    before: '',
-    after: 'PIN再発行・初回変更必須',
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: target.name
+  return withScriptLock_(function() {
+    const target = getEmployeeAuthRecord_(targetEmployeeId);
+    if (!target || !target.active) throw new Error('対象社員が見つかりません。');
+    validatePin_(temporaryPin, target.employeeId);
+    setEmployeePin_(target, temporaryPin, true);
+    invalidateEmployeeSessions_(target.employeeId, 0);
+    markPinHelpRequestsHandled_(target.employeeId, admin);
+    appendAudit_({
+      employeeId: admin.employeeId,
+      employeeName: admin.name,
+      operation: '仮PIN発行',
+      target: '社員マスタ',
+      targetId: target.employeeId,
+      before: '',
+      after: 'PIN再発行・初回変更必須',
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: target.name
+    });
+    SpreadsheetApp.flush();
+    return { ok: true };
   });
-  return { ok: true };
 }
-
 function markPinHelpRequestsHandled_(employeeId, admin) {
   const sheet = getDb_().getSheetByName(AUTH.resetSheet);
   const lastRow = sheet.getLastRow();
@@ -384,55 +396,59 @@ function markPinHelpRequestsHandled_(employeeId, admin) {
 
 function adminUnlockAccount(sessionToken, targetEmployeeId) {
   const admin = requireAdminSession_(sessionToken).employee;
-  const target = getEmployeeAuthRecord_(targetEmployeeId);
-  if (!target) throw new Error('対象社員が見つかりません。');
-  updateEmployeeAuthCells_(target.rowNumber, { failures: 0, lockUntil: '' });
-  appendAudit_({
-    employeeId: admin.employeeId,
-    employeeName: admin.name,
-    operation: 'アカウントロック解除',
-    target: '社員マスタ',
-    targetId: target.employeeId,
-    before: target.lockUntil || '',
-    after: '',
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: target.name
+  return withScriptLock_(function() {
+    const target = getEmployeeAuthRecord_(targetEmployeeId);
+    if (!target) throw new Error('対象社員が見つかりません。');
+    updateEmployeeAuthCells_(target.rowNumber, { failures: 0, lockUntil: '' });
+    appendAudit_({
+      employeeId: admin.employeeId,
+      employeeName: admin.name,
+      operation: 'アカウントロック解除',
+      target: '社員マスタ',
+      targetId: target.employeeId,
+      before: target.lockUntil || '',
+      after: '',
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: target.name
+    });
+    SpreadsheetApp.flush();
+    return { ok: true };
   });
-  return { ok: true };
 }
-
 function saveAuthSupportSettings(sessionToken, payload) {
   const admin = requireAdminSession_(sessionToken).employee;
   payload = payload || {};
-  const values = {
-    SUPPORT_CONTACT_NAME: String(payload.name || '').trim().slice(0, 80) || 'FM WORKS管理者',
-    SUPPORT_EMAIL: String(payload.email || '').trim().slice(0, 200),
-    SUPPORT_PHONE: String(payload.phone || '').trim().slice(0, 80),
-    SUPPORT_NOTE: String(payload.note || '').trim().slice(0, 300) || 'PINを忘れた場合は、社内のFM WORKS管理者へご連絡ください。'
-  };
-  if (!values.SUPPORT_EMAIL && !values.SUPPORT_PHONE) {
-    throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を1つ以上登録してください。');
-  }
-  if (values.SUPPORT_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.SUPPORT_EMAIL)) {
-    throw new Error('メールアドレスの形式を確認してください。');
-  }
-  saveSettings_(values);
-  appendAudit_({
-    employeeId: admin.employeeId,
-    employeeName: admin.name,
-    operation: 'サポート連絡先更新',
-    target: '設定',
-    targetId: 'SUPPORT',
-    before: '',
-    after: values.SUPPORT_CONTACT_NAME,
-    source: 'WEB',
-    result: 'SUCCESS',
-    note: ''
+  return withScriptLock_(function() {
+    const values = {
+      SUPPORT_CONTACT_NAME: String(payload.name || '').trim().slice(0, 80) || 'FM WORKS管理者',
+      SUPPORT_EMAIL: String(payload.email || '').trim().slice(0, 200),
+      SUPPORT_PHONE: String(payload.phone || '').trim().slice(0, 80),
+      SUPPORT_NOTE: String(payload.note || '').trim().slice(0, 300) || 'PINを忘れた場合は、社内のFM WORKS管理者へご連絡ください。'
+    };
+    if (!values.SUPPORT_EMAIL && !values.SUPPORT_PHONE) {
+      throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を1つ以上登録してください。');
+    }
+    if (values.SUPPORT_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.SUPPORT_EMAIL)) {
+      throw new Error('メールアドレスの形式を確認してください。');
+    }
+    saveSettings_(values);
+    appendAudit_({
+      employeeId: admin.employeeId,
+      employeeName: admin.name,
+      operation: 'サポート連絡先更新',
+      target: '設定',
+      targetId: 'SUPPORT',
+      before: '',
+      after: values.SUPPORT_CONTACT_NAME,
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: ''
+    });
+    SpreadsheetApp.flush();
+    return getSupportConfig_();
   });
-  return getSupportConfig_();
 }
-
 function requireSession_(sessionToken) {
   const raw = String(sessionToken || '');
   if (raw.length < 40) throw new Error('AUTH_REQUIRED');
