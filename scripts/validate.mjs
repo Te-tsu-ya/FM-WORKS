@@ -93,6 +93,28 @@ for (const dataMarker of ['loadWorklogs','loadRequests','loadMonthly','saveEmplo
     failed = true;
   }
 }
+for (const performanceMarker of [
+  'const PAGE_CACHE_TTL=',
+  'function startMenuPrefetch()',
+  'function cacheFresh(',
+  'requestIdleCallback',
+  '.getRequestsBundle(state.sessionToken)',
+  "invalidatePageCache('worklog','monthly')"
+]) {
+  if (!app.includes(performanceMarker)) {
+    console.error(`Navigation performance optimization missing: ${performanceMarker}`);
+    failed = true;
+  }
+}
+if (!requestCode.includes('function getRequestsBundle(sessionToken)')) {
+  console.error('Request page must use a single bundled server read.');
+  failed = true;
+}
+if (serverCode.includes('return getInitialData(sessionToken);')) {
+  console.error('Punch writes must not block on a full application reload.');
+  failed = true;
+}
+
 for (const uiMarker of ['performGlobalSearch','toggleNotificationMenu','renderLogin','openPinHelpModal']) {
   if (!app.includes(uiMarker)) {
     console.error(`Required interactive UI missing: ${uiMarker}`);
