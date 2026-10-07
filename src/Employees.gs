@@ -31,6 +31,9 @@ function saveEmployee(sessionToken, payload) {
     const note = String(payload.note || '').trim().slice(0,500);
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
+    if (existingBefore && existingBefore.employeeId === admin.employeeId && (role !== 'ADMIN' || status !== '在籍')) {
+      throw new Error('自分自身の管理者権限解除・無効化はできません。別の管理者から変更してください。');
+    }
     if (existingBefore && existingBefore.role === 'ADMIN' && existingBefore.active && (role !== 'ADMIN' || status !== '在籍')) {
       assertAnotherActiveAdmin_(employeeId);
     }
