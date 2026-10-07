@@ -3,7 +3,7 @@ function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
-    content.classList.toggle('one-screen',['home','monthly','admin'].includes(state.page));
+    content.classList.toggle('one-screen',state.page==='home');
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
   };
   if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();
@@ -189,6 +189,7 @@ function initGlobalKeyboardShortcuts(){
     const target=e.target;
     const tag=String(target&&target.tagName||'').toLowerCase();
     const typing=['input','textarea','select'].includes(tag)||!!(target&&target.isContentEditable);
+    if(e.key==='Tab'&&trapModalFocus_(e))return;
     if(e.key==='Escape'){
       const modal=document.getElementById('modalRoot');
       if(modal&&modal.innerHTML.trim()){e.preventDefault();closeModal();return;}

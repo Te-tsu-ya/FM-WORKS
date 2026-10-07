@@ -1,5 +1,5 @@
 <script>
-function attendancePage(){const d=state.data,a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}<div class='grid cols-2'>${card('現在の勤務状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' に出勤':'まだ出勤していません'}</div><p class='muted'>現在の実働：${liveWorkedText(a)}</p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>まだ打刻はありません。</p>')}</div><div class='grid cols-4 section-gap'>${metric('本日の実働',liveWorkedText(a),'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
+function attendancePage(){const d=state.data,a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴を管理します。')}<div class='grid cols-2'>${card('現在の勤務状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' に出勤':'まだ出勤していません'}</div><p class='muted'>現在の実働：<span data-live-worked>${liveWorkedText(a)}</span></p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>まだ打刻はありません。</p>')}</div><div class='grid cols-4 section-gap'>${metric('本日の実働',liveWorkedText(a),'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
 
 
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
@@ -82,9 +82,9 @@ function eventChip(e){
   </button>`
 }
 function scheduleToolbar(){const s=state.schedule;const employees=s.employees.length?s.employees:(state.data.employees||[]);return `<div class='schedule-toolbar'><div class='toolbar-group'><button class='secondary-button compact' onclick='moveSchedule(-1)'>‹</button><button class='secondary-button compact' onclick='scheduleToday()'>今日</button><button class='secondary-button compact' onclick='moveSchedule(1)'>›</button><strong class='period-label'>${fmtMonth(s.date)}</strong></div><div class='toolbar-group'><div class='segmented'>${[['month','月'],['week','週'],['day','日'],['list','一覧']].map(x=>`<button class='${s.view===x[0]?'active':''}' onclick="changeScheduleView('${x[0]}')">${x[1]}</button>`).join('')}</div><select class='filter-select' onchange="setScheduleFilter('employeeId',this.value)"><option value='ALL'>全社員</option>${employees.map(e=>`<option value='${e.employeeId}' ${s.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select><select class='filter-select' onchange="setScheduleFilter('category',this.value)"><option value='ALL'>全カテゴリ</option>${Object.keys(CATEGORY_COLORS).map(c=>`<option value='${c}' ${s.category===c?'selected':''}>${c}</option>`).join('')}</select><button class='primary-button' onclick='openScheduleEditor()'>＋ 予定登録</button></div></div>`}
-function monthView(){const s=state.schedule,range=monthGridRange(s.date),map=companyDayMap(),curMonth=parseIso(s.date).getMonth(),cells=[];for(let d=range.start;;d=addDays(d,1)){const dt=parseIso(d),ev=eventsFor(d),cd=map[d];cells.push(`<div class='month-day ${dt.getMonth()!==curMonth?'outside':''} ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}' onclick="openDay('${d}')"><div class='day-head'><span>${dt.getDate()}</span>${cd&&cd.type!=='通常勤務'?`<em class='day-type ${cd.working?'workday':'offday'}'>${escapeHtml(cd.name||cd.type)}</em>`:''}</div><div class='day-events'>${ev.slice(0,3).map(eventChip).join('')}${ev.length>3?`<button class='more-events'>＋${ev.length-3}件</button>`:''}</div></div>`);if(d===range.end)break}return `<div class='weekday-row'>${['日','月','火','水','木','金','土'].map(x=>`<div>${x}</div>`).join('')}</div><div class='month-grid'>${cells.join('')}</div>`}
+function monthView(){const s=state.schedule,range=monthGridRange(s.date),map=companyDayMap(),curMonth=parseIso(s.date).getMonth(),cells=[];for(let d=range.start;;d=addDays(d,1)){const dt=parseIso(d),ev=eventsFor(d),cd=map[d];cells.push(`<div class='month-day ${dt.getMonth()!==curMonth?'outside':''} ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}' onclick="openDay('${d}')"><div class='day-head'><button type='button' class='day-open' onclick="event.stopPropagation();openDay('${d}')" aria-label='${escapeHtml(fmtDate(d))}の詳細を開く'>${dt.getDate()}</button>${cd&&cd.type!=='通常勤務'?`<em class='day-type ${cd.working?'workday':'offday'}'>${escapeHtml(cd.name||cd.type)}</em>`:''}</div><div class='day-events'>${ev.slice(0,3).map(eventChip).join('')}${ev.length>3?`<button class='more-events'>＋${ev.length-3}件</button>`:''}</div></div>`);if(d===range.end)break}return `<div class='weekday-row'>${['日','月','火','水','木','金','土'].map(x=>`<div>${x}</div>`).join('')}</div><div class='month-grid'>${cells.join('')}</div>`}
 function weekView(){const start=startOfWeek(state.schedule.date),map=companyDayMap();return `<div class='week-grid'>${Array.from({length:7},(_,i)=>{const d=addDays(start,i),cd=map[d],ev=eventsFor(d);return `<section class='week-day ${isToday(d)?'today':''} ${cd&&!cd.working?'day-off':''}'><header><strong>${fmtDate(d)}</strong><small>${cd?escapeHtml(cd.name||cd.type):''}</small></header><div>${ev.length?ev.map(eventChip).join(''):`<p class='muted empty-day'>予定なし</p>`}</div><button class='add-inline' onclick="openScheduleEditor('', '${d}')">＋</button></section>`}).join('')}</div>`}
-function dayView(){const d=state.schedule.date,cd=companyDayMap()[d],ev=eventsFor(d);return `<div class='day-view'><div class='day-summary'><div><h2>${fmtDate(d)}</h2><p class='muted'>${cd?`${escapeHtml(cd.type)}${cd.name?' / '+escapeHtml(cd.name):''}${cd.working?'  '+cd.start+'-'+cd.end:''}`:'会社カレンダー未登録'}</p></div><button class='primary-button' onclick="openScheduleEditor('', '${d}')">＋ この日に予定</button></div>${ev.length?ev.map(e=>{const p=eventPeople(e)[0]||{id:'unknown'},color=personColor(p.id);return `<article class='agenda-item' style='--person-color:${color.line};--person-bg:${color.bg}' onclick="openScheduleEditor('${e.id}')"><div class='agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</div><div><strong>${escapeHtml(e.title)}</strong><p class='agenda-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b>${e.location?' <span>・ '+escapeHtml(e.location)+'</span>':''}</p><span class='badge'><i class='inline-category-dot' style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></div></article>`}).join(''):`<div class='empty-state'><strong>予定はありません</strong><p>右上のボタンから予定を登録できます。</p></div>`}</div>`}
+function dayView(){const d=state.schedule.date,cd=companyDayMap()[d],ev=eventsFor(d);return `<div class='day-view'><div class='day-summary'><div><h2>${fmtDate(d)}</h2><p class='muted'>${cd?`${escapeHtml(cd.type)}${cd.name?' / '+escapeHtml(cd.name):''}${cd.working?'  '+cd.start+'-'+cd.end:''}`:'会社カレンダー未登録'}</p></div><button class='primary-button' onclick="openScheduleEditor('', '${d}')">＋ この日に予定</button></div>${ev.length?ev.map(e=>{const p=eventPeople(e)[0]||{id:'unknown'},color=personColor(p.id);return `<button type='button' class='agenda-item' style='--person-color:${color.line};--person-bg:${color.bg}' onclick="openScheduleEditor('${e.id}')"><div class='agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</div><div><strong>${escapeHtml(e.title)}</strong><p class='agenda-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b>${e.location?' <span>・ '+escapeHtml(e.location)+'</span>':''}</p><span class='badge'><i class='inline-category-dot' style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></div></button>`}).join(''):`<div class='empty-state'><strong>予定はありません</strong><p>右上のボタンから予定を登録できます。</p></div>`}</div>`}
 function listView(){const ev=state.schedule.events||[];return `<div class='schedule-list'><div class='schedule-list-head'><span>日付</span><span>時間</span><span>予定</span><span>担当・参加者</span><span>分類</span></div>${ev.length?ev.map(e=>`<button class='schedule-list-row' onclick="openScheduleEditor('${e.id}')"><span><strong>${fmtDate(e.date)}</strong></span><span>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span><span><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</span><span class='list-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span><span><i style='background:${categoryColor(e.category)}'></i>${escapeHtml(e.category)}</span></button>`).join(''):`<div class='empty-state'>該当する予定はありません。</div>`}</div>`}
 function schedulePage(){const s=state.schedule;let body=(s.loading&&!cacheHas('schedule',scheduleCacheKey()))?`<div class='loading-card'></div>`:s.view==='month'?monthView():s.view==='week'?weekView():s.view==='day'?dayView():listView();return `${pageHead('予定表','社員名を予定カードに直接表示し、色と名前の両方で誰の予定か判別できます。')} ${scheduleToolbar()} ${schedulePeopleLegend()} <div class='schedule-surface'>${body}</div><div class='calendar-legend'><span><i class='legend-dot holiday'></i>会社休日・祝日</span><span><i class='legend-dot work'></i>調整出勤日</span><span><i class='legend-dot category'></i>右端の点は予定カテゴリ</span></div>`}
 function openDay(date){state.schedule.date=date;state.schedule.view='day';loadSchedule()}
@@ -118,8 +118,48 @@ function runReasonAction(){
   const fn=state.reasonAction;state.reasonAction=null;closeModal();if(typeof fn==='function')fn(value);
 }
 
-function ensureModal(){let r=document.getElementById('modalRoot');if(!r){r=document.createElement('div');r.id='modalRoot';document.body.appendChild(r)}return r}
-function closeModal(){const r=document.getElementById('modalRoot');if(r)r.innerHTML=''}
+function modalFocusables_(root){
+  if(!root)return [];
+  return [...root.querySelectorAll("button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")].filter(el=>!el.hidden&&el.offsetParent!==null);
+}
+function activateModalA11y_(root){
+  requestAnimationFrame(()=>{
+    const dialog=root&&root.querySelector('[role="dialog"]');
+    if(!dialog)return;
+    const preferred=dialog.querySelector('input:not([type="hidden"]):not([disabled]),select:not([disabled]),textarea:not([disabled])');
+    const focusables=modalFocusables_(dialog);
+    const target=preferred||focusables[0];
+    if(target&&(!dialog.contains(document.activeElement)||document.activeElement===document.body))target.focus();
+  });
+}
+function trapModalFocus_(event){
+  if(event.key!=='Tab')return false;
+  const root=document.getElementById('modalRoot');
+  const dialog=root&&root.querySelector('[role="dialog"]');
+  if(!dialog)return false;
+  const focusables=modalFocusables_(dialog);
+  if(!focusables.length){event.preventDefault();return true}
+  const first=focusables[0],last=focusables[focusables.length-1],active=document.activeElement;
+  if(!dialog.contains(active)){event.preventDefault();(event.shiftKey?last:first).focus();return true}
+  if(event.shiftKey&&active===first){event.preventDefault();last.focus();return true}
+  if(!event.shiftKey&&active===last){event.preventDefault();first.focus();return true}
+  return false;
+}
+function ensureModal(){
+  let r=document.getElementById('modalRoot');
+  if(!r){r=document.createElement('div');r.id='modalRoot';document.body.appendChild(r)}
+  if(!r.innerHTML.trim())modalReturnFocus=document.activeElement&&document.activeElement.focus?document.activeElement:null;
+  if(!r.dataset.a11yBound){
+    new MutationObserver(()=>{if(r.innerHTML.trim())activateModalA11y_(r)}).observe(r,{childList:true});
+    r.dataset.a11yBound='true';
+  }
+  return r;
+}
+function closeModal(){
+  const r=document.getElementById('modalRoot');if(r)r.innerHTML='';
+  const target=modalReturnFocus;modalReturnFocus=null;
+  if(target&&document.contains(target))requestAnimationFrame(()=>target.focus());
+}
 function openScheduleEditor(id='',date=''){
   const e=id?(state.schedule.events||[]).find(x=>x.id===id):null;
   const employees=state.schedule.employees.length?state.schedule.employees:(state.data.employees||[]);

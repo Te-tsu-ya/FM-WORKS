@@ -570,7 +570,6 @@ function requireAdminSession_(sessionToken) {
 }
 
 function createSession_(employee, clientInfo, rememberSession) {
-  cleanupExpiredSessions_();
   const config = getAuthConfig_();
   const now = new Date();
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -596,19 +595,28 @@ function createSession_(employee, clientInfo, rememberSession) {
   return token;
 }
 
+function sessionRowsToDelete_(rows, now) {
+  const current=now instanceof Date?now:new Date(now);
+  return (rows||[]).map((r,i)=>{
+    const status=String(r[7]||'');
+    const absoluteExpiry=parseTimestamp_(r[4]);
+    const inactive=status!=='ACTIVE'||(absoluteExpiry&&absoluteExpiry<=current);
+    return inactive?i+2:0;
+  }).filter(Boolean);
+}
+
 function cleanupExpiredSessions_() {
-  const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
-  const now = new Date();
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i];
-    const status = r[7] || '';
-    const absoluteExpiry = parseTimestamp_(r[4]);
-    const inactive = status !== 'ACTIVE' || (absoluteExpiry && absoluteExpiry <= now);
-    if (inactive) sheet.deleteRow(i + 2);
+  const sheet=getDb_().getSheetByName(AUTH.sessionSheet);
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return 0;
+  const rows=sheet.getRange(2,1,lastRow-1,11).getValues();
+  const rowNumbers=sessionRowsToDelete_(rows,new Date());
+  const blocks=contiguousRowBlocks_(rowNumbers);
+  for(let i=blocks.length-1;i>=0;i--){
+    const block=blocks[i];
+    sheet.deleteRows(block.start,block.end-block.start+1);
   }
+  return rowNumbers.length;
 }
 
 function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {

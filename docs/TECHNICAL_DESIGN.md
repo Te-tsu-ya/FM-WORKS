@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.1  
+**文書版:** 0.10.2  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -62,7 +62,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.1`
+`APP.version = 0.10.2`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -1100,3 +1100,53 @@ CIでは `validate.mjs` が以下を検査する。
 関数宣言は同一ブラウザGlobal Environment上で相互参照する。起動イベント `DOMContentLoaded -> bootstrap` は最後の `AppShell` のみに置き、全モジュールが読み込まれてから実行される。
 
 CIの `validate.mjs` はモジュールを読み込み順に連結して構文検査し、従来のUI契約マーカーも連結ソースへ対して検査する。これによりファイル分割そのものによる機能欠落を検知する。
+
+
+## 44. Usability / Accessibility Hardening v0.10.2
+
+### 44.1 Live attendance DOM update
+
+`AppCore.updateLiveWorkedNodes` は `[data-live-worked]` のtextContentだけを更新する。30秒タイマーは`renderPage`を呼ばず、DOM全置換によるスクロール・フォーカス喪失を防ぐ。
+
+### 44.2 Modal focus boundary
+
+`AppOperations` に以下を配置する。
+
+- `modalFocusables_`
+- `activateModalA11y_`
+- `trapModalFocus_`
+- focus restore付き `ensureModal / closeModal`
+
+`AppShell.initGlobalKeyboardShortcuts` はTabキーを`trapModalFocus_`へ渡す。Escapeの既存クローズ動作は維持する。
+
+### 44.3 Schedule keyboard semantics
+
+月表示の各セルは背景クリックを維持しつつ、日番号をネイティブbutton `.day-open` として提供する。日表示の予定詳細行 `.agenda-item` はarticle+onclickからbuttonへ変更する。
+
+### 44.4 Readable density / scroll planes
+
+CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査する。
+
+`content.one-screen` はホームのみへ適用する。管理・月次の外側スクロールを復活させ、設定コンテンツと年間カレンダーの固定高内部スクロールを解除する。ホーム内部の打刻履歴・予定など、明示的な長一覧は内部スクロールを許可する。
+
+### 44.5 Session garbage collection
+
+`createSession_` からGCを除去する。
+
+`sessionRowsToDelete_` が削除対象のシート行番号を計算し、`cleanupExpiredSessions_` は `contiguousRowBlocks_` で連続行を束ね、下側ブロックから `deleteRows(start,count)` を実行する。
+
+`scheduledDailyMaintenance_` がバックアップ判定より先にセッションGCを実行するため、バックアップ無効時でもGCは継続する。
+
+### 44.6 Regression gate
+
+`validate.mjs` は以下を検査する。
+
+- 11px未満のfont-size禁止
+- live timerの部分DOM更新
+- one-screen対象がhomeのみ
+- modal focus trap
+- schedule keyboard control
+- login pathからGC除去
+- scheduled maintenanceへのGC移行
+
+`test_logic.mjs` は期限切れ/無効セッション行の抽出を純粋ロジックで検証する。

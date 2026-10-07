@@ -260,13 +260,14 @@ function installDailyBackupTrigger(sessionToken) {
 }
 
 function scheduledDailyMaintenance_() {
+  const cleanedSessions=cleanupExpiredSessions_();
   const props=PropertiesService.getScriptProperties();
   const setting=props.getProperty(MAINTENANCE.autoBackupProperty);
   const enabled=setting===null?true:setting==='true';
-  if(!enabled)return {ok:true,skipped:true,reason:'disabled'};
+  if(!enabled)return {ok:true,skipped:true,reason:'disabled',cleanedSessions:cleanedSessions};
   const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
   const last=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
-  if(!isBackupDue_(last,today))return {ok:true,skipped:true,reason:'already-backed-up'};
+  if(!isBackupDue_(last,today))return {ok:true,skipped:true,reason:'already-backed-up',cleanedSessions:cleanedSessions};
   return withScriptLock_(function(){
     const recheck=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
     if(!isBackupDue_(recheck,today))return {ok:true,skipped:true,reason:'already-backed-up'};
@@ -277,6 +278,7 @@ function scheduledDailyMaintenance_() {
         targetId:result.fileId,before:'',after:result.fileName,source:'TRIGGER',result:'SUCCESS',note:'毎日03時台'
       });
       SpreadsheetApp.flush();
+      result.cleanedSessions=cleanedSessions;
       return result;
     }catch(err){
       try{

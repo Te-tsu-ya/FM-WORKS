@@ -27,11 +27,13 @@
 | Q-013 | 列番号依存・Migration不足 | High | Atlas | スキーマ版、ヘッダ検証、Migrationを自動化 | DONE v0.9.8 |
 | Q-014 | 監査before/after不足 | High | Ledger | 重要更新は変更前後を再現可能 | DONE v0.9.7 |
 | Q-015 | 予定の公開範囲が実質社内固定 | High | Sentinel / Kite | ALL / PARTICIPANTS / ADMIN等をAPIで強制 | DONE v0.9.3 |
-| Q-016 | 7〜10px文字が多い | Medium | Iris | 業務本文/重要状態は原則11〜12px以上。1画面化より可読性優先 | READY |
-| Q-017 | Nested scroll | Medium | Iris | 内部スクロールは明示的な長一覧に限定 | READY |
-| Q-018 | 実働表示で30秒ごと全画面再描画 | Medium | Iris / Forge | 数値ノードだけ更新し、フォーカス/スクロールを保持 | READY |
-| Q-019 | Visual/a11y/performance回帰試験なし | High | Probe | axe相当、visual snapshot、性能計測をCI化 | READY |
-| Q-020 | セッションクリーンアップが行削除ループ | Medium | Atlas / Forge | 定期GC化または一括処理、ログインパスから重処理を外す | READY |
+| Q-016 | 7〜10px文字が多い | Medium | Iris | 業務本文/重要状態は原則11〜12px以上。1画面化より可読性優先 | DONE v0.10.2（CSSの11px未満を廃止しCIで再発防止） |
+| Q-017 | Nested scroll | Medium | Iris | 内部スクロールは明示的な長一覧に限定 | DONE v0.10.2（1画面固定はホームだけに限定。設定・年間カレンダーはページスクロールへ戻し、内部スクロールは長一覧中心に限定） |
+| Q-018 | 実働表示で30秒ごと全画面再描画 | Medium | Iris / Forge | 数値ノードだけ更新し、フォーカス/スクロールを保持 | DONE v0.10.2（data-live-workedノードのみ更新） |
+| Q-019 | Visual/a11y/performance回帰試験なし | High | Probe | axe相当、visual snapshot、性能計測をCI化 | IN PROGRESS v0.10.2（文字最小値・キーボード操作・モーダル・再描画・セッションGCの静的回帰Gateを追加。実ブラウザaxe/visual snapshotは未実装） |
+| Q-020 | セッションクリーンアップが行削除ループ | Medium | Atlas / Forge | 定期GC化または一括処理、ログインパスから重処理を外す | DONE v0.10.2（ログイン時GCを廃止し、日次メンテナンスで連続行をdeleteRows一括削除） |
+| Q-024 | 予定表の一部操作がマウス依存 | High | Access / Journey / Forge | 日付・予定詳細へキーボードだけで到達し実行可能 | DONE v0.10.2（日付オープンボタン追加、日表示予定をbutton化、focus-visible強化） |
+| Q-025 | モーダルのフォーカス管理不足 | High | Access / Journey / Forge | 初期フォーカス、Tab閉じ込め、Escape、閉じた後のフォーカス復帰 | DONE v0.10.2（共通モーダルfocus trap/restore実装） |
 
 ## P2 / 経営価値
 

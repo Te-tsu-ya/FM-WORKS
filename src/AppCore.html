@@ -8,6 +8,7 @@ const pageCache={};
 const pendingLoads=new Set();
 let liveAttendanceTimer=null;
 let globalKeysBound=false;
+let modalReturnFocus=null;
 function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
 function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
 function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
@@ -175,12 +176,17 @@ function liveWorkedText(attendance){return formatMinutesClient(liveWorkedMinutes
 function stopLiveAttendanceTicker(){
   if(liveAttendanceTimer){clearInterval(liveAttendanceTimer);liveAttendanceTimer=null;}
 }
+function updateLiveWorkedNodes(){
+  if(!state.data||!state.data.attendance)return;
+  const text=liveWorkedText(state.data.attendance);
+  document.querySelectorAll('[data-live-worked]').forEach(el=>{el.textContent=text});
+}
 function startLiveAttendanceTicker(){
   stopLiveAttendanceTicker();
   liveAttendanceTimer=setInterval(()=>{
     if(!state.data||document.hidden)return;
     const a=state.data.attendance;
-    if(a&&a.state==='working'&&(state.page==='home'||state.page==='attendance'))renderPage();
+    if(a&&a.state==='working'&&(state.page==='home'||state.page==='attendance'))updateLiveWorkedNodes();
   },30000);
 }
 
@@ -363,7 +369,7 @@ function homePage(){
         <header class='home-panel-head'><div><span class='eyebrow'>ATTENDANCE</span><h2>現在の勤怠</h2></div><span class='home-state-pill ${a.state}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
         <div class='home-attendance-main'>
           <div><span>出勤</span><strong>${escapeHtml(a.clockIn||'--:--')}</strong></div>
-          <div><span>実働</span><strong>${escapeHtml(liveWorkedText(a))}</strong></div>
+          <div><span>実働</span><strong data-live-worked>${escapeHtml(liveWorkedText(a))}</strong></div>
           <div><span>退勤</span><strong>${escapeHtml(a.clockOut||'--:--')}</strong></div>
         </div>
         <div class='home-punch-actions'>${punchButtons(a)}</div>

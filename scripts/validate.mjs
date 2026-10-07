@@ -40,8 +40,49 @@ for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthl
     failed = true;
   }
 }
+const tinyFontMatches=[...styles.matchAll(/font-size\\s*:\\s*(\\d+(?:\\.\\d+)?)px/g)].filter(m=>Number(m[1])<11);
+if(tinyFontMatches.length){
+  console.error('Readable type gate failed: font-size below 11px remains: '+tinyFontMatches.slice(0,8).map(m=>m[0]).join(', '));
+  failed=true;
+}
+for(const marker of [
+  'function updateLiveWorkedNodes()',
+  'data-live-worked',
+  "content.classList.toggle('one-screen',state.page==='home')",
+  'function trapModalFocus_(',
+  "e.key==='Tab'&&trapModalFocus_(e)",
+  "class='day-open'",
+  "<button type='button' class='agenda-item'"
+]){
+  if(!app.includes(marker)){console.error('Usability/a11y hardening marker missing: '+marker);failed=true;}
+}
+const tickerStart=app.indexOf('function startLiveAttendanceTicker()');
+const tickerEnd=app.indexOf('\nfunction ',tickerStart+20);
+const tickerBlock=tickerStart>=0?(tickerEnd>tickerStart?app.slice(tickerStart,tickerEnd):app.slice(tickerStart)):'';
+if(!tickerBlock.includes('updateLiveWorkedNodes()')||tickerBlock.includes('renderPage()')){
+  console.error('Live attendance ticker must update only live-worked DOM nodes.');
+  failed=true;
+}
+
 const serverCode = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
 const authCode = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
+const maintenanceCodeForUi = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
+const createSessionStart=authCode.indexOf('function createSession_(');
+const createSessionEnd=authCode.indexOf('\nfunction ',createSessionStart+10);
+const createSessionBlock=createSessionStart>=0?(createSessionEnd>createSessionStart?authCode.slice(createSessionStart,createSessionEnd):authCode.slice(createSessionStart)):'';
+if(createSessionBlock.includes('cleanupExpiredSessions_(')){
+  console.error('Login path must not run session garbage collection.');
+  failed=true;
+}
+if(!authCode.includes('function sessionRowsToDelete_(')||!authCode.includes('sheet.deleteRows(block.start,block.end-block.start+1)')){
+  console.error('Batched session garbage collection is missing.');
+  failed=true;
+}
+if(!maintenanceCodeForUi.includes('const cleanedSessions=cleanupExpiredSessions_();')){
+  console.error('Scheduled maintenance must run session garbage collection.');
+  failed=true;
+}
+
 for (const requiredPermissionMarker of [
   "assertPermission_(employee, 'companyCalendarEdit')",
   "COMPANY_CALENDAR_EDIT_ROLES"

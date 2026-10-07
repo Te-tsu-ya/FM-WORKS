@@ -48,6 +48,7 @@ globalThis.__fmTest = {
   safeSheetText_,
   safeSheetName_,
   parseTimestamp_,
+  sessionRowsToDelete_,
   prototypeSettingEnabled_,
   prototypeModeEnabledForEnvironment_,
   isPrototypeLogin_,
@@ -132,6 +133,12 @@ expect('normal sheet text unchanged', api.safeSheetText_('Project Atlas', 100) =
 expect('sheet name sanitizes forbidden characters', !/[\\\/\?\*\[\]\:]/.test(api.safeSheetName_('FM/WORKS:*?')));
 const singleDigitHourTimestamp = api.parseTimestamp_('2026-10-08 3:19:57');
 expect('session timestamp accepts single-digit Sheets hour', !!singleDigitHourTimestamp && !Number.isNaN(singleDigitHourTimestamp.getTime()));
+const sessionRows=[
+  ['S1','','FM0001','','2026-10-07 10:00:00','','','ACTIVE','','',''],
+  ['S2','','FM0002','','2026-10-09 10:00:00','','','ACTIVE','','',''],
+  ['S3','','FM0003','','2026-10-09 10:00:00','','','REVOKED','','','']
+];
+expect('session cleanup selects expired and inactive rows in sheet coordinates', JSON.stringify(Array.from(api.sessionRowsToDelete_(sessionRows,new Date('2026-10-08T00:00:00+09:00'))))===JSON.stringify([2,4]));
 expect('prototype mode may be explicitly enabled in staging', api.prototypeModeEnabledForEnvironment_('TRUE','STAGING') === true);
 expect('prototype mode is forcibly disabled in production', api.prototypeModeEnabledForEnvironment_('TRUE','PRODUCTION') === false);
 expect('prototype mode honors an explicit OFF setting', api.prototypeModeEnabledForEnvironment_('FALSE','STAGING') === false);
