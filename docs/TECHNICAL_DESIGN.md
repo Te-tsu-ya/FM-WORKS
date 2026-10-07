@@ -504,3 +504,263 @@ Apps Scriptの原則:
 10. テーマ・アクセシビリティを実装。
 11. CI文書同期を実装。
 12. 回帰テスト後に既存Web Appを更新。
+
+
+## 27. DB完全スキーマ
+
+以下の列順は実装上の契約である。Apps Scriptは列番号で読み書きする箇所があるため、列追加時は既存列の途中へ挿入せず、原則として末尾追加とする。
+
+### 27.1 社員マスタ
+
+| 列 | 項目 | 用途 |
+| --- | --- | --- |
+| A | 社員ID | `FM0001` 形式、一意 |
+| B | 氏名 | 正式表示名 |
+| C | 表示名 | UI短縮名 |
+| D | 部署 | 組織表示 |
+| E | 役職 | 組織表示 |
+| F | 権限 | USER / CALENDAR_EDITOR / ADMIN |
+| G | 在籍状況 | 在籍 / 退職 |
+| H | 標準勤務開始 | HH:mm |
+| I | 標準勤務終了 | HH:mm |
+| J | 標準休憩分 | number |
+| K | 有給残日数 | 0.25日単位、空欄=未設定 |
+| L | メール | 任意 |
+| M | 備考 | 任意 |
+| N | PINソルト | 認証内部 |
+| O | PINハッシュ | 認証内部 |
+| P | PIN変更必須 | TRUE/FALSE |
+| Q | ログイン失敗回数 | number |
+| R | ロック期限 | timestamp |
+| S | 最終ログイン日時 | timestamp |
+| T | PIN更新日時 | timestamp |
+| U | 認証状態 | ACTIVE / DISABLED |
+| V | 権限詳細 | 拡張用 |
+| W | 給与集計対象 | TRUE/FALSE |
+
+### 27.2 打刻ログ
+
+| 列 | 項目 |
+| --- | --- |
+| A | 打刻ID |
+| B | 社員ID |
+| C | 氏名 |
+| D | 日付 |
+| E | 種別 |
+| F | 打刻日時 |
+| G | 勤務場所 |
+| H | 入力元 |
+| I | 修正済 |
+| J | 元打刻ID |
+| K | 備考 |
+| L | 登録日時 |
+
+有効打刻判定は修正レコードの元打刻IDを用い、置換済み元レコードを集計から除外する。
+
+### 27.3 日次勤怠
+
+旧運用データ互換用スナップショット。
+
+`日付 / 社員ID / 氏名 / 出勤 / 退勤 / 休憩分 / 実働分 / 残業分 / 休日出勤分 / 勤務場所 / 欠勤 / 遅刻早退分 / 在宅 / 有給 / 確定状況 / 備考`
+
+新しい打刻が存在する日は打刻ログを優先し、日次勤怠はフォールバックとして扱う。
+
+### 27.4 工数
+
+`工数ID / 日付 / 社員ID / 氏名 / プロジェクト / 作業分類 / 作業内容 / 開始 / 終了 / 工数分 / 備考 / 登録日時 / 状態 / 削除日時 / 更新日時`
+
+状態 `削除` はソフトデリートであり、物理行削除は禁止する。
+
+### 27.5 申請
+
+`申請ID / 申請日 / 社員ID / 氏名 / 申請種別 / 対象日開始 / 対象日終了 / 申請内容 / 理由 / ステータス / 承認者 / 承認日時 / 差戻し理由 / 登録日時`
+
+ステータス: `承認待ち / 承認済 / 差戻し / 取消`。
+
+打刻修正の申請内容はJSONを格納する。
+
+```json
+{
+  "originalPunchId": "P-...",
+  "action": "退勤",
+  "time": "18:05",
+  "workLocation": "出社"
+}
+```
+
+### 27.6 会社カレンダー
+
+`日付 / 区分 / 名称 / 標準勤務開始 / 標準勤務終了 / 休憩分 / 勤務日フラグ / 備考 / 更新者 / 更新日時`
+
+区分: `通常勤務 / 法定祝日 / 会社休日 / 調整出勤日 / 週末`。
+
+### 27.7 監査ログ
+
+`監査ID / 日時 / 社員ID / 氏名 / 操作 / 対象 / 対象ID / 変更前 / 変更後 / 入力元 / 結果 / 備考`
+
+主要な書込操作は成功・失敗を問わず可能な範囲で監査対象とする。
+
+### 27.8 設定
+
+`キー / 値 / 説明 / 更新日時`
+
+主要キー:
+
+| キー | 既定 |
+| --- | --- |
+| TIMEZONE | Asia/Tokyo |
+| DB_VERSION | 4 |
+| AUTH_VERSION | 3 |
+| SESSION_HOURS | 12 |
+| SESSION_IDLE_MINUTES | 120 |
+| MAX_LOGIN_FAILURES | 5 |
+| LOCK_MINUTES | 15 |
+| PIN_LENGTH | 6 |
+| PROTOTYPE_MODE | TRUE（試作時のみ） |
+| REMEMBER_SESSION_DAYS | 30 |
+| REMEMBER_IDLE_DAYS | 30 |
+| MONTHLY_REVIEW_DUE_DAY | 5 |
+
+### 27.9 予定
+
+`予定ID / 日付 / 開始 / 終了 / 終日 / 参加者ID / 参加者名 / タイトル / カテゴリ / 場所 / 詳細 / 公開範囲 / ステータス / 登録者 / 登録日時 / 更新日時 / 元データ / 色キー`
+
+参加者ID/名は複数人を保持する。表示時は社員マスタと突合し、名前をカードへ直接表示する。
+
+### 27.10 セッション
+
+`セッションID / トークンハッシュ / 社員ID / 作成日時 / 絶対有効期限 / アイドル有効期限 / 最終利用日時 / 状態 / クライアント情報 / ログアウト日時 / ログイン保持`
+
+状態: `ACTIVE / REVOKED / EXPIRED` 相当。
+
+### 27.11 PIN再発行
+
+`依頼ID / 依頼日時 / 社員ID / 氏名 / ステータス / メモ / 対応者 / 対応日時 / 入力元`
+
+### 27.12 プロジェクト
+
+`プロジェクトID / プロジェクト名 / 顧客表示名 / ステータス / 開始日 / 終了日 / 備考 / 更新者 / 更新日時`
+
+ステータス: `進行中 / 停止 / 完了`。
+
+### 27.13 月次締め
+
+`年月 / 状態 / 締め日時 / 締め者 / 再開日時 / 再開者 / 備考 / 更新日時`
+
+状態: `OPEN / CLOSED`。
+
+### 27.14 月次確認
+
+`年月 / 社員ID / 氏名 / 状態 / 確認日時 / 確認者 / 確認時最終更新 / メモ / 登録日時 / 更新日時`
+
+主キー相当: `年月 + 社員ID`。
+
+## 28. 公開API契約
+
+代表的なクライアント呼出しを以下に固定する。すべて戻り値はJSON化可能なプレーンオブジェクトとする。
+
+| API | 認証 | 入力 | 主な戻り値 |
+| --- | --- | --- | --- |
+| `getPublicAuthConfig()` | 不要 | なし | ログイン公開設定 |
+| `login(...)` | 不要 | 社員ID, PIN, clientInfo, remember | sessionToken, user |
+| `resumeSession(token)` | token | token | user, mustChangePin |
+| `getInitialData(token)` | Session | token | 共通初期データ |
+| `recordPunch(token, action, location)` | Session | 打刻種別,場所 | 最新attendance |
+| `getScheduleBundle(token, params)` | Session | 範囲,社員,カテゴリ | events, companyDays, employees |
+| `saveSchedule(token,payload)` | Session | 予定 | ok,id |
+| `getCompanyCalendar(token,year)` | Session | 年 | 年カレンダー |
+| `saveCompanyCalendarDay(token,payload)` | 編集権限 | 日付設定 | ok |
+| `getWorklogs(token,params)` | Session | 範囲,社員 | items,totalMinutes |
+| `saveWorklog(token,payload)` | Session | 工数 | ok,id |
+| `getRequestsBundle(token)` | Session | なし | own,team,context |
+| `submitRequest(token,payload)` | Session | 申請 | ok,id |
+| `approveRequest(token,id,decision,comment)` | ADMIN | 申請ID | ok |
+| `getMonthlySummary(token,ym,employeeId)` | Session | 年月,社員 | daily,totals,reviewStatus,closeStatus |
+| `confirmMonthlyReview(token,ym,note)` | Session | 年月 | reviewStatus |
+| `closeMonthlyPeriod(token,ym)` | ADMIN | 年月 | closeStatus |
+| `getAuthAdminData(token)` | ADMIN | なし | employees,resetRequests,support |
+| `getSystemStatus(token)` | ADMIN | なし | readiness,backup,sheets |
+| `getSystemDocument(token,type)` | ADMIN | requirements/technical | markdown,version |
+
+新しい公開関数を追加する場合、`scripts/validate.mjs` の認証境界検査を通すこと。
+
+## 29. 主要シーケンス
+
+### 29.1 月初確認
+
+```
+login / resume
+  → getInitialData
+    → getMonthlyReviewPrompt_
+      → getMonthlyReviewStatusInternal_
+      → getLatestMonthlyDataUpdate_
+  → globalActionBanners
+  → user clicks review
+  → getMonthlySummary(previous month)
+  → user inspects calendar
+  → confirmMonthlyReview
+  → 月次確認 upsert
+  → 監査ログ append
+  → alert disappears
+```
+
+### 29.2 打刻修正
+
+```
+Monthly day detail
+  → openRequestModal('打刻修正', date)
+  → getPunchesForDate
+  → submitRequest
+  → ADMIN approveRequest
+  → preparePunchCorrection_
+  → validatePunchSequence_
+  → applyApprovedPunchCorrection_
+  → new punch record + originalPunchId
+  → 月次確認 stale判定
+```
+
+### 29.3 月次締め
+
+```
+ADMIN closeMonthlyPeriod
+  → payroll employees
+  → getMonthlySummary each
+  → missing punch = 0
+  → worklog mismatch = 0
+  → pending requests = 0
+  → 月次締め CLOSED
+  → audit log
+  → worklog/request mutations blocked
+```
+
+## 30. UIルートと読み込み
+
+| route | サーバー読込 | キャッシュ |
+| --- | --- | --- |
+| home | getInitialData内 | 初期データ |
+| attendance | getInitialData内 | 初期データ |
+| worklog | getWorklogs | 90秒 |
+| schedule | getScheduleBundle | 90秒 |
+| companyCalendar | getCompanyCalendar | 300秒 |
+| requests | getRequestsBundle | 90秒 |
+| people | getAuthAdminData(ADMIN時) | 120秒 |
+| monthly | getMonthlySummary | 120秒 |
+| admin/auth | getAuthAdminData | 120秒 |
+| admin/operation | getSystemStatus + getAuditLogs | 60秒 |
+| admin/requirements | getSystemDocument | 600秒 |
+| admin/technical | getSystemDocument | 600秒 |
+
+ログイン後の `startMenuPrefetch` はユーザーの操作をブロックしないよう遅延実行する。
+
+## 31. 変更時チェックリスト
+
+ソースを変更するエンジニアは最低限以下を実施する。
+
+1. 変更する業務要件を `docs/REQUIREMENTS.md` へ反映。
+2. データ構造/API/UI/シーケンスを `docs/TECHNICAL_DESIGN.md` へ反映。
+3. 必要なロジックテストを追加。
+4. 必要な静的回帰マーカーを `scripts/validate.mjs` へ追加。
+5. 既存認証境界を確認。
+6. DB列を追加する場合は末尾追加を優先。
+7. UI変更はPC/モバイル、ライト/ダーク、エラー/空/読込状態を確認。
+8. GitHub ActionsのCIとDeployが両方成功してから完了扱いとする。
