@@ -46,7 +46,9 @@ globalThis.__fmTest = {
   shortEmployeeName_,
   requiredBreakMinutes_,
   calculateBreakMinutesForRows_,
-  normalizeYearMonth_
+  normalizeYearMonth_,
+  previousYearMonth_,
+  monthlyReviewUrgency_
 };
 `, context);
 
@@ -119,6 +121,9 @@ expect('recorded lunch break totals 60 minutes', api.calculateBreakMinutesForRow
 ], false) === 60);
 expect('valid year-month accepted', api.normalizeYearMonth_('2026-09') === '2026-09');
 expectThrows('invalid year-month rejected', () => api.normalizeYearMonth_('2026-13'));
+expect('previous month crosses year boundary', api.previousYearMonth_('2026-01-10') === '2025-12');
+expect('monthly review is warning before due day', api.monthlyReviewUrgency_(3,5) === 'warning');
+expect('monthly review becomes danger after due day', api.monthlyReviewUrgency_(6,5) === 'danger');
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
