@@ -48,8 +48,14 @@ function getInitialData(sessionToken) {
   const employee = session.employee;
   const attendance = getAttendanceState_(employee.employeeId);
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const yearMonth = today.slice(0, 7);
   const scheduleBundle = getScheduleBundle(sessionToken, { start: today, end: today, employeeId: employee.employeeId });
   const companyToday = scheduleBundle.companyDays.find(d => d.date === today) || null;
+  const monthSummary = getMonthlySummary(sessionToken, yearMonth, employee.employeeId);
+  const requestScope = employee.role === 'ADMIN' ? 'ALL' : 'SELF';
+  const requestItems = getRequests(sessionToken, { scope: requestScope });
+  const pendingRequests = requestItems.filter(r => r.status === '承認待ち').length;
+  const worklogGap = Math.max(0, monthSummary.totals.totalMinutes - monthSummary.totals.worklogMinutes);
 
   return {
     app: APP,
@@ -70,14 +76,18 @@ function getInitialData(sessionToken) {
     todaySchedule: scheduleBundle.events.slice(0, 8),
     companyToday: companyToday,
     month: {
-      workHours: '72時間36分',
-      overtime: '8時間12分',
-      leaveBalance: employee.leaveBalance + '日'
+      workHours: formatMinutes_(monthSummary.totals.totalMinutes),
+      overtime: formatMinutes_(monthSummary.totals.overtimeMinutes),
+      leaveBalance: employee.leaveBalance + '日',
+      paidLeaveDays: monthSummary.totals.paidLeaveDays,
+      worklogMinutes: monthSummary.totals.worklogMinutes,
+      worklogGapMinutes: worklogGap,
+      missingPunchDays: monthSummary.totals.missingPunchDays
     },
     tasks: [
-      { label: '工数入力', status: '未完了', tone: 'danger' },
-      { label: '勤怠の確認', status: '0件', tone: 'info' },
-      { label: '申請の確認', status: '0件', tone: 'info' }
+      { label: '工数入力', status: worklogGap > 0 ? formatMinutes_(worklogGap) + '不足' : '完了', tone: worklogGap > 0 ? 'danger' : 'info' },
+      { label: '勤怠の確認', status: monthSummary.totals.missingPunchDays + '件', tone: monthSummary.totals.missingPunchDays > 0 ? 'warning' : 'info' },
+      { label: employee.role === 'ADMIN' ? '申請の承認' : '申請の確認', status: pendingRequests + '件', tone: pendingRequests > 0 ? 'warning' : 'info' }
     ]
   };
 }
