@@ -56,7 +56,7 @@ function getProductionReadiness_() {
   const horizon=Utilities.formatDate(new Date(now.getTime()+90*86400000),DB.timeZone,'yyyy-MM-dd');
   const requiredSheets=[
     DB.sheets.employees,DB.sheets.punches,'日次勤怠','工数','申請',DB.sheets.companyCalendar,
-    DB.sheets.audit,AUTH.settingsSheet,DB.sheets.schedule,AUTH.sessionSheet,AUTH.resetSheet,DB.sheets.projects
+    DB.sheets.audit,AUTH.settingsSheet,DB.sheets.schedule,AUTH.sessionSheet,AUTH.resetSheet,DB.sheets.projects,DB.sheets.monthlyReview
   ];
   const sheetNames=new Set(db.getSheets().map(s=>s.getName()));
   const blockers=[];
