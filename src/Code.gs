@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.8.2',
+  version: '0.8.3',
   locale: 'ja-JP'
 });
 
@@ -168,6 +168,7 @@ function recordPunch(sessionToken, action, workLocation) {
     return {
       ok: true,
       today: dateText,
+      serverTime: new Date().toISOString(),
       attendance: getAttendanceState_(employee.employeeId)
     };
   } catch (err) {
