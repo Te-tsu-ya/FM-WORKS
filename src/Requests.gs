@@ -21,114 +21,126 @@ function getRequests(sessionToken, params) {
 function submitRequest(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
   payload = payload || {};
-  const type = String(payload.type || '');
-  if (!REQUEST_TYPES.includes(type)) throw new Error('申請種別を確認してください。');
-  const startDate = normalizeDate_(payload.startDate);
-  const endDate = normalizeDate_(payload.endDate || startDate);
-  if (startDate > endDate) throw new Error('対象期間を確認してください。');
-  const reason = String(payload.reason || '').trim().slice(0, 600);
-  if (!reason) throw new Error('申請理由を入力してください。');
+  return withScriptLock_(function() {
+    const type = String(payload.type || '');
+    if (!REQUEST_TYPES.includes(type)) throw new Error('申請種別を確認してください。');
+    const startDate = normalizeDate_(payload.startDate);
+    const endDate = normalizeDate_(payload.endDate || startDate);
+    if (startDate > endDate) throw new Error('対象期間を確認してください。');
+    const reason = String(payload.reason || '').trim().slice(0, 600);
+    if (!reason) throw new Error('申請理由を入力してください。');
 
-  let content = String(payload.content || '').trim().slice(0, 1500);
-  if (type === '打刻修正') {
-    const correction = payload.correction || {};
-    const action = String(correction.action || '');
-    if (!Object.values(PUNCH).includes(action)) throw new Error('修正する打刻種別を選択してください。');
-    const time = normalizeTime_(correction.time || '');
-    if (!time) throw new Error('修正後の時刻を入力してください。');
-    content = JSON.stringify({
-      originalPunchId: String(correction.originalPunchId || ''),
-      action: action,
-      time: time,
-      workLocation: ['出社','在宅','外出'].includes(correction.workLocation) ? correction.workLocation : '出社'
+    let content = String(payload.content || '').trim().slice(0, 1500);
+    if (type === '打刻修正') {
+      const correction = payload.correction || {};
+      const action = String(correction.action || '');
+      if (!Object.values(PUNCH).includes(action)) throw new Error('修正する打刻種別を選択してください。');
+      const time = normalizeTime_(correction.time || '');
+      if (!time) throw new Error('修正後の時刻を入力してください。');
+      content = JSON.stringify({
+        originalPunchId: String(correction.originalPunchId || ''),
+        action: action,
+        time: time,
+        workLocation: ['出社','在宅','外出'].includes(correction.workLocation) ? correction.workLocation : '出社'
+      });
+    }
+
+    const now = new Date();
+    const nowText = toTimestamp_(now);
+    const requestId = createId_('R');
+    getDb_().getSheetByName('申請').appendRow([
+      requestId,
+      Utilities.formatDate(now, DB.timeZone, 'yyyy-MM-dd'),
+      employee.employeeId,
+      employee.name,
+      type,
+      startDate,
+      endDate,
+      content,
+      reason,
+      '承認待ち',
+      '',
+      '',
+      '',
+      nowText
+    ]);
+    appendAudit_({
+      employeeId:employee.employeeId,employeeName:employee.name,operation:'申請登録',
+      target:'申請',targetId:requestId,before:'',after:type+' '+startDate,
+      source:'WEB',result:'SUCCESS',note:''
     });
-  }
-
-  const now = new Date();
-  const nowText = toTimestamp_(now);
-  const requestId = createId_('R');
-  getDb_().getSheetByName('申請').appendRow([
-    requestId,
-    Utilities.formatDate(now, DB.timeZone, 'yyyy-MM-dd'),
-    employee.employeeId,
-    employee.name,
-    type,
-    startDate,
-    endDate,
-    content,
-    reason,
-    '承認待ち',
-    '',
-    '',
-    '',
-    nowText
-  ]);
-  appendAudit_({
-    employeeId:employee.employeeId,employeeName:employee.name,operation:'申請登録',
-    target:'申請',targetId:requestId,before:'',after:type+' '+startDate,
-    source:'WEB',result:'SUCCESS',note:''
+    SpreadsheetApp.flush();
+    return {ok:true,id:requestId};
   });
-  return {ok:true,id:requestId};
 }
-
 function cancelRequest(sessionToken, requestId) {
   const employee = requireSession_(sessionToken).employee;
-  const rowInfo = findRequestRow_(requestId);
-  if (!rowInfo) throw new Error('申請が見つかりません。');
-  const r = rowInfo.values;
-  if (r[2] !== employee.employeeId && employee.role !== 'ADMIN') throw new Error('この申請を取り消す権限がありません。');
-  if (r[9] !== '承認待ち') throw new Error('承認待ちの申請だけ取り消せます。');
-  rowInfo.sheet.getRange(rowInfo.row,10).setValue('取消');
-  appendAudit_({
-    employeeId:employee.employeeId,employeeName:employee.name,operation:'申請取消',
-    target:'申請',targetId:r[0],before:'承認待ち',after:'取消',source:'WEB',result:'SUCCESS',note:''
+  return withScriptLock_(function() {
+    const rowInfo = findRequestRow_(requestId);
+    if (!rowInfo) throw new Error('申請が見つかりません。');
+    const r = rowInfo.values;
+    if (r[2] !== employee.employeeId && employee.role !== 'ADMIN') throw new Error('この申請を取り消す権限がありません。');
+    if (r[9] !== '承認待ち') throw new Error('承認待ちの申請だけ取り消せます。');
+    rowInfo.sheet.getRange(rowInfo.row,10).setValue('取消');
+    appendAudit_({
+      employeeId:employee.employeeId,employeeName:employee.name,operation:'申請取消',
+      target:'申請',targetId:r[0],before:'承認待ち',after:'取消',source:'WEB',result:'SUCCESS',note:''
+    });
+    SpreadsheetApp.flush();
+    return {ok:true};
   });
-  return {ok:true};
 }
-
 function approveRequest(sessionToken, requestId, decision, comment) {
   const admin = requireAdminSession_(sessionToken).employee;
-  const rowInfo = findRequestRow_(requestId);
-  if (!rowInfo) throw new Error('申請が見つかりません。');
-  const r = rowInfo.values;
-  if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
-  const approve = decision === 'APPROVE';
-  const nowText = toTimestamp_(new Date());
-  let leaveDaysToConsume = 0;
-  let leaveEmployee = null;
-  if (approve && ['有給','午前半休','午後半休'].includes(r[4])) {
-    leaveEmployee = getEmployee_(r[2]);
-    leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
-    if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
-    if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
-      throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
+  const normalizedDecision = String(decision || '').toUpperCase();
+  if (!['APPROVE','REJECT'].includes(normalizedDecision)) throw new Error('承認操作を確認してください。');
+
+  return withScriptLock_(function() {
+    const rowInfo = findRequestRow_(requestId);
+    if (!rowInfo) throw new Error('申請が見つかりません。');
+    const r = rowInfo.values;
+    if (r[9] !== '承認待ち') throw new Error('この申請はすでに処理されています。');
+    const approve = normalizedDecision === 'APPROVE';
+    const rejectReason = String(comment || '').trim().slice(0,500);
+    if (!approve && !rejectReason) throw new Error('差戻し理由を入力してください。');
+
+    const nowText = toTimestamp_(new Date());
+    let leaveDaysToConsume = 0;
+    let leaveEmployee = null;
+    if (approve && ['有給','午前半休','午後半休'].includes(r[4])) {
+      leaveEmployee = getEmployee_(r[2]);
+      leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
+      if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
+      if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
+        throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
+      }
     }
-  }
 
-  rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
-    approve ? '承認済' : '差戻し',
-    admin.name,
-    nowText,
-    approve ? '' : String(comment || '').trim().slice(0,500)
-  ]]);
+    rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
+      approve ? '承認済' : '差戻し',
+      admin.name,
+      nowText,
+      approve ? '' : rejectReason
+    ]]);
 
-  if (approve && r[4] === '打刻修正') {
-    applyApprovedPunchCorrection_(r);
-  }
-  if (approve && leaveEmployee && leaveDaysToConsume > 0) {
-    const employeeSheet = getDb_().getSheetByName(DB.sheets.employees);
-    employeeSheet.getRange(leaveEmployee.rowNumber,11).setValue(leaveEmployee.leaveBalance - leaveDaysToConsume);
-  }
+    if (approve && r[4] === '打刻修正') {
+      applyApprovedPunchCorrection_(r);
+    }
+    if (approve && leaveEmployee && leaveDaysToConsume > 0) {
+      const employeeSheet = getDb_().getSheetByName(DB.sheets.employees);
+      employeeSheet.getRange(leaveEmployee.rowNumber,11).setValue(leaveEmployee.leaveBalance - leaveDaysToConsume);
+    }
 
-  appendAudit_({
-    employeeId:admin.employeeId,employeeName:admin.name,
-    operation:approve?'申請承認':'申請差戻し',target:'申請',targetId:r[0],
-    before:'承認待ち',after:approve?'承認済':'差戻し',source:'WEB',result:'SUCCESS',
-    note:String(comment||'').slice(0,200)
+    appendAudit_({
+      employeeId:admin.employeeId,employeeName:admin.name,
+      operation:approve?'申請承認':'申請差戻し',target:'申請',targetId:r[0],
+      before:'承認待ち',after:approve?'承認済':'差戻し',source:'WEB',result:'SUCCESS',
+      note:approve?'':rejectReason.slice(0,200)
+    });
+    SpreadsheetApp.flush();
+    return {ok:true};
   });
-  return {ok:true};
 }
-
 function getPunchesForDate(sessionToken, date) {
   const employee = requireSession_(sessionToken).employee;
   const targetDate = normalizeDate_(date);
