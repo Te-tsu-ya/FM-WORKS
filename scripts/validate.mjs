@@ -292,7 +292,7 @@ const demoIdentitySources = [
   ['Worklog.gs', worklogCode],
   ['Requests.gs', requestCode],
   ['Employees.gs', employeeCode],
-  ['Projects.gs', projectsCode]
+  ['Projects.gs', fs.readFileSync(path.join(root,'src/Projects.gs'),'utf8')]
 ];
 const forbiddenRealDemoTerms = [
   '会津屋','ラクッショ','キキラク','CoDoNa',
