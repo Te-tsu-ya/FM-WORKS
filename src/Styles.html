@@ -171,3 +171,18 @@
   .notification-menu{position:fixed;right:14px;left:14px;top:70px;width:auto;max-height:60vh}
 }
 </style>
+<style>
+body.drawer-open{overflow:hidden}
+.mobile-drawer-backdrop{position:fixed;inset:0;background:rgba(12,24,42,.44);backdrop-filter:blur(3px);z-index:120}
+.mobile-drawer{position:fixed;z-index:121;left:0;top:0;bottom:0;width:min(340px,88vw);background:#fff;border-right:1px solid var(--line);box-shadow:22px 0 60px rgba(13,32,58,.20);padding:16px;display:flex;flex-direction:column;animation:drawerIn .18s ease-out}
+@keyframes drawerIn{from{transform:translateX(-18px);opacity:.6}to{transform:none;opacity:1}}
+.mobile-drawer-head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:4px 2px 14px;border-bottom:1px solid #edf1f5}
+.mobile-drawer-head .fm-logo{width:34px;height:34px}
+.mobile-drawer-head>div{display:grid;gap:2px}.mobile-drawer-head small{color:var(--muted);font-size:11px}
+.mobile-drawer nav{display:grid;gap:5px;padding-top:12px;overflow:auto}
+.mobile-drawer nav button{border:0;background:transparent;color:#34435c;border-radius:11px;min-height:46px;padding:0 12px;display:flex;align-items:center;gap:12px;text-align:left}
+.mobile-drawer nav button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mobile-drawer nav button.active{background:#eaf3ff;color:#0769ef;font-weight:700}
+.confirm-message,.readonly-note{line-height:1.75;color:#53647c;white-space:pre-wrap}
+@media(min-width:761px){#mobileDrawerRoot{display:none!important}}
+</style>
