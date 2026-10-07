@@ -42,7 +42,10 @@ globalThis.__fmTest = {
   safeSheetText_,
   safeSheetName_,
   parseTimestamp_,
-  isPrototypeLogin_
+  isPrototypeLogin_,
+  shortEmployeeName_,
+  requiredBreakMinutes_,
+  calculateBreakMinutesForRows_
 };
 `, context);
 
@@ -102,6 +105,17 @@ const singleDigitHourTimestamp = api.parseTimestamp_('2026-10-08 3:19:57');
 expect('session timestamp accepts single-digit Sheets hour', !!singleDigitHourTimestamp && !Number.isNaN(singleDigitHourTimestamp.getTime()));
 expect('prototype PIN accepts fictional employee', api.isPrototypeLogin_({employeeId:'FM0001'}, '000000') === true);
 expect('prototype PIN rejects unknown employee', api.isPrototypeLogin_({employeeId:'FM9999'}, '000000') === false);
+expect('employee short label uses surname only', api.shortEmployeeName_('青木 悠真','青木さん','FM0001') === '青木');
+expect('display name fallback strips honorific', api.shortEmployeeName_('', '森川さん', 'FM0002') === '森川');
+expect('6h requires no statutory break threshold', api.requiredBreakMinutes_(360) === 0);
+expect('over 6h requires 45 minutes', api.requiredBreakMinutes_(361) === 45);
+expect('over 8h requires 60 minutes', api.requiredBreakMinutes_(481) === 60);
+expect('recorded lunch break totals 60 minutes', api.calculateBreakMinutesForRows_([
+  { action: api.PUNCH.CLOCK_IN, timestamp: '2026-10-07 09:00:00' },
+  { action: api.PUNCH.BREAK_START, timestamp: '2026-10-07 12:00:00' },
+  { action: api.PUNCH.BREAK_END, timestamp: '2026-10-07 13:00:00' },
+  { action: api.PUNCH.CLOCK_OUT, timestamp: '2026-10-07 18:00:00' }
+], false) === 60);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
