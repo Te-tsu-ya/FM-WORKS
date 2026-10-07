@@ -3,7 +3,7 @@ const MAINTENANCE = Object.freeze({
   databaseIdProperty: 'FM_WORKS_DB_ID',
   lastBackupProperty: 'FM_WORKS_LAST_BACKUP_AT',
   autoBackupProperty: 'FM_WORKS_AUTO_BACKUP',
-  backupRetentionDays: 30
+  backupRetentionDays: 90
 });
 
 function getSystemStatus(sessionToken) {
@@ -43,8 +43,79 @@ function getSystemStatus(sessionToken) {
     backupMode: '管理者利用時に1日1回',
     lastBackupAt: props.getProperty(MAINTENANCE.lastBackupProperty) || '',
     backupRetentionDays: MAINTENANCE.backupRetentionDays,
+    readiness: getProductionReadiness_(),
     checkedAt: toTimestamp_(new Date()),
     checkedBy: admin.name
+  };
+}
+
+function getProductionReadiness_() {
+  const db=getDb_();
+  const now=new Date();
+  const today=Utilities.formatDate(now,DB.timeZone,'yyyy-MM-dd');
+  const horizon=Utilities.formatDate(new Date(now.getTime()+90*86400000),DB.timeZone,'yyyy-MM-dd');
+  const requiredSheets=[
+    DB.sheets.employees,DB.sheets.punches,'日次勤怠','工数','申請',DB.sheets.companyCalendar,
+    DB.sheets.audit,AUTH.settingsSheet,DB.sheets.schedule,AUTH.sessionSheet,AUTH.resetSheet,DB.sheets.projects
+  ];
+  const sheetNames=new Set(db.getSheets().map(s=>s.getName()));
+  const blockers=[];
+  const warnings=[];
+
+  const missingSheets=requiredSheets.filter(name=>!sheetNames.has(name));
+  if(missingSheets.length)blockers.push('必須シート不足: '+missingSheets.join('、'));
+
+  const employeeSheet=db.getSheetByName(DB.sheets.employees);
+  const employeeRows=employeeSheet&&employeeSheet.getLastRow()>=2
+    ? employeeSheet.getRange(2,1,employeeSheet.getLastRow()-1,23).getDisplayValues().filter(r=>r[0]&&r[6]==='在籍')
+    : [];
+  const activeAdmins=employeeRows.filter(r=>r[5]==='ADMIN');
+  if(!activeAdmins.length)blockers.push('有効な管理者がいません');
+
+  const missingPins=employeeRows.filter(r=>!r[14]);
+  if(missingPins.length)blockers.push('PIN未設定 '+missingPins.length+'名');
+
+  const support=getSupportConfig_();
+  if(!support.email&&!support.phone)blockers.push('PIN再発行の連絡先が未設定です');
+
+  const payrollCount=employeeRows.filter(r=>String(r[22]).toUpperCase()==='TRUE').length;
+  if(!payrollCount)warnings.push('給与集計対象者が0名です');
+
+  const calendar=getCompanyCalendarRange_(today,horizon);
+  const expectedDays=Math.round((parseYmd_(horizon)-parseYmd_(today))/86400000)+1;
+  if(calendar.length!==expectedDays){
+    blockers.push('会社カレンダーが今後90日分そろっていません');
+  }
+
+  const settingsSheet=db.getSheetByName(AUTH.settingsSheet);
+  if(settingsSheet&&settingsSheet.getLastRow()>=2){
+    const keys=settingsSheet.getRange(2,1,settingsSheet.getLastRow()-1,1).getDisplayValues().map(r=>r[0]).filter(Boolean);
+    const seen=new Set(),duplicates=new Set();
+    keys.forEach(k=>{if(seen.has(k))duplicates.add(k);else seen.add(k);});
+    if(duplicates.size)warnings.push('設定キー重複: '+[...duplicates].join('、'));
+  }
+
+  const props=PropertiesService.getScriptProperties();
+  const lastBackup=String(props.getProperty(MAINTENANCE.lastBackupProperty)||'');
+  const backupAt=parseTimestamp_(lastBackup);
+  const backupAgeHours=backupAt?Math.floor((now-backupAt)/3600000):null;
+  if(!backupAt)warnings.push('バックアップがまだありません');
+  else if(backupAgeHours>36)warnings.push('最終バックアップから36時間以上経過しています');
+
+  const prototypeMode=isPrototypeMode_();
+  if(prototypeMode)blockers.push('試作版共通PINモードが有効です');
+
+  return {
+    ready:blockers.length===0,
+    prototypeMode:prototypeMode,
+    blockers:blockers,
+    warnings:warnings,
+    activeEmployees:employeeRows.length,
+    activeAdmins:activeAdmins.length,
+    pinConfigured:employeeRows.length-missingPins.length,
+    payrollEmployees:payrollCount,
+    calendarThrough:horizon,
+    backupAgeHours:backupAgeHours
   };
 }
 
