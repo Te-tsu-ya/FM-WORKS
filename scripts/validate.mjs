@@ -250,7 +250,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','projectAdminSection','openProjectModal','saveProjectFromModal']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;
@@ -491,8 +491,12 @@ for (const marker of [
 for (const marker of [
   'function confirmMonthlyReview(sessionToken',
   'function getMonthlyReviewPrompt_(',
-  'function getLatestMonthlyDataUpdate_(',
-  'reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)'
+  'function getMonthlyReviewHistoryInternal_(',
+  'function getLatestMonthlyDataUpdateMap_(',
+  'function yearMonthsBetween_(',
+  'pendingCount:outstanding.length',
+  'isBacklog:isBacklog',
+  'reviewStatus:ym<systemToday.slice(0,7)?getMonthlyReviewStatusInternal_(ym,targetId):null'
 ]) {
   if (!monthlyCode.includes(marker)) {
     console.error('Monthly review implementation missing: ' + marker);
@@ -502,9 +506,13 @@ for (const marker of [
 
 for (const marker of [
   'function globalActionBanners()',
+  "const backlog=!!r.isBacklog",
   'function monthlyCalendarView(',
   'function confirmMonthlyReviewFromPage()',
   'function loadSystemDocument(',
+  'function projectAdminSection()',
+  'function openProjectModal(',
+  'function saveProjectFromModal(',
   '要件定義書',
   '技術設計書',
   'function toggleTheme()'
@@ -526,6 +534,15 @@ for (const marker of [
     console.error('Required v0.8 style missing: ' + marker);
     failed = true;
   }
+}
+
+if (!app.includes("loadSystemDocument('${type}',{force:true})")) {
+  console.error('Design document reload button must bypass the client cache.');
+  failed = true;
+}
+if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了です'}")) {
+  console.error('Admin monthly view must expose the selected employee review status.');
+  failed = true;
 }
 
 if (!docsCode.includes('requireAdminSession_(sessionToken)')) {
