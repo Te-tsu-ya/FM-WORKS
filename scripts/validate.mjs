@@ -140,7 +140,8 @@ for (const requiredMaintenanceMarker of [
   'function getAuditLogs(sessionToken',
   'function createManualBackup(sessionToken)',
   'function setDailyBackupEnabled(sessionToken',
-  "backupHandler: 'runDailyBackup_'",
+  "autoBackupProperty: 'FM_WORKS_AUTO_BACKUP'",
+  'function ensureDailyBackup(sessionToken)',
   'requireAdminSession_(sessionToken)'
 ]) {
   if (!maintenanceCode.includes(requiredMaintenanceMarker)) {
