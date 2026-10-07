@@ -118,10 +118,10 @@ function approveRequest(sessionToken, requestId, decision, comment) {
       if (r[4] !== '欠勤') {
         leaveEmployee = getEmployee_(r[2]);
         leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
-      }
-      if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
-      if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
-        throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
+        if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
+        if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
+          throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveEmployee.leaveBalance + '日');
+        }
       }
     }
 
