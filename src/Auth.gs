@@ -89,7 +89,7 @@ function login(employeeId, pin, clientInfo) {
     }
 
     if (!record.pinHash || !record.pinSalt) {
-      throw new Error('社員番号またはPINを確認してください。PINが未設定の場合は管理者へ連絡してください。');
+      throw loginError_();
     }
 
     const computed = hashPin_(record.employeeId, record.pinSalt, value);
@@ -411,6 +411,9 @@ function saveAuthSupportSettings(sessionToken, payload) {
     SUPPORT_PHONE: String(payload.phone || '').trim().slice(0, 80),
     SUPPORT_NOTE: String(payload.note || '').trim().slice(0, 300) || 'PINを忘れた場合は、社内のFM WORKS管理者へご連絡ください。'
   };
+  if (!values.SUPPORT_EMAIL && !values.SUPPORT_PHONE) {
+    throw new Error('PINを忘れた場合の連絡先として、メールまたは電話番号を1つ以上登録してください。');
+  }
   if (values.SUPPORT_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.SUPPORT_EMAIL)) {
     throw new Error('メールアドレスの形式を確認してください。');
   }
@@ -471,6 +474,7 @@ function requireAdminSession_(sessionToken) {
 }
 
 function createSession_(employee, clientInfo) {
+  cleanupExpiredSessions_();
   const config = getAuthConfig_();
   const now = new Date();
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -490,6 +494,21 @@ function createSession_(employee, clientInfo) {
     ''
   ]);
   return token;
+}
+
+function cleanupExpiredSessions_() {
+  const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues();
+  const now = new Date();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const status = r[7] || '';
+    const absoluteExpiry = parseTimestamp_(r[4]);
+    const inactive = status !== 'ACTIVE' || (absoluteExpiry && absoluteExpiry <= now);
+    if (inactive) sheet.deleteRow(i + 2);
+  }
 }
 
 function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
