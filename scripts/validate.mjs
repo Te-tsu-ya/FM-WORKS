@@ -98,6 +98,8 @@ for (const performanceMarker of [
   'function startMenuPrefetch()',
   'function cacheFresh(',
   'requestIdleCallback',
+  'function loadHomeOverview(',
+  "getHomeOverview(state.sessionToken)",
   '.getRequestsBundle(state.sessionToken)',
   "invalidatePageCache('worklog','monthly')"
 ]) {
@@ -106,6 +108,45 @@ for (const performanceMarker of [
     failed = true;
   }
 }
+const initialDataStart = serverCode.indexOf('function getInitialData(sessionToken)');
+const initialDataEnd = serverCode.indexOf('\nfunction getHomeOverview(', initialDataStart);
+const initialDataBlock = initialDataStart >= 0 && initialDataEnd > initialDataStart
+  ? serverCode.slice(initialDataStart, initialDataEnd)
+  : '';
+if (!initialDataBlock) {
+  console.error('Fast initial shell function could not be isolated.');
+  failed = true;
+} else {
+  for (const forbiddenInitialCall of ['getMonthlySummary(', 'getRequests(']) {
+    if (initialDataBlock.includes(forbiddenInitialCall)) {
+      console.error('Initial shell must not block on heavy overview work: ' + forbiddenInitialCall);
+      failed = true;
+    }
+  }
+  if (!initialDataBlock.includes('includeEmployees: false')) {
+    console.error('Initial schedule read must avoid re-reading the employee master.');
+    failed = true;
+  }
+}
+for (const performanceServerMarker of [
+  'function getHomeOverview(sessionToken)',
+  'getPendingRequestCount_(employee)',
+  "params.includeEmployees === false ? [] : getEmployees_()"
+]) {
+  if (!(serverCode + requestCode).includes(performanceServerMarker)) {
+    console.error('v0.8.2 performance server marker missing: ' + performanceServerMarker);
+    failed = true;
+  }
+}
+if (!app.includes("state.adminTab==='operation'))loadMaintenance")) {
+  console.error('Admin data load must not fetch maintenance outside the operation tab.');
+  failed = true;
+}
+if (!app.includes("scheduleIdleTask(()=>loadNotifications(),900)") || !app.includes("scheduleIdleTask(()=>loadHomeOverview(),420)")) {
+  console.error('Authenticated startup must stage noncritical calls after first paint.');
+  failed = true;
+}
+
 if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('function getRequestsBundle(sessionToken)')) {
   console.error('Request page must use a single bundled server read.');
   failed = true;
@@ -506,6 +547,8 @@ for (const marker of [
 
 for (const marker of [
   'function globalActionBanners()',
+  'function syncGlobalActionBanner()',
+  'function loadHomeOverview(',
   "const backlog=!!r.isBacklog",
   'function monthlyCalendarView(',
   'function confirmMonthlyReviewFromPage()',

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.8.1',
+  version: '0.8.2',
   locale: 'ja-JP'
 });
 
@@ -48,16 +48,16 @@ function include_(filename) {
 function getInitialData(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
-  const attendance = getAttendanceState_(employee.employeeId);
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
-  const yearMonth = today.slice(0, 7);
-  const scheduleBundle = getScheduleBundle(sessionToken, { start: today, end: today, employeeId: employee.employeeId });
+  const attendance = getAttendanceState_(employee.employeeId);
+  const employees = getEmployees_();
+  const scheduleBundle = getScheduleBundle(sessionToken, {
+    start: today,
+    end: today,
+    employeeId: employee.employeeId,
+    includeEmployees: false
+  });
   const companyToday = scheduleBundle.companyDays.find(d => d.date === today) || null;
-  const monthSummary = getMonthlySummary(sessionToken, yearMonth, employee.employeeId);
-  const requestScope = employee.role === 'ADMIN' ? 'ALL' : 'SELF';
-  const requestItems = getRequests(sessionToken, { scope: requestScope });
-  const pendingRequests = requestItems.filter(r => r.status === '承認待ち').length;
-  const worklogGap = Math.max(0, monthSummary.totals.totalMinutes - monthSummary.totals.worklogMinutes);
 
   return {
     app: APP,
@@ -73,11 +73,29 @@ function getInitialData(sessionToken) {
       title: employee.title || ''
     },
     permissions: getPermissions_(employee),
-    employees: getEmployees_(),
+    employees: employees,
     projects: getProjectsInternal_(false),
     attendance: attendance,
     todaySchedule: scheduleBundle.events.slice(0, 8),
     companyToday: companyToday,
+    monthlyReview: null,
+    month: null,
+    tasks: null,
+    overviewReady: false
+  };
+}
+
+function getHomeOverview(sessionToken) {
+  const session = requireSession_(sessionToken);
+  const employee = session.employee;
+  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const yearMonth = today.slice(0, 7);
+  const monthSummary = getMonthlySummary(sessionToken, yearMonth, employee.employeeId);
+  const pendingRequests = getPendingRequestCount_(employee);
+  const worklogGap = Math.max(0, monthSummary.totals.totalMinutes - monthSummary.totals.worklogMinutes);
+
+  return {
+    generatedAt: new Date().toISOString(),
     monthlyReview: getMonthlyReviewPrompt_(employee.employeeId),
     month: {
       workHours: formatMinutes_(monthSummary.totals.totalMinutes),
@@ -495,7 +513,7 @@ function getScheduleBundle(sessionToken, params) {
     end,
     events,
     companyDays: getCompanyCalendarRange_(start, end),
-    employees: getEmployees_()
+    employees: params.includeEmployees === false ? [] : getEmployees_()
   };
 }
 
