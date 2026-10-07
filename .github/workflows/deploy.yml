@@ -9,6 +9,10 @@ on:
       - 'scripts/**'
       - '.github/workflows/deploy.yml'
 
+concurrency:
+  group: fm-works-apps-script-production
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
