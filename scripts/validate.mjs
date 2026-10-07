@@ -199,6 +199,53 @@ if (!app.includes('generateCompanyCalendarYear')) {
   console.error('Company calendar generation UI missing');
   failed = true;
 }
+const employeeCode = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
+const authCodeAll = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
+const monthlyCodeAll = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
+const requestCodeAll = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
+const codeAll = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
+
+for (const markerText of [
+  'createTeamMonthlyExport',
+  'getPayrollEmployees_',
+  '給与集計対象',
+  'assertMonthlyReadyForExport_',
+  'inferLegacyLeaveLabel_',
+  "1/4日有給"
+]) {
+  if (!(monthlyCodeAll + requestCodeAll + app + authCodeAll + codeAll).includes(markerText)) {
+    console.error(`Payroll/leave production feature missing: ${markerText}`);
+    failed = true;
+  }
+}
+if (!employeeCode.includes('payrollIncluded') || !authCodeAll.includes('payrollIncluded') || !codeAll.includes('payrollIncluded')) {
+  console.error('Payroll inclusion is not propagated through employee data.');
+  failed = true;
+}
+if (!app.includes('step="0.25"') || !app.includes('empPayroll')) {
+  console.error('Employee UI must preserve quarter-day leave and payroll scope.');
+  failed = true;
+}
+if (!monthlyCodeAll.includes('function createMonthlyExport(sessionToken') ||
+    !monthlyCodeAll.slice(monthlyCodeAll.indexOf('function createMonthlyExport'), monthlyCodeAll.indexOf('function createTeamMonthlyExport')).includes('requireSession_(sessionToken)')) {
+  console.error('Single monthly export must authenticate at its entrypoint.');
+  failed = true;
+}
+
+const publicAuthWhitelist = new Set(['getPublicAuthConfig','initializeFirstAdmin','login','logout','requestPinHelp']);
+for (const file of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs']) {
+  const source = fs.readFileSync(path.join(root,'src',file),'utf8');
+  const matches = [...source.matchAll(/^function\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/gm)];
+  for (let i = 0; i < matches.length; i++) {
+    const name = matches[i][1];
+    if (name.endsWith('_') || name === 'doGet' || publicAuthWhitelist.has(name)) continue;
+    const body = source.slice(matches[i].index, i + 1 < matches.length ? matches[i + 1].index : source.length);
+    if (!/require(Session|AdminSession)_\(/.test(body)) {
+      console.error(`Public server function lacks explicit authentication: ${file} / ${name}`);
+      failed = true;
+    }
+  }
+}
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
 if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.executeAs !== 'USER_DEPLOYING') {
