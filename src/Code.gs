@@ -13,7 +13,8 @@ const DB = Object.freeze({
     schedule: '予定',
     companyCalendar: '会社カレンダー',
     audit: '監査ログ',
-    projects: 'プロジェクト'
+    projects: 'プロジェクト',
+    monthlyClose: '月次締め'
   }
 });
 
