@@ -37,7 +37,10 @@ function saveWorklog(sessionToken, payload) {
     const start = normalizeTime_(payload.start || '');
     const end = normalizeTime_(payload.end || '');
 
-    if (!project) throw new Error('プロジェクト名を入力してください。');
+    if (!project) throw new Error('プロジェクトを選択してください。');
+    const projectRecord = getProjectByName_(project);
+    if (!projectRecord) throw new Error('プロジェクトマスタに存在しないプロジェクトです。');
+    if (projectRecord.status !== '進行中') throw new Error('停止・完了したプロジェクトには新しい工数を登録できません。');
     if (!description) throw new Error('作業内容を入力してください。');
     if (!start || !end) throw new Error('開始時刻と終了時刻を入力してください。');
 
