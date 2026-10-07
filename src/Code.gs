@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.4.0',
+  version: '0.5.0',
   locale: 'ja-JP'
 });
 
@@ -356,8 +356,13 @@ function withScriptLock_(fn, timeoutMs) {
   }
 }
 
+function getDatabaseSpreadsheetId_() {
+  const configured = PropertiesService.getScriptProperties().getProperty('FM_WORKS_DB_ID');
+  return configured || DB.spreadsheetId;
+}
+
 function getDb_() {
-  return SpreadsheetApp.openById(DB.spreadsheetId);
+  return SpreadsheetApp.openById(getDatabaseSpreadsheetId_());
 }
 
 function createId_(prefix) {
