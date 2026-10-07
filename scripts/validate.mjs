@@ -138,8 +138,8 @@ for (const [label, source, requiredMarkers] of [
   ['worklog audit preservation', worklogCode, ["r[12] !== '削除'", "'削除', nowText", 'withScriptLock_']],
   ['employee concurrency', employeeCode, ['withScriptLock_', '標準勤務終了時刻は開始時刻より後']],
   ['monthly attendance integrity', monthlyCode, ["r[12]!=='削除'", 'missingAllPunches', 'lateEarlyMinutes', 'absenceDays']],
-  ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_']],
-  ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_']],
+  ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_', 'assertMonthRangeOpen_']],
+  ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_', 'assertMonthOpenForDate_']],
   ['punch correction resolution', serverCode, ['getActivePunchRows_', 'superseded.has', 'validatePunchSequence_']],
   ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_', 'const oldSource = old[16]']]
 ]) {
@@ -161,7 +161,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;
@@ -290,6 +290,7 @@ for (const projectMarker of [
 }
 for (const integrationMarker of [
   "projects: 'プロジェクト'",
+  "monthlyClose: '月次締め'",
   'projects: getProjectsInternal_(false)'
 ]) {
   if (!serverCode.includes(integrationMarker)) {
@@ -307,7 +308,11 @@ for (const operationalMonthlyMarker of [
   'function requiredBreakMinutes_(',
   'function calculateBreakMinutesForRows_(',
   'worklogMismatchDays',
-  '休憩不足'
+  '休憩不足',
+  'function closeMonthlyPeriod(sessionToken',
+  'function reopenMonthlyPeriod(sessionToken',
+  'function assertMonthOpenForDate_(',
+  'closeStatus:getMonthlyCloseStatusInternal_(ym)'
 ]) {
   if (!monthlyCode.includes(operationalMonthlyMarker)) {
     console.error(`Operational monthly control missing: ${operationalMonthlyMarker}`);
