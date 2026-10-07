@@ -1,60 +1,86 @@
-# FM WORKS 初期接続手順
+# FM WORKS 初期・本番セットアップ
 
-## 1. Apps Scriptプロジェクトを用意
+## 1. GitHub → Apps Script接続
 
-Google Apps ScriptでFM WORKS用のスタンドアロンプロジェクトを1つ作成します。
+GitHub Secrets:
 
-## 2. Apps Script APIを有効化
+- `CLASPRC_JSON`
+- `CLASP_JSON`
+- `DEPLOYMENT_ID`
 
-`https://script.google.com/home/usersettings` で Apps Script API をONにします。
+`main` のアプリコード変更はGitHub Actionsで検証後、既存Apps Script Webアプリへ反映されます。
 
-## 3. claspで一度だけログイン
+## 2. 初期ADMINのPIN設定
 
-ローカルPCでNode.js 20以上を用意し、以下を実行します。
+認証情報が1件もない場合、FM WORKSは通常ログイン画面ではなく「初期管理者設定」を表示します。
 
-```bash
-npm install -g @google/clasp
-clasp login
-```
+1. Webアプリを所有者のみアクセス可能な状態で開く
+2. ADMIN権限の社員IDを入力
+3. 本人だけが知る6桁PINを設定
+4. PINをチャット・GitHub・ドキュメントへ記載しない
 
-## 4. `.clasp.json` を作成
+PINは社員マスタに平文保存されません。
 
-このリポジトリ直下で、Apps ScriptのScript IDを使って次の内容を `.clasp.json` として作成します。
+## 3. PINを忘れた場合の連絡先
 
-```json
-{
-  "scriptId": "YOUR_SCRIPT_ID",
-  "rootDir": "src"
-}
-```
+ログイン後:
 
-`.clasp.json` はGitHubへコミットしません。
+`管理 → PINを忘れた場合の連絡先`
 
-## 5. GitHub Secretsを設定
+から以下を設定します。
 
-リポジトリの `Settings > Secrets and variables > Actions` に以下を登録します。
+- 管理者表示名
+- メール
+- 電話番号
+- 案内文
 
-- `CLASPRC_JSON`: `~/.clasprc.json` の内容
-- `CLASP_JSON`: `.clasp.json` の内容
-- `DEPLOYMENT_ID`: Apps Script Webアプリの既存Deployment ID（同じURLを更新するため）
+ログイン画面の「PINを忘れた場合」から、社員は連絡先の確認と再発行依頼を行えます。
 
-## 6. 初回デプロイ
+## 4. 各社員の認証準備
 
-初回だけApps Script側でWebアプリの実行者・アクセス範囲を慎重に設定してデプロイし、Deployment IDを取得します。
+`管理 → 認証設定`
 
-勤怠・社員情報を扱うため、公開範囲は本番要件を確認してから決めます。PINログインを使う場合でも、推測耐性・レート制限・監査ログを実装してから本番公開します。
+で社員ごとに仮PINを発行します。
 
-## 7. GitHub Actions
+- 仮PIN利用者は初回ログイン時にPIN変更必須
+- PIN未設定社員はログイン不可
+- 5回失敗で一時ロック
+- 管理者はロック解除可能
 
-Secrets設定後、GitHubの `Actions > Deploy Apps Script > Run workflow` から手動デプロイできます。
+## 5. 権限
 
-本番運用で十分にテストできた後、`main` へのpushで自動デプロイする設定へ切り替えます。
+- `ADMIN`: 管理・社員・承認・会社カレンダー編集
+- `CALENDAR_EDITOR`: 会社カレンダー編集
+- `USER`: 会社カレンダーは閲覧のみ
 
-## ブランチ運用
+サーバー側でも権限を再検証します。
+
+## 6. 本番公開
+
+初期ADMIN PIN設定前に公開範囲を広げないでください。
+
+初期設定・管理者連絡先・社員仮PINの準備後にWebアプリのアクセス範囲を変更します。無料Googleアカウント運用では、匿名公開ではなくGoogleログイン済みユーザーを対象とし、その上でFM WORKSの社員ID + PIN認証を行う構成を推奨します。
+
+## 7. 本番前チェック
+
+- ADMIN / USER / CALENDAR_EDITORのログイン
+- 誤PIN連続入力とロック
+- 仮PINの強制変更
+- PIN再発行依頼
+- 出勤 → 休憩 → 退勤
+- 打刻修正申請 → 管理者承認
+- 工数登録
+- 予定登録・編集
+- USERで会社カレンダー編集不可
+- 月次集計
+- Excel出力
+- ログアウト / セッション期限
+
+## ブランチ
 
 - `main`: 本番候補
-- `staging`: 検証用
+- `staging`: 検証
 - `develop`: 開発統合
-- `feature/*`: 個別修正
+- `feature/*`: 個別変更
 
-直接Apps Scriptエディタだけを編集せず、原則GitHubを正本にします。
+GitHubを正本とし、Apps Scriptエディタでの直接修正を常態化させないでください。
