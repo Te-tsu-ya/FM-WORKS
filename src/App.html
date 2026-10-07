@@ -384,8 +384,30 @@ function adminPage(){
   <div class='section-gap'>
     ${card('PIN再発行依頼',requestRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>依頼日時</th><th>社員</th><th>状態</th><th>メモ</th><th>操作</th></tr></thead><tbody>${requestRows}</tbody></table></div>`:"<p class='muted'>再発行依頼はありません。</p>")}
   </div>
+  ${projectAdminSection()}
   ${maintenanceSection()}
   `;
+}
+
+function projectAdminSection(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return '';
+  var projects=(state.authAdmin&&state.authAdmin.projects)||[];
+  var rows=projects.map(function(p){
+    var badge=p.status==='進行中'?'<span class="badge success">進行中</span>':p.status==='完了'?'<span class="badge">完了</span>':'<span class="badge warning">停止</span>';
+    return '<tr><td><strong>'+escapeHtml(p.name)+'</strong><br><small class="muted">'+escapeHtml(p.projectId)+'</small></td><td>'+escapeHtml(p.client||'—')+'</td><td>'+badge+'</td><td>'+escapeHtml(p.startDate||'—')+'</td><td>'+escapeHtml(p.endDate||'—')+'</td><td><button class="small-button" onclick="openProjectModal(\''+p.projectId+'\')">編集</button></td></tr>';
+  }).join('');
+  return '<div class="section-gap">'+card('プロジェクト管理','<div class="card-toolbar"><p class="muted">工数入力で利用するプロジェクトを管理します。停止・完了した案件は新規工数の選択肢から外れます。</p><button class="primary-button" onclick="openProjectModal()">＋ プロジェクト追加</button></div>'+(rows?'<div class="table-wrap"><table class="auth-table"><thead><tr><th>プロジェクト</th><th>顧客</th><th>状態</th><th>開始</th><th>終了</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="muted">プロジェクトが登録されていません。</p>'))+'</div>';
+}
+
+function openProjectModal(projectId){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){showToast('管理者権限が必要です');return;}
+  var p=projectId&&state.authAdmin?(state.authAdmin.projects||[]).find(function(x){return x.projectId===projectId;}):null;
+  var r=ensureModal();
+  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>プロジェクトマスタ</small><h2>'+(p?'プロジェクトを編集':'プロジェクトを追加')+'</h2></div><button class="icon-button" onclick="closeModal()">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト名</span><input id="prjName" maxlength="120" value="'+escapeHtml(p?p.name:'')+'" placeholder="例：Project Atlas"></label><label class="field"><span>顧客表示名</span><input id="prjClient" maxlength="100" value="'+escapeHtml(p?p.client:'')+'" placeholder="例：顧客A"></label><label class="field"><span>ステータス</span><select id="prjStatus"><option '+(!p||p.status==='進行中'?'selected':'')+'>進行中</option><option '+(p&&p.status==='停止'?'selected':'')+'>停止</option><option '+(p&&p.status==='完了'?'selected':'')+'>完了</option></select></label><label class="field"><span>開始日</span><input id="prjStart" type="date" value="'+escapeHtml(p?p.startDate:'')+'"></label><label class="field"><span>終了日</span><input id="prjEnd" type="date" value="'+escapeHtml(p?p.endDate:'')+'"></label><label class="field full"><span>備考</span><textarea id="prjNote" maxlength="500" rows="3">'+escapeHtml(p?p.note:'')+'</textarea></label></div><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="saveProjectFromModal(\''+(p?p.projectId:'')+'\')">保存</button></div></div></section>';
+}
+function saveProjectFromModal(projectId){
+  var payload={projectId:projectId||'',name:document.getElementById('prjName').value,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:document.getElementById('prjStart').value,endDate:document.getElementById('prjEnd').value,note:document.getElementById('prjNote').value};
+  google.script.run.withSuccessHandler(function(){closeModal();showToast('プロジェクトを保存しました');refreshAppData(function(){loadAuthAdmin();});}).withFailureHandler(function(err){handleApiError(err,'プロジェクトを保存できませんでした');}).saveProject(state.sessionToken,payload);
 }
 
 function maintenanceSection(){
