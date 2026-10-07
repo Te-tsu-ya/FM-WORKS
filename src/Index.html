@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f5f7fb">
   <meta name="color-scheme" content="light">
   <title><?= appName ?></title>
-  <?!= include('Styles'); ?>
+  <?!= include_('Styles'); ?>
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -70,6 +70,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="modalRoot"></div>
 
-  <?!= include('App'); ?>
+  <?!= include_('App'); ?>
 </body>
 </html>
