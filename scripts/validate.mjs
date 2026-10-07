@@ -104,7 +104,10 @@ for (const compactLoginMarker of [
   "document.body.classList.add('login-mode')",
   "document.body.classList.remove('login-mode')",
   "prototypeMode?'試作版ログイン'",
-  "cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000')"
+  "cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000')",
+  "function getStoredSessionToken()",
+  "localStorage.getItem('fmworks.session')",
+  "この端末でログイン状態を保持する（30日）"
 ]) {
   if (!app.includes(compactLoginMarker)) {
     console.error(`Compact prototype login UI missing: ${compactLoginMarker}`);
@@ -384,6 +387,9 @@ if (authCode.includes('prototypeMode: true')) {
     'function isPrototypeLogin_(',
     'function setPrototypeMode(sessionToken, enabled)',
     "saveSettings_({PROTOTYPE_MODE:'FALSE'})",
+    'rememberSessionHours',
+    'rememberIdleMinutes',
+    'createSession_(record, clientInfo, keepSignedIn)',
     'mustChangePin: prototypeAccess ? false : record.mustChangePin'
   ]) {
     if (!authCode.includes(prototypeAuthMarker)) {
@@ -397,7 +403,7 @@ if (authCode.includes('prototypeMode: true')) {
   }
 }
 for (const sessionMarker of [
-  'getRange(rowNumber, 1, 1, 10).getValues()[0]',
+  'getRange(rowNumber, 1, 1, 11).getValues()[0]',
   'value instanceof Date',
   '(\\d{1,2}):(\\d{1,2})'
 ]) {
