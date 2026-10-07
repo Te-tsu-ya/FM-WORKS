@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.2  
+**文書版:** 0.10.3  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -62,7 +62,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.2`
+`APP.version = 0.10.3`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -1150,3 +1150,24 @@ CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査
 - scheduled maintenanceへのGC移行
 
 `test_logic.mjs` は期限切れ/無効セッション行の抽出を純粋ロジックで検証する。
+
+
+## 45. General-JP Labor Period Monitoring v0.10.3
+
+`Labor.gs` の `LABOR_GENERAL_JP` に以下の一般則監視定数を保持する。
+
+- annualOvertimePrincipleMinutes = 21,600（360h）
+- specialAnnualOvertimeLimitMinutes = 43,200（720h）
+- specialSingleMonthOvertimeHolidayLimitMinutes = 6,000（100h）
+- specialMultiMonthAverageLimitMinutes = 4,800（80h）
+- specialExcessMonthLimit = 6
+
+設定には `LABOR_36_PERIOD_START_MONTH` と `LABOR_SPECIAL_CLAUSE` を追加する。`GENERAL_JP` は週開始曜日、起算月、特別条項の状態がすべて確定して初めて `configured=true` とする。
+
+`getClosedLaborHistory_` は `月次確定` 24列から社員・対象月の最新スナップショットを取得する。再締めがある場合は作成日時/締め日時が新しい行を採用する。
+
+`evaluateGeneralLaborHistory_` は純粋ロジックとして、36協定対象期間内の法定時間外合計、45時間超月数、対象月を末尾とする2〜6か月の時間外＋法定休日平均の最大値を計算する。
+
+対象月そのものは最新のライブ集計でスナップショット値を上書きする。過去確定月が欠ける場合は年次判定の完全性をfalseにし、警告を返す。
+
+本モデルは一般則の早期警告であり、会社の個別36協定や変形/フレックス/業種特例の法令適合判定を代替しない。

@@ -3,7 +3,11 @@ const LABOR_GENERAL_JP = Object.freeze({
   weeklyStatutoryMinutes:2400,
   monthlyOvertimePrincipleMinutes:2700,
   monthlyOvertimePremium50Minutes:3600,
+  annualOvertimePrincipleMinutes:21600,
+  specialAnnualOvertimeLimitMinutes:43200,
   specialSingleMonthOvertimeHolidayLimitMinutes:6000,
+  specialMultiMonthAverageLimitMinutes:4800,
+  specialExcessMonthLimit:6,
   nightStartMinutes:1320,
   nightEndMinutes:300
 });
@@ -14,13 +18,25 @@ function normalizeLaborWeekStartDay_(value){
   return Object.prototype.hasOwnProperty.call(LABOR_WEEKDAY_INDEX,v)?v:'';
 }
 
+function normalizeLaborAgreementStartMonth_(value){
+  const n=Number(value);
+  return Number.isInteger(n)&&n>=1&&n<=12?n:0;
+}
+
+function normalizeLaborSpecialClause_(value){
+  const v=String(value||'UNCONFIGURED').trim().toUpperCase();
+  return ['NONE','ENABLED'].includes(v)?v:'UNCONFIGURED';
+}
+
 function getLaborRuleConfig_(){
   const s=getSettingsMap_();
   const profile=String(s.LABOR_RULE_PROFILE||'UNCONFIGURED').trim().toUpperCase()==='GENERAL_JP'?'GENERAL_JP':'UNCONFIGURED';
   const weekStartDay=normalizeLaborWeekStartDay_(s.LABOR_WEEK_START_DAY);
+  const agreementStartMonth=normalizeLaborAgreementStartMonth_(s.LABOR_36_PERIOD_START_MONTH);
+  const specialClause=normalizeLaborSpecialClause_(s.LABOR_SPECIAL_CLAUSE);
   return {
-    profile,weekStartDay,
-    configured:profile==='GENERAL_JP'&&!!weekStartDay,
+    profile,weekStartDay,agreementStartMonth,specialClause,
+    configured:profile==='GENERAL_JP'&&!!weekStartDay&&!!agreementStartMonth&&specialClause!=='UNCONFIGURED',
     statutoryHolidaySource:String(s.LABOR_STATUTORY_HOLIDAY_SOURCE||'CALENDAR_TAG'),
     confirmedBy:String(s.LABOR_RULE_CONFIRMED_BY||''),
     confirmedAt:String(s.LABOR_RULE_CONFIRMED_AT||''),
@@ -35,12 +51,18 @@ function saveLaborRuleConfig(sessionToken,payload){
   payload=payload||{};
   const profile=String(payload.profile||'UNCONFIGURED').toUpperCase()==='GENERAL_JP'?'GENERAL_JP':'UNCONFIGURED';
   const weekStartDay=normalizeLaborWeekStartDay_(payload.weekStartDay);
+  const agreementStartMonth=normalizeLaborAgreementStartMonth_(payload.agreementStartMonth);
+  const specialClause=normalizeLaborSpecialClause_(payload.specialClause);
   if(profile==='GENERAL_JP'&&!weekStartDay)throw new Error('一般則プロファイルを有効にする場合は、就業規則上の週開始曜日を設定してください。');
+  if(profile==='GENERAL_JP'&&!agreementStartMonth)throw new Error('一般則プロファイルを有効にする場合は、36協定の対象期間の起算月を設定してください。');
+  if(profile==='GENERAL_JP'&&specialClause==='UNCONFIGURED')throw new Error('36協定の特別条項の有無を確認してください。');
   const before=getLaborRuleConfig_();
   const now=toTimestamp_(new Date());
   saveSettings_({
     LABOR_RULE_PROFILE:profile,
     LABOR_WEEK_START_DAY:weekStartDay,
+    LABOR_36_PERIOD_START_MONTH:agreementStartMonth||'',
+    LABOR_SPECIAL_CLAUSE:specialClause,
     LABOR_STATUTORY_HOLIDAY_SOURCE:'CALENDAR_TAG',
     LABOR_RULE_CONFIRMED_BY:profile==='GENERAL_JP'?admin.name:'',
     LABOR_RULE_CONFIRMED_AT:profile==='GENERAL_JP'?now:'',
@@ -152,6 +174,77 @@ function laborBoundaryFacts_(employeeId,start,end,systemToday){
   return out;
 }
 
+function laborShiftYearMonth_(yearMonth,delta){
+  const ym=String(yearMonth||'');
+  if(!/^\d{4}-\d{2}$/.test(ym))return '';
+  const p=ym.split('-').map(Number),d=new Date(Date.UTC(p[0],p[1]-1+Number(delta||0),1));
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');
+}
+
+function laborAgreementPeriodStart_(targetYearMonth,startMonth){
+  const ym=String(targetYearMonth||'');
+  const m=normalizeLaborAgreementStartMonth_(startMonth);
+  if(!/^\d{4}-\d{2}$/.test(ym)||!m)return '';
+  const year=Number(ym.slice(0,4)),month=Number(ym.slice(5,7));
+  const startYear=month>=m?year:year-1;
+  return startYear+'-'+String(m).padStart(2,'0');
+}
+
+function getClosedLaborHistory_(employeeId,targetYearMonth,monthsBack){
+  const start=laborShiftYearMonth_(targetYearMonth,-Math.max(0,Number(monthsBack||11)));
+  const sheet=getDb_().getSheetByName(DB.sheets.monthlySnapshot);
+  if(!sheet||sheet.getLastRow()<2)return [];
+  const rows=sheet.getRange(2,1,sheet.getLastRow()-1,24).getDisplayValues();
+  const latest={};
+  rows.forEach(r=>{
+    const ym=r[1],id=r[2];
+    if(id!==employeeId||ym<start||ym>targetYearMonth)return;
+    const stamp=r[18]||r[4]||'';
+    if(!latest[ym]||stamp>latest[ym].stamp){
+      latest[ym]={
+        yearMonth:ym,
+        statutoryOvertimeMinutes:Number(r[19]||0),
+        statutoryHolidayMinutes:Number(r[21]||0),
+        overtimeHolidayMinutes:Number(r[22]||0),
+        ruleStatus:r[23]||'',
+        stamp:stamp
+      };
+    }
+  });
+  return Object.values(latest).sort((a,b)=>a.yearMonth.localeCompare(b.yearMonth));
+}
+
+function evaluateGeneralLaborHistory_(records,targetYearMonth,startMonth,specialClause){
+  const target=String(targetYearMonth||''),periodStart=laborAgreementPeriodStart_(target,startMonth);
+  const byMonth={};
+  (records||[]).forEach(r=>{if(r&&r.yearMonth)byMonth[r.yearMonth]=r;});
+  const periodMonths=periodStart?yearMonthsBetween_(periodStart,target):[];
+  const periodComplete=periodMonths.length>0&&periodMonths.every(ym=>!!byMonth[ym]);
+  const periodRecords=periodMonths.map(ym=>byMonth[ym]).filter(Boolean);
+  const annualStatutoryOvertimeMinutes=periodRecords.reduce((a,r)=>a+Number(r.statutoryOvertimeMinutes||0),0);
+  const monthsOver45=periodRecords.filter(r=>Number(r.statutoryOvertimeMinutes||0)>LABOR_GENERAL_JP.monthlyOvertimePrincipleMinutes).length;
+  let maxMultiMonthAverageMinutes=0,maxMultiMonthWindow=0,multiMonthComplete=false;
+  for(let size=2;size<=6;size++){
+    const months=[];
+    for(let i=size-1;i>=0;i--)months.push(laborShiftYearMonth_(target,-i));
+    if(months.every(ym=>!!byMonth[ym])){
+      multiMonthComplete=true;
+      const avg=Math.round(months.reduce((a,ym)=>a+Number(byMonth[ym].overtimeHolidayMinutes||0),0)/size);
+      if(avg>maxMultiMonthAverageMinutes){maxMultiMonthAverageMinutes=avg;maxMultiMonthWindow=size;}
+    }
+  }
+  return {
+    agreementPeriodStart:periodStart,
+    annualStatutoryOvertimeMinutes,
+    monthsOver45,
+    periodComplete,
+    maxMultiMonthAverageMinutes,
+    maxMultiMonthWindow,
+    multiMonthComplete,
+    specialClause:normalizeLaborSpecialClause_(specialClause)
+  };
+}
+
 function applyLaborModelToMonthlyDaily_(daily,employeeId,start,end,systemToday){
   const config=getLaborRuleConfig_(),byDate=Object.fromEntries((daily||[]).map(d=>[d.date,d]));
   daily.forEach(d=>{
@@ -178,11 +271,32 @@ function applyLaborModelToMonthlyDaily_(daily,employeeId,start,end,systemToday){
     statutoryHolidayMinutes+=Number(d.statutoryHolidayMinutes||0);
   });
   const overtimeHolidayMinutes=statutoryOvertimeMinutes+statutoryHolidayMinutes,warnings=[];
+  const targetYearMonth=String(start||'').slice(0,7);
+  const history=getClosedLaborHistory_(employeeId,targetYearMonth,11).filter(r=>r.yearMonth!==targetYearMonth);
+  history.push({yearMonth:targetYearMonth,statutoryOvertimeMinutes,statutoryHolidayMinutes,overtimeHolidayMinutes,ruleStatus:config.configured?'CONFIGURED':'UNCONFIGURED'});
+  const period=evaluateGeneralLaborHistory_(history,targetYearMonth,config.agreementStartMonth,config.specialClause);
   if(!config.configured)warnings.push('就業規則・36協定の確認が未完了です。表示値は一般則を基礎にした参考値です。');
   if(!config.weekStartDay)warnings.push('週40時間判定の週開始曜日が未設定です。');
   if(statutoryOvertimeMinutes>2700)warnings.push('法定時間外が月45時間を超えています。');
   if(statutoryOvertimeMinutes>3600)warnings.push('法定時間外が月60時間を超えています。');
-  if(overtimeHolidayMinutes>=6000)warnings.push('法定時間外＋法定休日労働が単月100時間以上です。');
+  if(overtimeHolidayMinutes>=LABOR_GENERAL_JP.specialSingleMonthOvertimeHolidayLimitMinutes)warnings.push('法定時間外＋法定休日労働が単月100時間以上です。');
+  if(config.agreementStartMonth){
+    if(period.periodComplete){
+      if(period.annualStatutoryOvertimeMinutes>LABOR_GENERAL_JP.annualOvertimePrincipleMinutes)warnings.push('36協定の対象期間で法定時間外が年360時間を超えています。');
+      if(config.specialClause==='ENABLED'&&period.annualStatutoryOvertimeMinutes>LABOR_GENERAL_JP.specialAnnualOvertimeLimitMinutes)warnings.push('特別条項ありでも法定時間外が年720時間を超えています。');
+      if(config.specialClause==='ENABLED'&&period.monthsOver45>LABOR_GENERAL_JP.specialExcessMonthLimit)warnings.push('月45時間を超えた月が年6か月を超えています。');
+    }else if(period.agreementPeriodStart){
+      warnings.push('36協定の年次判定に必要な過去月の確定データが不足しています。');
+    }
+    if(period.multiMonthComplete&&period.maxMultiMonthAverageMinutes>LABOR_GENERAL_JP.specialMultiMonthAverageLimitMinutes){
+      warnings.push('法定時間外＋法定休日労働の'+period.maxMultiMonthWindow+'か月平均が80時間を超えています。');
+    }
+  }
+  if(config.specialClause==='NONE'&&statutoryOvertimeMinutes>LABOR_GENERAL_JP.monthlyOvertimePrincipleMinutes)warnings.push('特別条項なし設定で月45時間を超えています。36協定を確認してください。');
   return {ruleStatus:config.configured?'CONFIGURED':'UNCONFIGURED',profile:config.profile,weekStartDay:config.weekStartDay,
-    statutoryOvertimeMinutes,lateNightMinutes,statutoryHolidayMinutes,overtimeHolidayMinutes,warnings};
+    agreementStartMonth:config.agreementStartMonth,specialClause:config.specialClause,
+    statutoryOvertimeMinutes,lateNightMinutes,statutoryHolidayMinutes,overtimeHolidayMinutes,
+    annualStatutoryOvertimeMinutes:period.annualStatutoryOvertimeMinutes,monthsOver45:period.monthsOver45,
+    multiMonthAverageMinutes:period.maxMultiMonthAverageMinutes,multiMonthWindow:period.maxMultiMonthWindow,
+    historyComplete:period.periodComplete,warnings};
 }

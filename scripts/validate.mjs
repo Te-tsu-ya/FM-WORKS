@@ -772,6 +772,30 @@ for (const marker of [
   }
 }
 
+for (const laborHistoryMarker of [
+  'annualOvertimePrincipleMinutes:21600',
+  'specialAnnualOvertimeLimitMinutes:43200',
+  'specialMultiMonthAverageLimitMinutes:4800',
+  'specialExcessMonthLimit:6',
+  'function normalizeLaborAgreementStartMonth_(',
+  'function normalizeLaborSpecialClause_(',
+  'function getClosedLaborHistory_(',
+  'function evaluateGeneralLaborHistory_(',
+  'LABOR_36_PERIOD_START_MONTH',
+  'LABOR_SPECIAL_CLAUSE'
+]) {
+  if (!laborCodeText.includes(laborHistoryMarker)) {
+    console.error('Labor history/general-rule monitoring missing: ' + laborHistoryMarker);
+    failed = true;
+  }
+}
+for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協定の起算月','特別条項']) {
+  if (!app.includes(laborUiMarker)) {
+    console.error('Labor configuration UI missing: ' + laborUiMarker);
+    failed = true;
+  }
+}
+
 for (const marker of [
   'function globalActionBanners()',
   'function syncGlobalActionBanner()',

@@ -68,6 +68,10 @@ globalThis.__fmTest = {
   normalizeRuntimeEnvironment_,
   isBackupDue_,
   normalizeLaborWeekStartDay_,
+  normalizeLaborAgreementStartMonth_,
+  normalizeLaborSpecialClause_,
+  laborAgreementPeriodStart_,
+  evaluateGeneralLaborHistory_,
   dailyStatutoryOvertimeMinutes_,
   lateNightOverlapMinutes_,
   applyWeeklyStatutoryOvertimeToFacts_,
@@ -193,6 +197,16 @@ expect('runtime environment accepts production', api.normalizeRuntimeEnvironment
 expect('unknown runtime environment falls back to staging', api.normalizeRuntimeEnvironment_('UNKNOWN')==='STAGING');
 expect('backup due when last backup is prior day', api.isBackupDue_('2026-10-06 03:12:00','2026-10-07')===true);
 expect('backup skipped when already backed up today', api.isBackupDue_('2026-10-07 03:12:00','2026-10-07')===false);
+expect('labor agreement start month validates', api.normalizeLaborAgreementStartMonth_(4)===4 && api.normalizeLaborAgreementStartMonth_(13)===0);
+expect('labor special clause validates', api.normalizeLaborSpecialClause_('enabled')==='ENABLED' && api.normalizeLaborSpecialClause_('x')==='UNCONFIGURED');
+expect('labor agreement period crosses calendar year', api.laborAgreementPeriodStart_('2027-02',4)==='2026-04');
+const annualLaborRecords=Array.from({length:12},(_,i)=>({yearMonth:(i<9?'2026-':'2027-')+String(i<9?i+4:i-8).padStart(2,'0'),statutoryOvertimeMinutes:1900,overtimeHolidayMinutes:1900}));
+const annualLaborEval=api.evaluateGeneralLaborHistory_(annualLaborRecords,'2027-03',4,'ENABLED');
+expect('annual labor history detects over 360h', annualLaborEval.periodComplete===true && annualLaborEval.annualStatutoryOvertimeMinutes===22800);
+const specialMonths=['2026-04','2026-05','2026-06','2026-07','2026-08','2026-09','2026-10'].map(yearMonth=>({yearMonth,statutoryOvertimeMinutes:2800,overtimeHolidayMinutes:5000}));
+const specialEval=api.evaluateGeneralLaborHistory_(specialMonths,'2026-10',4,'ENABLED');
+expect('special clause history counts months over 45h', specialEval.monthsOver45===7);
+expect('multi-month average includes overtime plus statutory holiday', specialEval.maxMultiMonthAverageMinutes===5000 && specialEval.maxMultiMonthWindow>=2);
 expect('labor week start normalizes', api.normalizeLaborWeekStartDay_('monday')==='MONDAY');
 expect('8h has no daily statutory overtime', api.dailyStatutoryOvertimeMinutes_(480,false)===0);
 expect('9h has 60m daily statutory overtime', api.dailyStatutoryOvertimeMinutes_(540,false)===60);
