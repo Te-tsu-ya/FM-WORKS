@@ -491,7 +491,11 @@ for (const marker of [
 for (const marker of [
   'function confirmMonthlyReview(sessionToken',
   'function getMonthlyReviewPrompt_(',
-  'function getLatestMonthlyDataUpdate_(',
+  'function getMonthlyReviewHistoryInternal_(',
+  'function getLatestMonthlyDataUpdateMap_(',
+  'function yearMonthsBetween_(',
+  'pendingCount:outstanding.length',
+  'isBacklog:isBacklog',
   'reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)'
 ]) {
   if (!monthlyCode.includes(marker)) {
@@ -502,6 +506,7 @@ for (const marker of [
 
 for (const marker of [
   'function globalActionBanners()',
+  "const backlog=!!r.isBacklog",
   'function monthlyCalendarView(',
   'function confirmMonthlyReviewFromPage()',
   'function loadSystemDocument(',
