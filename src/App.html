@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000};
 const pageCache={};
 const pendingLoads=new Set();
@@ -90,14 +90,19 @@ function schedulePeopleLegend(){
 function roleLabel(role){return ({ADMIN:'管理者',CALENDAR_EDITOR:'会社カレンダー編集者',USER:'社員'})[role]||role||'社員'}
 function clientInfo(){return [navigator.platform||'',navigator.userAgent||''].join(' | ').slice(0,240)}
 function sessionErrorMessage(err){return String(err&&err.message||err||'')}
+function cleanApiErrorMessage(err,fallback){
+  let msg=sessionErrorMessage(err).trim();
+  msg=msg.replace(/^(Exception|Error):\s*/,'').trim();
+  return msg||fallback||'処理に失敗しました。';
+}
 function handleApiError(err,fallback){
-  const msg=sessionErrorMessage(err);
-  if(msg.includes('AUTH_REQUIRED')||msg.includes('SESSION_EXPIRED')){
+  const raw=sessionErrorMessage(err);
+  if(raw.includes('AUTH_REQUIRED')||raw.includes('SESSION_EXPIRED')){
     clearLocalSession();
     showLogin('セッションの有効期限が切れました。もう一度ログインしてください。');
     return true;
   }
-  showToast(msg&& !msg.includes('Exception:')?msg:fallback);
+  showToast(cleanApiErrorMessage(err,fallback));
   return false;
 }
 function setSessionToken(token,persistent=false){
@@ -392,6 +397,7 @@ function loadRequests(options={}){
     endPageLoad(ticket);
     state.requests.own=data&&data.own||[];
     state.requests.team=data&&data.team||[];
+    state.requests.context=data&&data.context||null;
     state.requests.loading=false;
     markPageCache('requests',key);
     renderPageIfActive('requests');
@@ -400,40 +406,211 @@ function loadRequests(options={}){
     if(!handleApiError(err,'申請を読み込めませんでした')&&!options.silent)renderPageIfActive('requests');
   }).getRequestsBundle(state.sessionToken);
 }
+const REQUEST_UI={
+  '有給':{label:'有給休暇',mark:'休',desc:'1日・複数日の有給休暇',tone:'blue'},
+  '午前半休':{label:'午前半休',mark:'AM',desc:'午前を休む',tone:'purple'},
+  '午後半休':{label:'午後半休',mark:'PM',desc:'午後を休む',tone:'purple'},
+  '1/4日有給':{label:'1/4日有給',mark:'¼',desc:'4分の1日単位の有給',tone:'purple'},
+  '欠勤':{label:'欠勤',mark:'欠',desc:'有給を使わない欠勤',tone:'red'},
+  '打刻修正':{label:'打刻修正',mark:'修',desc:'出勤・退勤などを修正',tone:'orange'},
+  '在宅勤務':{label:'在宅勤務',mark:'在',desc:'在宅勤務を申請',tone:'green'},
+  '残業':{label:'残業',mark:'残',desc:'時間外勤務を申請',tone:'blue'},
+  '休日出勤':{label:'休日出勤',mark:'休出',desc:'休日の勤務を申請',tone:'orange'}
+};
+let requestPreviewSequence=0;
 function requestStatusBadge(status){if(status==='承認済')return '<span class="badge success">承認済</span>';if(status==='差戻し'||status==='取消')return '<span class="badge danger">'+escapeHtml(status)+'</span>';return '<span class="badge warning">'+escapeHtml(status)+'</span>';}
-function requestsPage(){var r=state.requests;if(r.loading&&!cacheHas('requests','current'))return pageHead('申請','有給・半休・打刻修正・在宅・残業の申請をまとめます。','<button class="primary-button" onclick="openRequestModal()">＋ 新規申請</button>')+'<div class="loading-card"></div>';var pending=(r.own||[]).filter(function(x){return x.status==='承認待ち';}).length,approved=(r.own||[]).filter(function(x){return x.status==='承認済';}).length,returned=(r.own||[]).filter(function(x){return x.status==='差戻し';}).length;var ownRows=(r.own||[]).map(function(x){return '<div class="list-item"><span class="status-dot" style="background:'+((x.status==='承認済')?'#18a46d':(x.status==='差戻し'?'#ef4d5b':'#f3a11b'))+'"></span><div><strong>'+escapeHtml(x.type)+'　'+escapeHtml(x.startDate)+(x.endDate!==x.startDate?'〜'+escapeHtml(x.endDate):'')+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+escapeHtml(x.reason)+(x.rejectReason?' / 差戻し理由：'+escapeHtml(x.rejectReason):'')+'</div></div><div class="admin-actions">'+requestStatusBadge(x.status)+(x.status==='承認待ち'?'<button class="small-button" onclick="cancelOwnRequest(\''+x.id+'\')">取消</button>':'')+'</div></div>';}).join('');var teamPending=(r.team||[]).filter(function(x){return x.status==='承認待ち';});var teamRows=teamPending.map(function(x){return '<div class="list-item"><span class="status-dot" style="background:#f3a11b"></span><div><strong>'+escapeHtml(x.name)+' / '+escapeHtml(x.type)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+escapeHtml(x.startDate)+(x.endDate!==x.startDate?'〜'+escapeHtml(x.endDate):'')+' / '+escapeHtml(x.reason)+'</div></div><div class="admin-actions"><button class="small-button" onclick="approveTeamRequest(\''+x.id+'\')">承認</button><button class="small-button" onclick="rejectTeamRequest(\''+x.id+'\')">差戻し</button></div></div>';}).join('');var action='<button class="primary-button" onclick="openRequestModal()">＋ 新規申請</button>';return pageHead('申請','有給・半休・打刻修正・在宅・残業の申請をまとめます。',action)+'<div class="grid cols-4">'+metric('承認待ち',pending+'件','tone-orange')+metric('承認済',approved+'件','tone-green')+metric('差戻し',returned+'件','tone-red')+metric('有給残',state.data.month.leaveBalance,'tone-purple')+'</div><div class="grid cols-2 section-gap">'+card('自分の申請',ownRows||'<p class="muted">申請はありません。</p>')+(state.data.permissions&&state.data.permissions.adminConsole?card('承認待ち',teamRows||'<p class="muted">承認待ちはありません。</p>'):card('申請できる内容','<p class="muted">有給、半休、打刻修正、在宅勤務、残業、休日出勤を申請できます。</p>'))+'</div>';}
-function openRequestModal(){
-  var r=ensureModal(),today=state.data.today;
-  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card' role='dialog' aria-modal='true'>
-    <div class='modal-head'><div><small>新規申請</small><h2>申請内容を入力</h2></div><button class='icon-button' onclick='closeModal()'>×</button></div>
-    <div class='form-grid'>
-      <label class='field full'><span>申請種別</span><select id='reqType' onchange='toggleRequestCorrectionFields()'><option>有給</option><option>午前半休</option><option>午後半休</option><option>1/4日有給</option><option>欠勤</option><option>打刻修正</option><option>在宅勤務</option><option>残業</option><option>休日出勤</option></select></label>
-      <label class='field'><span>対象日（開始）</span><input id='reqStart' type='date' value='${today}' onchange='syncRequestDates()'></label>
-      <label class='field'><span>対象日（終了）</span><input id='reqEnd' type='date' value='${today}'></label>
-      <label class='field full'><span>申請理由</span><textarea id='reqReason' rows='3' maxlength='600' placeholder='理由を入力'></textarea></label>
-      <label id='reqContentField' class='field full'><span>補足</span><textarea id='reqContent' rows='2' maxlength='1500' placeholder='必要に応じて入力'></textarea></label>
-      <div id='correctionFields' class='field full' style='display:none'><span>打刻修正内容</span><div class='form-grid'>
-        <label class='field full'><span>元の打刻（任意）</span><select id='reqOriginalPunch'><option value=''>不足打刻として追加</option></select></label>
-        <label class='field'><span>打刻種別</span><select id='reqAction'><option>出勤</option><option>休憩開始</option><option>休憩終了</option><option>退勤</option></select></label>
-        <label class='field'><span>修正後時刻</span><input id='reqTime' type='time'></label>
-        <label class='field'><span>勤務場所</span><select id='reqLocation'><option>出社</option><option>在宅</option><option>外出</option></select></label>
-      </div></div>
+function formatLeaveDays(v){return v==null?'—':(Number(v)%1===0?Number(v).toFixed(0):Number(v).toFixed(2).replace(/0+$/,'').replace(/\.$/,''))+'日'}
+function requestTypeCard(type,label,desc){
+  const meta=REQUEST_UI[type]||{mark:'申',tone:'blue'};
+  return `<button class='request-quick-card ${meta.tone}' onclick="openRequestModal('${type}')"><span class='request-quick-mark'>${escapeHtml(meta.mark)}</span><span><strong>${escapeHtml(label||meta.label)}</strong><small>${escapeHtml(desc||meta.desc)}</small></span><i>›</i></button>`;
+}
+function leaveBalancePanel(){
+  const x=state.requests.context||{};
+  if(!x.leaveBalanceConfigured){
+    return `<section class='leave-overview unconfigured'><div><small>有給残日数</small><strong>未設定</strong><p>有給申請を使う前に、管理者が社員情報で残日数を設定してください。</p></div>${state.data.permissions&&state.data.permissions.employeeAdmin?`<button class='secondary-button compact' onclick="navigate('people')">社員設定を開く</button>`:''}</section>`;
+  }
+  return `<section class='leave-overview'><div class='leave-balance-main'><small>現在の有給残</small><strong>${formatLeaveDays(x.leaveBalance)}</strong></div><div class='leave-balance-stat'><span>承認待ち</span><b>${formatLeaveDays(x.pendingLeaveDays||0)}</b></div><div class='leave-balance-stat available'><span>申請可能残</span><b>${formatLeaveDays(x.availableLeaveDays)}</b></div><small class='leave-balance-note'>承認待ちの有給申請を差し引いた目安です。</small></section>`;
+}
+function requestHistoryRows(items,adminMode){
+  if(!items||!items.length)return '<div class="request-empty"><strong>まだ申請はありません</strong><span>上のカードからすぐ申請できます。</span></div>';
+  return items.map(x=>{
+    const meta=REQUEST_UI[x.type]||{mark:'申',tone:'blue'};
+    const actions=adminMode&&x.status==='承認待ち'
+      ? `<div class='admin-actions'><button class='small-button approve' onclick="approveTeamRequest('${x.id}')">承認</button><button class='small-button' onclick="rejectTeamRequest('${x.id}')">差戻し</button></div>`
+      : `<div class='admin-actions'>${requestStatusBadge(x.status)}${x.status==='承認待ち'?`<button class='small-button' onclick="cancelOwnRequest('${x.id}')">取消</button>`:''}</div>`;
+    return `<div class='request-row'><span class='request-row-mark ${meta.tone}'>${escapeHtml(meta.mark)}</span><div class='request-row-main'><div><strong>${adminMode?escapeHtml(x.name)+' / ':''}${escapeHtml(meta.label||x.type)}</strong><span>${escapeHtml(x.startDate)}${x.endDate!==x.startDate?'〜'+escapeHtml(x.endDate):''}</span></div><p>${escapeHtml(x.reason||'理由なし')}${x.rejectReason?`<em>差戻し理由：${escapeHtml(x.rejectReason)}</em>`:''}</p></div>${actions}</div>`;
+  }).join('');
+}
+function requestsPage(){
+  const r=state.requests;
+  if(r.loading&&!cacheHas('requests','current'))return pageHead('申請','やりたいことから選ぶだけで申請できます。')+'<div class="loading-card"></div>';
+  const teamPending=(r.team||[]).filter(x=>x.status==='承認待ち');
+  const quick=[
+    requestTypeCard('有給','有給休暇','残日数を見ながら申請'),
+    requestTypeCard('午前半休','半休・1/4日','午前・午後・1/4日から選択'),
+    requestTypeCard('打刻修正'),
+    requestTypeCard('在宅勤務'),
+    requestTypeCard('残業'),
+    requestTypeCard('休日出勤'),
+    requestTypeCard('欠勤')
+  ].join('');
+  const admin=state.data.permissions&&state.data.permissions.adminConsole;
+  return pageHead('申請','申請種別を探すのではなく、やりたいことから選べます。')+
+    leaveBalancePanel()+
+    `<section class='request-launch'><div class='request-section-head'><div><span class='eyebrow'>QUICK REQUEST</span><h2>何を申請しますか？</h2></div><span>クリックすると必要な項目だけ表示します。</span></div><div class='request-quick-grid'>${quick}</div></section>`+
+    `<div class='grid cols-2 section-gap'>${card('自分の申請',requestHistoryRows(r.own||[],false), 'request-history-card')}${admin?card('承認待ち '+teamPending.length+'件',requestHistoryRows(teamPending,true),'request-history-card'):card('申請の流れ',"<div class='request-help-flow'><span><b>1</b>種類を選ぶ</span><i>→</i><span><b>2</b>日付と理由</span><i>→</i><span><b>3</b>申請</span></div><p class='muted'>申請後はこの画面で承認状況を確認できます。</p>")}</div>`;
+}
+function requestReasonSuggestions(type){
+  if(type==='打刻修正')return ['打刻漏れ','操作ミス','その他'];
+  if(type==='残業'||type==='休日出勤')return ['業務都合','納期対応','緊急対応','その他'];
+  if(type==='在宅勤務')return ['業務都合','外部予定','家庭の都合','その他'];
+  if(type==='欠勤')return ['私用','家庭の都合','体調不良','その他'];
+  return ['私用','家庭の都合','その他'];
+}
+function requestTypeHeader(type){
+  const meta=REQUEST_UI[type]||REQUEST_UI['有給'];
+  return `<div class='request-selected-type ${meta.tone}'><span class='request-modal-mark'>${escapeHtml(meta.mark)}</span><div><small>申請種別</small><strong>${escapeHtml(meta.label)}</strong><p>${escapeHtml(meta.desc)}</p></div></div>`;
+}
+function requestSubtypeSelector(type){
+  if(!['午前半休','午後半休','1/4日有給'].includes(type))return '';
+  return `<div class='request-subtypes' role='group' aria-label='休暇区分'>${['午前半休','午後半休','1/4日有給'].map(x=>`<button type='button' class='${x===type?'active':''}' onclick="changeRequestSubtype('${x}')">${escapeHtml(REQUEST_UI[x].label)}</button>`).join('')}</div>`;
+}
+function requestBalanceSummary(){
+  const x=state.requests.context||{};
+  if(!x.leaveBalanceConfigured)return `<div class='request-balance-strip warning'><span>有給残日数が未設定です</span><b>管理者の設定が必要</b></div>`;
+  return `<div class='request-balance-strip'><span>現在 ${formatLeaveDays(x.leaveBalance)}</span><span>承認待ち ${formatLeaveDays(x.pendingLeaveDays||0)}</span><b>申請可能 ${formatLeaveDays(x.availableLeaveDays)}</b></div>`;
+}
+function openRequestModal(type='有給'){
+  const meta=REQUEST_UI[type]?REQUEST_UI[type]:REQUEST_UI['有給'];
+  type=REQUEST_UI[type]?type:'有給';
+  const r=ensureModal(),today=state.data.today;
+  const isPaid=['有給','午前半休','午後半休','1/4日有給'].includes(type);
+  const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
+  const reasonChips=requestReasonSuggestions(type).map(x=>`<button type='button' onclick="setRequestReason('${escapeHtml(x)}')">${escapeHtml(x)}</button>`).join('');
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card request-modal-card' role='dialog' aria-modal='true' aria-labelledby='requestModalTitle'>
+    <div class='modal-head request-modal-head'><div><small>新規申請</small><h2 id='requestModalTitle'>${escapeHtml(meta.label)}を申請</h2></div><button class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
+    <div id='requestFormError' class='request-form-error' role='alert' aria-live='assertive'></div>
+    ${requestTypeHeader(type)}
+    ${requestSubtypeSelector(type)}
+    ${isPaid?requestBalanceSummary():''}
+    <input id='reqType' type='hidden' value='${escapeHtml(type)}'>
+    <div class='request-form-body'>
+      <div class='request-date-grid ${single?'single':''}'>
+        <label id='reqStartField' class='field'><span>${single?'対象日':'開始日'} <em>必須</em></span><input id='reqStart' type='date' value='${today}' onchange='syncRequestDates()'></label>
+        <label id='reqEndField' class='field ${single?'is-hidden':''}'><span>終了日 <em>必須</em></span><input id='reqEnd' type='date' value='${today}' onchange='refreshRequestPreview()'></label>
+      </div>
+      <div id='requestPreview' class='request-preview ${isPaid?'':'is-hidden'}'></div>
+      <div id='correctionFields' class='request-correction ${type==='打刻修正'?'':'is-hidden'}'>
+        <div class='request-block-title'><strong>修正する打刻</strong><span>元の打刻を選ぶか、不足打刻として追加します。</span></div>
+        <div class='form-grid'>
+          <label class='field full'><span>元の打刻</span><select id='reqOriginalPunch'><option value=''>不足打刻として追加</option></select></label>
+          <label id='reqActionField' class='field'><span>打刻種別 <em>必須</em></span><select id='reqAction'><option>出勤</option><option>休憩開始</option><option>休憩終了</option><option>退勤</option></select></label>
+          <label id='reqTimeField' class='field'><span>修正後時刻 <em>必須</em></span><input id='reqTime' type='time'></label>
+          <label class='field'><span>勤務場所</span><select id='reqLocation'><option>出社</option><option>在宅</option><option>外出</option></select></label>
+        </div>
+      </div>
+      <label id='reqReasonField' class='field full request-reason-field'><span>申請理由 <em>必須</em></span><div class='request-reason-chips'>${reasonChips}</div><textarea id='reqReason' rows='2' maxlength='600' placeholder='例：私用のため'></textarea></label>
+      <label class='field full'><span>補足 <i>任意</i></span><textarea id='reqContent' rows='2' maxlength='1500' placeholder='承認者に伝えたいことがあれば入力'></textarea></label>
     </div>
-    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick='submitRequestFromModal()'>申請する</button></div></div>
+    <div class='modal-actions request-modal-actions'><span class='request-submit-hint'>入力内容は申請後も履歴で確認できます。</span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button id='requestSubmitButton' class='primary-button' onclick='submitRequestFromModal()'>${escapeHtml(meta.label)}を申請</button></div></div>
   </section>`;
-  toggleRequestCorrectionFields();
-}
-function syncRequestDates(){
-  var type=document.getElementById('reqType')?document.getElementById('reqType').value:'';
-  var start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
-  var single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
-  if(start&&end&&single){end.value=start.value;end.disabled=true}
-  else if(end){end.disabled=false}
   if(type==='打刻修正')loadCorrectionPunchOptions();
+  if(isPaid)refreshRequestPreview();
 }
-function toggleRequestCorrectionFields(){var type=document.getElementById('reqType')?document.getElementById('reqType').value:'',isCorrection=type==='打刻修正',box=document.getElementById('correctionFields');if(box)box.style.display=isCorrection?'grid':'none';syncRequestDates();}
-function loadCorrectionPunchOptions(){var date=document.getElementById('reqStart').value;if(!date)return;google.script.run.withSuccessHandler(function(items){var select=document.getElementById('reqOriginalPunch');if(!select)return;select.innerHTML='<option value="">不足打刻として追加</option>'+items.map(function(x){return '<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>';}).join('');}).withFailureHandler(function(err){handleApiError(err,'打刻履歴を読み込めませんでした');}).getPunchesForDate(state.sessionToken,date);}
-function submitRequestFromModal(){var type=document.getElementById('reqType').value,payload={type:type,startDate:document.getElementById('reqStart').value,endDate:document.getElementById('reqEnd').value,reason:document.getElementById('reqReason').value,content:document.getElementById('reqContent').value};if(type==='打刻修正')payload.correction={originalPunchId:document.getElementById('reqOriginalPunch').value,action:document.getElementById('reqAction').value,time:document.getElementById('reqTime').value,workLocation:document.getElementById('reqLocation').value};google.script.run.withSuccessHandler(function(){closeModal();showToast('申請を登録しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を登録できませんでした');}).submitRequest(state.sessionToken,payload);}
+function changeRequestSubtype(type){
+  const currentReason=document.getElementById('reqReason')?document.getElementById('reqReason').value:'';
+  const currentDate=document.getElementById('reqStart')?document.getElementById('reqStart').value:state.data.today;
+  openRequestModal(type);
+  const reason=document.getElementById('reqReason'),start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
+  if(reason)reason.value=currentReason;if(start)start.value=currentDate;if(end)end.value=currentDate;
+  refreshRequestPreview();
+}
+function setRequestReason(value){const el=document.getElementById('reqReason');if(!el)return;el.value=value==='その他'?'':value+(value.endsWith('ため')?'':'のため');el.focus()}
+function syncRequestDates(){
+  const type=document.getElementById('reqType')?document.getElementById('reqType').value:'';
+  const start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
+  const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
+  if(start&&end&&single)end.value=start.value;
+  if(type==='打刻修正')loadCorrectionPunchOptions();
+  refreshRequestPreview();
+}
+function requestPayloadFromForm(){
+  const type=document.getElementById('reqType').value;
+  const start=document.getElementById('reqStart').value;
+  const end=document.getElementById('reqEnd').value||start;
+  const payload={type,startDate:start,endDate:end,reason:document.getElementById('reqReason').value,content:document.getElementById('reqContent').value};
+  if(type==='打刻修正')payload.correction={originalPunchId:document.getElementById('reqOriginalPunch').value,action:document.getElementById('reqAction').value,time:document.getElementById('reqTime').value,workLocation:document.getElementById('reqLocation').value};
+  return payload;
+}
+function clearRequestFieldErrors(){document.querySelectorAll('.request-modal-card .field-error').forEach(x=>x.classList.remove('field-error'))}
+function showRequestError(message,fieldId){
+  clearRequestFieldErrors();
+  const box=document.getElementById('requestFormError');
+  if(box){box.innerHTML=`<strong>申請できません</strong><span>${escapeHtml(message)}</span>`;box.classList.add('show')}
+  const field=fieldId?document.getElementById(fieldId):null;
+  if(field){field.classList.add('field-error');const input=field.querySelector('input,select,textarea');if(input)input.focus()}
+  const card=document.querySelector('.request-modal-card');if(card)card.scrollTo({top:0,behavior:'smooth'});
+}
+function hideRequestError(){const box=document.getElementById('requestFormError');if(box)box.classList.remove('show');clearRequestFieldErrors()}
+function validateRequestForm(payload){
+  if(!payload.startDate)return ['対象日を選択してください。','reqStartField'];
+  if(payload.endDate&&payload.startDate>payload.endDate)return ['終了日は開始日以降にしてください。','reqEndField'];
+  if(!String(payload.reason||'').trim())return ['申請理由を入力してください。','reqReasonField'];
+  if(['有給','午前半休','午後半休','1/4日有給'].includes(payload.type)){
+    const x=state.requests.context||{};
+    if(!x.leaveBalanceConfigured)return ['有給残日数が未設定です。管理者に社員情報の有給残日数を設定してもらってください。',''];
+  }
+  if(payload.type==='打刻修正'&&!payload.correction.time)return ['修正後の時刻を入力してください。','reqTimeField'];
+  return null;
+}
+function refreshRequestPreview(){
+  const typeEl=document.getElementById('reqType'),box=document.getElementById('requestPreview');
+  if(!typeEl||!box)return;
+  const type=typeEl.value;
+  if(!['有給','午前半休','午後半休','1/4日有給'].includes(type)){box.classList.add('is-hidden');return}
+  const payload=requestPayloadFromForm();
+  if(!payload.startDate||!payload.endDate)return;
+  box.classList.remove('is-hidden');
+  box.innerHTML="<span class='preview-loading'>有給日数を確認しています…</span>";
+  const seq=++requestPreviewSequence;
+  google.script.run.withSuccessHandler(data=>{
+    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    if(!data.leaveBalanceConfigured){
+      box.innerHTML="<div class='preview-warning'><strong>有給残日数が未設定です</strong><span>管理者が社員情報から設定すると、有給を申請できます。</span></div>";
+      return;
+    }
+    const projected=data.projectedBalance;
+    const bad=projected<0;
+    box.innerHTML=`<div class='preview-item'><span>今回の消化</span><strong>${formatLeaveDays(data.requestedDays)}</strong></div><div class='preview-arrow'>→</div><div class='preview-item'><span>申請後の残数</span><strong class='${bad?'danger':''}'>${formatLeaveDays(projected)}</strong></div>${bad?"<div class='preview-warning full'><strong>残日数が不足しています</strong><span>日付または申請区分を変更してください。</span></div>":''}`;
+  }).withFailureHandler(err=>{
+    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    box.innerHTML=`<div class='preview-warning'><strong>日数を確認できません</strong><span>${escapeHtml(cleanApiErrorMessage(err,'会社カレンダーを確認してください。'))}</span></div>`;
+  }).previewRequest(state.sessionToken,payload);
+}
+function loadCorrectionPunchOptions(){
+  const date=document.getElementById('reqStart').value;if(!date)return;
+  const select=document.getElementById('reqOriginalPunch');if(select)select.innerHTML='<option value="">読み込み中…</option>';
+  google.script.run.withSuccessHandler(function(items){
+    const el=document.getElementById('reqOriginalPunch');if(!el)return;
+    el.innerHTML='<option value="">不足打刻として追加</option>'+items.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>').join('');
+  }).withFailureHandler(function(err){showRequestError(cleanApiErrorMessage(err,'打刻履歴を読み込めませんでした。'),'');}).getPunchesForDate(state.sessionToken,date);
+}
+function submitRequestFromModal(){
+  hideRequestError();
+  const payload=requestPayloadFromForm(),invalid=validateRequestForm(payload);
+  if(invalid){showRequestError(invalid[0],invalid[1]);return}
+  const button=document.getElementById('requestSubmitButton');
+  if(button){button.disabled=true;button.dataset.label=button.textContent;button.textContent='申請中…'}
+  google.script.run.withSuccessHandler(function(){
+    closeModal();showToast('申請を登録しました');
+    invalidatePageCache('requests','monthly');loadRequests({force:true});
+  }).withFailureHandler(function(err){
+    if(button){button.disabled=false;button.textContent=button.dataset.label||'申請する'}
+    const msg=cleanApiErrorMessage(err,'申請を登録できませんでした。');
+    const field=msg.includes('理由')?'reqReasonField':msg.includes('日')?'reqStartField':'';
+    showRequestError(msg,field);
+  }).submitRequest(state.sessionToken,payload);
+}
 function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){google.script.run.withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
 function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
 function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){google.script.run.withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
