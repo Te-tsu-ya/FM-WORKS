@@ -128,7 +128,9 @@ DBスキーマ目安: 4。
 
 ## 7. stale判定
 
-`getLatestMonthlyDataUpdate_` は対象月の以下を走査する。
+`getLatestMonthlyDataUpdateMap_` は対象期間を1回のシート走査で月別に集計する。単月API `getLatestMonthlyDataUpdate_` はこの結果を再利用する。
+
+対象データ:
 
 1. 打刻ログ: `createdAt`
 2. 工数: `updatedAt`
@@ -627,6 +629,7 @@ Apps Scriptの原則:
 | REMEMBER_SESSION_DAYS | 30 |
 | REMEMBER_IDLE_DAYS | 30 |
 | MONTHLY_REVIEW_DUE_DAY | 5 |
+| MONTHLY_REVIEW_START_MONTH | 2026-09（現行導入開始月） |
 
 ### 27.9 予定
 
@@ -699,8 +702,9 @@ Apps Scriptの原則:
 login / resume
   → getInitialData
     → getMonthlyReviewPrompt_
-      → getMonthlyReviewStatusInternal_
-      → getLatestMonthlyDataUpdate_
+      → yearMonthsBetween_
+      → getMonthlyReviewHistoryInternal_
+      → getLatestMonthlyDataUpdateMap_
   → globalActionBanners
   → user clicks review
   → getMonthlySummary(previous month)
@@ -708,7 +712,9 @@ login / resume
   → confirmMonthlyReview
   → 月次確認 upsert
   → 監査ログ append
-  → alert disappears
+  → getInitialData refresh
+  → 未確認月が残る場合は次の最古月をalert
+  → 全対象月完了でalert disappears
 ```
 
 ### 29.2 打刻修正
