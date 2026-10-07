@@ -472,9 +472,35 @@ if (!app.includes("if(options.force)state.homeOverview.reloadRequested=true") ||
   console.error('Home overview refresh must survive overlapping force reloads without stale overwrite.');
   failed = true;
 }
-if (!app.includes("state.adminTab==='operation'))loadMaintenance")) {
-  console.error('Admin data load must not fetch maintenance outside the operation tab.');
+if (!app.includes("if(tab==='operation')loadMaintenance()")) {
+  console.error('Operation tab must load maintenance directly.');
   failed = true;
+}
+const adminTabStart=app.indexOf('function setAdminTab(tab)');
+const adminTabEnd=app.indexOf('\nfunction ',adminTabStart+20);
+const adminTabBlock=adminTabStart>=0&&adminTabEnd>adminTabStart?app.slice(adminTabStart,adminTabEnd):'';
+if(adminTabBlock.includes("if(tab==='operation'){loadAuthAdmin")){
+  console.error('Operation tab must not fetch unrelated authentication/admin master data.');
+  failed=true;
+}
+for (const marker of [
+  "function authAdminScope_(",
+  "function authAdminCacheName_(",
+  "getAuthAdminData(state.sessionToken,scope)",
+  "loadAuthAdmin({scope:'people'})",
+  "loadAuthAdmin({scope:'projects'})"
+]) {
+  if(!app.includes(marker)){
+    console.error('Scoped admin loading missing: '+marker);
+    failed=true;
+  }
+}
+if(!authCode.includes('function getAuthAdminData(sessionToken, scope)') ||
+   !authCode.includes("['people','auth','projects']") ||
+   !authCode.includes("if(mode==='projects')") ||
+   !authCode.includes("if(mode==='auth')")){
+  console.error('Server admin payload must be scoped to the active view.');
+  failed=true;
 }
 for (const marker of [
   'function scheduleBackgroundTask(',

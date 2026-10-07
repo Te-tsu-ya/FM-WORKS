@@ -135,10 +135,11 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='worklog')loadWorklogs();
   if(state.page==='requests')loadRequests();
   if(state.page==='monthly')loadMonthly();
-  if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin();
+  if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
   if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){
-    if(['auth','projects'].includes(state.adminTab))loadAuthAdmin();
-    if(state.adminTab==='operation'){loadAuthAdmin();loadMaintenance();}
+    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
+    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
+    if(state.adminTab==='operation')loadMaintenance();
     if(state.adminTab==='requirements')loadSystemDocument('requirements');
     if(state.adminTab==='technical')loadSystemDocument('technical');
   }

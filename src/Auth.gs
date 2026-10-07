@@ -353,70 +353,52 @@ function requestPinHelp(employeeId, note, clientInfo) {
     };
   });
 }
-function getAuthAdminData(sessionToken) {
+function getAuthAdminData(sessionToken, scope) {
   const session = requireAdminSession_(sessionToken);
-  const sheet = getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow = sheet.getLastRow();
-  const employees = [];
-  if (lastRow >= 2) {
-    const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
-    rows.forEach((r, i) => {
-      if (!r[0]) return;
-      employees.push({
-        employeeId: r[0],
-        name: r[1],
-        displayName: r[2] || r[1],
-        department: r[3] || '',
-        title: r[4] || '',
-        role: r[5] || 'USER',
-        active: r[6] === '在籍',
-        workStart: r[7] || '09:00',
-        workEnd: r[8] || '18:00',
-        breakMinutes: Number(r[9] || 60),
-        leaveBalance: Number(r[10] || 0),
-        leaveBalanceConfigured: String(r[10] || '').trim() !== '',
-        email: r[11] || '',
-        note: r[12] || '',
-        pinConfigured: !!r[14],
-        mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
-        failures: Number(r[16] || 0),
-        lockedUntil: r[17] || '',
-        lastLogin: r[18] || '',
-        authState: r[20] || '',
-        payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-        managerId: r[23] || '',
-        leaveBasisDate: r[24] || '',
-        hireDate: r[25] || ''
-      });
-    });
-  }
-  const resetSheet = getDb_().getSheetByName(AUTH.resetSheet);
-  const resetLastRow = resetSheet.getLastRow();
-  const resetRequests = resetLastRow < 2 ? [] : resetSheet.getRange(2, 1, resetLastRow - 1, 9).getDisplayValues()
-    .filter(r => r[0])
-    .slice(-50)
-    .reverse()
-    .map(r => ({
-      requestId: r[0],
-      requestedAt: r[1],
-      employeeId: r[2],
-      name: r[3],
-      status: r[4],
-      note: r[5],
-      handledBy: r[6],
-      handledAt: r[7]
-    }));
-  return {
-    employees: employees,
-    projects: getProjectsInternal_(true),
-    resetRequests: resetRequests,
-    support: getSupportConfig_(),
-    prototypeMode: isPrototypeConfigured_(),
-    prototypeAccessEffective: isPrototypeMode_(),
-    currentUser: publicEmployee_(session.employee)
-  };
-}
+  const mode=['people','auth','projects'].includes(String(scope||''))?String(scope):'auth';
+  const result={scope:mode};
 
+  if(mode==='people'||mode==='auth'){
+    const sheet = getDb_().getSheetByName(DB.sheets.employees);
+    const lastRow = sheet.getLastRow();
+    const employees = [];
+    if (lastRow >= 2) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
+      rows.forEach(r => {
+        if (!r[0]) return;
+        employees.push({
+          employeeId:r[0], name:r[1], displayName:r[2]||r[1], department:r[3]||'', title:r[4]||'',
+          role:r[5]||'USER', active:r[6]==='在籍', workStart:r[7]||'09:00', workEnd:r[8]||'18:00',
+          breakMinutes:Number(r[9]||60), leaveBalance:Number(r[10]||0), leaveBalanceConfigured:String(r[10]||'').trim()!=='',
+          email:r[11]||'', note:r[12]||'', pinConfigured:!!r[14], mustChangePin:String(r[15]).toUpperCase()==='TRUE',
+          failures:Number(r[16]||0), lockedUntil:r[17]||'', lastLogin:r[18]||'', authState:r[20]||'',
+          payrollIncluded:String(r[22]).toUpperCase()==='TRUE', managerId:r[23]||'', leaveBasisDate:r[24]||'', hireDate:r[25]||''
+        });
+      });
+    }
+    result.employees=employees;
+  }
+
+  if(mode==='projects'){
+    result.projects=getProjectsInternal_(true);
+  }
+
+  if(mode==='auth'){
+    const resetSheet = getDb_().getSheetByName(AUTH.resetSheet);
+    const resetLastRow = resetSheet.getLastRow();
+    result.resetRequests = resetLastRow < 2 ? [] : resetSheet.getRange(Math.max(2,resetLastRow-49),1,Math.min(50,resetLastRow-1),9).getDisplayValues()
+      .filter(r => r[0])
+      .reverse()
+      .map(r => ({
+        requestId:r[0], requestedAt:r[1], employeeId:r[2], name:r[3], status:r[4], note:r[5], handledBy:r[6], handledAt:r[7]
+      }));
+    result.support=getSupportConfig_();
+    result.prototypeMode=isPrototypeConfigured_();
+    result.prototypeAccessEffective=isPrototypeMode_();
+    result.currentUser=publicEmployee_(session.employee);
+  }
+  return result;
+}
 function adminSetTemporaryPin(sessionToken, targetEmployeeId, temporaryPin) {
   const admin = requireAdminSession_(sessionToken).employee;
   return withScriptLock_(function() {

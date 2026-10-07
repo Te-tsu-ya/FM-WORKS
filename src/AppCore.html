@@ -3,7 +3,7 @@ const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['w
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
 let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
-const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000,documents:600000};
+const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:180000,maintenance:60000,documents:600000};
 const pageCache={};
 const pendingLoads=new Set();
 let liveAttendanceTimer=null;
@@ -13,7 +13,7 @@ let routePrefetchTimer=null;
 function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
 function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
 function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
-function invalidatePageCache(...names){names.forEach(name=>delete pageCache[name])}
+function invalidatePageCache(...names){names.forEach(name=>{if(name==='authAdmin'){delete pageCache.authAdminPeople;delete pageCache.authAdminAuth;delete pageCache.authAdminProjects;}else delete pageCache[name]})}
 function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
 function endPageLoad(ticket){if(ticket)pendingLoads.delete(ticket)}
 function renderPageIfActive(page){if(state.page===page)renderPage()}

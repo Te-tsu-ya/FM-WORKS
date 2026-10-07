@@ -1281,3 +1281,13 @@ CIとDeployの双方で `test_logic.mjs` と `test_client_contract.mjs` を実�
 - date/index read: 800ms
 
 これはネットワーク往復を含むUX時間ではなく、Apps Scriptサーバー実行の警告予算である。
+
+### 48.7 Scoped admin payloads
+
+`getAuthAdminData(sessionToken, scope)` は `people / auth / projects` の3スコープを受け取り、画面が必要とするデータだけを返す。
+
+- people: 社員編集に必要な社員26列
+- auth: 社員認証状態 + 直近50件のPIN再発行依頼 + サポート設定
+- projects: プロジェクトマスタ
+
+クライアントは `authAdminPeople / authAdminAuth / authAdminProjects` を別キャッシュとして管理する。運用設定タブは `loadAuthAdmin` を呼ばず `loadMaintenance` のみ実行する。

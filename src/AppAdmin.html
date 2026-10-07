@@ -12,8 +12,9 @@ function settingsTabs(){
 }
 function setAdminTab(tab){
   state.adminTab=tab;renderNav();renderPage(true);
-  if(['auth','projects'].includes(tab))loadAuthAdmin();
-  if(tab==='operation'){loadAuthAdmin();loadMaintenance();}
+  if(tab==='auth')loadAuthAdmin({scope:'auth'});
+  if(tab==='projects')loadAuthAdmin({scope:'projects'});
+  if(tab==='operation')loadMaintenance();
   if(tab==='requirements')loadSystemDocument('requirements');
   if(tab==='technical')loadSystemDocument('technical');
 }
@@ -45,8 +46,10 @@ function openProjectModal(projectId){
 function saveProjectFromModal(projectId){
   const payload={projectId:projectId||'',name:document.getElementById('prjName').value,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:document.getElementById('prjStart').value,endDate:document.getElementById('prjEnd').value,note:document.getElementById('prjNote').value};
   google.script.run.withSuccessHandler(()=>{
-    closeModal();showToast('プロジェクトを保存しました');invalidatePageCache('worklog','authAdmin');
-    refreshAppData(()=>loadAuthAdmin({force:true}));
+    closeModal();showToast('プロジェクトを保存しました');
+    invalidatePageCache('worklog','authAdmin');
+    if(state.data)state.data.projects=[];
+    loadAuthAdmin({force:true,scope:'projects'});
   }).withFailureHandler(err=>handleApiError(err,'プロジェクトを保存できませんでした')).saveProject(state.sessionToken,payload);
 }
 
@@ -223,24 +226,29 @@ function toggleDailyBackup(){
   },false);
 }
 
+function authAdminScope_(options={}){
+  if(options.scope)return options.scope;
+  if(state.page==='people')return 'people';
+  if(state.page==='admin'&&state.adminTab==='projects')return 'projects';
+  return 'auth';
+}
+function authAdminCacheName_(scope){return scope==='people'?'authAdminPeople':scope==='projects'?'authAdminProjects':'authAdminAuth';}
 function loadAuthAdmin(options={}){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)) return;
-  const key='current';
-  if(!options.force&&cacheFresh('authAdmin',key)){
-    if(options.withMaintenance)loadMaintenance();
-    return;
-  }
-  const ticket=beginPageLoad('authAdmin',key);if(!ticket)return;
-  const hasCurrent=cacheHas('authAdmin',key)&&!!state.authAdmin;
+  const scope=authAdminScope_(options),cacheName=authAdminCacheName_(scope),key=scope;
+  if(!options.force&&cacheFresh(cacheName,key))return;
+  const ticket=beginPageLoad(cacheName,key);if(!ticket)return;
+  const hasCurrent=cacheHas(cacheName,key)&&!!state.authAdmin;
   if(!hasCurrent&&!options.silent)renderPage();
   google.script.run
     .withSuccessHandler(data=>{
-      endPageLoad(ticket);state.authAdmin=data;markPageCache('authAdmin',key);
+      endPageLoad(ticket);
+      state.authAdmin={...(state.authAdmin||{}),...(data||{})};
+      markPageCache(cacheName,key);
       if(state.page==='admin'||state.page==='people')renderPage();
-      if(options.withMaintenance||(state.page==='admin'&&state.adminTab==='operation'))loadMaintenance({silent:!!options.silent});
     })
     .withFailureHandler(err=>{endPageLoad(ticket);handleApiError(err,'管理情報を読み込めませんでした')})
-    .getAuthAdminData(state.sessionToken);
+    .getAuthAdminData(state.sessionToken,scope);
 }
 
 function openTempPinModal(employeeId){
