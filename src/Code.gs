@@ -77,7 +77,7 @@ function getInitialData(sessionToken) {
     month: {
       workHours: formatMinutes_(monthSummary.totals.totalMinutes),
       overtime: formatMinutes_(monthSummary.totals.overtimeMinutes),
-      leaveBalance: employee.leaveBalance + '日',
+      leaveBalance: employee.leaveBalanceConfigured ? employee.leaveBalance + '日' : '未設定',
       paidLeaveDays: monthSummary.totals.paidLeaveDays,
       worklogMinutes: monthSummary.totals.worklogMinutes,
       worklogGapMinutes: worklogGap,
