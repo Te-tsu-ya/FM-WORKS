@@ -55,7 +55,9 @@ globalThis.__fmTest = {
   canManageEmployeeRecord_,
   monthlySnapshotPayload_,
   normalizeLeaveDays_,
-  leaveBalanceAfterDelta_
+  leaveBalanceAfterDelta_,
+  normalizeScheduleVisibility_,
+  canViewScheduleRow_
 };
 `, context);
 
@@ -152,6 +154,14 @@ expect('monthly snapshot payload contains normalized daily facts', snapshotPaylo
 expect('leave days normalize to quarter day', api.normalizeLeaveDays_(1.24)===1.25);
 expect('leave balance applies usage', api.leaveBalanceAfterDelta_(10,-1.5)===8.5);
 expectThrows('leave balance rejects negative result', ()=>api.leaveBalanceAfterDelta_(1,-1.25));
+expect('schedule visibility accepts participant scope', api.normalizeScheduleVisibility_('参加者のみ',{employeeId:'FM0003',role:'USER'})==='参加者のみ');
+expectThrows('non-admin cannot create admin-only schedule', ()=>api.normalizeScheduleVisibility_('管理者のみ',{employeeId:'FM0003',role:'USER'}));
+const participantRow=['S1','2026-10-07','09:00','10:00','FALSE','FM0003,FM0004','神谷、小林','面談','予定','','','参加者のみ','有効','FM0001','','','FM WORKS','予定'];
+expect('participant-only visible to participant', api.canViewScheduleRow_({employeeId:'FM0003',name:'神谷 直人',role:'USER'},participantRow)===true);
+expect('participant-only hidden from unrelated user', api.canViewScheduleRow_({employeeId:'FM0005',name:'中村 健太',role:'USER'},participantRow)===false);
+const adminOnlyRow=[...participantRow]; adminOnlyRow[11]='管理者のみ';
+expect('admin-only visible to admin', api.canViewScheduleRow_({employeeId:'FM0002',name:'森川 彩乃',role:'ADMIN'},adminOnlyRow)===true);
+expect('admin-only hidden from participant', api.canViewScheduleRow_({employeeId:'FM0003',name:'神谷 直人',role:'USER'},adminOnlyRow)===false);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

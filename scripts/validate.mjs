@@ -30,7 +30,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -291,6 +291,21 @@ if (!styles.includes('.request-form-error.show{display:grid}')) {
 }
 if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
+  failed = true;
+}
+for (const schedulePrivacyMarker of [
+  'function normalizeScheduleVisibility_(',
+  'function canViewScheduleRow_(',
+  "['社内','参加者のみ','管理者のみ']",
+  'canViewScheduleRow_(viewer,r)'
+]) {
+  if (!serverCode.includes(schedulePrivacyMarker)) {
+    console.error('Schedule privacy enforcement missing: ' + schedulePrivacyMarker);
+    failed = true;
+  }
+}
+if (!searchCode.includes('canViewScheduleRow_(session.employee,r)')) {
+  console.error('Global search must respect schedule visibility.');
   failed = true;
 }
 for (const scheduleIdentityMarker of [
