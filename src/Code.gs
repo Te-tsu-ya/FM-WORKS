@@ -38,7 +38,7 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
-function include(filename) {
+function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
@@ -680,13 +680,12 @@ function normalizeTime_(value) {
   return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
 }
 
-function healthCheck() {
-  const db = getDb_();
+function healthCheck(sessionToken) {
+  requireSession_(sessionToken);
   return {
     ok: true,
     app: APP.name,
     version: APP.version,
-    dbTitle: db.getName(),
     timestamp: new Date().toISOString()
   };
 }
