@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.2.0',
+  version: '0.3.0',
   locale: 'ja-JP'
 });
 
@@ -11,6 +11,8 @@ const DB = Object.freeze({
   sheets: {
     employees: '社員マスタ',
     punches: '打刻ログ',
+    schedule: '予定',
+    companyCalendar: '会社カレンダー',
     audit: '監査ログ'
   }
 });
@@ -40,11 +42,15 @@ function include(filename) {
 function getInitialData() {
   const employee = getEmployee_(DB.defaultEmployeeId);
   const attendance = getAttendanceState_(employee.employeeId);
+  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const scheduleBundle = getScheduleBundle({ start: today, end: today, employeeId: employee.employeeId });
+  const companyToday = scheduleBundle.companyDays.find(d => d.date === today) || null;
 
   return {
     app: APP,
     demo: false,
     serverTime: new Date().toISOString(),
+    today: today,
     user: {
       employeeId: employee.employeeId,
       displayName: employee.displayName,
@@ -52,7 +58,10 @@ function getInitialData() {
       role: employee.role,
       department: employee.department
     },
+    employees: getEmployees_(),
     attendance: attendance,
+    todaySchedule: scheduleBundle.events.slice(0, 8),
+    companyToday: companyToday,
     month: {
       workHours: '72時間36分',
       overtime: '8時間12分',
@@ -328,6 +337,310 @@ function formatMinutes_(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return h + '時間' + String(m).padStart(2, '0') + '分';
+}
+
+
+function getScheduleBundle(params) {
+  params = params || {};
+  const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  const start = normalizeDate_(params.start || today);
+  const end = normalizeDate_(params.end || start);
+  if (start > end) throw new Error('期間指定が不正です。');
+
+  const employeeId = String(params.employeeId || 'ALL');
+  const category = String(params.category || 'ALL');
+  const sheet = getDb_().getSheetByName(DB.sheets.schedule);
+  const lastRow = sheet.getLastRow();
+  const events = [];
+
+  if (lastRow >= 2) {
+    const rows = sheet.getRange(2, 1, lastRow - 1, 18).getDisplayValues();
+    rows.forEach(r => {
+      if (!r[0] || !r[1] || r[12] === '削除') return;
+      if (r[1] < start || r[1] > end) return;
+      const ids = String(r[5] || '').split(',').map(x => x.trim()).filter(Boolean);
+      if (employeeId !== 'ALL' && !ids.includes(employeeId)) return;
+      if (category !== 'ALL' && r[8] !== category) return;
+      events.push({
+        id: r[0],
+        date: r[1],
+        start: r[2] || '',
+        end: r[3] || '',
+        allDay: String(r[4]).toUpperCase() === 'TRUE',
+        employeeIds: ids,
+        employeeNames: r[6] ? String(r[6]).split('、').filter(Boolean) : [],
+        title: r[7] || '',
+        category: r[8] || '予定',
+        location: r[9] || '',
+        detail: r[10] || '',
+        visibility: r[11] || '社内',
+        status: r[12] || '有効',
+        createdBy: r[13] || '',
+        createdAt: r[14] || '',
+        updatedAt: r[15] || '',
+        source: r[16] || '',
+        colorKey: r[17] || r[8] || '予定'
+      });
+    });
+  }
+
+  events.sort((a, b) =>
+    a.date.localeCompare(b.date) ||
+    (a.start || '99:99').localeCompare(b.start || '99:99') ||
+    a.title.localeCompare(b.title)
+  );
+
+  return {
+    start,
+    end,
+    events,
+    companyDays: getCompanyCalendarRange_(start, end),
+    employees: getEmployees_()
+  };
+}
+
+function saveSchedule(payload) {
+  payload = payload || {};
+  const employee = getEmployee_(DB.defaultEmployeeId);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const date = normalizeDate_(payload.date);
+    const title = String(payload.title || '').trim();
+    if (!title) throw new Error('予定名を入力してください。');
+
+    const allDay = payload.allDay === true || String(payload.allDay).toUpperCase() === 'TRUE';
+    const start = allDay ? '' : normalizeTime_(payload.start || '');
+    const end = allDay ? '' : normalizeTime_(payload.end || '');
+    if (!allDay && !start) throw new Error('開始時刻を入力してください。');
+    if (start && end && start > end) throw new Error('終了時刻は開始時刻以降にしてください。');
+
+    let employeeIds = payload.employeeIds;
+    if (!Array.isArray(employeeIds)) {
+      employeeIds = String(employeeIds || employee.employeeId).split(',').map(x => x.trim()).filter(Boolean);
+    }
+    if (!employeeIds.length) employeeIds = [employee.employeeId];
+
+    const activeEmployees = getEmployees_();
+    const names = employeeIds.map(id => {
+      const hit = activeEmployees.find(e => e.employeeId === id);
+      return hit ? hit.shortName : id;
+    });
+
+    const allowedCategories = ['予定', '仮予定', '業務', '出張', '休暇', '社内'];
+    const category = allowedCategories.includes(payload.category) ? payload.category : '予定';
+    const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
+    const sheet = getDb_().getSheetByName(DB.sheets.schedule);
+
+    let id = String(payload.id || '').trim();
+    let rowNumber = 0;
+    let createdBy = employee.name;
+    let createdAt = nowText;
+    let source = 'FM WORKS';
+
+    if (id) {
+      const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
+        .createTextFinder(id).matchEntireCell(true).findNext();
+      if (!found) throw new Error('編集対象の予定が見つかりません。');
+      rowNumber = found.getRow();
+      const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
+      createdBy = old[13] || employee.name;
+      createdAt = old[14] || nowText;
+      source = old[16] || 'FM WORKS';
+    } else {
+      id = createId_('S');
+      rowNumber = Math.max(2, sheet.getLastRow() + 1);
+    }
+
+    const row = [
+      id,
+      date,
+      start,
+      end,
+      allDay,
+      employeeIds.join(','),
+      names.join('、'),
+      title,
+      category,
+      String(payload.location || '').trim(),
+      String(payload.detail || '').trim(),
+      '社内',
+      '有効',
+      createdBy,
+      createdAt,
+      nowText,
+      source,
+      category
+    ];
+
+    sheet.getRange(rowNumber, 1, 1, 18).setValues([row]);
+    appendAudit_({
+      employeeId: employee.employeeId,
+      employeeName: employee.name,
+      operation: payload.id ? '予定更新' : '予定登録',
+      target: '予定',
+      targetId: id,
+      before: '',
+      after: date + ' ' + title,
+      source: 'WEB',
+      result: 'SUCCESS',
+      note: names.join('、')
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, id: id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteSchedule(scheduleId) {
+  const id = String(scheduleId || '').trim();
+  if (!id) throw new Error('予定IDがありません。');
+  const employee = getEmployee_(DB.defaultEmployeeId);
+  const sheet = getDb_().getSheetByName(DB.sheets.schedule);
+  const found = sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), 1)
+    .createTextFinder(id).matchEntireCell(true).findNext();
+  if (!found) throw new Error('削除対象の予定が見つかりません。');
+
+  const row = found.getRow();
+  const title = sheet.getRange(row, 8).getDisplayValue();
+  sheet.getRange(row, 13).setValue('削除');
+  sheet.getRange(row, 16).setValue(Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss'));
+
+  appendAudit_({
+    employeeId: employee.employeeId,
+    employeeName: employee.name,
+    operation: '予定削除',
+    target: '予定',
+    targetId: id,
+    before: title,
+    after: '削除',
+    source: 'WEB',
+    result: 'SUCCESS',
+    note: ''
+  });
+  return { ok: true };
+}
+
+function getCompanyCalendar(year) {
+  const y = Number(year || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy'));
+  if (!Number.isInteger(y) || y < 2024 || y > 2100) throw new Error('年の指定が不正です。');
+  const start = y + '-01-01';
+  const end = y + '-12-31';
+  const days = getCompanyCalendarRange_(start, end);
+  return {
+    year: y,
+    days: days,
+    workdays: days.filter(d => d.working).length,
+    daysOff: days.filter(d => !d.working).length,
+    adjustedWorkdays: days.filter(d => d.type === '調整出勤日').length,
+    companyHolidays: days.filter(d => d.type === '会社休日').length
+  };
+}
+
+function saveCompanyCalendarDay(payload) {
+  payload = payload || {};
+  const employee = getEmployee_(DB.defaultEmployeeId);
+  if (employee.role !== 'ADMIN') throw new Error('会社カレンダーの編集権限がありません。');
+
+  const date = normalizeDate_(payload.date);
+  const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
+  const type = allowedTypes.includes(payload.type) ? payload.type : '通常勤務';
+  const working = type === '通常勤務' || type === '調整出勤日';
+  const name = String(payload.name || '').trim();
+  const start = working ? normalizeTime_(payload.start || '09:00') : '';
+  const end = working ? normalizeTime_(payload.end || '18:00') : '';
+  const breakMinutes = working ? Math.max(0, Number(payload.breakMinutes || 60)) : '';
+  const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
+
+  const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
+  const lastRow = sheet.getLastRow();
+  let rowNumber = 0;
+  if (lastRow >= 2) {
+    const found = sheet.getRange(2, 1, lastRow - 1, 1).createTextFinder(date).matchEntireCell(true).findNext();
+    if (found) rowNumber = found.getRow();
+  }
+  if (!rowNumber) rowNumber = Math.max(2, lastRow + 1);
+
+  sheet.getRange(rowNumber, 1, 1, 10).setValues([[
+    date, type, name, start, end, breakMinutes, working,
+    'FM WORKS編集', employee.name, nowText
+  ]]);
+
+  appendAudit_({
+    employeeId: employee.employeeId,
+    employeeName: employee.name,
+    operation: '会社カレンダー更新',
+    target: '会社カレンダー',
+    targetId: date,
+    before: '',
+    after: type + (name ? ' / ' + name : ''),
+    source: 'WEB',
+    result: 'SUCCESS',
+    note: ''
+  });
+  SpreadsheetApp.flush();
+  return { ok: true };
+}
+
+function getCompanyCalendarRange_(start, end) {
+  const sheet = getDb_().getSheetByName(DB.sheets.companyCalendar);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  return sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues()
+    .filter(r => r[0] && r[0] >= start && r[0] <= end)
+    .map(r => ({
+      date: r[0],
+      type: r[1] || '',
+      name: r[2] || '',
+      start: r[3] || '',
+      end: r[4] || '',
+      breakMinutes: Number(r[5] || 0),
+      working: String(r[6]).toUpperCase() === 'TRUE',
+      note: r[7] || ''
+    }))
+    .sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function getEmployees_() {
+  const sheet = getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  return sheet.getRange(2, 1, lastRow - 1, 13).getDisplayValues()
+    .filter(r => r[0] && r[6] === '在籍')
+    .map(r => ({
+      employeeId: r[0],
+      name: r[1],
+      displayName: r[2] || r[1],
+      shortName: String(r[1] || '').replace(/\s+/g, '').replace('達哉','').replace('弘典','') || r[2] || r[0],
+      department: r[3] || '',
+      title: r[4] || '',
+      role: r[5] || 'USER'
+    }));
+}
+
+function normalizeDate_(value) {
+  const s = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('日付は YYYY-MM-DD 形式で指定してください。');
+  const parts = s.split('-').map(Number);
+  const d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+  if (d.getUTCFullYear() !== parts[0] || d.getUTCMonth() !== parts[1]-1 || d.getUTCDate() !== parts[2]) {
+    throw new Error('存在しない日付です。');
+  }
+  return s;
+}
+
+function normalizeTime_(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) throw new Error('時刻は HH:MM 形式で指定してください。');
+  const h = Number(m[1]), min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) throw new Error('時刻が不正です。');
+  return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
 }
 
 function healthCheck() {
