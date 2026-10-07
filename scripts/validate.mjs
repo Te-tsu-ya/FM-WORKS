@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -17,7 +17,7 @@ for (const file of required) {
 }
 const app = fs.readFileSync(path.join(root,'src/App.html'),'utf8');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
-for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','管理']) {
+for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
 }
 try {
@@ -30,7 +30,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -250,7 +250,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;
@@ -352,7 +352,7 @@ if (!monthlyCodeAll.includes('function createMonthlyExport(sessionToken') ||
 }
 
 const publicAuthWhitelist = new Set(['getPublicAuthConfig','initializeFirstAdmin','login','logout','requestPinHelp']);
-for (const file of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs']) {
+for (const file of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Docs.gs']) {
   const source = fs.readFileSync(path.join(root,'src',file),'utf8');
   const matches = [...source.matchAll(/^function\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/gm)];
   for (let i = 0; i < matches.length; i++) {
@@ -380,6 +380,7 @@ for (const projectMarker of [
 for (const integrationMarker of [
   "projects: 'プロジェクト'",
   "monthlyClose: '月次締め'",
+  "monthlyReview: '月次確認'",
   'projects: getProjectsInternal_(false)'
 ]) {
   if (!serverCode.includes(integrationMarker)) {
@@ -463,6 +464,77 @@ for (const [label, source] of [
     console.error(`Spreadsheet text sanitization missing from ${label}`);
     failed = true;
   }
+}
+
+const docsCode = fs.readFileSync(path.join(root,'src/Docs.gs'),'utf8');
+const requirementsDoc = fs.readFileSync(path.join(root,'docs/REQUIREMENTS.md'),'utf8');
+const technicalDoc = fs.readFileSync(path.join(root,'docs/TECHNICAL_DESIGN.md'),'utf8');
+const appVersion = (serverCode.match(/version:\s*'([^']+)'/) || [,''])[1];
+
+for (const [label, doc] of [['要件定義書',requirementsDoc],['技術設計書',technicalDoc]]) {
+  if (!doc.includes('**文書版:** ' + appVersion)) {
+    console.error(label + ' version must match APP.version ' + appVersion);
+    failed = true;
+  }
+}
+
+for (const marker of [
+  "monthlyReview: '月次確認'",
+  'getMonthlyReviewPrompt_(employee.employeeId)'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('Monthly review integration missing: ' + marker);
+    failed = true;
+  }
+}
+
+for (const marker of [
+  'function confirmMonthlyReview(sessionToken',
+  'function getMonthlyReviewPrompt_(',
+  'function getLatestMonthlyDataUpdate_(',
+  'reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)'
+]) {
+  if (!monthlyCode.includes(marker)) {
+    console.error('Monthly review implementation missing: ' + marker);
+    failed = true;
+  }
+}
+
+for (const marker of [
+  'function globalActionBanners()',
+  'function monthlyCalendarView(',
+  'function confirmMonthlyReviewFromPage()',
+  'function loadSystemDocument(',
+  '要件定義書',
+  '技術設計書',
+  'function toggleTheme()'
+]) {
+  if (!app.includes(marker)) {
+    console.error('Required v0.8 UI missing: ' + marker);
+    failed = true;
+  }
+}
+
+for (const marker of [
+  'html[data-theme="dark"]',
+  '.global-caution',
+  '.monthly-calendar',
+  '.settings-tabs',
+  'cursor:pointer'
+]) {
+  if (!styles.includes(marker)) {
+    console.error('Required v0.8 style missing: ' + marker);
+    failed = true;
+  }
+}
+
+if (!docsCode.includes('requireAdminSession_(sessionToken)')) {
+  console.error('Design documents must be ADMIN-only.');
+  failed = true;
+}
+if (!requirementsDoc.includes('文書同期ルール') || !technicalDoc.includes('文書同期CI')) {
+  console.error('Design document synchronization policy missing.');
+  failed = true;
 }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
