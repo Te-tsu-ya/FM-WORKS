@@ -27,6 +27,12 @@ function submitRequest(sessionToken, payload) {
     const startDate = normalizeDate_(payload.startDate);
     const endDate = normalizeDate_(payload.endDate || startDate);
     if (startDate > endDate) throw new Error('対象期間を確認してください。');
+    if (['午前半休','午後半休','打刻修正'].includes(type) && startDate !== endDate) {
+      throw new Error(type + 'は1日単位で申請してください。');
+    }
+    if (['有給','午前半休','午後半休'].includes(type)) {
+      assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
+    }
     const reason = String(payload.reason || '').trim().slice(0, 600);
     if (!reason) throw new Error('申請理由を入力してください。');
 
@@ -109,6 +115,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     let leaveEmployee = null;
     if (approve && ['有給','午前半休','午後半休'].includes(r[4])) {
       leaveEmployee = getEmployee_(r[2]);
+      assertNoLeaveConflict_(r[2], r[4], r[5], r[6], r[0], true);
       leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
       if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
       if (leaveEmployee.leaveBalance < leaveDaysToConsume) {
@@ -155,6 +162,29 @@ function getPunchesForDate(sessionToken, date) {
       workLocation:r[6]||'出社', source:r[7]||''
     }));
 }
+function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeRequestId, approvedOnly) {
+  const leaveTypes = ['有給','午前半休','午後半休'];
+  if (!leaveTypes.includes(type)) return;
+
+  const sheet = getDb_().getSheetByName('申請');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 14).getDisplayValues();
+  for (const r of rows) {
+    if (!r[0] || r[0] === excludeRequestId || r[2] !== employeeId || !leaveTypes.includes(r[4])) continue;
+    if (approvedOnly ? r[9] !== '承認済' : !['承認待ち','承認済'].includes(r[9])) continue;
+    if (r[6] < startDate || r[5] > endDate) continue;
+
+    if (type === '有給' || r[4] === '有給') {
+      throw new Error('同じ期間に有給・半休の申請がすでに存在します。');
+    }
+    if (type === r[4] && startDate === r[5]) {
+      throw new Error('同じ日の' + type + '申請がすでに存在します。');
+    }
+  }
+}
+
 function calculateLeaveDaysForRequest_(type, startDate, endDate) {
   if (type === '午前半休' || type === '午後半休') {
     const days = getCompanyCalendarRange_(startDate, startDate);
