@@ -283,9 +283,37 @@ if (!requestCode.includes("'1/4日有給'") || !employeeCode.includes('Math.roun
   console.error('Quarter-day paid leave support is incomplete.');
   failed = true;
 }
-for (const forbiddenRealData of ['会津屋','ラクッショ','キキラク','CoDoNa','坂井','金子','五十嵐']) {
-  if (app.includes(forbiddenRealData)) {
-    console.error(`Real demo-identifying term remains in UI source: ${forbiddenRealData}`);
+const demoIdentitySources = [
+  ['UI', app],
+  ['README', fs.readFileSync(path.join(root,'README.md'),'utf8')],
+  ['SETUP', fs.readFileSync(path.join(root,'docs/SETUP.md'),'utf8')],
+  ['Code.gs', fs.readFileSync(path.join(root,'src/Code.gs'),'utf8')],
+  ['Auth.gs', authCode],
+  ['Worklog.gs', worklogCode],
+  ['Requests.gs', requestCode],
+  ['Employees.gs', employeeCode],
+  ['Projects.gs', projectsCode]
+];
+const forbiddenRealDemoTerms = [
+  '会津屋','ラクッショ','キキラク','CoDoNa',
+  '坂井','池田','金子','五十嵐',
+  '丸栄','MARUEI','INSIGHT LAB','イデアル','旅人屋','まいぷれ'
+];
+for (const forbiddenRealData of forbiddenRealDemoTerms) {
+  for (const [label, source] of demoIdentitySources) {
+    if (source.includes(forbiddenRealData)) {
+      console.error(`Real demo-identifying term remains in ${label}: ${forbiddenRealData}`);
+      failed = true;
+    }
+  }
+}
+for (const requiredFictionalDemoTerm of [
+  '青木 悠真','森川 彩乃','神谷 直人','小林 美月','中村 健太',
+  'Project Atlas','Project Nova','Project Orion','Project Bloom','Project Vega','Project Aurora','Internal Works'
+]) {
+  const readme = demoIdentitySources.find(([label]) => label === 'README')[1];
+  if (!readme.includes(requiredFictionalDemoTerm)) {
+    console.error(`Fictional demo identity/project documentation missing: ${requiredFictionalDemoTerm}`);
     failed = true;
   }
 }
