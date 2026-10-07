@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.0  
+**文書版:** 0.8.1  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.0`
+`APP.version = 0.8.1`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -216,6 +216,8 @@ state.monthly = {
 
 クリックで日詳細モーダル。
 
+`monthlyReviewPanel(d)` は本人表示とADMIN表示を分ける。本人には確認完了操作を表示し、ADMINが他社員を表示している場合は本人確認済み / 未確認 / 再確認を読み取り専用で表示する。代理確認ボタンは出さない。
+
 ### 10.2 1画面レイアウト
 
 `renderPage` は月次・設定で `.content.one-screen` を付ける。
@@ -238,11 +240,13 @@ state.monthly = {
 - requirements
 - technical
 
+`projects` は `projectAdminSection()`、`openProjectModal()`、`saveProjectFromModal()` を使用する。設定画面の再構成時もこの3関数を削除しないこと。
+
 `settingsTabs()` と左ナビのサブメニューを同期。
 
 ### 11.1 文書
 
-`loadSystemDocument(type)` でADMIN APIを呼ぶ。
+`loadSystemDocument(type, options)` でADMIN APIを呼ぶ。通常はクライアントキャッシュを利用し、`options.force === true` の場合はキャッシュを無視して再取得する。文書ヘッダーの「再読込」は必ず `force:true` を指定する。
 
 `Docs.gs`:
 
@@ -477,6 +481,9 @@ Apps Scriptの原則:
 - 年月
 - 前月算出
 - 月次確認期限トーン
+- 設定画面のプロジェクト管理関数の存在
+- 文書再読込のforce指定
+- ADMINによる他社員の月次確認状態表示
 
 `scripts/validate.mjs`:
 
