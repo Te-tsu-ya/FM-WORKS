@@ -1067,7 +1067,7 @@ Performance Budget超過は処理失敗にせずJSON logで観測する。
 - `prototypeModeEnabledForEnvironment_`: PRODUCTIONなら必ずfalseを返す。
 - `isPrototypeMode_`: 実際に共通PIN認証を許可してよいかを返す。
 
-`getPublicAuthConfig` は共通PIN値を返さない。クライアントもPIN値を表示しない。
+`getPublicAuthConfig` は共通PIN値を返さない。クライアントもPIN値を表示しない。ログイン入力欄にも共通PINを自動入力しない。
 
 `Maintenance.getProductionReadiness_` は `isPrototypeConfigured_` を使うため、PRODUCTIONで共通PINが実効無効になっていても、設定 `PROTOTYPE_MODE=TRUE` が残る限りREADYを拒否する。これにより「安全にログインできること」と「本番設定が正しいこと」を別々に保証する。
 
