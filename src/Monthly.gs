@@ -35,7 +35,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     const standard=company.working&&company.start&&company.end ? Math.max(0,timeRangeMinutes_(company.start,company.end)-Number(company.breakMinutes||0)) : 0;
     const overtime=company.working?Math.max(0,minutes-standard):0;
     const holiday=company.working?0:minutes;
-    const issue=rows.length>0&&(!clockIn||!clockOut);
+    const issue=rows.length>0&&(!clockIn||(!clockOut&&date!==systemToday));
     if(minutes>0)workDays++;
     if(issue)missingPunchDays++;
     totalMinutes+=minutes;overtimeMinutes+=overtime;holidayMinutes+=holiday;
