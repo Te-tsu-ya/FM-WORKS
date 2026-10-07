@@ -307,12 +307,12 @@ for (const forbiddenRealData of forbiddenRealDemoTerms) {
     }
   }
 }
+const readmeDemoSource = demoIdentitySources.find(([label]) => label === 'README')[1];
 for (const requiredFictionalDemoTerm of [
   '青木 悠真','森川 彩乃','神谷 直人','小林 美月','中村 健太',
   'Project Atlas','Project Nova','Project Orion','Project Bloom','Project Vega','Project Aurora','Internal Works'
 ]) {
-  const readme = demoIdentitySources.find(([label]) => label === 'README')[1];
-  if (!readme.includes(requiredFictionalDemoTerm)) {
+  if (!readmeDemoSource.includes(requiredFictionalDemoTerm)) {
     console.error(`Fictional demo identity/project documentation missing: ${requiredFictionalDemoTerm}`);
     failed = true;
   }
