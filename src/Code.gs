@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.7.0',
+  version: '0.8.0',
   locale: 'ja-JP'
 });
 
@@ -14,7 +14,8 @@ const DB = Object.freeze({
     companyCalendar: '会社カレンダー',
     audit: '監査ログ',
     projects: 'プロジェクト',
-    monthlyClose: '月次締め'
+    monthlyClose: '月次締め',
+    monthlyReview: '月次確認'
   }
 });
 
@@ -77,6 +78,7 @@ function getInitialData(sessionToken) {
     attendance: attendance,
     todaySchedule: scheduleBundle.events.slice(0, 8),
     companyToday: companyToday,
+    monthlyReview: getMonthlyReviewPrompt_(employee.employeeId),
     month: {
       workHours: formatMinutes_(monthSummary.totals.totalMinutes),
       overtime: formatMinutes_(monthSummary.totals.overtimeMinutes),
