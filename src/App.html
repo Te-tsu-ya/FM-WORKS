@@ -1,9 +1,9 @@
 <script>
-const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']];
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','設定','i-gear']];
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
-const PAGE_CACHE_TTL={worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+const PAGE_CACHE_TTL={worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdmin:120000,maintenance:60000,documents:600000};
 const pageCache={};
 const pendingLoads=new Set();
 function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
@@ -30,6 +30,29 @@ function startMenuPrefetch(){
   }
 }
 
+function getTheme(){return document.documentElement.dataset.theme==='dark'?'dark':'light'}
+function updateThemeButton(){
+  const b=document.getElementById('themeToggleButton');if(!b)return;
+  const dark=getTheme()==='dark';
+  b.setAttribute('aria-label',dark?'ライトモードに切り替え':'ダークモードに切り替え');
+  b.title=dark?'ライトモード':'ダークモード';
+}
+function setTheme(theme,animate=true){
+  const next=theme==='dark'?'dark':'light';
+  const apply=()=>{document.documentElement.dataset.theme=next;document.documentElement.style.colorScheme=next;localStorage.setItem('fmworks.theme',next);updateThemeButton()};
+  if(animate&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.documentElement.classList.remove('theme-to-light','theme-to-dark');
+    document.documentElement.classList.add(next==='dark'?'theme-to-dark':'theme-to-light','theme-changing');
+    if(document.startViewTransition)document.startViewTransition(apply);else apply();
+    setTimeout(()=>document.documentElement.classList.remove('theme-changing','theme-to-light','theme-to-dark'),720);
+  }else apply();
+}
+function toggleTheme(){setTheme(getTheme()==='dark'?'light':'dark',true)}
+function initTheme(){
+  const saved=localStorage.getItem('fmworks.theme');
+  const system=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  setTheme(saved||system,false);updateThemeButton();
+}
 function svg(id){return `<svg aria-hidden='true'><use href='#${id}'/></svg>`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
 function card(title,body,cls=''){return `<section class='card ${cls}'><h3>${title}</h3>${body}</section>`}
@@ -146,25 +169,58 @@ function visibleNav(){
 }
 function renderNav(){
   const nav=visibleNav();
-  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>`<button class='nav-button ${state.page===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`).join('');
+  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>{
+    const main=`<button class='nav-button ${state.page===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`;
+    if(id!=='admin')return main;
+    return `<div class='nav-group'>${main}<div class='nav-submenu'>
+      <button class='${state.page==='admin'&&state.adminTab==='operation'?'active':''}' data-admin-tab='operation'>運用設定</button>
+      <button class='${state.page==='admin'&&state.adminTab==='requirements'?'active':''}' data-admin-tab='requirements'>要件定義書</button>
+      <button class='${state.page==='admin'&&state.adminTab==='technical'?'active':''}' data-admin-tab='technical'>技術設計書</button>
+    </div></div>`;
+  }).join('');
   const allowedIds=new Set(nav.map(x=>x[0]));
   const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
   const mobile=document.getElementById('mobileNav');
   mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
   mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
   document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>navigate(b.dataset.route));
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.adminTab;navigate('admin')});
 }
 function navigate(page){
   closeMobileDrawer();
   if(page==='admin'&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
-  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
+  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage(true);window.scrollTo({top:0,behavior:'auto'});
   if(page==='schedule')loadSchedule();
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs();
   if(page==='requests')loadRequests();
   if(page==='monthly')loadMonthly();
   if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin();
-  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({withMaintenance:true});
+  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
+    if(['auth','projects'].includes(state.adminTab))loadAuthAdmin();
+    if(state.adminTab==='operation'){loadAuthAdmin();loadMaintenance();}
+    if(state.adminTab==='requirements')loadSystemDocument('requirements');
+    if(state.adminTab==='technical')loadSystemDocument('technical');
+  }
+}
+
+function globalActionBanners(){
+  const r=state.data&&state.data.monthlyReview;
+  if(!r||!r.needsAttention)return '';
+  const danger=r.urgency==='danger';
+  return `<section class='global-caution ${danger?'danger':'warning'}' role='status'>
+    <div class='caution-icon'>!</div>
+    <div><strong>${escapeHtml(r.targetMonth)}の勤怠確認が${r.stale?'再度必要です':'未完了です'}</strong><p>${escapeHtml(r.message)} 月初の確認が終わるまで表示されます。</p></div>
+    <button class='primary-button compact' onclick='openPreviousMonthReview()'>先月の勤怠を確認</button>
+  </section>`;
+}
+function openPreviousMonthReview(){
+  const r=state.data&&state.data.monthlyReview;if(!r)return;
+  state.monthly.yearMonth=r.targetMonth;
+  state.monthly.employeeId=state.data.user.employeeId;
+  state.monthly.view='calendar';
+  navigate('monthly');
+  loadMonthly({force:true});
 }
 
 function homePage(){const d=state.data,a=d.attendance;const sched=(d.todaySchedule||[]);const company=d.companyToday;return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}<div class='hero'><div class='live-chip'>● 実データ接続済み</div><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>${company?`${escapeHtml(company.type)}${company.name?' / '+escapeHtml(company.name):''}`:'会社カレンダー未登録'} ・ ${fmtDate(d.today)}</p></div><div class='grid cols-3'>${card('現在の勤怠状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' 出勤':'未出勤'}</div><p class='muted'>実働 ${a.worked} / ${a.workLocation}</p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('今日の予定',sched.length?list(sched.map(e=>({title:`${e.allDay?'終日':e.start||'--:--'} ${escapeHtml(e.title)}`,sub:`${escapeHtml(e.employeeNames.join('、'))}${e.location?' / '+escapeHtml(e.location):''}`,color:categoryColor(e.category)}))):`<p class='muted'>今日の予定はありません。</p><button class='secondary-button' onclick="navigate('schedule')">予定表を開く</button>`)}${card('やること',d.tasks.map(x=>`<div class='list-item'><span></span><strong>${x.label}</strong><span class='badge ${x.tone==='danger'?'danger':x.tone==='warning'?'warning':''}'>${x.status}</span></div>`).join(''))}</div><div class='grid cols-3 section-gap'>${metric('勤務時間',d.month.workHours,'tone-green')}${metric('残業時間',d.month.overtime,'')}${metric('有給残',d.month.leaveBalance,'tone-orange')}</div><div class='grid cols-2 section-gap'>${card('今日の打刻履歴',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>本日の打刻はまだありません。</p>')}${card('共有予定表',`<p class='muted'>旧予定表をFM WORKSへ移行済み。月・週・日・一覧で確認できます。</p><button class='primary-button' onclick="navigate('schedule')">予定表を開く</button>`)}</div>`}
@@ -480,10 +536,10 @@ function requestBalanceSummary(){
   if(!x.leaveBalanceConfigured)return `<div class='request-balance-strip warning'><span>有給残日数が未設定です</span><b>管理者の設定が必要</b></div>`;
   return `<div class='request-balance-strip'><span>現在 ${formatLeaveDays(x.leaveBalance)}</span><span>承認待ち ${formatLeaveDays(x.pendingLeaveDays||0)}</span><b>申請可能 ${formatLeaveDays(x.availableLeaveDays)}</b></div>`;
 }
-function openRequestModal(type='有給'){
+function openRequestModal(type='有給',presetDate=''){
   const meta=REQUEST_UI[type]?REQUEST_UI[type]:REQUEST_UI['有給'];
   type=REQUEST_UI[type]?type:'有給';
-  const r=ensureModal(),today=state.data.today;
+  const r=ensureModal(),today=presetDate||state.data.today;
   const isPaid=['有給','午前半休','午後半休','1/4日有給'].includes(type);
   const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
   const reasonChips=requestReasonSuggestions(type).map(x=>`<button type='button' onclick="setRequestReason('${escapeHtml(x)}')">${escapeHtml(x)}</button>`).join('');
@@ -966,9 +1022,14 @@ function saveSupportSettingsFromAdmin(){
     .saveAuthSupportSettings(state.sessionToken,payload);
 }
 
-function renderPage(){
+function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
-  document.getElementById('content').innerHTML=fn();
+  const content=document.getElementById('content');
+  const update=()=>{
+    content.classList.toggle('one-screen',['monthly','admin'].includes(state.page));
+    content.innerHTML=globalActionBanners()+fn();
+  };
+  if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();
 }
 
 function setLoading(){
@@ -1086,6 +1147,8 @@ function loadAuthenticatedApp(mustChangePin){
     document.getElementById('app').hidden=false;
     setProfileUi();
     initTopbarInteractions();
+    initTheme();
+    const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
     renderNav();
     renderPage();
     loadNotifications();
@@ -1100,7 +1163,12 @@ function loadAuthenticatedApp(mustChangePin){
     if(state.page==='requests')loadRequests();
     if(state.page==='monthly')loadMonthly();
     if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin();
-    if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({withMaintenance:true});
+    if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){
+      if(['auth','projects'].includes(state.adminTab))loadAuthAdmin();
+      if(state.adminTab==='operation'){loadAuthAdmin();loadMaintenance();}
+      if(state.adminTab==='requirements')loadSystemDocument('requirements');
+      if(state.adminTab==='technical')loadSystemDocument('technical');
+    }
     startMenuPrefetch();
     if(mustChangePin)setTimeout(()=>openChangePinModal(true),0);
   }).withFailureHandler(err=>{clearLocalSession();showLogin(sessionErrorMessage(err).includes('SESSION')?'セッションの有効期限が切れました。':'ログイン状態を確認できませんでした。')}).getInitialData(state.sessionToken);
@@ -1222,7 +1290,12 @@ function openNotificationItem(index){
   const menu=document.getElementById('notificationMenu');
   const item=menu&&menu._items&&menu._items[index];
   closeNotificationMenu();
-  if(item)navigate(item.route||'home');
+  if(item){
+    if(item.route==='monthly'&&item.yearMonth){
+      state.monthly.yearMonth=item.yearMonth;state.monthly.employeeId=state.data.user.employeeId;state.monthly.view='calendar';
+    }
+    navigate(item.route||'home');
+  }
 }
 
 function toggleProfileMenu(){
@@ -1283,6 +1356,8 @@ function submitPinHelp(){
 }
 
 function bootstrap(){
+  initTheme();
+  const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
   state.sessionToken=getStoredSessionToken();
   const button=document.getElementById('profileButton');
   if(button)button.addEventListener('click',e=>{e.stopPropagation();toggleProfileMenu()});
