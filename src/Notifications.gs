@@ -3,6 +3,18 @@ function getNotifications(sessionToken) {
   const employee = session.employee;
   const items = [];
 
+  const monthlyReview=getMonthlyReviewPrompt_(employee.employeeId);
+  if(monthlyReview.needsAttention){
+    items.push({
+      type:'勤怠確認',
+      title:monthlyReview.targetMonth+'の勤怠確認',
+      subtitle:monthlyReview.stale?'確認後に変更があります。再確認してください。':'先月の勤怠に誤りがないか確認してください。',
+      route:'monthly',
+      yearMonth:monthlyReview.targetMonth,
+      priority:monthlyReview.urgency
+    });
+  }
+
   const requestScope = employee.role === 'ADMIN' ? 'ALL' : 'SELF';
   getRequests(sessionToken, { scope: requestScope })
     .filter(r => employee.role === 'ADMIN' ? r.status === '承認待ち' : ['承認待ち','差戻し'].includes(r.status))
