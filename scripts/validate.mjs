@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Index.html','src/Styles.html','src/App.html',
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Index.html','src/Styles.html','src/App.html',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
 ];
 let failed = false;
@@ -29,7 +29,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -91,6 +91,18 @@ for (const dataMarker of ['loadWorklogs','loadRequests','loadMonthly','saveEmplo
     console.error(`Live module UI missing: ${dataMarker}`);
     failed = true;
   }
+}
+for (const uiMarker of ['performGlobalSearch','toggleNotificationMenu','renderLogin','openPinHelpModal']) {
+  if (!app.includes(uiMarker)) {
+    console.error(`Required interactive UI missing: ${uiMarker}`);
+    failed = true;
+  }
+}
+const searchCode = fs.readFileSync(path.join(root,'src/Search.gs'),'utf8');
+const notificationCode = fs.readFileSync(path.join(root,'src/Notifications.gs'),'utf8');
+if (!searchCode.includes('requireSession_(') || !notificationCode.includes('requireSession_(')) {
+  console.error('Search/notification APIs must require an authenticated session');
+  failed = true;
 }
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
 if (manifest.runtimeVersion !== 'V8') { console.error('Apps Script runtime must be V8'); failed = true; }
