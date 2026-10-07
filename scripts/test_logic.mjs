@@ -48,7 +48,8 @@ globalThis.__fmTest = {
   calculateBreakMinutesForRows_,
   normalizeYearMonth_,
   previousYearMonth_,
-  monthlyReviewUrgency_
+  monthlyReviewUrgency_,
+  yearMonthsBetween_
 };
 `, context);
 
@@ -124,6 +125,11 @@ expectThrows('invalid year-month rejected', () => api.normalizeYearMonth_('2026-
 expect('previous month crosses year boundary', api.previousYearMonth_('2026-01-10') === '2025-12');
 expect('monthly review is warning before due day', api.monthlyReviewUrgency_(3,5) === 'warning');
 expect('monthly review becomes danger after due day', api.monthlyReviewUrgency_(6,5) === 'danger');
+expect(
+  'month range crosses year boundary in order',
+  JSON.stringify(Array.from(api.yearMonthsBetween_('2025-11','2026-02'))) === JSON.stringify(['2025-11','2025-12','2026-01','2026-02'])
+);
+expect('empty month range rejected as empty list', api.yearMonthsBetween_('2026-03','2026-02').length === 0);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
