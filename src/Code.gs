@@ -186,7 +186,7 @@ function getAttendanceState_(employeeId) {
   }
 
   const rows = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues()
-    .filter(r => r[1] === employeeId && r[3] === today)
+    .filter(r => r[1] === employeeId && r[3] === today && String(r[8]).toUpperCase() !== 'TRUE')
     .map(r => ({
       id: r[0],
       action: r[4],
