@@ -1,4 +1,4 @@
-const REQUEST_TYPES = Object.freeze(['有給','午前半休','午後半休','欠勤','打刻修正','在宅勤務','残業','休日出勤']);
+const REQUEST_TYPES = Object.freeze(['有給','午前半休','午後半休','1/4日有給','欠勤','打刻修正','在宅勤務','残業','休日出勤']);
 
 function getRequests(sessionToken, params) {
   const session = requireSession_(sessionToken);
@@ -27,10 +27,10 @@ function submitRequest(sessionToken, payload) {
     const startDate = normalizeDate_(payload.startDate);
     const endDate = normalizeDate_(payload.endDate || startDate);
     if (startDate > endDate) throw new Error('対象期間を確認してください。');
-    if (['午前半休','午後半休','打刻修正'].includes(type) && startDate !== endDate) {
+    if (['午前半休','午後半休','1/4日有給','打刻修正'].includes(type) && startDate !== endDate) {
       throw new Error(type + 'は1日単位で申請してください。');
     }
-    if (['有給','午前半休','午後半休','欠勤'].includes(type)) {
+    if (['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(type)) {
       assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
     }
     const reason = String(payload.reason || '').trim().slice(0, 600);
@@ -113,7 +113,7 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     const nowText = toTimestamp_(new Date());
     let leaveDaysToConsume = 0;
     let leaveEmployee = null;
-    if (approve && ['有給','午前半休','午後半休','欠勤'].includes(r[4])) {
+    if (approve && ['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(r[4])) {
       assertNoLeaveConflict_(r[2], r[4], r[5], r[6], r[0], true);
       if (r[4] !== '欠勤') {
         leaveEmployee = getEmployee_(r[2]);
@@ -168,7 +168,7 @@ function getPunchesForDate(sessionToken, date) {
     }));
 }
 function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeRequestId, approvedOnly) {
-  const dayOffTypes = ['有給','午前半休','午後半休','欠勤'];
+  const dayOffTypes = ['有給','午前半休','午後半休','1/4日有給','欠勤'];
   if (!dayOffTypes.includes(type)) return;
 
   const sheet = getDb_().getSheetByName('申請');
@@ -193,10 +193,11 @@ function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeReq
 }
 
 function calculateLeaveDaysForRequest_(type, startDate, endDate) {
-  if (type === '午前半休' || type === '午後半休') {
+  if (type === '午前半休' || type === '午後半休' || type === '1/4日有給') {
     const days = getCompanyCalendarRange_(startDate, startDate);
     if (days.length !== 1) throw new Error('対象日の会社カレンダーが未登録です。');
-    return days[0].working ? 0.5 : 0;
+    if (!days[0].working) return 0;
+    return type === '1/4日有給' ? 0.25 : 0.5;
   }
   const expected = inclusiveDateCount_(startDate, endDate);
   const days = getCompanyCalendarRange_(startDate, endDate);
@@ -205,7 +206,6 @@ function calculateLeaveDaysForRequest_(type, startDate, endDate) {
   }
   return days.filter(d => d.working).length;
 }
-
 function inclusiveDateCount_(startDate, endDate) {
   const a = startDate.split('-').map(Number);
   const b = endDate.split('-').map(Number);
