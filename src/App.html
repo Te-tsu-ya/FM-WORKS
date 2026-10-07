@@ -531,7 +531,10 @@ function setLoading(){
 function renderLogin(message=''){
   const cfg=state.publicConfig||{needsSetup:false,pinLength:6,prototypeMode:false,prototypePin:'',support:{name:'FM WORKS管理者',email:'',phone:'',note:''}};
   const support=cfg.support||{};
-  const remembered=localStorage.getItem('fmworks.employeeId')||(cfg.prototypeMode?'FM0001':(cfg.needsSetup?'FM0001':''));
+  const storedEmployeeId=localStorage.getItem('fmworks.employeeId')||'';
+  const remembered=cfg.prototypeMode
+    ? (/^FM000[1-5]$/.test(storedEmployeeId)?storedEmployeeId:'FM0001')
+    : (storedEmployeeId||(cfg.needsSetup?'FM0001':''));
   const heading=cfg.prototypeMode?'試作版ログイン':(cfg.needsSetup?'初期管理者設定':'FM WORKSへログイン');
   const intro=cfg.prototypeMode?`試作版の共通PINは <strong>${escapeHtml(cfg.prototypePin||'000000')}</strong> です。`:(cfg.needsSetup?"初回のみ、管理者の社員番号と新しいPINを設定してください。設定後は通常のログイン画面になります。":"");
   const shell=document.getElementById('loginShell');
