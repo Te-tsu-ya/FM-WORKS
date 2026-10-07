@@ -1,0 +1,37 @@
+name: Deploy Apps Script
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate repository
+        run: node scripts/validate.mjs
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Restore clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASP_JSON: ${{ secrets.CLASP_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON" || (echo "CLASPRC_JSON is not configured" && exit 1)
+          test -n "$CLASP_JSON" || (echo "CLASP_JSON is not configured" && exit 1)
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          printf '%s' "$CLASP_JSON" > .clasp.json
+      - name: Push source to Apps Script
+        run: clasp push --force
+      - name: Update existing web app deployment
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: |
+          if [ -n "$DEPLOYMENT_ID" ]; then
+            clasp create-deployment --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
+          else
+            echo "DEPLOYMENT_ID is not configured; source was pushed but web app deployment was not updated."
+          fi
