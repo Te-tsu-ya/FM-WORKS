@@ -266,6 +266,13 @@ body.drawer-open{overflow:hidden}
 .readiness-row.ok{background:#f1fbf6;border-color:#d7f2e4}.readiness-row.ok>span{background:#dff6e9;color:#128758}
 .primary-button:disabled,.secondary-button:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
 @media(max-width:760px){.maintenance-detail>div{grid-template-columns:1fr;gap:4px}.maintenance-detail strong{text-align:left}}
+.monthly-close-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 16px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.monthly-close-banner>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.monthly-close-banner strong{font-size:13px}
+.monthly-close-banner small{color:var(--muted)}
+.monthly-close-banner.closed{background:#f4fbf7;border-color:#d8efe3}
+.monthly-close-banner.open{background:#fff9ef;border-color:#f4e3bd}
+@media(max-width:760px){.monthly-close-banner{align-items:flex-start;flex-direction:column}}
 </style>
 <style>
 .card-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
