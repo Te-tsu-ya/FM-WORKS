@@ -144,14 +144,13 @@ function approveRequest(sessionToken, requestId, decision, comment) {
 function getPunchesForDate(sessionToken, date) {
   const employee = requireSession_(sessionToken).employee;
   const targetDate = normalizeDate_(date);
-  const sheet = getDb_().getSheetByName(DB.sheets.punches);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  return sheet.getRange(2,1,lastRow-1,12).getDisplayValues()
-    .filter(r=>r[1]===employee.employeeId && r[3]===targetDate && String(r[8]).toUpperCase()!=='TRUE')
-    .map(r=>({id:r[0],action:r[4],timestamp:r[5],workLocation:r[6]}));
+  return getActivePunchRows_(employee.employeeId, targetDate, targetDate)
+    .sort((a,b)=>String(a[5]).localeCompare(String(b[5])))
+    .map(r=>({
+      id:r[0], action:r[4], timestamp:r[5], time:String(r[5]).slice(11,16),
+      workLocation:r[6]||'出社', source:r[7]||''
+    }));
 }
-
 function calculateLeaveDaysForRequest_(type, startDate, endDate) {
   if (type === '午前半休' || type === '午後半休') {
     const days = getCompanyCalendarRange_(startDate, startDate);
@@ -188,6 +187,7 @@ function applyApprovedPunchCorrection_(requestRow) {
   let correction;
   try { correction = JSON.parse(requestRow[7] || '{}'); }
   catch(e) { throw new Error('打刻修正申請の内容が読み取れません。'); }
+
   const employeeId = requestRow[2];
   const employeeName = requestRow[3];
   const date = requestRow[5];
@@ -196,23 +196,27 @@ function applyApprovedPunchCorrection_(requestRow) {
   if (!Object.values(PUNCH).includes(action) || !time) throw new Error('打刻修正内容が不正です。');
 
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
-  let originalLocation = correction.workLocation || '出社';
-  const originalId = String(correction.originalPunchId || '');
-  if (originalId && sheet.getLastRow() >= 2) {
-    const found = sheet.getRange(2,1,sheet.getLastRow()-1,1).createTextFinder(originalId).matchEntireCell(true).findNext();
-    if (found) {
-      const row = found.getRow();
-      const original = sheet.getRange(row,1,1,12).getDisplayValues()[0];
-      if (original[1] !== employeeId) throw new Error('修正対象の打刻が一致しません。');
-      originalLocation = original[6] || originalLocation;
-      sheet.getRange(row,9).setValue(true);
-    }
+  const activeRows = getActivePunchRows_(employeeId, date, date);
+  const originalId = String(correction.originalPunchId || '').trim();
+  let originalLocation = ['出社','在宅','外出'].includes(correction.workLocation) ? correction.workLocation : '出社';
+
+  if (originalId) {
+    const original = activeRows.find(r => r[0] === originalId);
+    if (!original) throw new Error('修正対象の打刻が見つからないか、すでに別の修正で置き換えられています。');
+    originalLocation = original[6] || originalLocation;
   }
+
+  const timestamp = date + ' ' + time + ':00';
+  const candidate = activeRows
+    .filter(r => r[0] !== originalId)
+    .map(r => ({ id:r[0], action:r[4], timestamp:r[5], workLocation:r[6] }));
+  candidate.push({ id:'PROPOSED', action:action, timestamp:timestamp, workLocation:originalLocation });
+  validatePunchSequence_(candidate);
 
   const nowText = toTimestamp_(new Date());
   sheet.appendRow([
     createId_('P'), employeeId, employeeName, date, action,
-    date + ' ' + time + ':00', originalLocation, 'CORRECTION',
+    timestamp, originalLocation, 'CORRECTION',
     false, originalId, '申請承認による修正 ' + requestRow[0], nowText
   ]);
 }
