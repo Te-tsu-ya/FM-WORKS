@@ -11,7 +11,6 @@ function metric(label,value,iconTone=''){return `<section class='card metric'><d
 function list(items){return `<div class='list'>${items.map(i=>`<div class='list-item'><span class='status-dot' style='background:${i.color||'var(--blue)'}'></span><div><strong>${i.title}</strong><div class='muted' style='font-size:12px;margin-top:3px'>${i.sub||''}</div></div>${i.right||''}</div>`).join('')}</div>`}
 function pageHead(title,desc,action=''){return `<div class='page-head'><div><div class='eyebrow'>FM WORKS</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2400)}
-function demoAction(label){showToast(`${label}：この機能は次フェーズで実装します`)}
 function pad(n){return String(n).padStart(2,'0')}
 function parseIso(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
 function iso(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
