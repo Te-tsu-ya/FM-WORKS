@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],loading:false},monthly:{yearMonth:null,employeeId:null,data:null,loading:false},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 
 function svg(id){return `<svg aria-hidden='true'><use href='#${id}'/></svg>`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
@@ -261,14 +261,76 @@ function adminPage(){
   </div>
   <div class='section-gap'>
     ${card('PIN再発行依頼',requestRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>依頼日時</th><th>社員</th><th>状態</th><th>メモ</th><th>操作</th></tr></thead><tbody>${requestRows}</tbody></table></div>`:"<p class='muted'>再発行依頼はありません。</p>")}
+  </div>
+  ${maintenanceSection()}
+  `;
+}
+
+function maintenanceSection(){
+  const m=state.maintenance||{},s=m.status;
+  if(m.loading&&!s)return `<div class='section-gap'>${card('システム保守',"<div class='loading-card'></div>")}</div>`;
+  if(!s)return `<div class='section-gap'>${card('システム保守',"<p class='muted'>システム情報を読み込んでいます。</p>")}</div>`;
+
+  const auditRows=(m.audit||[]).slice(0,40).map(x=>`<tr>
+    <td>${escapeHtml(x.at)}</td>
+    <td><strong>${escapeHtml(x.employeeName||x.employeeId||'SYSTEM')}</strong><br><small class='muted'>${escapeHtml(x.employeeId||'')}</small></td>
+    <td>${escapeHtml(x.operation)}</td>
+    <td>${escapeHtml(x.target)}${x.targetId?`<br><small class='muted'>${escapeHtml(x.targetId)}</small>`:''}</td>
+    <td>${x.result==='SUCCESS'?'<span class="badge success">成功</span>':'<span class="badge danger">エラー</span>'}</td>
+  </tr>`).join('');
+
+  const backupText=s.lastBackupAt||'まだありません';
+  return `<div class='section-gap'>
+    <div class='grid cols-4'>
+      ${metric('DBレコード',Object.values(s.sheets||{}).reduce((a,b)=>a+Number(b||0),0)+'件','tone-green')}
+      ${metric('有効セッション',s.activeSessions+'件')}
+      ${metric('PIN未設定',s.pinPending+'名',s.pinPending?'tone-orange':'tone-green')}
+      ${metric('最終バックアップ',backupText?s.lastBackupAt?'実施済み':'未実施':'未実施',s.lastBackupAt?'tone-green':'tone-orange')}
+    </div>
+    <div class='grid cols-2 section-gap'>
+      ${card('バックアップ・復旧',`<div class='maintenance-detail'>
+        <div><span>最終バックアップ</span><strong>${escapeHtml(backupText)}</strong></div>
+        <div><span>自動バックアップ</span><strong>${s.backupEnabled?'毎日3時台 / 有効':'無効'}</strong></div>
+        <div><span>保持期間</span><strong>${s.backupRetentionDays}日</strong></div>
+      </div><div class='button-row section-gap'><button class='primary-button' onclick='createBackupNow()'>今すぐバックアップ</button><button class='secondary-button' onclick='toggleDailyBackup()'>${s.backupEnabled?'自動バックアップを停止':'自動バックアップを有効化'}</button></div>`)}
+      ${card('システム状態',`<div class='maintenance-detail'>
+        <div><span>データベース</span><strong>${escapeHtml(s.dbName)}</strong></div>
+        <div><span>アプリバージョン</span><strong>${escapeHtml(state.data.app.version)}</strong></div>
+        <div><span>最終確認</span><strong>${escapeHtml(s.checkedAt)}</strong></div>
+      </div><div class='section-gap'><button class='secondary-button' onclick='loadMaintenance()'>状態を再確認</button></div>`)}
+    </div>
+    <div class='section-gap'>${card('監査ログ（最新40件）',auditRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>日時</th><th>操作者</th><th>操作</th><th>対象</th><th>結果</th></tr></thead><tbody>${auditRows}</tbody></table></div>`:"<p class='muted'>監査ログはありません。</p>")}</div>
   </div>`;
+}
+
+function loadMaintenance(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return;
+  state.maintenance.loading=true;renderPage();
+  let pending=2,failed=false;
+  const done=()=>{pending--;if(pending<=0){state.maintenance.loading=false;renderPage()}};
+  google.script.run.withSuccessHandler(data=>{state.maintenance.status=data;done()}).withFailureHandler(err=>{failed=true;done();handleApiError(err,'システム状態を読み込めませんでした')}).getSystemStatus(state.sessionToken);
+  google.script.run.withSuccessHandler(data=>{state.maintenance.audit=data||[];done()}).withFailureHandler(err=>{failed=true;done();handleApiError(err,'監査ログを読み込めませんでした')}).getAuditLogs(state.sessionToken,100);
+}
+
+function createBackupNow(){
+  openConfirmDialog('バックアップを作成','現在のFM WORKS DBをGoogle Driveへ複製します。','バックアップ作成',function(){
+    showToast('バックアップを作成しています...');
+    google.script.run.withSuccessHandler(result=>{showToast('バックアップを作成しました');loadMaintenance()}).withFailureHandler(err=>handleApiError(err,'バックアップを作成できませんでした')).createManualBackup(state.sessionToken);
+  },false);
+}
+
+function toggleDailyBackup(){
+  const current=!!(state.maintenance.status&&state.maintenance.status.backupEnabled);
+  openConfirmDialog(current?'自動バックアップを停止':'自動バックアップを有効化',current?'毎日の自動バックアップを停止しますか？':'毎日3時台にDBをバックアップし、30日間保持します。','変更する',function(){
+    google.script.run.withSuccessHandler(data=>{state.maintenance.status=data;renderPage();showToast(current?'自動バックアップを停止しました':'自動バックアップを有効化しました')}).withFailureHandler(err=>handleApiError(err,'バックアップ設定を変更できませんでした')).setDailyBackupEnabled(state.sessionToken,!current);
+  },false);
 }
 
 function loadAuthAdmin(){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)) return;
   state.authAdmin=null;renderPage();
   google.script.run
-    .withSuccessHandler(data=>{state.authAdmin=data;renderPage()})
+    .withSuccessHandler(data=>{state.authAdmin=data;renderPage();loadMaintenance()})
     .withFailureHandler(err=>handleApiError(err,'管理情報を読み込めませんでした'))
     .getAuthAdminData(state.sessionToken);
 }
