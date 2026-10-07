@@ -5,10 +5,16 @@ function getNotifications(sessionToken) {
 
   const monthlyReview=getMonthlyReviewPrompt_(employee.employeeId);
   if(monthlyReview.needsAttention){
+    const backlog=!!monthlyReview.isBacklog;
+    const pendingCount=Number(monthlyReview.pendingCount||1);
     items.push({
       type:'勤怠確認',
       title:monthlyReview.targetMonth+'の勤怠確認',
-      subtitle:monthlyReview.stale?'確認後に変更があります。再確認してください。':'先月の勤怠に誤りがないか確認してください。',
+      subtitle:monthlyReview.stale
+        ? '確認後に変更があります。再確認してください。'
+        : backlog
+          ? '以前の未確認月が残っています。古い月から確認してください。'+(pendingCount>1?' 残り'+pendingCount+'か月。':'')
+          : '先月の勤怠に誤りがないか確認してください。',
       route:'monthly',
       yearMonth:monthlyReview.targetMonth,
       priority:monthlyReview.urgency
