@@ -27,14 +27,21 @@ function saveEmployee(sessionToken, payload) {
     if (found) rowNumber=found.getRow();
   }
   const isNew = !rowNumber;
+  const existingEmployee = !isNew ? getEmployeeAuthRecord_(employeeId) : null;
   if (isNew) rowNumber=Math.max(2,lastRow+1);
   const existingAuth = isNew ? Array(9).fill('') : sheet.getRange(rowNumber,14,1,9).getValues()[0];
-  if (isNew) existingAuth[7] = 'ACTIVE';
+  existingAuth[7] = status === '在籍'
+    ? (String(existingAuth[7] || '').toUpperCase() === 'DISABLED' ? 'ACTIVE' : (existingAuth[7] || 'ACTIVE'))
+    : 'DISABLED';
 
   sheet.getRange(rowNumber,1,1,22).setValues([[
     employeeId,name,displayName,department,title,role,status,workStart,workEnd,breakMinutes,leaveBalance,email,note,
     ...existingAuth
   ]]);
+
+  if (existingEmployee && existingEmployee.active && status !== '在籍') {
+    invalidateEmployeeSessions_(employeeId, 0);
+  }
 
   appendAudit_({
     employeeId:admin.employeeId,employeeName:admin.name,operation:isNew?'社員追加':'社員更新',
