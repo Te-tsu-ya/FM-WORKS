@@ -25,7 +25,7 @@ function renderNav(){
 function navigate(page){state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();document.getElementById('content').focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
 
 function homePage(){const d=state.data;return `${pageHead('ホーム','今日の勤務・予定・やることをまとめて確認します。')}
-<div class="hero"><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>今日も一日、やるべきことを確認してスムーズに進めましょう。</p></div>
+<div class="hero"><div style="display:inline-flex;align-items:center;gap:8px;background:#e7f8f0;color:#128758;border:1px solid #bfead8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;margin-bottom:12px">✓ GitHub自動更新テスト</div><h2>おはようございます、${escapeHtml(d.user.displayName)}</h2><p>この表示が見えれば、ChatGPT → GitHub → Apps Script の自動反映に成功しています。</p></div>
 <div class="grid cols-3">
 ${card('現在の勤怠状況',`<div class="status-row"><span class="status-dot"></span><strong>勤務中</strong></div><div class="attendance-time">${d.attendance.clockIn}</div><div class="button-row"><button class="primary-button" onclick="demoAction('退勤')">退勤する</button><button class="secondary-button" onclick="demoAction('休憩')">休憩する</button></div>`)}
 ${card('今日の予定',list([{title:'10:00 定例ミーティング',sub:'会議室A / オンライン',color:'#1478ff'},{title:'13:00 プロジェクト進捗確認',sub:'オンライン',color:'#18a46d'},{title:'15:00 提案資料レビュー',sub:'Focus Time',color:'#f3a11b'}]))}
