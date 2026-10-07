@@ -35,6 +35,7 @@ function saveEmployee(sessionToken, payload) {
       throw new Error('メールアドレスの形式を確認してください。');
     }
     const note = String(payload.note || '').trim().slice(0,500);
+    const payrollIncluded = !!payload.payrollIncluded;
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
     if (existingBefore && existingBefore.employeeId === admin.employeeId && (role !== 'ADMIN' || status !== '在籍')) {
@@ -60,9 +61,9 @@ function saveEmployee(sessionToken, payload) {
       ? (String(existingAuth[7] || '').toUpperCase() === 'DISABLED' ? 'ACTIVE' : (existingAuth[7] || 'ACTIVE'))
       : 'DISABLED';
 
-    sheet.getRange(rowNumber,1,1,22).setValues([[
+    sheet.getRange(rowNumber,1,1,23).setValues([[
       employeeId,name,displayName,department,title,role,status,workStart,workEnd,
-      breakMinutes,leaveBalance,email,note,...existingAuth
+      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded
     ]]);
 
     if (existingEmployee && existingEmployee.active && status !== '在籍') {
