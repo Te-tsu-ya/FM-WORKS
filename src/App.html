@@ -527,6 +527,7 @@ function openScheduleEditor(id='',date=''){
         <div><span>参加者</span><strong>${escapeHtml((e.employeeNames||[]).join('、')||'—')}</strong></div>
         <div><span>分類</span><strong>${escapeHtml(e.category||'予定')}</strong></div>
         <div><span>場所</span><strong>${escapeHtml(e.location||'—')}</strong></div>
+        <div><span>公開範囲</span><strong>${escapeHtml(e.visibility||'社内')}</strong></div>
       </div>
       ${e.detail?`<div class='section-gap'><small class='muted'>詳細・メモ</small><p class='readonly-note'>${escapeHtml(e.detail)}</p></div>`:''}
       <div class='modal-actions'><span class='muted'>この予定の編集権限はありません。</span><div><button class='primary-button' onclick='closeModal()'>閉じる</button></div></div>
@@ -545,6 +546,7 @@ function openScheduleEditor(id='',date=''){
       <label class='field time-field'><span>終了</span><input id='schEnd' type='time' value='${escapeHtml(e?e.end:'10:00')}'></label>
       <label class='field'><span>分類</span><select id='schCategory'>${Object.keys(CATEGORY_COLORS).map(cat=>`<option value='${cat}' ${(e?e.category:'予定')===cat?'selected':''}>${cat}</option>`).join('')}</select></label>
       <label class='field'><span>場所</span><input id='schLocation' value='${escapeHtml(e?e.location:'')}' placeholder='訪問先 / Zoom 等'></label>
+      <label class='field'><span>公開範囲</span><select id='schVisibility'><option value='社内' ${!e||!e.visibility||e.visibility==='社内'?'selected':''}>社内全員</option><option value='参加者のみ' ${e&&e.visibility==='参加者のみ'?'selected':''}>参加者のみ</option>${state.data.user.role==='ADMIN'?`<option value='管理者のみ' ${e&&e.visibility==='管理者のみ'?'selected':''}>管理者のみ</option>`:''}</select></label>
       <div class='field full'><span>参加者</span><div class='attendee-grid'>${employees.map(emp=>`<label><input type='checkbox' name='schEmployee' value='${emp.employeeId}' ${checked.includes(emp.employeeId)?'checked':''}><span>${escapeHtml(emp.name)}</span></label>`).join('')}</div></div>
       <label class='field full'><span>詳細・メモ</span><textarea id='schDetail' rows='4'>${escapeHtml(e?e.detail:'')}</textarea></label>
     </div>
@@ -553,7 +555,7 @@ function openScheduleEditor(id='',date=''){
   toggleScheduleTimes();
 }
 function toggleScheduleTimes(){const all=document.getElementById('schAllDay');document.querySelectorAll('.time-field').forEach(x=>x.style.display=all&&all.checked?'none':'grid')}
-function saveScheduleFromModal(id){const employeeIds=[...document.querySelectorAll("input[name='schEmployee']:checked")].map(x=>x.value);const payload={id:id,date:document.getElementById('schDate').value,title:document.getElementById('schTitle').value,allDay:document.getElementById('schAllDay').checked,start:document.getElementById('schStart').value,end:document.getElementById('schEnd').value,category:document.getElementById('schCategory').value,location:document.getElementById('schLocation').value,detail:document.getElementById('schDetail').value,employeeIds};showToast('予定を保存しています...');google.script.run.withSuccessHandler(()=>{closeModal();showToast('予定を保存しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'保存に失敗しました')).saveSchedule(state.sessionToken,payload)}
+function saveScheduleFromModal(id){const employeeIds=[...document.querySelectorAll("input[name='schEmployee']:checked")].map(x=>x.value);const payload={id:id,date:document.getElementById('schDate').value,title:document.getElementById('schTitle').value,allDay:document.getElementById('schAllDay').checked,start:document.getElementById('schStart').value,end:document.getElementById('schEnd').value,category:document.getElementById('schCategory').value,location:document.getElementById('schLocation').value,detail:document.getElementById('schDetail').value,visibility:document.getElementById('schVisibility').value,employeeIds};showToast('予定を保存しています...');google.script.run.withSuccessHandler(()=>{closeModal();showToast('予定を保存しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'保存に失敗しました')).saveSchedule(state.sessionToken,payload)}
 function deleteScheduleFromModal(id){openConfirmDialog('予定を削除','この予定を削除しますか？','削除',function(){google.script.run.withSuccessHandler(()=>{showToast('予定を削除しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'削除に失敗しました')).deleteSchedule(state.sessionToken,id);},true)}
 
 function canEditCompanyCalendar(){return !!(state.data&&state.data.permissions&&state.data.permissions.companyCalendarEdit)}

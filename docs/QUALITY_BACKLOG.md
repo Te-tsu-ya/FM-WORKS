@@ -26,7 +26,7 @@
 | Q-012 | App.html 1,600行超の巨大フロント | High | Aster / Iris | UIモジュール分割、責務境界、回帰テスト | READY |
 | Q-013 | 列番号依存・Migration不足 | High | Atlas | スキーマ版、ヘッダ検証、Migrationを自動化 | READY |
 | Q-014 | 監査before/after不足 | High | Ledger | 重要更新は変更前後を再現可能 | READY |
-| Q-015 | 予定の公開範囲が実質社内固定 | High | Sentinel / Kite | ALL / PARTICIPANTS / ADMIN等をAPIで強制 | READY |
+| Q-015 | 予定の公開範囲が実質社内固定 | High | Sentinel / Kite | ALL / PARTICIPANTS / ADMIN等をAPIで強制 | DONE v0.9.3 |
 | Q-016 | 7〜10px文字が多い | Medium | Iris | 業務本文/重要状態は原則11〜12px以上。1画面化より可読性優先 | READY |
 | Q-017 | Nested scroll | Medium | Iris | 内部スクロールは明示的な長一覧に限定 | READY |
 | Q-018 | 実働表示で30秒ごと全画面再描画 | Medium | Iris / Forge | 数値ノードだけ更新し、フォーカス/スクロールを保持 | READY |

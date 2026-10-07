@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.9.2  
+**文書版:** 0.9.3  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.9.2`
+`APP.version = 0.9.3`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -965,3 +965,8 @@ DB:
 ### 34.1 Export entrypoint authentication
 
 `createMonthlyExport` は公開API入口で `requireSession_` を実行し、その後 `getMonthlySummaryForExport_` へ委譲する。
+
+
+## 35. Schedule Visibility Authorization
+
+`canViewScheduleRow_` を共通認可関数とし、L列visibilityを `社内 / 参加者のみ / 管理者のみ` として解釈する。`getScheduleBundle` と `searchApp` は非公開予定をレスポンスから除外する。`normalizeScheduleVisibility_` は非ADMINによる管理者限定予定の作成を拒否する。

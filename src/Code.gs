@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.9.2',
+  version: '0.9.3',
   locale: 'ja-JP'
 });
 
@@ -112,7 +112,7 @@ function getHomeOverview(sessionToken) {
     tasks: [
       { label: '工数入力', status: worklogGap > 0 ? formatMinutes_(worklogGap) + '不足' : '完了', tone: worklogGap > 0 ? 'danger' : 'info' },
       { label: '勤怠の確認', status: monthSummary.totals.missingPunchDays + '件', tone: monthSummary.totals.missingPunchDays > 0 ? 'warning' : 'info' },
-      { label: employee.role === 'ADMIN' ? '申請の承認' : '申請の確認', status: pendingRequests + '件', tone: pendingRequests > 0 ? 'warning' : 'info' }
+      { label: getPermissions_(employee).requestApprove ? '申請の承認' : '申請の確認', status: pendingRequests + '件', tone: pendingRequests > 0 ? 'warning' : 'info' }
     ]
   };
 }
@@ -474,6 +474,26 @@ function formatMinutes_(minutes) {
 }
 
 
+function normalizeScheduleVisibility_(value, viewer) {
+  const requested=String(value||'社内').trim();
+  const allowed=['社内','参加者のみ','管理者のみ'];
+  const normalized=allowed.includes(requested)?requested:'社内';
+  if(normalized==='管理者のみ'&&String(viewer&&viewer.role||'USER').toUpperCase()!=='ADMIN') throw new Error('管理者のみの予定を作成できるのは管理者だけです。');
+  return normalized;
+}
+
+function canViewScheduleRow_(viewer,row) {
+  if(!viewer||!row)return false;
+  if(String(viewer.role||'USER').toUpperCase()==='ADMIN')return true;
+  const visibility=String(row[11]||'社内').trim()||'社内';
+  const owner=String(row[13]||'');
+  const ids=String(row[5]||'').split(',').map(x=>x.trim()).filter(Boolean);
+  if(owner===viewer.employeeId||owner===viewer.name)return true;
+  if(visibility==='管理者のみ')return false;
+  if(visibility==='参加者のみ')return ids.includes(viewer.employeeId);
+  return true;
+}
+
 function getScheduleBundle(sessionToken, params) {
   const session = requireSession_(sessionToken);
   const viewer = session.employee;
@@ -493,6 +513,7 @@ function getScheduleBundle(sessionToken, params) {
     const rows = sheet.getRange(2, 1, lastRow - 1, 18).getDisplayValues();
     rows.forEach(r => {
       if (!r[0] || !r[1] || r[12] === '削除') return;
+      if (!canViewScheduleRow_(viewer,r)) return;
       if (r[1] < start || r[1] > end) return;
       const ids = String(r[5] || '').split(',').map(x => x.trim()).filter(Boolean);
       if (employeeId !== 'ALL' && !ids.includes(employeeId)) return;
@@ -575,6 +596,7 @@ function saveSchedule(sessionToken, payload) {
 
     const allowedCategories = ['予定', '仮予定', '業務', '出張', '休暇', '社内'];
     const category = allowedCategories.includes(payload.category) ? payload.category : '予定';
+    const visibility = normalizeScheduleVisibility_(payload.visibility || '社内', employee);
     const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
     const sheet = getDb_().getSheetByName(DB.sheets.schedule);
 
@@ -617,7 +639,7 @@ function saveSchedule(sessionToken, payload) {
       category,
       safeSheetText_(payload.location, 150),
       safeSheetText_(payload.detail, 1000),
-      '社内',
+      visibility,
       '有効',
       createdBy,
       createdAt,
@@ -819,7 +841,7 @@ function getEmployees_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 24).getDisplayValues()
+  return sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues()
     .filter(r => r[0] && r[6] === '在籍')
     .map(r => ({
       employeeId: r[0],
@@ -830,7 +852,9 @@ function getEmployees_() {
       title: r[4] || '',
       role: r[5] || 'USER',
       payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
-      managerId: r[23] || ''
+      managerId: r[23] || '',
+      leaveBasisDate: r[24] || '',
+      hireDate: r[25] || ''
     }));
 }
 
