@@ -413,6 +413,13 @@ function createId_(prefix) {
   return prefix + '-' + Utilities.getUuid();
 }
 
+function safeSheetText_(value, maxLength) {
+  let text = String(value == null ? '' : value).trim();
+  if (maxLength) text = text.slice(0, Number(maxLength));
+  if (/^[=+\-@]/.test(text)) text = "'" + text;
+  return text;
+}
+
 function formatMinutes_(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
