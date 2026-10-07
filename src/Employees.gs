@@ -6,11 +6,11 @@ function saveEmployee(sessionToken, payload) {
     const employeeId = String(payload.employeeId || '').trim().toUpperCase();
     if (!/^FM\d{4,6}$/.test(employeeId)) throw new Error('社員IDは FM0001 のような形式で入力してください。');
 
-    const name = String(payload.name || '').trim().slice(0,100);
+    const name = safeSheetText_(payload.name, 100);
     if (!name) throw new Error('氏名を入力してください。');
-    const displayName = String(payload.displayName || name).trim().slice(0,80);
-    const department = String(payload.department || '').trim().slice(0,80);
-    const title = String(payload.title || '').trim().slice(0,80);
+    const displayName = safeSheetText_(payload.displayName || name, 80);
+    const department = safeSheetText_(payload.department, 80);
+    const title = safeSheetText_(payload.title, 80);
     const allowedRoles = ['USER','CALENDAR_EDITOR','ADMIN'];
     const role = allowedRoles.includes(payload.role) ? payload.role : 'USER';
     const status = payload.active === false ? '退職' : '在籍';
@@ -34,7 +34,7 @@ function saveEmployee(sessionToken, payload) {
     if (email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) {
       throw new Error('メールアドレスの形式を確認してください。');
     }
-    const note = String(payload.note || '').trim().slice(0,500);
+    const note = safeSheetText_(payload.note, 500);
     const payrollIncluded = !!payload.payrollIncluded;
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
