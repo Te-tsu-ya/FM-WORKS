@@ -17,6 +17,10 @@ const DB = Object.freeze({
   }
 });
 
+const PERMISSIONS = Object.freeze({
+  COMPANY_CALENDAR_EDIT_ROLES: ['ADMIN', 'CALENDAR_EDITOR']
+});
+
 const PUNCH = Object.freeze({
   CLOCK_IN: '出勤',
   BREAK_START: '休憩開始',
@@ -58,6 +62,7 @@ function getInitialData() {
       role: employee.role,
       department: employee.department
     },
+    permissions: getPermissions_(employee),
     employees: getEmployees_(),
     attendance: attendance,
     todaySchedule: scheduleBundle.events.slice(0, 8),
@@ -277,6 +282,21 @@ function validatePunchTransition_(attendance, action) {
       finished: '退勤済み'
     };
     throw new Error('現在の状態「' + (labels[state] || state) + '」では「' + action + '」を登録できません。');
+  }
+}
+
+function getPermissions_(employee) {
+  const role = String(employee && employee.role || 'USER').toUpperCase();
+  return {
+    companyCalendarView: true,
+    companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role)
+  };
+}
+
+function assertPermission_(employee, permission) {
+  const permissions = getPermissions_(employee);
+  if (!permissions[permission]) {
+    throw new Error('この操作を行う権限がありません。');
   }
 }
 
@@ -542,7 +562,7 @@ function getCompanyCalendar(year) {
 function saveCompanyCalendarDay(payload) {
   payload = payload || {};
   const employee = getEmployee_(DB.defaultEmployeeId);
-  if (employee.role !== 'ADMIN') throw new Error('会社カレンダーの編集権限がありません。');
+  assertPermission_(employee, 'companyCalendarEdit');
 
   const date = normalizeDate_(payload.date);
   const allowedTypes = ['通常勤務', '法定祝日', '会社休日', '調整出勤日', '週末'];
