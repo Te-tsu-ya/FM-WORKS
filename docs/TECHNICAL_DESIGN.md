@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.0  
+**文書版:** 0.8.1  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -57,7 +57,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.0`
+`APP.version = 0.8.1`
 
 DBスキーマ目安: 4。  
 認証スキーマ: 3。  
@@ -128,7 +128,9 @@ DBスキーマ目安: 4。
 
 ## 7. stale判定
 
-`getLatestMonthlyDataUpdate_` は対象月の以下を走査する。
+`getLatestMonthlyDataUpdateMap_` は対象期間を1回のシート走査で月別に集計する。単月API `getLatestMonthlyDataUpdate_` はこの結果を再利用する。
+
+対象データ:
 
 1. 打刻ログ: `createdAt`
 2. 工数: `updatedAt`
@@ -216,6 +218,8 @@ state.monthly = {
 
 クリックで日詳細モーダル。
 
+`monthlyReviewPanel(d)` は本人表示とADMIN表示を分ける。本人には確認完了操作を表示し、ADMINが他社員を表示している場合は本人確認済み / 未確認 / 再確認を読み取り専用で表示する。代理確認ボタンは出さない。
+
 ### 10.2 1画面レイアウト
 
 `renderPage` は月次・設定で `.content.one-screen` を付ける。
@@ -238,11 +242,13 @@ state.monthly = {
 - requirements
 - technical
 
+`projects` は `projectAdminSection()`、`openProjectModal()`、`saveProjectFromModal()` を使用する。設定画面の再構成時もこの3関数を削除しないこと。
+
 `settingsTabs()` と左ナビのサブメニューを同期。
 
 ### 11.1 文書
 
-`loadSystemDocument(type)` でADMIN APIを呼ぶ。
+`loadSystemDocument(type, options)` でADMIN APIを呼ぶ。通常はクライアントキャッシュを利用し、`options.force === true` の場合はキャッシュを無視して再取得する。文書ヘッダーの「再読込」は必ず `force:true` を指定する。
 
 `Docs.gs`:
 
@@ -354,7 +360,11 @@ CSS対象:
 
 disabledは `cursor:not-allowed`。
 
+小型操作要素 `.small-button`、申請理由チップ、設定サブメニュー、設定タブは `min-height:28px` とし、24px未満の独立クリック領域を作らない。
+
 `:focus-visible` は青系3pxアウトライン。
+
+ダークテーマでは、管理画面のsmall-button / security-item / readiness-row / maintenance-detail / auth-stateにも個別の暗色面・枠・文字色を指定し、ライト背景の取り残しを防ぐ。
 
 ## 17. クライアントキャッシュ
 
@@ -477,6 +487,9 @@ Apps Scriptの原則:
 - 年月
 - 前月算出
 - 月次確認期限トーン
+- 設定画面のプロジェクト管理関数の存在
+- 文書再読込のforce指定
+- ADMINによる他社員の月次確認状態表示
 
 `scripts/validate.mjs`:
 
@@ -620,6 +633,7 @@ Apps Scriptの原則:
 | REMEMBER_SESSION_DAYS | 30 |
 | REMEMBER_IDLE_DAYS | 30 |
 | MONTHLY_REVIEW_DUE_DAY | 5 |
+| MONTHLY_REVIEW_START_MONTH | 2026-09（現行導入開始月） |
 
 ### 27.9 予定
 
@@ -692,8 +706,9 @@ Apps Scriptの原則:
 login / resume
   → getInitialData
     → getMonthlyReviewPrompt_
-      → getMonthlyReviewStatusInternal_
-      → getLatestMonthlyDataUpdate_
+      → yearMonthsBetween_
+      → getMonthlyReviewHistoryInternal_
+      → getLatestMonthlyDataUpdateMap_
   → globalActionBanners
   → user clicks review
   → getMonthlySummary(previous month)
@@ -701,7 +716,9 @@ login / resume
   → confirmMonthlyReview
   → 月次確認 upsert
   → 監査ログ append
-  → alert disappears
+  → getInitialData refresh
+  → 未確認月が残る場合は次の最古月をalert
+  → 全対象月完了でalert disappears
 ```
 
 ### 29.2 打刻修正

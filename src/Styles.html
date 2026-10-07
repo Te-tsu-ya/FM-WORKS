@@ -440,3 +440,30 @@ html[data-theme="dark"] .badge.success{background:#123126;color:#78d5ad}
   .year-grid{max-height:none}
 }
 </style>
+
+
+<style>
+/* v0.8.1 accessibility and dark-theme regression hardening */
+.small-button,.request-reason-chips button,.nav-submenu button,.settings-tabs button{min-height:28px}
+html[data-theme="dark"] .small-button{
+  background:#101927;
+  border-color:#304157;
+  color:#dce8f8;
+}
+html[data-theme="dark"] .small-button:hover{background:#1a2a3e}
+html[data-theme="dark"] .security-item,
+html[data-theme="dark"] .readiness-row,
+html[data-theme="dark"] .maintenance-detail{
+  background:#111b29;
+  border-color:#2a394e;
+}
+html[data-theme="dark"] .maintenance-detail>div{border-color:#2a394e}
+html[data-theme="dark"] .readiness-row>strong,
+html[data-theme="dark"] .readiness-head>div>strong{color:#dfe9f8}
+html[data-theme="dark"] .readiness-row.blocker{background:#2b181d;border-color:#63313b}
+html[data-theme="dark"] .readiness-row.warning{background:#2a2418;border-color:#5b4b25}
+html[data-theme="dark"] .readiness-row.ok{background:#13271f;border-color:#28523f}
+html[data-theme="dark"] .auth-state{background:#123126;color:#78d5ad}
+html[data-theme="dark"] .auth-state.pending{background:#3a2b12;color:#f3c670}
+html[data-theme="dark"] .auth-state.locked{background:#3a1920;color:#ff98a5}
+</style>

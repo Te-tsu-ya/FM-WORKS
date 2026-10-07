@@ -2,8 +2,31 @@ function previousYearMonth_(dateText) {
   const s=String(dateText||'');
   const m=s.match(/^(\d{4})-(\d{2})/);
   if(!m)throw new Error('日付を確認してください。');
-  const d=new Date(Number(m[1]),Number(m[2])-2,1);
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  let year=Number(m[1]),month=Number(m[2])-1;
+  if(month<1){year--;month=12;}
+  return year+'-'+String(month).padStart(2,'0');
+}
+
+function yearMonthsBetween_(startMonth, endMonth) {
+  const start=normalizeYearMonth_(startMonth);
+  const end=normalizeYearMonth_(endMonth);
+  if(start>end)return [];
+  let year=Number(start.slice(0,4)),month=Number(start.slice(5,7));
+  const out=[];
+  for(let guard=0;guard<240;guard++){
+    const ym=year+'-'+String(month).padStart(2,'0');
+    if(ym>end)break;
+    out.push(ym);
+    month++;
+    if(month>12){month=1;year++;}
+  }
+  return out;
+}
+
+function monthEndString_(yearMonth) {
+  const ym=normalizeYearMonth_(yearMonth);
+  const p=ym.split('-').map(Number);
+  return ym+'-'+String(new Date(p[0],p[1],0).getDate()).padStart(2,'0');
 }
 
 function monthlyReviewUrgency_(day, dueDay) {
@@ -12,26 +35,155 @@ function monthlyReviewUrgency_(day, dueDay) {
   return d<=due?'warning':'danger';
 }
 
+function getMonthlyReviewStartMonth_(latestRequiredMonth) {
+  const latest=normalizeYearMonth_(latestRequiredMonth);
+  const settings=getSettingsMap_();
+  let start=String(settings.MONTHLY_REVIEW_START_MONTH||'').trim();
+  if(!/^\d{4}-\d{2}$/.test(start)||start>latest){
+    start=latest;
+    try{saveSettings_({MONTHLY_REVIEW_START_MONTH:start});}catch(e){console.warn('Monthly review start month persistence failed',e);}
+  }
+  return normalizeYearMonth_(start);
+}
+
+function getMonthlyReviewSheet_(createIfMissing) {
+  const db=getDb_();
+  let sheet=db.getSheetByName(DB.sheets.monthlyReview);
+  if(sheet||!createIfMissing)return sheet;
+  sheet=db.insertSheet(DB.sheets.monthlyReview);
+  sheet.getRange(1,1,1,10).setValues([[
+    '年月','社員ID','氏名','状態','確認日時','確認者','確認時最終更新','メモ','登録日時','更新日時'
+  ]]);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
+  const months=yearMonthsBetween_(startMonth,endMonth);
+  const allowed=new Set(months);
+  const latestByMonth={};
+  months.forEach(ym=>latestByMonth[ym]='');
+
+  function consider(ym,value){
+    if(!allowed.has(ym)||!value)return;
+    const candidate=parseTimestamp_(value);
+    const current=parseTimestamp_(latestByMonth[ym]);
+    if(candidate&&(!current||candidate>current))latestByMonth[ym]=toTimestamp_(candidate);
+  }
+
+  const rangeStart=months.length?months[0]+'-01':'';
+  const rangeEnd=months.length?monthEndString_(months[months.length-1]):'';
+  if(!months.length)return latestByMonth;
+
+  const db=getDb_();
+
+  const punchSheet=db.getSheetByName(DB.sheets.punches);
+  if(punchSheet&&punchSheet.getLastRow()>=2){
+    punchSheet.getRange(2,1,punchSheet.getLastRow()-1,12).getDisplayValues().forEach(r=>{
+      if(r[1]!==employeeId||r[3]<rangeStart||r[3]>rangeEnd)return;
+      consider(String(r[3]).slice(0,7),r[11]||r[5]);
+    });
+  }
+
+  const worklogSheet=db.getSheetByName('工数');
+  if(worklogSheet&&worklogSheet.getLastRow()>=2){
+    worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues().forEach(r=>{
+      if(r[2]!==employeeId||r[1]<rangeStart||r[1]>rangeEnd)return;
+      consider(String(r[1]).slice(0,7),r[14]||r[11]);
+    });
+  }
+
+  const requestSheet=db.getSheetByName('申請');
+  if(requestSheet&&requestSheet.getLastRow()>=2){
+    requestSheet.getRange(2,1,requestSheet.getLastRow()-1,14).getDisplayValues().forEach(r=>{
+      if(r[2]!==employeeId||!r[5]||!r[6]||r[5]>rangeEnd||r[6]<rangeStart)return;
+      months.forEach(ym=>{
+        if(r[5]<=monthEndString_(ym)&&r[6]>=ym+'-01'){
+          consider(ym,r[13]);
+          consider(ym,r[11]);
+        }
+      });
+    });
+  }
+
+  const calendarSheet=db.getSheetByName(DB.sheets.companyCalendar);
+  if(calendarSheet&&calendarSheet.getLastRow()>=2){
+    calendarSheet.getRange(2,1,calendarSheet.getLastRow()-1,10).getDisplayValues().forEach(r=>{
+      if(!r[0]||r[0]<rangeStart||r[0]>rangeEnd)return;
+      consider(String(r[0]).slice(0,7),r[9]);
+    });
+  }
+
+  return latestByMonth;
+}
+
+function getMonthlyReviewHistoryInternal_(employeeId, startMonth, endMonth) {
+  const months=yearMonthsBetween_(startMonth,endMonth);
+  if(!months.length)return [];
+
+  const sheet=getMonthlyReviewSheet_(false);
+  const rows=sheet&&sheet.getLastRow()>=2
+    ? sheet.getRange(2,1,sheet.getLastRow()-1,10).getDisplayValues().filter(r=>r[1]===employeeId&&months.includes(r[0]))
+    : [];
+  const rowByMonth=Object.fromEntries(rows.map(r=>[r[0],r]));
+  const latestByMonth=getLatestMonthlyDataUpdateMap_(employeeId,months[0],months[months.length-1]);
+
+  return months.map(ym=>{
+    const row=rowByMonth[ym]||null;
+    const confirmedAt=row&&row[3]==='CONFIRMED'?row[4]||'':'';
+    const lastUpdatedAt=latestByMonth[ym]||'';
+    const confirmedDate=parseTimestamp_(confirmedAt);
+    const lastDate=parseTimestamp_(lastUpdatedAt);
+    const stale=!!(confirmedDate&&lastDate&&lastDate>confirmedDate);
+    return {
+      yearMonth:ym,
+      employeeId:employeeId,
+      recorded:!!row,
+      status:row?row[3]||'PENDING':'PENDING',
+      confirmed:!!confirmedAt&&!stale,
+      stale:stale,
+      confirmedAt:confirmedAt,
+      confirmedBy:row?row[5]||'':'',
+      lastUpdatedAt:lastUpdatedAt,
+      note:row?row[7]||'':''
+    };
+  });
+}
+
 function getMonthlyReviewPrompt_(employeeId) {
   const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
   const day=Number(today.slice(8,10));
-  const targetMonth=previousYearMonth_(today);
+  const latestRequiredMonth=previousYearMonth_(today);
+  const startMonth=getMonthlyReviewStartMonth_(latestRequiredMonth);
   const dueDay=Math.max(1,Math.min(31,Number(getSettingsMap_().MONTHLY_REVIEW_DUE_DAY||5)));
-  const status=getMonthlyReviewStatusInternal_(targetMonth,employeeId);
+  const history=getMonthlyReviewHistoryInternal_(employeeId,startMonth,latestRequiredMonth);
+  const outstanding=history.filter(x=>!x.confirmed||x.stale);
+  const target=outstanding[0]||history[history.length-1]||{
+    yearMonth:latestRequiredMonth,confirmed:false,stale:false,confirmedAt:'',lastUpdatedAt:''
+  };
+  const isBacklog=target.yearMonth<latestRequiredMonth;
+  const needsAttention=outstanding.length>0;
+
   return {
-    targetMonth:targetMonth,
+    targetMonth:target.yearMonth,
+    latestRequiredMonth:latestRequiredMonth,
+    reviewStartMonth:startMonth,
+    pendingCount:outstanding.length,
+    isBacklog:isBacklog,
     dueDay:dueDay,
-    urgency:monthlyReviewUrgency_(day,dueDay),
-    needsAttention:!status.confirmed||status.stale,
-    confirmed:status.confirmed,
-    stale:status.stale,
-    confirmedAt:status.confirmedAt,
-    lastUpdatedAt:status.lastUpdatedAt,
-    message:status.stale
-      ? targetMonth+'の勤怠は確認後に変更があります。もう一度確認してください。'
-      : status.confirmed
-        ? targetMonth+'の勤怠確認は完了しています。'
-        : targetMonth+'の勤怠内容に誤りがないか確認してください。'
+    urgency:needsAttention&&(isBacklog||monthlyReviewUrgency_(day,dueDay)==='danger')?'danger':'warning',
+    needsAttention:needsAttention,
+    confirmed:target.confirmed,
+    stale:target.stale,
+    confirmedAt:target.confirmedAt,
+    lastUpdatedAt:target.lastUpdatedAt,
+    message:!needsAttention
+      ? latestRequiredMonth+'までの勤怠確認は完了しています。'
+      : target.stale
+        ? target.yearMonth+'の勤怠は確認後に変更があります。もう一度確認してください。'
+        : isBacklog
+          ? target.yearMonth+'の勤怠確認が未完了です。古い未確認月から順に確認してください。'
+          : target.yearMonth+'の勤怠内容に誤りがないか確認してください。'
   };
 }
 
@@ -44,29 +196,10 @@ function getMonthlyReviewStatus(sessionToken, yearMonth, employeeId) {
 
 function getMonthlyReviewStatusInternal_(yearMonth, employeeId) {
   const ym=normalizeYearMonth_(yearMonth);
-  const sheet=getDb_().getSheetByName(DB.sheets.monthlyReview);
-  const lastRow=sheet?sheet.getLastRow():0;
-  let row=null;
-  if(lastRow>=2){
-    const rows=sheet.getRange(2,1,lastRow-1,10).getDisplayValues();
-    row=rows.find(r=>r[0]===ym&&r[1]===employeeId)||null;
-  }
-  const confirmedAt=row&&row[3]==='CONFIRMED'?row[4]||'':'';
-  const lastUpdatedAt=getLatestMonthlyDataUpdate_(employeeId,ym);
-  const confirmedDate=parseTimestamp_(confirmedAt);
-  const lastDate=parseTimestamp_(lastUpdatedAt);
-  const stale=!!(confirmedDate&&lastDate&&lastDate>confirmedDate);
-  return {
-    yearMonth:ym,
-    employeeId:employeeId,
-    recorded:!!row,
-    status:row?row[3]||'PENDING':'PENDING',
-    confirmed:!!confirmedAt&&!stale,
-    stale:stale,
-    confirmedAt:confirmedAt,
-    confirmedBy:row?row[5]||'':'',
-    lastUpdatedAt:lastUpdatedAt,
-    note:row?row[7]||'':''
+  const history=getMonthlyReviewHistoryInternal_(employeeId,ym,ym);
+  return history[0]||{
+    yearMonth:ym,employeeId:employeeId,recorded:false,status:'PENDING',confirmed:false,stale:false,
+    confirmedAt:'',confirmedBy:'',lastUpdatedAt:'',note:''
   };
 }
 
@@ -86,7 +219,7 @@ function confirmMonthlyReview(sessionToken, yearMonth, note) {
       throw new Error('確認未完了の項目があります（'+blockers.join(' / ')+'）。赤・黄の付いた日を確認してください。');
     }
 
-    const sheet=getDb_().getSheetByName(DB.sheets.monthlyReview);
+    const sheet=getMonthlyReviewSheet_(true);
     const lastRow=sheet.getLastRow();
     const values=lastRow>=2?sheet.getRange(2,1,lastRow-1,10).getDisplayValues():[];
     const idx=values.findIndex(r=>r[0]===ym&&r[1]===employee.employeeId);
@@ -109,43 +242,9 @@ function confirmMonthlyReview(sessionToken, yearMonth, note) {
 }
 
 function getLatestMonthlyDataUpdate_(employeeId, yearMonth) {
-  const p=yearMonth.split('-').map(Number);
-  const start=yearMonth+'-01';
-  const end=yearMonth+'-'+String(new Date(p[0],p[1],0).getDate()).padStart(2,'0');
-  let latest='';
-
-  function consider(value){
-    const d=parseTimestamp_(value);
-    const current=parseTimestamp_(latest);
-    if(d&&(!current||d>current))latest=toTimestamp_(d);
-  }
-
-  const db=getDb_();
-  const punchSheet=db.getSheetByName(DB.sheets.punches);
-  if(punchSheet&&punchSheet.getLastRow()>=2){
-    punchSheet.getRange(2,1,punchSheet.getLastRow()-1,12).getDisplayValues().forEach(r=>{
-      if(r[1]===employeeId&&r[3]>=start&&r[3]<=end)consider(r[11]||r[5]);
-    });
-  }
-  const worklogSheet=db.getSheetByName('工数');
-  if(worklogSheet&&worklogSheet.getLastRow()>=2){
-    worklogSheet.getRange(2,1,worklogSheet.getLastRow()-1,15).getDisplayValues().forEach(r=>{
-      if(r[2]===employeeId&&r[1]>=start&&r[1]<=end)consider(r[14]||r[11]);
-    });
-  }
-  const requestSheet=db.getSheetByName('申請');
-  if(requestSheet&&requestSheet.getLastRow()>=2){
-    requestSheet.getRange(2,1,requestSheet.getLastRow()-1,14).getDisplayValues().forEach(r=>{
-      if(r[2]===employeeId&&r[5]<=end&&r[6]>=start){consider(r[13]);consider(r[11]);}
-    });
-  }
-  const calendarSheet=db.getSheetByName(DB.sheets.companyCalendar);
-  if(calendarSheet&&calendarSheet.getLastRow()>=2){
-    calendarSheet.getRange(2,1,calendarSheet.getLastRow()-1,10).getDisplayValues().forEach(r=>{
-      if(r[0]>=start&&r[0]<=end)consider(r[9]);
-    });
-  }
-  return latest;
+  const ym=normalizeYearMonth_(yearMonth);
+  const map=getLatestMonthlyDataUpdateMap_(employeeId,ym,ym);
+  return map[ym]||'';
 }
 
 function getMonthlyCloseStatus(sessionToken, yearMonth) {
@@ -489,7 +588,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
     daily:daily,
     requests:requests,
     closeStatus:getMonthlyCloseStatusInternal_(ym),
-    reviewStatus:getMonthlyReviewStatusInternal_(ym,targetId)
+    reviewStatus:ym<systemToday.slice(0,7)?getMonthlyReviewStatusInternal_(ym,targetId):null
   };
 }
 function appendMonthlyIssue_(current, next) {
