@@ -342,8 +342,10 @@ function loadAuthenticatedApp(mustChangePin){
     document.getElementById('loginShell').hidden=true;
     document.getElementById('app').hidden=false;
     setProfileUi();
+    initTopbarInteractions();
     renderNav();
     renderPage();
+    loadNotifications();
     if(state.page==='schedule')loadSchedule();
     if(state.page==='companyCalendar')loadCompanyCalendar();
     if(state.page==='worklog')loadWorklogs();
@@ -361,6 +363,99 @@ function setProfileUi(){
   document.getElementById('profileRole').textContent=roleLabel(u.role);
   document.getElementById('profileMenuName').textContent=u.fullName||u.displayName;
   document.getElementById('profileMenuId').textContent=u.employeeId+' / '+roleLabel(u.role);
+}
+
+let searchTimer=null;
+function initTopbarInteractions(){
+  const input=document.getElementById('globalSearchInput');
+  if(input&&!input.dataset.bound){
+    input.dataset.bound='1';
+    input.addEventListener('input',()=>{
+      clearTimeout(searchTimer);
+      const q=input.value.trim();
+      if(q.length<2){hideSearchResults();return}
+      searchTimer=setTimeout(()=>performGlobalSearch(q),220);
+    });
+    input.addEventListener('keydown',e=>{if(e.key==='Escape')hideSearchResults()});
+  }
+  const bell=document.getElementById('notificationButton');
+  if(bell&&!bell.dataset.bound){
+    bell.dataset.bound='1';
+    bell.addEventListener('click',e=>{e.stopPropagation();toggleNotificationMenu()});
+  }
+}
+
+function performGlobalSearch(query){
+  if(!state.sessionToken)return;
+  google.script.run
+    .withSuccessHandler(renderSearchResults)
+    .withFailureHandler(err=>handleApiError(err,'検索できませんでした'))
+    .searchApp(state.sessionToken,query);
+}
+
+function renderSearchResults(items){
+  const box=document.getElementById('globalSearchResults');
+  if(!box)return;
+  const rows=(items||[]);
+  box.innerHTML=rows.length?rows.map((r,i)=>`<button type='button' onclick="openSearchResult(${i})"><span class='search-type'>${escapeHtml(r.type)}</span><span><strong>${escapeHtml(r.title)}</strong><small>${escapeHtml(r.sub||'')}</small></span></button>`).join(''):`<div class='search-empty'>該当する情報はありません。</div>`;
+  box._items=rows;
+  box.hidden=false;
+}
+
+function hideSearchResults(){
+  const box=document.getElementById('globalSearchResults');
+  if(box)box.hidden=true;
+}
+
+function openSearchResult(index){
+  const box=document.getElementById('globalSearchResults');
+  const item=box&&box._items&&box._items[index];
+  if(!item)return;
+  hideSearchResults();
+  const input=document.getElementById('globalSearchInput');if(input)input.value='';
+  if(item.route==='schedule'&&item.date){
+    state.schedule.date=item.date;state.schedule.view='day';
+  }
+  navigate(item.route||'home');
+}
+
+function loadNotifications(){
+  if(!state.sessionToken)return;
+  google.script.run
+    .withSuccessHandler(data=>{
+      const dot=document.getElementById('notificationDot');
+      if(dot)dot.hidden=!(data&&data.count);
+      renderNotificationMenu(data&&data.items||[]);
+    })
+    .withFailureHandler(()=>{})
+    .getNotifications(state.sessionToken);
+}
+
+function renderNotificationMenu(items){
+  const menu=document.getElementById('notificationMenu');
+  if(!menu)return;
+  menu._items=items||[];
+  menu.innerHTML=`<div class='notification-head'><strong>通知</strong><small>${menu._items.length}件</small></div>`+
+    (menu._items.length?menu._items.map((n,i)=>`<button type='button' onclick="openNotificationItem(${i})"><span class='notification-type'>${escapeHtml(n.type)}</span><span><strong>${escapeHtml(n.title)}</strong><small>${escapeHtml(n.subtitle||'')}</small></span></button>`).join(''):`<div class='notification-empty'>新しい通知はありません。</div>`);
+}
+
+function toggleNotificationMenu(){
+  const menu=document.getElementById('notificationMenu'),button=document.getElementById('notificationButton');
+  if(!menu||!button)return;
+  const next=menu.hidden;menu.hidden=!next;button.setAttribute('aria-expanded',String(next));
+  if(next)loadNotifications();
+}
+
+function closeNotificationMenu(){
+  const menu=document.getElementById('notificationMenu'),button=document.getElementById('notificationButton');
+  if(menu)menu.hidden=true;if(button)button.setAttribute('aria-expanded','false');
+}
+
+function openNotificationItem(index){
+  const menu=document.getElementById('notificationMenu');
+  const item=menu&&menu._items&&menu._items[index];
+  closeNotificationMenu();
+  if(item)navigate(item.route||'home');
 }
 
 function toggleProfileMenu(){
@@ -424,7 +519,11 @@ function bootstrap(){
   state.sessionToken=sessionStorage.getItem('fmworks.session')||null;
   const button=document.getElementById('profileButton');
   if(button)button.addEventListener('click',e=>{e.stopPropagation();toggleProfileMenu()});
-  document.addEventListener('click',e=>{if(!e.target.closest('.profile-wrap'))closeProfileMenu()});
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.profile-wrap'))closeProfileMenu();
+    if(!e.target.closest('.search-wrap'))hideSearchResults();
+    if(!e.target.closest('.notification-wrap'))closeNotificationMenu();
+  });
   google.script.run.withSuccessHandler(config=>{
     state.publicConfig=config;
     if(state.sessionToken){
