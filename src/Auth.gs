@@ -5,6 +5,8 @@ const AUTH = Object.freeze({
   pepperKey: 'FM_WORKS_AUTH_PEPPER',
   defaultSessionHours: 12,
   defaultIdleMinutes: 120,
+  defaultRememberSessionDays: 30,
+  defaultRememberIdleDays: 30,
   defaultMaxFailures: 5,
   defaultLockMinutes: 15,
   defaultPinLength: 6,
@@ -26,7 +28,7 @@ function getPublicAuthConfig() {
   };
 }
 
-function initializeFirstAdmin(employeeId, pin, clientInfo, support) {
+function initializeFirstAdmin(employeeId, pin, clientInfo, support, rememberSession) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -70,10 +72,10 @@ function initializeFirstAdmin(employeeId, pin, clientInfo, support) {
   } finally {
     lock.releaseLock();
   }
-  return login(employeeId, pin, clientInfo);
+  return login(employeeId, pin, clientInfo, rememberSession);
 }
 
-function login(employeeId, pin, clientInfo) {
+function login(employeeId, pin, clientInfo, rememberSession) {
   const id = normalizeEmployeeId_(employeeId);
   const value = String(pin || '');
   const config = getAuthConfig_();
@@ -136,7 +138,8 @@ function login(employeeId, pin, clientInfo) {
     record.failures = 0;
     record.lockUntil = '';
     record.lastLogin = nowText;
-    const sessionToken = createSession_(record, clientInfo);
+    const keepSignedIn = !!rememberSession;
+    const sessionToken = createSession_(record, clientInfo, keepSignedIn);
     appendAudit_({
       employeeId: record.employeeId,
       employeeName: record.name,
@@ -152,6 +155,7 @@ function login(employeeId, pin, clientInfo) {
     return {
       ok: true,
       sessionToken: sessionToken,
+      remembered: keepSignedIn,
       mustChangePin: prototypeAccess ? false : record.mustChangePin,
       user: publicEmployee_(record)
     };
@@ -515,7 +519,7 @@ function requireSession_(sessionToken) {
   if (!found) throw new Error('AUTH_REQUIRED');
 
   const rowNumber = found.getRow();
-  const row = sheet.getRange(rowNumber, 1, 1, 10).getValues()[0];
+  const row = sheet.getRange(rowNumber, 1, 1, 11).getValues()[0];
   const now = new Date();
   const absoluteExpiry = parseTimestamp_(row[4]);
   const idleExpiry = parseTimestamp_(row[5]);
@@ -534,7 +538,9 @@ function requireSession_(sessionToken) {
   const lastUsed = parseTimestamp_(row[6]);
   if (!lastUsed || (now.getTime() - lastUsed.getTime()) >= AUTH.sessionTouchMinutes * 60000) {
     const nowText = toTimestamp_(now);
-    const nextIdle = toTimestamp_(new Date(now.getTime() + config.idleMinutes * 60000));
+    const remembered = String(row[10] || '').toUpperCase() === 'TRUE' || row[10] === true;
+    const idleMinutes = remembered ? config.rememberIdleMinutes : config.idleMinutes;
+    const nextIdle = toTimestamp_(new Date(now.getTime() + idleMinutes * 60000));
     sheet.getRange(rowNumber, 6, 1, 2).setValues([[nextIdle, nowText]]);
   }
   return { rowNumber: rowNumber, employee: employee, sessionId: row[0] };
@@ -546,14 +552,17 @@ function requireAdminSession_(sessionToken) {
   return session;
 }
 
-function createSession_(employee, clientInfo) {
+function createSession_(employee, clientInfo, rememberSession) {
   cleanupExpiredSessions_();
   const config = getAuthConfig_();
   const now = new Date();
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
   const sessionId = 'S-' + Utilities.getUuid();
-  const absoluteExpiry = new Date(now.getTime() + config.sessionHours * 3600000);
-  const idleExpiry = new Date(now.getTime() + config.idleMinutes * 60000);
+  const remembered = !!rememberSession;
+  const absoluteHours = remembered ? config.rememberSessionHours : config.sessionHours;
+  const idleMinutes = remembered ? config.rememberIdleMinutes : config.idleMinutes;
+  const absoluteExpiry = new Date(now.getTime() + absoluteHours * 3600000);
+  const idleExpiry = new Date(now.getTime() + idleMinutes * 60000);
   getDb_().getSheetByName(AUTH.sessionSheet).appendRow([
     sessionId,
     hashToken_(token),
@@ -564,7 +573,8 @@ function createSession_(employee, clientInfo) {
     toTimestamp_(now),
     'ACTIVE',
     sanitizeClientInfo_(clientInfo),
-    ''
+    '',
+    remembered
   ]);
   return token;
 }
@@ -573,7 +583,7 @@ function cleanupExpiredSessions_() {
   const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
   const now = new Date();
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
@@ -588,7 +598,7 @@ function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
   const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 10).getDisplayValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 11).getDisplayValues();
   rows.forEach((r, idx) => {
     const rowNumber = idx + 2;
     if (rowNumber === exceptRowNumber) return;
@@ -685,6 +695,8 @@ function getAuthConfig_() {
   return {
     sessionHours: Math.max(1, Number(map.SESSION_HOURS || AUTH.defaultSessionHours)),
     idleMinutes: Math.max(15, Number(map.SESSION_IDLE_MINUTES || AUTH.defaultIdleMinutes)),
+    rememberSessionHours: Math.max(24, Number(map.REMEMBER_SESSION_DAYS || AUTH.defaultRememberSessionDays) * 24),
+    rememberIdleMinutes: Math.max(1440, Number(map.REMEMBER_IDLE_DAYS || AUTH.defaultRememberIdleDays) * 1440),
     maxFailures: Math.max(3, Number(map.MAX_LOGIN_FAILURES || AUTH.defaultMaxFailures)),
     lockMinutes: Math.max(1, Number(map.LOCK_MINUTES || AUTH.defaultLockMinutes)),
     pinLength: Math.max(4, Number(map.PIN_LENGTH || AUTH.defaultPinLength))
