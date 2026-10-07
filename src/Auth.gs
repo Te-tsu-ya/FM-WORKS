@@ -8,15 +8,20 @@ const AUTH = Object.freeze({
   defaultMaxFailures: 5,
   defaultLockMinutes: 15,
   defaultPinLength: 6,
-  sessionTouchMinutes: 5
+  sessionTouchMinutes: 5,
+  prototypeMode: true,
+  prototypePin: '000000',
+  prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']
 });
 
 function getPublicAuthConfig() {
   const config = getAuthConfig_();
   return {
     appName: APP.name,
-    needsSetup: !hasAnyPinConfigured_(),
+    needsSetup: AUTH.prototypeMode ? false : !hasAnyPinConfigured_(),
     pinLength: config.pinLength,
+    prototypeMode: AUTH.prototypeMode,
+    prototypePin: AUTH.prototypeMode ? AUTH.prototypePin : '',
     support: getSupportConfig_()
   };
 }
@@ -89,34 +94,37 @@ function login(employeeId, pin, clientInfo) {
       throw new Error('ログインできません。しばらく待ってから再度お試しください。');
     }
 
-    if (!record.pinHash || !record.pinSalt) {
+    const prototypeAccess = isPrototypeLogin_(record, value);
+    if ((!record.pinHash || !record.pinSalt) && !prototypeAccess) {
       throw loginError_();
     }
 
-    const computed = hashPin_(record.employeeId, record.pinSalt, value);
-    if (!safeEqual_(computed, record.pinHash)) {
-      const failures = record.failures + 1;
-      let lockUntil = '';
-      if (failures >= config.maxFailures) {
-        lockUntil = toTimestamp_(new Date(now.getTime() + config.lockMinutes * 60000));
+    if (!prototypeAccess) {
+      const computed = hashPin_(record.employeeId, record.pinSalt, value);
+      if (!safeEqual_(computed, record.pinHash)) {
+        const failures = record.failures + 1;
+        let lockUntil = '';
+        if (failures >= config.maxFailures) {
+          lockUntil = toTimestamp_(new Date(now.getTime() + config.lockMinutes * 60000));
+        }
+        updateEmployeeAuthCells_(record.rowNumber, {
+          failures: failures,
+          lockUntil: lockUntil
+        });
+        appendAudit_({
+          employeeId: record.employeeId,
+          employeeName: record.name,
+          operation: 'ログイン失敗',
+          target: '認証',
+          targetId: record.employeeId,
+          before: '',
+          after: '',
+          source: 'WEB',
+          result: 'ERROR',
+          note: lockUntil ? 'アカウント一時ロック' : 'PIN不一致'
+        });
+        throw loginError_();
       }
-      updateEmployeeAuthCells_(record.rowNumber, {
-        failures: failures,
-        lockUntil: lockUntil
-      });
-      appendAudit_({
-        employeeId: record.employeeId,
-        employeeName: record.name,
-        operation: 'ログイン失敗',
-        target: '認証',
-        targetId: record.employeeId,
-        before: '',
-        after: '',
-        source: 'WEB',
-        result: 'ERROR',
-        note: lockUntil ? 'アカウント一時ロック' : 'PIN不一致'
-      });
-      throw loginError_();
     }
 
     const nowText = toTimestamp_(now);
@@ -140,17 +148,24 @@ function login(employeeId, pin, clientInfo) {
       after: '成功',
       source: 'WEB',
       result: 'SUCCESS',
-      note: sanitizeClientInfo_(clientInfo)
+      note: prototypeAccess ? '試作版共通PIN / ' + sanitizeClientInfo_(clientInfo) : sanitizeClientInfo_(clientInfo)
     });
     return {
       ok: true,
       sessionToken: sessionToken,
-      mustChangePin: record.mustChangePin,
+      mustChangePin: prototypeAccess ? false : record.mustChangePin,
       user: publicEmployee_(record)
     };
   } finally {
     lock.releaseLock();
   }
+}
+
+function isPrototypeLogin_(record, pin) {
+  return !!(AUTH.prototypeMode &&
+    record &&
+    AUTH.prototypeEmployeeIds.includes(record.employeeId) &&
+    String(pin || '') === AUTH.prototypePin);
 }
 
 function resumeSession(sessionToken) {
