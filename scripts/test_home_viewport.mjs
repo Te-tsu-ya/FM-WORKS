@@ -119,7 +119,7 @@ for(const scenario of cases){
     '--no-first-run','--disable-extensions','--force-device-scale-factor=1',
     '--hide-scrollbars','--window-size='+Math.max(500,scenario.width)+','+
       (scenario.height+(direct?87:115)),
-    '--virtual-time-budget=5500','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
+    '--virtual-time-budget=5500','--dump-dom',pathToFileURL(file).href];
   let result;
   try {
     let debug='';
@@ -152,6 +152,15 @@ for(const scenario of cases){
   }
   const failed=Object.keys(checks).filter(k=>!checks[k]);
   console.log((failed.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+' '+(failed.length?'failed='+failed.join(','):''));
+  // Chrome's --dump-dom and --screenshot race to exit when combined.
+  // Run the screenshot independently so geometry evaluation is deterministic.
+  try{
+    const screenshotArgs=args.filter(arg=>arg!=='--dump-dom');
+    screenshotArgs.splice(screenshotArgs.length-1,0,'--virtual-time-budget=1500','--screenshot='+screenshot);
+    execFileSync(chrome,screenshotArgs,{timeout:45000,stdio:'ignore'});
+  }catch(err){
+    console.warn('Screenshot artifact unavailable for '+id+': '+String(err.message||err));
+  }
   if(failed.length)problems++;
 }
 if(problems){
