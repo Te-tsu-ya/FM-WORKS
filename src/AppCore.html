@@ -443,7 +443,7 @@ function homePunchHistory(a){
 }
 function homeScheduleRows(events){
   if(!events.length)return `<div class='home-empty-state'><strong>今日の予定はありません</strong><span>新しい予定は予定表から追加できます。</span></div>`;
-  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' onclick="state.schedule.date='${escapeHtml(e.date||state.data.today)}';navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
+  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' data-date='${escapeHtml(e.date||state.data.today)}' data-event-id='${escapeHtml(e.id||'')}' onclick="state.schedule.date=this.dataset.date;state.schedule.selectedDate=this.dataset.date;state.schedule.selectedEventId=this.dataset.eventId||null;navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
 }
 function homeTaskRows(tasks){
   if(!tasks)return state.homeOverview.error?homeOverviewError():homeOverviewLoading();

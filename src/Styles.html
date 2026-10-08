@@ -1062,3 +1062,12 @@ html[data-theme="dark"] .schedule-hybrid .month-day.day-off{background:color-mix
   .schedule-detail-panel{transition:none}
 }
 </style>
+
+
+<style>
+/* v0.11.3 follow-up: compact genuinely empty timelines. */
+.schedule-timeboard.schedule-all-day-only .schedule-time-track,
+.schedule-timeboard.schedule-all-day-only .schedule-time-axis-body{display:none!important}
+.schedule-timeboard.schedule-all-day-only .schedule-all-day{min-height:40px;height:auto;overflow:visible}
+.schedule-lane-empty{color:var(--muted);font-size:11px;padding:5px}
+</style>

@@ -801,6 +801,7 @@ function loadSchedule(options={}){
     }
     markPageCache('schedule',key);
     renderPageIfActive('schedule');
+    if(state.schedule.mobileDetailOpen)scheduleFocusDetail();
   }).withFailureHandler(err=>{
     endPageLoad(ticket);
     if(scheduleCacheKey()!==key)return;
@@ -1037,16 +1038,17 @@ function scheduleTimelineEvent(item,bounds){
   </button>`;
 }
 function scheduleTimeboard(columns,bounds,kind){
-  const hours=Array.from({length:bounds.end-bounds.start},(_,i)=>bounds.start+i),
-    height=(bounds.end-bounds.start)*48;
-  return `<div class='schedule-timeboard ${kind}' style='--schedule-cols:${columns.length}'>
+  const hasTimed=columns.some(col=>col.events.some(e=>!e.allDay&&scheduleMinutes(e.start)!==null));
+  const hours=hasTimed?Array.from({length:bounds.end-bounds.start},(_,i)=>bounds.start+i):[],
+    height=hasTimed?(bounds.end-bounds.start)*48:0;
+  return `<div class='schedule-timeboard ${kind} ${hasTimed?'':'schedule-all-day-only'}' style='--schedule-cols:${columns.length}'>
     <div class='schedule-time-axis'><div class='schedule-time-axis-head'>時刻</div>
       <div class='schedule-time-axis-body' style='height:${height}px'>${hours.map(h=>`<span style='top:${(h-bounds.start)*48}px'>${String(h).padStart(2,'0')}:00</span>`).join('')}</div></div>
     ${columns.map(col=>{
       const allDay=col.events.filter(e=>e.allDay||scheduleMinutes(e.start)===null);
       return `<section class='schedule-time-lane'>
         <header><strong>${escapeHtml(col.label)}</strong><small>${col.events.length}件${col.note?' / '+escapeHtml(col.note):''}</small></header>
-        <div class='schedule-all-day'>${allDay.map(e=>`<button type='button' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>終日 · ${escapeHtml(e.title)}</button>`).join('')}</div>
+        <div class='schedule-all-day'>${allDay.length?allDay.map(e=>`<button type='button' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>終日 · ${escapeHtml(e.title)}</button>`).join(''):(!hasTimed?`<small class='schedule-lane-empty'>予定なし</small>`:'')}</div>
         <div class='schedule-time-track' style='height:${height}px'>
           ${scheduleTimelineLayout(col.events,bounds).map(item=>scheduleTimelineEvent(item,bounds)).join('')}
         </div>

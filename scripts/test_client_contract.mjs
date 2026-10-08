@@ -403,6 +403,9 @@ const result=vm.runInContext(`
   let escPrevented=false;
   onScheduleDetailKeydown({key:'Escape',preventDefault(){escPrevented=true},stopPropagation(){}});
   expect('Escape dismisses mobile schedule sheet',escPrevented&&state.schedule.mobileDetailOpen===false);
+  state.schedule.events=[];
+  expect('empty day does not render twelve hours of unused timeline',dayView().includes('schedule-all-day-only')&&dayView().includes('予定なし'));
+  expect('home schedule deep link passes both date and selected event',homeScheduleRows([{id:'HOME1',date:'2026-10-08',title:'確認'}]).includes('state.schedule.selectedEventId=this.dataset.eventId||null'));
 
   state.page='home';
 
