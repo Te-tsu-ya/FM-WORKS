@@ -48,7 +48,7 @@ if(tinyFontMatches.length){
 for(const marker of [
   'function updateLiveWorkedNodes()',
   'data-live-worked',
-  "content.classList.toggle('one-screen',state.page==='home')",
+  "content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance')",
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
@@ -531,8 +531,13 @@ for (const attendanceMarker of [
   "function attendanceTimeline(",
   "function attendanceMonthCalendar(",
   "function attendanceRecentHistory(",
+  "function buildAttendanceSamplePreview(",
+  "function attendanceDisplayPreview(",
+  "function openAttendanceSampleDay(",
   "attendance-top-grid",
-  "attendance-bottom-grid"
+  "attendance-bottom-grid",
+  "attendance-one-screen",
+  "attendance-sample-badge"
 ]) {
   if (!(app + styles).includes(attendanceMarker)) {
     console.error('Attendance workspace redesign marker missing: ' + attendanceMarker);
@@ -1098,8 +1103,9 @@ if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了
   failed = true;
 }
 
-if (!app.includes("content.classList.toggle('one-screen',state.page==='home')")) {
-  console.error('Desktop one-screen mode must be limited to the home dashboard.');
+if (!app.includes("content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance')") ||
+    !app.includes("content.classList.toggle('attendance-one-screen',state.page==='attendance')")) {
+  console.error('Desktop one-screen mode must cover home and attendance with an attendance-specific host class.');
   failed = true;
 }
 if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-screen){height:auto;overflow:visible}')) {
@@ -1108,6 +1114,16 @@ if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-sc
 }
 if (!styles.includes('@media(max-height:760px) and (min-width:901px)')) {
   console.error('Home dashboard needs a compact desktop mode for shorter viewports.');
+  failed = true;
+}
+if (!styles.includes('@media(min-width:1141px)') ||
+    !styles.includes('.content.one-screen.attendance-one-screen') ||
+    !styles.includes('@media(max-width:1140px)')) {
+  console.error('Attendance dashboard needs desktop one-screen rules and a narrow-screen scroll fallback.');
+  failed = true;
+}
+if (!app.includes("preview&&preview._sample") || !app.includes("permissions&&state.data.permissions.adminConsole")) {
+  console.error('Attendance QA sample must be visibly marked and ADMIN-only.');
   failed = true;
 }
 for (const homeFlowMarker of [

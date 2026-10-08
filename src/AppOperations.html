@@ -31,6 +31,102 @@ function attendancePreviewData(){
   return p&&p.data&&p.key===key?p.data:null;
 }
 
+function attendancePreviewHasMeaningfulData(preview){
+  return !!(preview&&Array.isArray(preview.daily)&&preview.daily.some(x=>
+    x&&(
+      x.clockIn||x.clockOut||Number(x.workMinutes||0)>0||x.leaveStatus||x.issue||x.worklogIssue
+    )
+  ));
+}
+
+function buildAttendanceSamplePreview(){
+  if(!state.data||!state.data.today)return null;
+  const ym=state.data.today.slice(0,7);
+  const parts=ym.split('-').map(Number);
+  const lastDay=new Date(parts[0],parts[1],0).getDate();
+  const today=state.data.today;
+  let sequence=0;
+  const daily=[];
+  for(let day=1;day<=lastDay;day++){
+    const date=ym+'-'+String(day).padStart(2,'0');
+    const dow=parseIso(date).getDay();
+    const workingDay=dow!==0&&dow!==6;
+    const row={
+      date:date,companyType:workingDay?'通常勤務':'週末',companyName:workingDay?'通常勤務':'休日',
+      workingDay:workingDay,clockIn:'',clockOut:'',workMinutes:0,overtimeMinutes:0,holidayMinutes:0,
+      lateEarlyMinutes:0,breakMinutes:0,requiredBreakMinutes:workingDay?60:0,worklogMinutes:0,
+      worklogDifferenceMinutes:0,worklogIssue:false,workLocation:'',remote:false,leaveStatus:'',
+      absence:false,source:'SAMPLE',issue:false,issueType:''
+    };
+    if(workingDay&&date<today){
+      sequence++;
+      const pattern=((sequence-1)%5)+1;
+      if(pattern===1){
+        Object.assign(row,{clockIn:'09:00',clockOut:'18:00',workMinutes:480,breakMinutes:60,worklogMinutes:480,workLocation:'出社'});
+      }else if(pattern===2){
+        Object.assign(row,{clockIn:'08:55',clockOut:'18:15',workMinutes:500,overtimeMinutes:20,breakMinutes:60,worklogMinutes:500,workLocation:'在宅',remote:true});
+      }else if(pattern===3){
+        Object.assign(row,{clockIn:'09:03',clockOut:'18:05',workMinutes:482,overtimeMinutes:2,breakMinutes:60,worklogMinutes:420,worklogDifferenceMinutes:-62,worklogIssue:true,workLocation:'出社'});
+      }else if(pattern===4){
+        Object.assign(row,{leaveStatus:'有給',worklogMinutes:0});
+      }else{
+        Object.assign(row,{clockIn:'09:12',clockOut:'',workMinutes:0,breakMinutes:0,worklogMinutes:0,workLocation:'外出',issue:true,issueType:'退勤打刻がありません'});
+      }
+    }
+    daily.push(row);
+  }
+  const worked=daily.filter(x=>x.workMinutes>0);
+  const totals={
+    workDays:worked.length,
+    absenceDays:0,
+    totalMinutes:worked.reduce((s,x)=>s+Number(x.workMinutes||0),0),
+    overtimeMinutes:worked.reduce((s,x)=>s+Number(x.overtimeMinutes||0),0),
+    holidayMinutes:0,lateEarlyMinutes:0,
+    paidLeaveDays:daily.filter(x=>x.leaveStatus==='有給').length,
+    remoteDays:daily.filter(x=>x.remote).length,
+    missingPunchDays:daily.filter(x=>x.issue).length,
+    worklogMinutes:daily.reduce((s,x)=>s+Number(x.worklogMinutes||0),0),
+    worklogMismatchDays:daily.filter(x=>x.worklogIssue).length
+  };
+  return {
+    _sample:true,
+    yearMonth:ym,
+    employee:{employeeId:state.data.user.employeeId,name:state.data.user.fullName||state.data.user.displayName||'',displayName:state.data.user.displayName||''},
+    totals:totals,
+    daily:daily,
+    requests:[],
+    closeStatus:{closed:false,status:'OPEN'},
+    reviewStatus:null
+  };
+}
+
+function attendanceDisplayPreview(){
+  const real=attendancePreviewData();
+  if(attendancePreviewHasMeaningfulData(real))return real;
+  if(state.data&&state.data.permissions&&state.data.permissions.adminConsole)return buildAttendanceSamplePreview();
+  return real;
+}
+
+function openAttendanceSampleDay(date,preview){
+  const item=preview&&Array.isArray(preview.daily)?preview.daily.find(x=>x.date===date):null;
+  if(!item)return;
+  const status=item.issue?item.issueType:(item.worklogIssue?'工数差異':(item.leaveStatus||(!item.workingDay?'休日':'正常')));
+  const modal=ensureModal();
+  modal.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card attendance-sample-modal' role='dialog' aria-modal='true' aria-label='勤怠サンプル詳細'>
+    <div class='modal-head'><div><small>表示確認用サンプル</small><h2>${escapeHtml(fmtDate(item.date))}</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
+    <div class='attendance-sample-warning'>この内容は画面デザイン確認用です。Google Sheetsには保存されていません。</div>
+    <div class='attendance-sample-detail-grid'>
+      <div><span>状態</span><strong>${escapeHtml(status)}</strong></div>
+      <div><span>出勤</span><strong>${escapeHtml(item.clockIn||'—')}</strong></div>
+      <div><span>退勤</span><strong>${escapeHtml(item.clockOut||'—')}</strong></div>
+      <div><span>実働</span><strong>${formatMinutesClient(item.workMinutes)}</strong></div>
+      <div><span>休憩</span><strong>${formatMinutesClient(item.breakMinutes)}</strong></div>
+      <div><span>勤務場所</span><strong>${escapeHtml(item.workLocation||'—')}</strong></div>
+    </div>
+    <div class='button-row section-gap'><button type='button' class='secondary-button' onclick='closeModal()'>閉じる</button></div>
+  </section>`;
+}
+
 function openAttendanceMonthly(view){
   const preview=attendancePreviewData();
   state.monthly.yearMonth=state.data.today.slice(0,7);
@@ -44,6 +140,8 @@ function openAttendanceMonthly(view){
 }
 
 function openAttendancePreviewDay(date){
+  const display=attendanceDisplayPreview();
+  if(display&&display._sample){openAttendanceSampleDay(date,display);return}
   const preview=attendancePreviewData();if(!preview)return;
   state.monthly.yearMonth=preview.yearMonth;
   state.monthly.employeeId=state.data.user.employeeId;
@@ -102,12 +200,19 @@ function attendanceAlerts(preview){
   if(review&&review.needsAttention){
     items.push({tone:'danger',title:`${review.targetMonth}の勤怠確認が${review.stale?'再度必要です':'未完了です'}`,sub:review.message,action:"openPreviousMonthReview()"});
   }
-  if(today&&today.issue){
-    items.push({tone:'danger',title:today.issueType||'本日の勤怠に確認事項があります',sub:'内容を確認し、必要に応じて打刻修正を申請してください。',action:`openAttendancePreviewDay('${today.date}')`});
-  }
-  if(today&&today.worklogIssue){
-    const diff=Math.abs(Number(today.worklogDifferenceMinutes||0));
-    items.push({tone:'warning',title:'工数と実働に差異があります',sub:`差異 ${formatMinutesClient(diff)}。工数画面で確認してください。`,action:"navigate('worklog')"});
+  if(preview&&preview._sample){
+    const punchIssue=(preview.daily||[]).find(x=>x.issue);
+    const worklogIssue=(preview.daily||[]).find(x=>x.worklogIssue);
+    if(punchIssue)items.push({tone:'danger',title:`表示例：${punchIssue.date.slice(5).replace('-','/')} 打刻確認`,sub:punchIssue.issueType+'（画面確認用サンプル）',action:`openAttendancePreviewDay('${punchIssue.date}')`});
+    if(worklogIssue)items.push({tone:'warning',title:`表示例：${worklogIssue.date.slice(5).replace('-','/')} 工数差異`,sub:`差異 ${formatMinutesClient(Math.abs(Number(worklogIssue.worklogDifferenceMinutes||0)))}（画面確認用サンプル）`,action:`openAttendancePreviewDay('${worklogIssue.date}')`});
+  }else{
+    if(today&&today.issue){
+      items.push({tone:'danger',title:today.issueType||'本日の勤怠に確認事項があります',sub:'内容を確認し、必要に応じて打刻修正を申請してください。',action:`openAttendancePreviewDay('${today.date}')`});
+    }
+    if(today&&today.worklogIssue){
+      const diff=Math.abs(Number(today.worklogDifferenceMinutes||0));
+      items.push({tone:'warning',title:'工数と実働に差異があります',sub:`差異 ${formatMinutesClient(diff)}。工数画面で確認してください。`,action:"navigate('worklog')"});
+    }
   }
   if(!items.length)return `<div class='attendance-alert-empty'><span>✓</span><div><strong>現在、確認が必要な勤怠はありません</strong><small>問題が見つかった場合はここに表示します。</small></div></div>`;
   return items.slice(0,3).map(x=>`<button class='attendance-alert-item ${x.tone}' onclick="${x.action}"><span>!</span><div><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.sub)}</small></div><b>›</b></button>`).join('');
@@ -161,7 +266,7 @@ function attendanceMonthSummary(preview){
 
 function attendanceRecentHistory(preview){
   if(!preview)return `<div class='attendance-history-skeleton'></div>`;
-  const rows=(preview.daily||[]).filter(x=>x.date<=state.data.today&&(x.clockIn||x.clockOut||x.workMinutes||x.leaveStatus||x.issue)).slice(-5).reverse();
+  const rows=(preview.daily||[]).filter(x=>x.date<=state.data.today&&(x.clockIn||x.clockOut||x.workMinutes||x.leaveStatus||x.issue)).slice(-4).reverse();
   if(!rows.length)return `<div class='attendance-empty compact'><strong>今月の勤怠履歴はまだありません</strong></div>`;
   return `<div class='attendance-recent-table'><div class='attendance-recent-head'><span>日付</span><span>出勤</span><span>退勤</span><span>実働</span><span>休憩</span><span>残業</span><span>勤務場所</span><span>状態</span></div>${rows.map(x=>{
     const tone=attendanceDayTone(x);
@@ -171,8 +276,9 @@ function attendanceRecentHistory(preview){
 }
 
 function attendancePage(){
-  const d=state.data,a=d.attendance,company=d.companyToday||null,preview=attendancePreviewData();
-  const dateAction=`<div class='attendance-date-chip'>${svg('i-calendar')}<strong>${escapeHtml(fmtDate(d.today))}</strong><span>${company?escapeHtml(company.name||company.type||'勤務日'):'会社カレンダー未登録'}</span></div>`;
+  const d=state.data,a=d.attendance,company=d.companyToday||null,preview=attendanceDisplayPreview();
+  const sampleBadge=preview&&preview._sample?`<span class='attendance-sample-badge' title='実データには保存されません'>表示確認用サンプル</span>`:'';
+  const dateAction=`<div class='attendance-date-actions'>${sampleBadge}<div class='attendance-date-chip'>${svg('i-calendar')}<strong>${escapeHtml(fmtDate(d.today))}</strong><span>${company?escapeHtml(company.name||company.type||'勤務日'):'会社カレンダー未登録'}</span></div></div>`;
   const stateTone=attendanceStatusTone(a);
   const currentMain=a.clockIn?`<strong class='attendance-live-value' data-live-worked>${escapeHtml(liveWorkedText(a))}</strong><span class='attendance-live-range'>${escapeHtml(a.clockIn)} 〜 ${escapeHtml(a.clockOut||'現在')}</span>`:`<strong class='attendance-live-value off-copy'>まだ出勤していません</strong><span class='attendance-live-range'>勤務を開始すると実働時間を表示します</span>`;
   return `<div class='attendance-dashboard'>

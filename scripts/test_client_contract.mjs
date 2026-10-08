@@ -178,6 +178,12 @@ const result=vm.runInContext(`
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
   expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
   expect('attendance workspace exposes today monthly and history views',attendanceWorkspaceTabs('history').includes('本日')&&attendanceWorkspaceTabs('history').includes('月間')&&attendanceWorkspaceTabs('history').includes('履歴'));
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'青木さん',fullName:'青木 悠真'},permissions:{adminConsole:true}};
+  state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
+  const attendanceSample=attendanceDisplayPreview();
+  expect('empty admin attendance gets a browser-only QA sample',attendanceSample&&attendanceSample._sample===true);
+  expect('attendance QA sample covers issue and worklog-difference states',attendanceSample.daily.some(x=>x.issue)&&attendanceSample.daily.some(x=>x.worklogIssue));
+  expect('attendance QA sample covers leave and remote-work states',attendanceSample.daily.some(x=>x.leaveStatus==='有給')&&attendanceSample.daily.some(x=>x.remote===true));
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
 
 
