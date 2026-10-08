@@ -728,3 +728,97 @@ html[data-theme="dark"] .attendance-sample-badge,html[data-theme="dark"] .attend
 }
 @media(max-width:620px){.attendance-sample-detail-grid{grid-template-columns:1fr}.attendance-date-actions{justify-content:flex-start;width:100%}}
 </style>
+<style>
+/* v0.10.9 readability + mid-day work-location switching */
+.font-size-toggle{font-weight:900;font-size:15px;letter-spacing:-.04em}
+.attendance-location-label{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.attendance-location-label>span{font-size:12px;color:var(--muted);font-weight:800}
+.attendance-location-label>small{font-size:11px;color:var(--muted);text-align:right}
+.attendance-timeline-row.location .attendance-timeline-dot{background:var(--purple)}
+.attendance-timeline-row.location strong{color:#6548cf}
+
+@media(min-width:1141px){
+  .attendance-one-screen .attendance-panel h2,
+  .attendance-one-screen .attendance-focus-card h2{font-size:15px}
+  .attendance-one-screen .attendance-timeline-row time{font-size:13px}
+  .attendance-one-screen .attendance-timeline-row strong{font-size:13px}
+  .attendance-one-screen .attendance-timeline-row small{font-size:12px}
+  .attendance-one-screen .attendance-state-pill{font-size:12px}
+  .attendance-one-screen .attendance-location-label>span{font-size:12px}
+  .attendance-one-screen .attendance-location-label>small{font-size:11px}
+  .attendance-one-screen .attendance-location button{font-size:14px}
+  .attendance-one-screen .attendance-today-stats span,
+  .attendance-one-screen .attendance-today-stats small{font-size:12px}
+  .attendance-one-screen .attendance-today-stats strong{font-size:15px}
+  .attendance-one-screen .attendance-mini-weekdays span,
+  .attendance-one-screen .attendance-mini-day{font-size:12px}
+  .attendance-one-screen .attendance-calendar-legend{font-size:12px}
+  .attendance-one-screen .attendance-month-kpis span{font-size:12px}
+  .attendance-one-screen .attendance-month-kpis strong{font-size:14px}
+  .attendance-one-screen .attendance-history-title{font-size:13px}
+  .attendance-one-screen .attendance-recent-head,
+  .attendance-one-screen .attendance-recent-row{font-size:12px}
+  .attendance-one-screen .attendance-recent-row em{font-size:12px}
+  .attendance-one-screen .text-button{font-size:12px}
+}
+
+/* Large-text mode favors readability over the one-screen constraint. */
+html[data-font-size="large"] .nav-button{font-size:16px}
+html[data-font-size="large"] .search-box input{font-size:16px}
+html[data-font-size="large"] .profile-text strong{font-size:15px}
+html[data-font-size="large"] .profile-text small{font-size:13px}
+html[data-font-size="large"] .page-head p{font-size:16px}
+html[data-font-size="large"] .eyebrow{font-size:13px}
+html[data-font-size="large"] button,
+html[data-font-size="large"] input,
+html[data-font-size="large"] select,
+html[data-font-size="large"] textarea{font-size:15px}
+html[data-font-size="large"] .muted,
+html[data-font-size="large"] small{font-size:13px}
+html[data-font-size="large"] .attendance-panel h2,
+html[data-font-size="large"] .attendance-focus-card h2{font-size:18px}
+html[data-font-size="large"] .attendance-state-pill{font-size:14px}
+html[data-font-size="large"] .attendance-live-value{font-size:34px}
+html[data-font-size="large"] .attendance-live-value.off-copy{font-size:24px}
+html[data-font-size="large"] .attendance-live-range{font-size:14px}
+html[data-font-size="large"] .attendance-location-label>span{font-size:14px}
+html[data-font-size="large"] .attendance-location-label>small{font-size:13px}
+html[data-font-size="large"] .attendance-timeline-row time,
+html[data-font-size="large"] .attendance-timeline-row strong{font-size:15px}
+html[data-font-size="large"] .attendance-timeline-row small{font-size:14px}
+html[data-font-size="large"] .attendance-today-stats span,
+html[data-font-size="large"] .attendance-today-stats small{font-size:13px}
+html[data-font-size="large"] .attendance-today-stats strong{font-size:18px}
+html[data-font-size="large"] .attendance-mini-weekdays span,
+html[data-font-size="large"] .attendance-mini-day{font-size:14px}
+html[data-font-size="large"] .attendance-calendar-legend{font-size:13px}
+html[data-font-size="large"] .attendance-month-kpis span{font-size:13px}
+html[data-font-size="large"] .attendance-month-kpis strong{font-size:17px}
+html[data-font-size="large"] .attendance-history-title{font-size:15px}
+html[data-font-size="large"] .attendance-recent-head,
+html[data-font-size="large"] .attendance-recent-row{font-size:14px}
+html[data-font-size="large"] .attendance-recent-row em{font-size:13px}
+
+@media(min-width:1141px){
+  html[data-font-size="large"] .content.one-screen.attendance-one-screen{
+    height:auto;
+    min-height:calc(100svh - var(--topbar));
+    overflow:visible;
+    display:block
+  }
+  html[data-font-size="large"] .content.attendance-one-screen>.attendance-dashboard{
+    display:grid;
+    grid-template-rows:auto;
+    gap:12px
+  }
+  html[data-font-size="large"] .attendance-one-screen .attendance-panel,
+  html[data-font-size="large"] .attendance-one-screen .attendance-focus-card{
+    overflow:visible
+  }
+}
+@media(max-width:760px){
+  .font-size-toggle{width:38px;height:38px;font-size:14px}
+  .attendance-location-label{align-items:flex-start;flex-direction:column;gap:3px}
+  .attendance-location-label>small{text-align:left}
+}
+</style>

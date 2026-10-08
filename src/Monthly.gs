@@ -530,7 +530,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
         const endMin=timeToMinutes_(company.end);
         lateEarly=Math.max(0,inMin-startMin)+Math.max(0,endMin-outMin);
       }
-      workLocation=rows.length?rows[rows.length-1].workLocation:'';
+      workLocation=summarizeWorkLocations_(rows);
       remote=minutes>0&&rows.some(x=>x.workLocation==='在宅');
     }
 

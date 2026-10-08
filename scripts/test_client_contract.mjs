@@ -147,6 +147,14 @@ const result=vm.runInContext(`
   expect('punch submits session/action/location through GAS contract',call&&call.method==='recordPunch'&&call.args[0]==='SESSION_TOKEN'&&call.args[1]==='出勤'&&call.args[2]==='在宅');
   state.busy=false;
 
+  state.data={attendance:{state:'working',workLocation:'出社'}};
+  state.workLocation='出社';
+  resetCalls();
+  selectWorkLocation('在宅');
+  call=lastCall();
+  expect('mid-shift location switch reaches dedicated server contract',call&&call.method==='recordWorkLocationChange'&&call.args[0]==='SESSION_TOKEN'&&call.args[1]==='在宅');
+  state.busy=false;
+
   requestPayloadFromForm=()=>({type:'有給',startDate:'2026-10-08',endDate:'2026-10-08',reason:'私用',content:''});
   validateRequestForm=()=>null;
   hideRequestError=()=>{};
@@ -171,6 +179,11 @@ const result=vm.runInContext(`
   document.documentElement.dataset.theme='light';
   toggleTheme();
   expect('theme toggle changes theme without server call',document.documentElement.dataset.theme==='dark');
+  document.documentElement.dataset.fontSize='standard';
+  setFontSizeMode('large');
+  expect('large-text mode persists on the html root',document.documentElement.dataset.fontSize==='large'&&localStorage.getItem('fmworks.fontSize')==='large');
+  toggleFontSize();
+  expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
   expect('top navigation definition is limited to five daily jobs plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
