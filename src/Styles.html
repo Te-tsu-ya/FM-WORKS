@@ -1815,3 +1815,242 @@ html[data-theme="dark"] .home-portal-all-clear>span{background:#244934;color:#91
 }
 @media(prefers-reduced-motion:reduce){.home-portal-skeleton{animation:none}}
 </style>
+
+
+<style>
+/*
+ * FM WORKS v0.11.10: shared interface contract + fit-to-viewport home.
+ * Shared tokens improve consistency; page-specific layout remains isolated.
+ */
+:root{
+  --ui-card-radius:16px;
+  --ui-control-radius:10px;
+  --ui-card-shadow:0 5px 20px rgba(29,55,90,.04);
+  --ui-section-gap:12px;
+  --ui-control-min-height:40px;
+  --ui-section-title-size:16px;
+  --ui-focus-color:var(--blue);
+}
+html:not([data-theme="dark"]){--muted:#62748d}
+.card,.attendance-panel,.attendance-focus-card,.worklog-panel,.schedule-detail-panel,
+.request-dashboard-launch,.request-side-card,.request-history-panel,.admin-workspace-main,
+.admin-internal-sidebar,.home-portal-panel{
+  border-radius:var(--ui-card-radius);
+  box-shadow:var(--ui-card-shadow);
+}
+.primary-button,.secondary-button{border-radius:var(--ui-control-radius)}
+.attendance-panel h2,.attendance-focus-card h2,.worklog-panel h2,
+.request-panel-heading h2,.home-portal-panel-head h2{font-size:var(--ui-section-title-size)}
+.home-portal-stat,.home-portal-shortcut,.home-portal-task-row,
+.request-quick-card,.admin-overview-card,.attendance-date-chip,
+.worklog-time-block,.request-history-filters button{
+  -webkit-tap-highlight-color:transparent;
+}
+.home-portal-stat:focus-visible,.home-portal-task-row:focus-visible,
+.home-portal-shortcut:focus-visible,.request-quick-card:focus-visible,
+.worklog-time-block:focus-visible,.admin-overview-card:focus-visible,
+.attendance-date-chip:focus-visible,.request-history-filters button:focus-visible{
+  outline:3px solid var(--ui-focus-color);
+  outline-offset:2px;
+}
+html[data-theme="dark"] .home-portal-stat:focus-visible,
+html[data-theme="dark"] .home-portal-task-row:focus-visible,
+html[data-theme="dark"] .home-portal-shortcut:focus-visible{outline-color:#95c4ff}
+
+/* Fit mode is only enabled when text is standard-size and a desktop viewport
+ * has enough space. Smaller viewports / large text retain normal scrolling. */
+@media (min-width:1200px) and (min-height:740px){
+  html:not([data-font-size="large"]) .content.one-screen:has(>.home-portal-screen){
+    height:calc(100svh - var(--topbar));
+    min-height:0;
+    max-height:none;
+    overflow:hidden;
+    padding:12px 20px 10px;
+  }
+  html:not([data-font-size="large"]) .home-portal-screen{
+    height:100%;
+    min-height:0;
+    overflow:hidden;
+    grid-template-rows:auto auto minmax(0,1fr);
+    align-content:stretch;
+    gap:8px;
+  }
+  html:not([data-font-size="large"]) .home-portal-header{
+    min-height:0;
+    padding:9px 15px;
+    gap:14px;
+  }
+  html:not([data-font-size="large"]) .home-portal-intro h1{
+    font-size:19px;
+    line-height:1.24;
+    margin:5px 0 3px;
+  }
+  html:not([data-font-size="large"]) .home-portal-intro p{line-height:1.4}
+  html:not([data-font-size="large"]) .home-portal-meta{gap:8px}
+  html:not([data-font-size="large"]) .home-portal-current{gap:4px;padding-left:14px}
+  html:not([data-font-size="large"]) .home-portal-stats{gap:8px}
+  html:not([data-font-size="large"]) .home-portal-stat{
+    min-height:69px;
+    padding:8px 12px;
+    gap:3px;
+    border-radius:12px;
+  }
+  html:not([data-font-size="large"]) .home-portal-stat>strong{
+    font-size:20px;
+    line-height:1.16;
+  }
+  html:not([data-font-size="large"]) .home-portal-stat>small{
+    line-height:1.25;
+    font-size:11px;
+  }
+  html:not([data-font-size="large"]) .home-portal-layout{
+    height:100%;
+    min-height:0;
+    grid-template-rows:minmax(276px,1.45fr) minmax(168px,1fr);
+    align-items:stretch;
+    gap:8px;
+  }
+  html:not([data-font-size="large"]) .home-portal-panel{
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    min-height:0;
+    max-height:100%;
+    padding:10px 13px;
+    border-radius:13px;
+    overflow:hidden;
+  }
+  html:not([data-font-size="large"]) .home-portal-panel-head{
+    flex:0 0 auto;
+    margin-bottom:7px;
+    gap:8px;
+  }
+  html:not([data-font-size="large"]) .home-portal-panel-head .eyebrow{margin-bottom:2px}
+  html:not([data-font-size="large"]) .home-portal-panel-head h2{font-size:15px}
+  html:not([data-font-size="large"]) .home-portal-punch-facts{
+    flex:0 0 auto;
+    gap:6px;
+    margin-bottom:7px;
+  }
+  html:not([data-font-size="large"]) .home-portal-punch-facts>div{
+    padding:6px 5px;
+    gap:3px;
+    border-radius:9px;
+  }
+  html:not([data-font-size="large"]) .home-portal-punch-facts strong{font-size:15px}
+  html:not([data-font-size="large"]) .home-portal-punch-actions{
+    flex:0 0 auto;
+    margin-bottom:7px;
+  }
+  html:not([data-font-size="large"]) .home-portal-punch-actions>button{
+    min-height:42px;
+    border-radius:10px;
+    font-size:13px;
+  }
+  html:not([data-font-size="large"]) .home-portal-attendance .home-location{
+    min-height:34px;
+    flex:0 0 auto;
+    padding:4px 9px;
+    margin-bottom:6px;
+  }
+  html:not([data-font-size="large"]) .home-portal-attendance .home-location-options button{
+    min-height:30px;
+    padding:4px 10px;
+  }
+  html:not([data-font-size="large"]) .home-portal-inline-head{
+    flex:0 0 auto;
+    margin:5px 1px 3px;
+  }
+  html:not([data-font-size="large"]) .home-portal-inline-head button{min-height:30px}
+  html:not([data-font-size="large"]) .home-portal-punch-history{
+    min-height:0;
+    flex:1 1 auto;
+    overflow-y:auto;
+    scrollbar-width:thin;
+  }
+  html:not([data-font-size="large"]) .home-portal-punch-history .home-empty-mini{
+    padding:7px 10px;
+  }
+  html:not([data-font-size="large"]) .home-portal-agenda-empty{
+    flex:1 1 auto;
+    min-height:0;
+    padding:8px 10px;
+    gap:10px;
+  }
+  html:not([data-font-size="large"]) .home-portal-empty-icon{
+    width:31px;height:31px;border-radius:8px;
+  }
+  html:not([data-font-size="large"]) .home-portal-agenda-rows{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    scrollbar-width:thin;
+  }
+  html:not([data-font-size="large"]) .home-portal-agenda-row{
+    padding:8px 10px;
+    min-height:40px;
+    gap:7px;
+  }
+  html:not([data-font-size="large"]) .home-portal-task-list{
+    min-height:0;
+    overflow-y:auto;
+    scrollbar-width:thin;
+    gap:5px;
+  }
+  html:not([data-font-size="large"]) .home-portal-task-row{
+    min-height:43px;
+    flex-shrink:0;
+    padding:8px 10px;
+    gap:7px;
+  }
+  html:not([data-font-size="large"]) .home-portal-other-tasks{
+    flex:0 0 auto;
+    margin-top:5px;
+  }
+  html:not([data-font-size="large"]) .home-portal-other-tasks>summary{
+    padding:5px 4px;
+    min-height:28px;
+  }
+  html:not([data-font-size="large"]) .home-portal-shortcut-grid{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    grid-auto-rows:minmax(41px,1fr);
+    gap:6px;
+    scrollbar-width:thin;
+  }
+  html:not([data-font-size="large"]) .home-portal-shortcut{
+    min-width:0;
+    min-height:41px;
+    padding:7px 10px;
+    gap:7px;
+  }
+  html:not([data-font-size="large"]) .home-portal-shortcut strong{font-size:12px}
+  html:not([data-font-size="large"]) .home-portal-shortcut small{font-size:11px;line-height:1.2}
+  html:not([data-font-size="large"]) .home-portal-panel-footer{
+    flex:0 0 auto;
+    margin-top:5px;
+    padding-top:5px;
+  }
+}
+@media(min-width:1500px) and (min-height:740px){
+  html:not([data-font-size="large"]) .home-portal-shortcut-grid:has(> :nth-child(5)){
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+/* User-selected larger text must win over fitting the screen. No clipped text. */
+html[data-font-size="large"] .content.one-screen:has(>.home-portal-screen){
+  height:auto;
+  overflow:visible;
+  padding-bottom:28px;
+}
+html[data-font-size="large"] .home-portal-screen{
+  height:auto;
+  overflow:visible;
+}
+/* Very short or narrow windows retain natural scrolling instead of hiding controls. */
+@media(max-height:739px), (max-width:1199px){
+  .content.one-screen:has(>.home-portal-screen){height:auto;overflow:visible}
+  .home-portal-screen{height:auto;overflow:visible}
+}
+</style>

@@ -946,6 +946,26 @@ const result=vm.runInContext(`
   state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''};
   resetCalls();
 
+
+  // v0.11.10: all six sections keep intact page entry points after shared style refactoring.
+  const uiPageRoutes=['home','attendance','worklog','schedule','requests','people'];
+  expect('all six primary application page routes have a functional renderer',
+    uiPageRoutes.every(page=>typeof ({home:homePage,attendance:attendancePage,
+      worklog:worklogPage,schedule:schedulePage,requests:requestsPage,people:peoplePage})[page]==='function'));
+  state.sessionToken='SESSION_TOKEN';
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'テスト'},
+    attendance:{state:'off',stateLabel:'勤務外'},permissions:{requestApprove:true,adminConsole:true},
+    todaySchedule:[],companyToday:{name:'通常勤務'},
+    month:{workHours:'1時間00分',overtime:'0時間00分',leaveBalance:'10日',pendingRequests:0},
+    tasks:[{label:'勤怠の確認',status:'0件',tone:'info'}]};
+  state.homeOverview={loading:false,loaded:true,reloadRequested:false,error:'',callbacks:[]};
+  resetCalls();
+  const fittedPortal=homePage();
+  expect('desktop one-screen preserves all four panels, no fake live calls and schedule empty state',
+    ['home-portal-attendance','home-portal-priorities','home-portal-agenda','home-portal-shortcuts']
+      .every(key=>fittedPortal.includes(key))&&
+    fittedPortal.includes('今日の予定はありません')&&fittedPortal.includes('出勤する')&&apiCalls.length===0);
+
   state.adminUi=createAdminUiState();
   state.authAdmin=null;
   state.sessionToken='SESSION_TOKEN';

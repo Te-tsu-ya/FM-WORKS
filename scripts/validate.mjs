@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/DESIGN_SYSTEM.md','scripts/test_home_viewport.mjs',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
@@ -1348,6 +1348,37 @@ for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協�
   }
 }
 
+
+
+const designSystem=fs.readFileSync(path.join(root,'docs','DESIGN_SYSTEM.md'),'utf8');
+for(const systemMarker of [
+  '--ui-card-radius','--ui-control-radius','--ui-card-shadow',
+  '--ui-section-gap','--ui-control-min-height','--ui-focus-color'
+]){
+  if(!styles.includes(systemMarker)||!designSystem.includes(systemMarker)){
+    console.error('v0.11.10 shared design token undocumented or missing: '+systemMarker);failed=true;
+  }
+}
+for(const layoutMarker of [
+  '@media (min-width:1200px) and (min-height:740px)',
+  'height:calc(100svh - var(--topbar))',
+  'grid-template-rows:minmax(276px,1.45fr) minmax(168px,1fr)',
+  'html[data-font-size="large"] .content.one-screen:has(>.home-portal-screen)',
+  '@media(max-height:739px), (max-width:1199px)',
+  '.home-portal-punch-history',
+  '.home-portal-agenda-rows',
+  '.home-portal-task-list',
+  '.home-portal-shortcut-grid'
+]){
+  if(!styles.includes(layoutMarker)){
+    console.error('v0.11.10 one-screen or fallback style missing: '+layoutMarker);failed=true;
+  }
+}
+if(!designSystem.includes('ホーム')||!designSystem.includes('勤怠')||
+  !designSystem.includes('工数')||!designSystem.includes('予定表')||
+  !designSystem.includes('申請')||!designSystem.includes('管理')){
+  console.error('Cross-page design audit is incomplete.');failed=true;
+}
 
 const portalFile=fs.readFileSync(path.join(root,'src','AppHomePortal.html'),'utf8');
 for (const homePortalMarker of [
