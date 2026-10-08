@@ -1,0 +1,80 @@
+<script>
+/* v0.12.0: Information architecture only. No accounting writes, save APIs or spreadsheet reads. */
+const OFFICE_MODULES=[
+  {id:'documents',title:'帳票・見積',icon:'i-file',caption:'見積・請求・納品・注文・領収書',
+    explanation:'既存のExcel帳票を整理し、共通の取引先・明細から帳票を作成するための入口です。',
+    fields:['帳票種別','発行日','帳票番号','取引先','ベンダーコード','登録番号','品目・内容','数量','単価','税率・税額','合計金額'],
+    sheets:'見積／納品／請求／注文／領収書のExcelテンプレート'},
+  {id:'receipts',title:'領収書・証憑',icon:'i-doc',caption:'領収書の登録と証跡管理',
+    explanation:'経費申請や支払履歴に添付する領収書・証拠書類を一か所で扱う構想です。',
+    fields:['書類整理番号','利用日','支払先','使用目的','金額','適格請求書番号','支払方法','領収書・証憑','関連申請'],
+    sheets:'経費申請、貸出申請書、領収書テンプレート'},
+  {id:'expenses',title:'経費申請',icon:'i-trend',caption:'立替・支払・承認の管理',
+    explanation:'申請から承認、支払い、立替者への精算までを管理するための入口です。',
+    fields:['申請日','申請者','申請額','申請理由','使用日','使用額','経費区分','承認状況','出金日','立替者受取日','支払方法','備考'],
+    sheets:'経費清算申請、経費、現金出納帳'},
+  {id:'travel',title:'出張履歴',icon:'i-calendar',caption:'出張・宿泊・日当の履歴',
+    explanation:'出張者・行き先・目的・日程・費用と出張旅費の判定情報を管理する構想です。',
+    fields:['出張者','役職','出発日・時刻','帰着日・時刻','出張先','内容','移動距離区分','交通費等','宿泊地域','宿泊日数','日当区分','支給額','備考'],
+    sheets:'出張記録、経費申請'},
+  {id:'assets',title:'備品・購買',icon:'i-gear',caption:'必要備品・購入・貸出管理',
+    explanation:'備品の購入候補・予算・支払いと、実際の貸出・返却まで管理するための入口です。',
+    fields:['エリア','品目','管理番号','メーカー・品番','金額・予算','取引先','支払者・支払方法','購入状況','貸出日','返却予定日','返却日','備考'],
+    sheets:'事務所で必要なもの、備品管理、貸出簿'},
+  {id:'vendors',title:'取引先マスタ',icon:'i-users',caption:'ベンダーコードと登録情報',
+    explanation:'見積・経費・出張に共通する取引先情報を将来ひも付けるための入口です。',
+    fields:['社名','ベンダーコード','業種','コード接頭辞','適格請求書発行事業者登録番号','所在地','備考'],
+    sheets:'ベンダーコード、経費、帳票テンプレート'}
+];
+function officeWorkspaceAllowed(){
+  return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace);
+}
+function selectOfficeModule(id){
+  if(!officeWorkspaceAllowed()||!OFFICE_MODULES.some(item=>item.id===id))return;
+  if(!state.officeUi)state.officeUi={selected:'documents'};
+  state.officeUi.selected=id;
+  renderPageIfActive('office');
+}
+function officeModuleCurrent(){
+  const selected=state.officeUi&&state.officeUi.selected;
+  return OFFICE_MODULES.find(item=>item.id===selected)||OFFICE_MODULES[0];
+}
+function officeModuleDetail(item){
+  return `<section class='card office-module-detail' aria-labelledby='officeDetailTitle'>
+    <header class='office-module-head'>
+      <div><span class='eyebrow'>PLANNING / 基本設計</span><h2 id='officeDetailTitle'>${escapeHtml(item.title)}</h2>
+        <p>${escapeHtml(item.explanation)}</p></div>
+      <span class='office-planning-status' role='status'>入力・保存機能は未実装</span>
+    </header>
+    <div class='office-module-subhead'><strong>想定する入力項目</strong><small>参考のExcelから抽出した仮項目です。内容とデザインは後から変更できます。</small></div>
+    <div class='office-field-grid'>${item.fields.map((name,i)=>`<div class='office-field-sample'>
+      <span class='office-field-number'>${String(i+1).padStart(2,'0')}</span><span>${escapeHtml(name)}</span></div>`).join('')}</div>
+    <div class='office-source-note'><strong>参考資料</strong><span>${escapeHtml(item.sheets)}</span></div>
+  </section>`;
+}
+function officePage(){
+  if(!officeWorkspaceAllowed())return pageHead('事務・経理','この画面を表示する権限がありません。管理者または総務担当者にご確認ください。');
+  const selected=officeModuleCurrent();
+  return `<div class='office-screen'>
+    ${pageHead('事務・経理','見積・帳票、経費申請、出張履歴、備品管理などの入口をまとめています。')}
+    <section class='office-intro'><div>
+      <span class='eyebrow'>WORKSPACE / 総務・経理</span>
+      <strong>事務作業をひとつの場所に。</strong>
+      <p>現在はメニューと入力項目の土台だけです。Excelの金額・取引先・社員の実データは読み込んでいません。</p>
+    </div><span class='office-intro-chip'>設計準備中</span></section>
+    <div class='office-grid'>
+      <nav class='office-module-nav' aria-label='事務機能のメニュー'>
+        ${OFFICE_MODULES.map(item=>`<button type='button' class='office-module-link ${item.id===selected.id?'active':''}'
+          data-office-module='${item.id}' aria-current='${item.id===selected.id?'page':'false'}'
+          onclick='selectOfficeModule(this.dataset.officeModule)'>
+          <span class='office-module-icon'>${svg(item.icon)}</span>
+          <span class='office-module-label'><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.caption)}</small></span>
+          <span class='office-module-arrow' aria-hidden='true'>›</span>
+        </button>`).join('')}
+      </nav>
+      ${officeModuleDetail(selected)}
+    </div>
+    <p class='office-footnote'>この画面では申請・承認・保存・PDF発行はできません。各機能の設計が決まるまで、会計・勤怠・年休台帳などの実データには影響しません。</p>
+  </div>`;
+}
+</script>

@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,office:officePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
@@ -119,6 +119,7 @@ function acceptLogin(result){
 
 function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
+  state.officeUi={selected:'documents'};
   state.authAdmin=null;
   state.adminUi=createAdminUiState();
   state.adminTab='people';
@@ -137,6 +138,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
   if(state.page==='admin'&&state.adminTab==='people')state.page='people';
   if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
+  if(state.page==='office'&&!(data.permissions&&data.permissions.officeWorkspace))state.page='home';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
   document.getElementById('app').hidden=false;
