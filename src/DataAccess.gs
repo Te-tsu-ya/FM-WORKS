@@ -113,7 +113,12 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end){
   const lastRow=sheet.getLastRow();
   if(lastRow<2)return [];
   const regex=dateRangeRegex_(start,end,370);
-  if(!regex)return sheet.getRange(2,1,lastRow-1,width).getDisplayValues();
+  // Long date spans exceed the indexed regex cap. Never expose out-of-range rows.
+  if(!regex){
+    if(String(start)>String(end))return [];
+    return sheet.getRange(2,1,lastRow-1,width).getDisplayValues()
+      .filter(r=>String(r[dateColumn-1]||'')>=String(start)&&String(r[dateColumn-1]||'')<=String(end));
+  }
   const started=Date.now();
   const cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();
   if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER'});return [];}

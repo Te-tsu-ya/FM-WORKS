@@ -265,6 +265,38 @@ const result=vm.runInContext(`
   resetFinanceUi();resetCalls();loadMyFinanceItems();
   call=lastCall();
   expect('all employees fetch only own expense and travel history',call&&call.method==='getMyFinanceItems'&&call.args[0]==='SESSION_TOKEN');
+  const financeFakeExpense={
+    id:'EXP-FAKE-1',employeeId:'FM9000',employeeName:'架空社員',
+    vendor:'安全な取引先',item:'<img src=x onerror=alert(1)>',
+    usedOn:'2026-10-08',category:'消耗品費',amount:'2500',purpose:'確認',
+    paymentMethod:'立替',receiptRef:'REC-001',status:'差戻し',
+    returnReason:'使途を修正してください'
+  };
+  state.data.permissions.financeWorkspace=true;
+  financeUi.overview={expenses:[financeFakeExpense],travels:[],receipts:[],
+    receiptMatches:{'EXP-FAKE-1':{status:'AMOUNT_MISMATCH',label:'金額差異',claimAmount:2500,recordedAmount:2000}}};
+  const htmlDetail=financeDetailRows_('expense',financeFakeExpense);
+  expect('finance record details escape untrusted spreadsheet markup',
+    htmlDetail.includes('&lt;img')&&!htmlDetail.includes('<img src=x'));
+  expect('finance detail shows receipt reference and mismatch evidence',
+    htmlDetail.includes('REC-001')&&htmlDetail.includes('金額差異')&&htmlDetail.includes('2,000円'));
+  const financeRowsHtml=financeOverviewRows('expense');
+  expect('financial approval view includes detail action for every record',
+    financeRowsHtml.includes('financeShowDetail('));
+  financeUi.mine={setupRequired:false,expenses:[financeFakeExpense],travels:[]};
+  expect('returned finance claim offers an owner resubmission path',
+    financeMyRow('expense',financeFakeExpense).includes('修正して再申請'));
+  resetCalls();
+  openFinanceForm('expense','EXP-FAKE-1');
+  expect('returned claim editing retains original row id and prepopulates fields',
+    financeActiveForm&&financeActiveForm.editId==='EXP-FAKE-1'&&
+    document.getElementById('fin-vendor').value==='安全な取引先');
+  submitFinanceForm();
+  call=lastCall();
+  expect('finance resubmission uses dedicated server endpoint with original id',
+    call&&call.method==='resubmitFinanceRequest'&&call.args[0]==='SESSION_TOKEN'&&
+    call.args[1]==='expense'&&call.args[2]==='EXP-FAKE-1');
+  resetFinanceUi();
   resetFinanceUi();
   state.data=beforeOfficeData;
   state.page=beforeOfficePage;

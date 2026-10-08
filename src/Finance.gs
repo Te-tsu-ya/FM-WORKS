@@ -73,12 +73,24 @@ function financeObject_(kind,row){
 function financeArray_(kind,entry){
   return FINANCE_MODELS[kind].keys.map(key=>entry[key]==null?'':entry[key]);
 }
+function financeNormalizeDateText_(value){
+  const m=String(value||'').trim().match(/^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/);
+  return m?m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0'):String(value||'');
+}
+function financeTransportRow_(kind,row){
+  const data=financeObject_(kind,row);
+  ['usedOn','startsOn','endsOn','paidAt','receivedAt'].forEach(field=>{
+    if(Object.prototype.hasOwnProperty.call(data,field))data[field]=financeNormalizeDateText_(data[field]);
+  });
+  return data;
+}
 function financeRows_(kind,employeeId,limit){
   const sheet=financeSheet_(kind),last=sheet.getLastRow(),cols=FINANCE_MODELS[kind].keys.length;
   if(last<2)return [];
-  const rows=sheet.getRange(2,1,last-1,cols).getDisplayValues().map(row=>financeObject_(kind,row))
+  const rows=sheet.getRange(2,1,last-1,cols).getDisplayValues().map(row=>financeTransportRow_(kind,row))
     .filter(item=>item.id&&(!employeeId||item.employeeId===employeeId));
   rows.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(limit===0)return rows;
   return rows.slice(0,Math.max(1,Math.min(200,Number(limit)||80)));
 }
 function financeFindRow_(kind,id){
@@ -180,19 +192,124 @@ function saveFinanceReceipt(sessionToken,payload){
     requestKey:p.requestKey
   },employee);
 }
+function financeMyActionFirst_(rows,max){
+  // Returned requests stay accessible even after many other submissions.
+  return (rows||[]).slice().sort((a,b)=>{
+    const ar=a.status==='差戻し'?0:1,br=b.status==='差戻し'?0:1;
+    return ar-br||String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''));
+  }).slice(0,max);
+}
 function getMyFinanceItems(sessionToken){
   const employee=requireSession_(sessionToken).employee;
   const status=financeStorageStatus_();
   if(!status.ready)return {setupRequired:true,expenses:[],travels:[],message:'管理者によるDB初期設定が必要です。'};
-  return {setupRequired:false,expenses:financeRows_('expense',employee.employeeId,80),
-    travels:financeRows_('travel',employee.employeeId,80)};
+  return {setupRequired:false,expenses:financeMyActionFirst_(financeRows_('expense',employee.employeeId,0),80),
+    travels:financeMyActionFirst_(financeRows_('travel',employee.employeeId,0),80)};
 }
-function getFinanceOverview(sessionToken){
+function financeAmountDisplay_(value){
+  const raw=String(value==null?'':value).replace(/[¥￥,\s円]/g,'').trim();
+  if(!/^\d+$/.test(raw))return null;
+  const n=Number(raw);
+  return Number.isSafeInteger(n)?n:null;
+}
+function financeReceiptCrossCheck_(expenses,receipts){
+  // Read-only reconciliation by the shared receipt reference. Do not auto-post expenses.
+  const byReference={};
+  (receipts||[]).forEach(r=>{
+    const key=String(r.receiptRef||'').trim().toUpperCase();
+    if(key)(byReference[key]||(byReference[key]=[])).push(r);
+  });
+  const claimSums={};
+  (expenses||[]).filter(x=>x.status!=='差戻し').forEach(x=>{
+    const key=String(x.receiptRef||'').trim().toUpperCase();
+    const n=financeAmountDisplay_(x.amount);
+    if(key&&n!==null)claimSums[key]=(claimSums[key]||0)+n;
+  });
+  const matches={};
+  (expenses||[]).forEach(x=>{
+    const ref=String(x.receiptRef||'').trim().toUpperCase();
+    const matchesRows=ref?(byReference[ref]||[]):[];
+    if(!ref){matches[x.id]={status:'NO_REFERENCE',label:'証憑番号なし'};return;}
+    if(!matchesRows.length){matches[x.id]={status:'NO_RECORD',label:'経費記録が未登録'};return;}
+    const amounts=matchesRows.map(r=>financeAmountDisplay_(r.amount));
+    const declared=claimSums[ref]||0;
+    if(amounts.some(n=>n===null)){
+      matches[x.id]={status:'UNVERIFIED',label:'金額形式の確認が必要'};return;
+    }
+    if(matchesRows.length!==1){
+      matches[x.id]={status:'MULTIPLE',label:'同じ証憑番号が複数件（要確認）',
+        recordedAmount:amounts.reduce((a,b)=>a+b,0),claimAmount:declared};return;
+    }
+    const amount=amounts[0];
+    matches[x.id]={status:amount===declared?'MATCHED':'AMOUNT_MISMATCH',
+      label:amount===declared?'金額一致（番号照合）':'金額に差異あり',
+      recordedAmount:amount,claimAmount:declared};
+  });
+  return matches;
+}
+function financeOutstandingFirst_(rows,max){
+  const priority={承認待ち:0,承認済:1,差戻し:2,精算済:3};
+  const ordered=(rows||[]).slice().sort((a,b)=>{
+    const rankA=Object.prototype.hasOwnProperty.call(priority,a.status)?priority[a.status]:4;
+    const rankB=Object.prototype.hasOwnProperty.call(priority,b.status)?priority[b.status]:4;
+    return rankA-rankB||String(b.createdAt||'').localeCompare(String(a.createdAt||''));
+  });
+  return ordered.slice(0,max);
+}
+function getFinanceOverview(sessionToken,params){
   requireFinanceOperator_(sessionToken);
   const status=financeStorageStatus_();
   if(!status.ready)return {setupRequired:true,expenses:[],travels:[],receipts:[],message:'DB初期設定が必要です。管理者はバックアップ後にDB更新を実施してください。'};
-  return {setupRequired:false,expenses:financeRows_('expense','',160),
-    travels:financeRows_('travel','',160),receipts:financeRows_('receipt','',160)};
+  const allExpenses=financeRows_('expense','',0);
+  const allTravels=financeRows_('travel','',0);
+  const allReceipts=financeRows_('receipt','',0);
+  const max=Math.max(1,Math.min(1000,Number(params&&params.limit)||160));
+  const expenses=financeOutstandingFirst_(allExpenses,max);
+  const travels=financeOutstandingFirst_(allTravels,max);
+  const receipts=allReceipts.slice(0,max);
+  return {
+    setupRequired:false,expenses:expenses,travels:travels,receipts:receipts,
+    receiptMatches:financeReceiptCrossCheck_(expenses.concat(
+      allExpenses.filter(x=>!expenses.some(displayed=>displayed.id===x.id))),allReceipts),
+    totals:{
+      expense:allExpenses.length,travel:allTravels.length,receipt:allReceipts.length,
+      expensePending:allExpenses.filter(x=>x.status==='承認待ち').length,
+      travelPending:allTravels.filter(x=>x.status==='承認待ち').length,
+      expenseToSettle:allExpenses.filter(x=>x.status==='承認済').length,
+      travelToSettle:allTravels.filter(x=>x.status==='承認済').length,
+      expenseHidden:Math.max(0,allExpenses.length-expenses.length),
+      travelHidden:Math.max(0,allTravels.length-travels.length),
+      receiptHidden:Math.max(0,allReceipts.length-receipts.length)
+    }
+  };
+}
+function resubmitFinanceRequest(sessionToken,kind,id,payload){
+  const employee=requireSession_(sessionToken).employee;
+  if(!['expense','travel'].includes(kind))throw new Error('申請区分が不正です。');
+  const values=kind==='expense'?financeExpensePayload_(payload):
+    financeTravelPayload_(payload,employee);
+  const key=financeRequestKey_(values.requestKey);
+  return withScriptLock_(function(){
+    const target=financeFindRow_(kind,id),item=target.item,model=FINANCE_MODELS[kind];
+    if(String(item.employeeId)!==String(employee.employeeId))
+      throw new Error('他の社員の申請は修正できません。');
+    if(item.status==='承認待ち'&&item.requestKey===key)
+      return {ok:true,id:item.id,status:item.status,duplicate:true};
+    if(item.status!=='差戻し')throw new Error('差戻された申請だけを修正・再申請できます。');
+    if(item.requestKey===key)throw new Error('再申請には新しい送信識別子が必要です。');
+    const now=financeNow_();
+    const updated=Object.assign({},item,values,{
+      requestKey:key,status:'承認待ち',decidedBy:'',decidedAt:'',returnReason:'',updatedAt:now
+    });
+    target.sheet.getRange(target.rowNumber,1,1,model.keys.length)
+      .setValues([financeArray_(kind,updated)]);
+    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
+      operation:'経理再申請',target:kind,targetId:item.id,
+      before:auditJson_({status:item.status,amount:item.amount||item.spentAmount,returnReason:item.returnReason}),
+      after:auditJson_({status:updated.status,amount:updated.amount||updated.spentAmount}),
+      source:'WEB',result:'SUCCESS',note:''});
+    return {ok:true,id:item.id,status:updated.status,duplicate:false};
+  });
 }
 function financeReview_(sessionToken,kind,id,decision,reason){
   const reviewer=requireFinanceOperator_(sessionToken);
