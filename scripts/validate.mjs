@@ -1349,6 +1349,20 @@ for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協�
 }
 
 
+
+const designAudit=fs.readFileSync(path.join(root,'docs','UI_UX_CONSISTENCY_AUDIT.md'),'utf8');
+for(const auditMarker of ['全画面UI/UX統一性監査','ホーム','勤怠','工数','予定表','申請','管理','未検証']){
+  if(!designAudit.includes(auditMarker)){console.error('UI design audit missing '+auditMarker);failed=true;}
+}
+for(const desktopFit of [
+  '@media(min-width:1200px) and (min-height:690px)',
+  '.home-portal-stat{min-height:68px',
+  '.home-portal-punch-actions>button{min-height:39px',
+  '@media(min-width:1200px) and (max-height:689px)',
+  ':focus-visible'
+]){
+  if(!styles.includes(desktopFit)){console.error('Home viewport fit missing '+desktopFit);failed=true;}
+}
 const portalFile=fs.readFileSync(path.join(root,'src','AppHomePortal.html'),'utf8');
 for (const homePortalMarker of [
   'function homePage()',

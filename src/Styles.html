@@ -1815,3 +1815,67 @@ html[data-theme="dark"] .home-portal-all-clear>span{background:#244934;color:#91
 }
 @media(prefers-reduced-motion:reduce){.home-portal-skeleton{animation:none}}
 </style>
+
+
+<style>
+/* v0.11.10: home-first desktop compact layout. Other pages retain their spacing. */
+/* At ordinary laptop/desktop sizes, all four primary home sections fit in the first viewport. */
+@media(min-width:1200px) and (min-height:690px){
+  .content.one-screen:has(>.home-portal-screen){
+    padding-top:12px;padding-bottom:12px;
+  }
+  .home-portal-screen{gap:9px}
+  .home-portal-header{padding:10px 16px;min-height:74px;gap:12px}
+  .home-portal-intro h1{font-size:19px;margin:4px 0 2px}
+  .home-portal-intro p{font-size:11px;line-height:1.35}
+  .home-portal-today{padding:4px 7px}
+  .home-portal-meta{gap:6px}
+  .home-portal-current{gap:3px}
+  .home-portal-current>strong{font-size:13px}
+  .home-portal-current button{padding:2px 0}
+  .home-portal-stats{gap:9px}
+  .home-portal-stat{min-height:68px;padding:8px 12px;gap:3px;border-radius:12px}
+  .home-portal-stat>span:first-child{font-size:11px}
+  .home-portal-stat>strong{font-size:20px}
+  .home-portal-stat>small{font-size:10px}
+  .home-portal-layout{gap:9px;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr)}
+  .home-portal-panel{padding:12px;border-radius:13px}
+  .home-portal-panel-head{margin-bottom:8px}
+  .home-portal-panel-head .eyebrow{font-size:10px;margin-bottom:2px}
+  .home-portal-panel-head h2{font-size:14px}
+  .home-portal-punch-facts{gap:7px;margin-bottom:7px}
+  .home-portal-punch-facts>div{padding:7px 7px;gap:3px}
+  .home-portal-punch-facts strong{font-size:15px}
+  .home-portal-punch-actions{margin-bottom:7px}
+  .home-portal-punch-actions>button{min-height:39px;font-size:13px}
+  .home-portal-attendance .home-location{min-height:36px;margin-bottom:6px;padding:5px 9px}
+  .home-portal-attendance .home-location-options button{min-height:30px;padding:5px 10px}
+  .home-portal-inline-head{margin:5px 1px 4px}
+  .home-portal-punch-history .home-empty-mini{padding:8px}
+  .home-portal-punch-history .home-punch-history>div{padding:5px 8px}
+  .home-portal-agenda-empty{min-height:54px;padding:9px;gap:10px}
+  .home-portal-empty-icon{width:31px;height:31px}
+  .home-portal-empty-icon svg{width:18px;height:18px}
+  .home-portal-agenda-empty strong{font-size:12px}
+  .home-portal-agenda-empty small{font-size:11px}
+  .home-portal-agenda-empty button{min-height:32px}
+  .home-portal-task-list{gap:6px}
+  .home-portal-task-row{padding:8px 10px;gap:7px}
+  .home-portal-task-copy strong{font-size:12px}
+  .home-portal-task-copy small{font-size:11px;line-height:1.35}
+  .home-portal-other-tasks{margin-top:4px}
+  .home-portal-other-tasks>summary{padding:5px 4px}
+  .home-portal-shortcut-grid{gap:7px}
+  .home-portal-shortcut{padding:8px 10px;gap:8px;min-height:48px}
+  .home-portal-shortcut strong{font-size:12px}
+  .home-portal-shortcut small{font-size:10px}
+}
+/* For short browser windows and large text zoom, never crop content; allow normal scrolling instead. */
+@media(min-width:1200px) and (max-height:689px){
+  .content.one-screen:has(>.home-portal-screen){height:auto;overflow:visible}
+}
+/* Shared controls: consistent keyboard focus on every screen, not just Home. */
+:is(button,a,input,select,textarea,summary,[role="button"]):focus-visible{
+  outline:2px solid var(--blue);outline-offset:2px;
+}
+</style>

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.9  
+**文書版:** 0.11.10  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.9`
+`APP.version = 0.11.10`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -469,6 +469,14 @@ home-screen
 共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
 
 
+
+
+## 10.5 ホーム視認性と横断デザイン監査 v0.11.10
+
+- Styles.html の最後にデスクトップ限定 `@media(min-width:1200px) and (min-height:690px)` を設定。ホームのヘッダー、KPI、カード、打刻操作などを読みやすさを保つ範囲で圧縮。
+- `@media(min-width:1200px) and (max-height:689px)` では自然スクロールを維持。文字ズームや予定・タスクの増加を考慮し、content を切らない。
+- 変更は `.home-portal-*` の範囲に制限。全画面共通のキーボードフォーカスだけ `:focus-visible` に一貫した outline を追加。
+- コードと提供画像による現状のデザインの整合性・残課題は `docs/UI_UX_CONSISTENCY_AUDIT.md` に記録。残る全ページの実機/倍率検証前はUI統一が完了したと表現しない。
 
 ## 10.4 ホーム個人ポータル再設計 v0.11.9
 
