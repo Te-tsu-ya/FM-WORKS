@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.3  
+**文書版:** 0.11.4  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.3`
+`APP.version = 0.11.4`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -483,6 +483,24 @@ home-screen
 - 会社カレンダーの年次画面、編集権限、予定のセキュリティ判定は既存のサーバー実装を再利用する。
 - 試験は `scripts/test_client_contract.mjs` に月選択/予定詳細/フィルター/重複/スマホペイン/エスケープを追加。`scripts/validate.mjs` はUI必須マーカーを検証する。
 - 実端末での画面描画、iOS/Android/Windows/Mac、ズーム5〜500%、Apps Script実通信時間の確認は別途実ブラウザで実施する。
+
+
+## 10.2 スケジュールのクライアントデータ層 v0.11.4
+
+- `scheduleCacheKey()` は表示形式やフィルターではなく対象月の `monthGridRange()` だけに依存させる。4つの表示は同じ全社員・全分類の元データを共有する。
+- `SCHEDULE_RETRY_COOLDOWN` は一時的な通信失敗後30秒の再検証間隔を設け、読み込み済みの予定を残したままリクエスト連打を防ぐ。
+- 休日ラベルの色は土曜青、日曜・祝日赤に背景とあわせて統一する。
+- `scheduleWindowCache` (`Map`) はセッションID + 社員ID + 期間で管理する。保持数6、TTL 180秒。古いデータは即時表示しつつ非同期再検証する（SWR）。
+- `getScheduleBundle` は `{start,end,employeeId:'ALL',category:'ALL',includeEmployees:false}` の1回だけ。サーバーの `canViewScheduleRow_` による行単位の閲覧認可を必ず維持する。
+- `scheduleFilterEvents(rawEvents,employeeId,category)` は取得済みの認可済みデータだけを絞り込み、`state.schedule.events` に反映する。日別索引 `eventsFor` は表示配列の参照が変わった時だけ再生成。
+- `scheduleWindowRequests` は同じ期間の重複通信を抑止し、同時実行は最大2件。切替・日付ジャンプ・キャッシュ再訪時にキャンセル不能な遅延通信が上書きしないよう、セッション同一性・generation・現在キーを検証する。最新要求が待機中なら先行通信終了後に処理する。
+- 予定更新・削除、会社カレンダーの更新、セッション破棄時の `invalidatePageCache('schedule')` / `invalidateScheduleWindowCache()` で元データ・表示配列とキャッシュを失効させる。古い応答を無視する。
+- `validate.mjs` のUI契約マーカーは、強調状態のクラスを含んだ動的HTMLテンプレートと一致させる。
+- 強調状態のCSSでは `position:relative` を共通適用しない。時間軸の `.schedule-timed-event` は `position:absolute` を維持し、強調時も時間座標を守る。静的QAで再発を防ぐ。
+- `schedulePeopleLegend()` はネイティブボタンと `aria-pressed` / 操作状態テキストを持つ。 `toggleScheduleEmployeeHighlight()` はDOMクラスを更新するだけで描画処理・API呼び出しを発生させない。
+- 月/週/日/一覧の予定行に `data-schedule-employee-ids` を付け、共同参加者を含む参加IDで強調を判定する。
+- `Styles.html` の末尾で日セル境界、日曜・土曜・祝日・調整勤務日の背景を強調する。darkテーマと縮小画面にも適用する。
+- CIの契約試験で初回認可済み全件取得1回、画面/フィルター変更0回、戻る0回、期間変更1回、編集失効、社員強調0回を検証。実ブラウザでの体感時間は別途計測が必要。
 
 ## 11. 管理画面
 

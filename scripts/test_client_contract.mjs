@@ -378,18 +378,87 @@ const result=vm.runInContext(`
   expect('detail never interpolates untrusted HTML',!scheduleDetailPanel().includes('<img src=x')&&scheduleDetailPanel().includes('&lt;img'));
   expect('schedule rejects invalid day navigation',(()=>{const old=state.schedule.selectedDate;scheduleJumpTo('2026-02-30');return state.schedule.selectedDate===old})());
 
-  // Changing a filter must not display the previous filter's events.
-  state.schedule.events=[
-    {id:'ONLY-ALL',date:'2026-10-08',start:'09:00',end:'10:00',title:'絞り込み前の予定',category:'社内',employeeIds:['FM0001']}
+
+  // One authorized monthly payload powers all four views and both filters without GAS.
+  invalidateScheduleWindowCache();
+  state.page='schedule';
+  state.schedule.date='2026-10-08';
+  state.schedule.selectedDate='2026-10-08';
+  state.schedule.employeeId='ALL';
+  state.schedule.category='ALL';
+  state.schedule.view='month';
+  state.schedule.employees=[
+    {employeeId:'FM0001',name:'青木 悠真'},{employeeId:'FM0002',name:'森川 彩乃'}
   ];
-  state.schedule.loadedKey=scheduleCacheKey();
   resetCalls();
+  loadSchedule();
+  let firstFetch=lastCall();
+  expect('one full-month fetch requests all authorized people/categories',
+    apiCalls.length===1&&firstFetch&&firstFetch.method==='getScheduleBundle'&&
+    firstFetch.args[1].employeeId==='ALL'&&firstFetch.args[1].category==='ALL'&&
+    firstFetch.args[1].start==='2026-09-27'&&firstFetch.args[1].end==='2026-10-31');
+  const sourceEvents=[
+    {id:'FAST1',date:'2026-10-08',start:'09:00',end:'10:00',title:'青木の仕事',category:'社内',employeeIds:['FM0001'],employeeNames:['青木 悠真']},
+    {id:'FAST2',date:'2026-10-08',start:'13:00',end:'14:00',title:'森川の仕事',category:'業務',employeeIds:['FM0002'],employeeNames:['森川 彩乃']},
+    {id:'FAST3',date:'2026-10-08',start:'14:00',end:'15:00',title:'共同作業',category:'業務',employeeIds:['FM0001','FM0002'],employeeNames:['青木 悠真','森川 彩乃']}
+  ];
+  invokeServerSuccess({events:sourceEvents,companyDays:[{date:'2026-10-12',name:'スポーツの日',type:'法定祝日',working:false}]});
+  expect('initial full-month request becomes available',scheduleLoaded()&&state.schedule.events.length===3);
+  resetCalls();
+  changeScheduleView('week');
+  changeScheduleView('day');
+  changeScheduleView('list');
+  changeScheduleView('month');
+  expect('switching all calendar views uses no network',apiCalls.length===0&&scheduleLoaded());
   setScheduleFilter('category','業務');
-  let filterCall=lastCall();
-  expect('schedule filter fetches a new authorized dataset',filterCall&&filterCall.method==='getScheduleBundle'&&filterCall.args[1].category==='業務');
-  expect('filter loading never shows stale category events',!schedulePage().includes('絞り込み前の予定')&&schedulePage().includes('予定表を読み込み中'));
-  invokeServerSuccess({events:[{id:'ONLY-WORK',date:'2026-10-08',title:'絞り込み後の予定',category:'業務',employeeIds:['FM0001'],employeeNames:['青木 悠真']}],companyDays:[]});
-  expect('filter success replaces previous dataset',scheduleLoaded()&&scheduleDetailPanel().includes('絞り込み後の予定')&&!scheduleDetailPanel().includes('絞り込み前の予定'));
+  expect('category filter applies immediately offline',apiCalls.length===0&&state.schedule.events.length===2&&!state.schedule.events.some(e=>e.id==='FAST1'));
+  setScheduleFilter('employeeId','FM0002');
+  expect('person filter also applies immediately offline',apiCalls.length===0&&state.schedule.events.length===2&&state.schedule.events.every(e=>e.employeeIds.includes('FM0002')));
+  setScheduleFilter('category','ALL');
+  setScheduleFilter('employeeId','ALL');
+  expect('clear filters restores full data offline',apiCalls.length===0&&state.schedule.events.length===3);
+  const legend=schedulePeopleLegend();
+  expect('employee legend exposes keyboard-operable highlight buttons',legend.includes('schedule-person-button')&&legend.includes("aria-pressed='false'"));
+  toggleScheduleEmployeeHighlight('FM0001');
+  expect('highlight includes shared events and dims other employees without request',
+    state.schedule.highlightEmployeeId==='FM0001'&&
+    scheduleHighlightClass(sourceEvents[0])==='schedule-is-emphasized'&&
+    scheduleHighlightClass(sourceEvents[1])==='schedule-is-dimmed'&&
+    scheduleHighlightClass(sourceEvents[2])==='schedule-is-emphasized'&&apiCalls.length===0);
+  expect('highlight classes appear in month, day, week and list HTML',
+    monthView().includes('schedule-is-emphasized')&&dayView().includes('schedule-is-emphasized')&&
+    weekView().includes('schedule-is-emphasized')&&listView().includes('schedule-is-emphasized'));
+  toggleScheduleEmployeeHighlight('FM0001');
+  expect('clicking again releases emphasis without a server call',state.schedule.highlightEmployeeId==='ALL'&&apiCalls.length===0);
+  const coloredDays=monthView();
+  expect('calendar labels Sundays and Saturdays distinctly',coloredDays.includes('schedule-sunday')&&coloredDays.includes('schedule-saturday')&&coloredDays.includes('schedule-holiday'));
+  scheduleJumpTo('2026-11-08');
+  const nextFetch=lastCall();
+  expect('uncached next month makes one authorized ranged request',apiCalls.length===1&&nextFetch.method==='getScheduleBundle'&&nextFetch.args[1].employeeId==='ALL'&&nextFetch.args[1].category==='ALL');
+  invokeServerSuccess({events:[{id:'NOV1',date:'2026-11-08',title:'11月の予定',category:'予定',employeeIds:['FM0001']}],companyDays:[]});
+  resetCalls();
+  scheduleJumpTo('2026-10-08');
+  scheduleJumpTo('2026-11-08');
+  expect('returning to either cached month is network-free',apiCalls.length===0&&state.schedule.events.some(e=>e.id==='NOV1'));
+  const novCache=scheduleWindowForDate('2026-11-08');
+  novCache.at=Date.now()-SCHEDULE_WINDOW_TTL-1000;
+  resetCalls();
+  loadSchedule();
+  expect('expired month stays visible while revalidation is requested',apiCalls.length===1&&scheduleLoaded()&&state.schedule.refreshing);
+  invokeServerFailure({message:'QA temporary network failure'});
+  resetCalls();
+  changeScheduleView('week');
+  expect('temporary GAS failure does not trigger repeat calls on every view switch',apiCalls.length===0&&scheduleLoaded()&&state.schedule.events.some(e=>e.id==='NOV1'));
+  invalidatePageCache('schedule');
+  expect('schedule mutation invalidates all window caches',scheduleWindowCache.size===0&&!scheduleLoaded());
+  resetCalls();
+  loadSchedule({force:true});
+  expect('stale data is reloaded after mutation',apiCalls.length===1&&lastCall().method==='getScheduleBundle');
+  invokeServerSuccess({events:[],companyDays:[]});
+  state.sessionToken='DIFFERENT_LOGIN';
+  expect('cached data cannot be reused by a new login identity',!scheduleLoaded()&&scheduleWindowForDate('2026-11-08')===null);
+  state.sessionToken='SESSION_TOKEN';
+  state.schedule.highlightEmployeeId='ALL';
   state.schedule.view='day';state.schedule.date='2026-10-08';state.schedule.selectedDate='2026-10-08';
   state.schedule.employeeId='FM0001';state.schedule.employees=[
     {employeeId:'FM0001',name:'青木 悠真'},{employeeId:'FM0002',name:'森川 彩乃'}

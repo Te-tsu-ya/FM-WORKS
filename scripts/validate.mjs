@@ -53,7 +53,7 @@ for(const marker of [
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
-  "class='schedule-timed-event'"
+  "class='schedule-timed-event ${scheduleHighlightClass(e)}'"
 ]){
   if(!app.includes(marker)){console.error('Usability/a11y hardening marker missing: '+marker);failed=true;}
 }
@@ -758,6 +758,34 @@ if(!styles.includes('.schedule-layout{display:grid')||
   !styles.includes('.schedule-detail-panel.is-open')||
   !styles.includes('.schedule-day-dots')){
   console.error('v0.11.3 responsive hybrid schedule style missing.');failed=true;
+}
+
+
+// v0.11.4: calendar client cache, instant filters, employee highlighting and weekend contrast.
+for(const name of [
+  'function scheduleWindowIdentity()',
+  'function scheduleFilterEvents(events,employeeId,category)',
+  'function invalidateScheduleWindowCache()',
+  'const scheduleWindowCache=new Map()',
+  'const scheduleWindowRequests=new Map()',
+  "employeeId:'ALL',category:'ALL',includeEmployees:false",
+  'function toggleScheduleEmployeeHighlight(employeeId)',
+  'function scheduleHighlightClass(e)',
+  "class='person-chip schedule-person-button",
+  'schedule-sunday',
+  'schedule-saturday',
+  'schedule-holiday'
+]){
+  if(!app.includes(name)){console.error('v0.11.4 calendar performance/UX marker missing: '+name);failed=true;}
+}
+if(styles.includes('.schedule-hybrid .schedule-is-emphasized{position:relative')||
+   !styles.includes('.schedule-timed-event.schedule-is-emphasized{position:absolute')){
+  console.error('Employee emphasis must preserve absolute timeline card positioning.');failed=true;
+}
+if(!styles.includes('.schedule-hybrid .month-day.schedule-holiday')||
+   !styles.includes('schedule-person-button.is-emphasized')||
+   !styles.includes('.schedule-hybrid .schedule-is-emphasized')){
+  console.error('Calendar contrast and employee emphasis CSS missing.');failed=true;
 }
 
 for (const schedulePrivacyMarker of [
