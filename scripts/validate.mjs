@@ -700,7 +700,7 @@ for(const adminUiMarker of [
   'function adminEmployeeDetail()',
   'function selectAdminEmployee(employeeId)',
   'function filterAdminPeople(kind,value)',
-  'function adminWizardValidateStep(step)',
+  'function validateAdminWizardStep(step)',
   'function adminWizardShowStep(step)',
   'function adminWizardReviewHtml()',
   'function adminWizardNext()',
