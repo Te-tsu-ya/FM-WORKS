@@ -1068,6 +1068,7 @@ function scheduleDayPeople(){
   const s=state.schedule,all=s.employees.length?s.employees:(state.data.employees||[]),
     wanted=s.employeeId==='ALL'?all:all.filter(p=>p.employeeId===s.employeeId);
   const people=wanted.map(p=>({id:p.employeeId,name:p.name})),seen=new Set(people.map(p=>p.id));
+  if(s.employeeId!=='ALL'&&people.length)return people;
   eventsFor(s.date).forEach(e=>{
     (e.employeeIds||[]).forEach((id,i)=>{
       if(!seen.has(id)){seen.add(id);people.push({id,name:(e.employeeNames||[])[i]||id});}
@@ -1157,7 +1158,7 @@ function schedulePage(){
     `<div class='loading-card schedule-loading' role='status' aria-label='予定表を読み込み中'></div>`):
     s.view==='month'?monthView():s.view==='week'?weekView():s.view==='day'?dayView():listView();
   const detail=unavailable?'':scheduleDetailPanel();
-  const action=s.view==='month'?`<button type='button' id='scheduleOpenDetails' class='secondary-button compact schedule-mobile-open-detail' onclick='selectScheduleDay(scheduleSelectedDate())'>選択日の予定を見る</button>`:'';
+  const action=`<button type='button' id='scheduleOpenDetails' class='secondary-button compact schedule-mobile-open-detail' onclick='selectScheduleDay(scheduleSelectedDate())'>選択日の予定を見る</button>`;
   return `<div class='schedule-hybrid'>
     ${pageHead('予定表','社員名を予定カードに直接表示し、予定と会社カレンダーを1か所で確認します。',action)}
     ${scheduleWorkspaceTabs('schedule')}
@@ -1246,6 +1247,7 @@ function closeModal(){
   if(target&&document.contains(target))requestAnimationFrame(()=>target.focus());
 }
 function openScheduleEditor(id='',date=''){
+  if(state.page==='schedule'&&state.schedule.mobileDetailOpen&&scheduleIsSmallScreen())closeScheduleDetail();
   const e=id?(state.schedule.events||[]).find(x=>x.id===id):null;
   const employees=state.schedule.employees.length?state.schedule.employees:(state.data.employees||[]);
   const d=date||(e&&e.date)||state.schedule.date||state.data.today;

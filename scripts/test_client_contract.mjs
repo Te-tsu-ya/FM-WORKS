@@ -367,7 +367,7 @@ const result=vm.runInContext(`
   expect('detail shows all events and company holiday',hybridDetail.includes('資料作成')&&hybridDetail.includes('調整会議')&&hybridDetail.includes('顧客対応')&&hybridDetail.includes('研修')&&hybridDetail.includes('社内記念日'));
   selectScheduleEvent('S2');
   const readonlyDetail=scheduleDetailPanel();
-  expect('readonly schedule selection shows view-only action',readonlyDetail.includes('詳細を確認')&&!readonlyDetail.includes("class='schedule-selected-event'"));
+  expect('readonly schedule selection shows view-only action',readonlyDetail.includes('詳細を確認')&&!readonlyDetail.includes('予定を編集'));
   const overlap=scheduleTimelineLayout(state.schedule.events,scheduleTimeBounds(state.schedule.events));
   expect('overlapping events are laid out side-by-side',overlap.length===3&&overlap[0].columns===2&&overlap[1].columns===2&&overlap[0].column!==overlap[1].column);
   expect('day view retains all-day and timed events',dayView().includes('終日 · 研修')&&dayView().includes('schedule-timed-event'));
@@ -377,6 +377,33 @@ const result=vm.runInContext(`
   state.schedule.selectedEventId='E-XSS';
   expect('detail never interpolates untrusted HTML',!scheduleDetailPanel().includes('<img src=x')&&scheduleDetailPanel().includes('&lt;img'));
   expect('schedule rejects invalid day navigation',(()=>{const old=state.schedule.selectedDate;scheduleJumpTo('2026-02-30');return state.schedule.selectedDate===old})());
+
+  // Changing a filter must not display the previous filter's events.
+  state.schedule.events=[
+    {id:'ONLY-ALL',date:'2026-10-08',start:'09:00',end:'10:00',title:'絞り込み前の予定',category:'社内',employeeIds:['FM0001']}
+  ];
+  state.schedule.loadedKey=scheduleCacheKey();
+  resetCalls();
+  setScheduleFilter('category','業務');
+  let filterCall=lastCall();
+  expect('schedule filter fetches a new authorized dataset',filterCall&&filterCall.method==='getScheduleBundle'&&filterCall.args[1].category==='業務');
+  expect('filter loading never shows stale category events',!schedulePage().includes('絞り込み前の予定')&&schedulePage().includes('予定表を読み込み中'));
+  invokeServerSuccess({events:[{id:'ONLY-WORK',date:'2026-10-08',title:'絞り込み後の予定',category:'業務',employeeIds:['FM0001'],employeeNames:['青木 悠真']}],companyDays:[]});
+  expect('filter success replaces previous dataset',scheduleLoaded()&&scheduleDetailPanel().includes('絞り込み後の予定')&&!scheduleDetailPanel().includes('絞り込み前の予定'));
+  state.schedule.view='day';state.schedule.date='2026-10-08';state.schedule.selectedDate='2026-10-08';
+  state.schedule.employeeId='FM0001';state.schedule.employees=[
+    {employeeId:'FM0001',name:'青木 悠真'},{employeeId:'FM0002',name:'森川 彩乃'}
+  ];
+  state.schedule.events=[{id:'MULTI',date:'2026-10-08',start:'10:00',end:'11:00',title:'共同会議',employeeIds:['FM0001','FM0002'],employeeNames:['青木 悠真','森川 彩乃']}];
+  expect('person filter does not add other employee lanes',scheduleDayPeople().length===1&&scheduleDayPeople()[0].id==='FM0001');
+  state.schedule.employeeId='ALL';
+  state.schedule.employees=Array.from({length:6},(_,i)=>({employeeId:'FM'+String(i+1).padStart(4,'0'),name:'社員'+(i+1)}));
+  expect('six employees use two vertical timeline boards',dayView().split('schedule-timeboard day-board').length===3);
+  state.schedule.mobileDetailOpen=true;
+  let escPrevented=false;
+  onScheduleDetailKeydown({key:'Escape',preventDefault(){escPrevented=true},stopPropagation(){}});
+  expect('Escape dismisses mobile schedule sheet',escPrevented&&state.schedule.mobileDetailOpen===false);
+
   state.page='home';
 
   return {failures};
