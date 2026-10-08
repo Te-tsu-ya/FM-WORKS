@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.8  
+**文書版:** 0.10.9  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.8`
+`APP.version = 0.10.9`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -278,6 +278,47 @@ PC幅1141px以上:
 - サンプルはブラウザメモリ上だけで生成し、`google.script.run` やSheetsへの書込を行わない。
 - サンプルは正常出社 / 在宅 / 工数差異 / 有給 / 打刻不足を含み、`_sample=true` で識別する。
 - サンプル日クリックは `openAttendanceSampleDay` の読み取り専用モーダルへ限定する。月次締め・申請・Excel等へサンプルを渡さない。
+
+## 9.3 可読性モード / 勤務場所変更 v0.10.9
+
+### 文字サイズ
+`Index.html` のトップバーに `#fontSizeToggleButton` を配置する。
+
+クライアント:
+- `getFontSizeMode()`
+- `setFontSizeMode(mode)`
+- `toggleFontSize()`
+- `initFontSize()`
+
+保存先は `localStorage['fmworks.fontSize']`。HTMLルートへ `data-font-size="standard|large"` を付与する。
+
+標準モードでも勤怠の本文・表・カレンダーをv0.10.8より1段階拡大する。大きめモードでは固定1画面を解除できるCSSとし、可読性を優先する。
+
+### 勤務場所変更
+`PUNCH.LOCATION_CHANGE = '勤務場所変更'` を追加するが、時刻打刻として扱う4種とは `TIME_PUNCH_ACTIONS` で分離する。
+
+`recordWorkLocationChange(sessionToken, workLocation)`:
+1. `requireSession_`
+2. 勤務場所値を検証
+3. ScriptLock取得
+4. 当日の勤怠状態を取得
+5. 状態が working / break のみ許可
+6. 打刻ログへ action=勤務場所変更 を追記
+7. 監査ログへ before / after を記録
+8. 追加後の attendance を返す
+
+勤務場所変更イベントは、勤務状態を変えない。そのため `buildAttendanceStateFromRows_` は「最終行だけで状態を判定」せず、時系列に出勤・休憩・退勤を走査し、LOCATION_CHANGEは状態遷移から除外する。
+
+`validatePunchSequence_` は勤務中・休憩中のLOCATION_CHANGEを許可する。打刻修正申請では `isTimePunchAction_` を使い、LOCATION_CHANGEを修正対象へ含めない。
+
+`summarizeWorkLocations_(rows)` は勤務場所の連続重複を除去し、`出社→在宅` のような日単位要約を返す。月次の `workLocation` にこの要約を使用し、`remote` は従来どおり当日行のいずれかが在宅ならtrueとする。
+
+クライアントの `selectWorkLocation(location)`:
+- 勤務外（未出勤）: ローカル選択のみ
+- working / break: `recordWorkLocationChange` を呼ぶ
+- finished: 変更を拒否
+
+タイムラインではLOCATION_CHANGEを紫系の状態点で表示し、`変更前 → 変更後` を表示する。
 
 ## 10. 月次UI
 

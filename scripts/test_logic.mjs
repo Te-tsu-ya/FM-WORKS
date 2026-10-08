@@ -43,6 +43,9 @@ globalThis.__fmTest = {
   timeRangeMinutes_,
   timeToMinutes_,
   validatePunchSequence_,
+  buildAttendanceStateFromRows_,
+  summarizeWorkLocations_,
+  isTimePunchAction_,
   inferLegacyLeaveLabel_,
   addDateString_,
   dateSpanDays_,
@@ -119,6 +122,22 @@ const validPunches = [
   { action: api.PUNCH.CLOCK_OUT, timestamp: '2026-10-07 18:00:00' }
 ];
 expect('valid punch sequence accepted', api.validatePunchSequence_(validPunches) === true);
+const switchedLocationPunches = [
+  { action: api.PUNCH.CLOCK_IN, timestamp: '2026-10-07 09:00:00', workLocation: '出社' },
+  { action: api.PUNCH.LOCATION_CHANGE, timestamp: '2026-10-07 13:30:00', workLocation: '在宅' },
+  { action: api.PUNCH.CLOCK_OUT, timestamp: '2026-10-07 18:00:00', workLocation: '在宅' }
+];
+expect('location change inside a work session is sequence-safe', api.validatePunchSequence_(switchedLocationPunches) === true);
+expect('location change is not treated as a time-punch correction action', api.isTimePunchAction_(api.PUNCH.LOCATION_CHANGE) === false);
+const switchedAttendance = api.buildAttendanceStateFromRows_('2026-10-07', switchedLocationPunches);
+expect('location change preserves finished attendance state', switchedAttendance.state === 'finished');
+expect('location change updates current work location', switchedAttendance.workLocation === '在宅');
+expect('location change summary preserves the day transition', switchedAttendance.workLocationSummary === '出社→在宅' && api.summarizeWorkLocations_(switchedLocationPunches) === '出社→在宅');
+const locationHistory = switchedAttendance.history.find(x=>x.action===api.PUNCH.LOCATION_CHANGE);
+expect('location change history preserves from/to locations', locationHistory&&locationHistory.fromWorkLocation==='出社'&&locationHistory.workLocation==='在宅');
+expectThrows('location change before clock-in is rejected', () => api.validatePunchSequence_([
+  { action: api.PUNCH.LOCATION_CHANGE, timestamp: '2026-10-07 08:30:00', workLocation: '在宅' }
+]));
 expectThrows('break before clock-in rejected', () => api.validatePunchSequence_([
   { action: api.PUNCH.BREAK_START, timestamp: '2026-10-07 12:00:00' }
 ]));

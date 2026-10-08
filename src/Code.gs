@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.10.8',
+  version: '0.10.9',
   locale: 'ja-JP'
 });
 
@@ -26,12 +26,26 @@ const PERMISSIONS = Object.freeze({
   COMPANY_CALENDAR_EDIT_ROLES: ['ADMIN', 'CALENDAR_EDITOR']
 });
 
+const WORK_LOCATIONS = Object.freeze(['出社','在宅','外出']);
 const PUNCH = Object.freeze({
   CLOCK_IN: '出勤',
   BREAK_START: '休憩開始',
   BREAK_END: '休憩終了',
-  CLOCK_OUT: '退勤'
+  CLOCK_OUT: '退勤',
+  LOCATION_CHANGE: '勤務場所変更'
 });
+const TIME_PUNCH_ACTIONS = Object.freeze([
+  PUNCH.CLOCK_IN,
+  PUNCH.BREAK_START,
+  PUNCH.BREAK_END,
+  PUNCH.CLOCK_OUT
+]);
+function isWorkLocation_(value) {
+  return WORK_LOCATIONS.includes(String(value || ''));
+}
+function isTimePunchAction_(action) {
+  return TIME_PUNCH_ACTIONS.includes(String(action || ''));
+}
 
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
@@ -188,12 +202,11 @@ function getHomeOverview(sessionToken) {
 function recordPunch(sessionToken, action, workLocation) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
-  const allowedActions = Object.values(PUNCH);
-  if (!allowedActions.includes(action)) {
+  if (!isTimePunchAction_(action)) {
     throw new Error('不正な打刻種別です。');
   }
 
-  const location = ['出社', '在宅', '外出'].includes(workLocation) ? workLocation : '出社';
+  const location = isWorkLocation_(workLocation) ? workLocation : '出社';
   const lock = LockService.getScriptLock();
 
   lock.waitLock(10000);
@@ -261,6 +274,92 @@ function recordPunch(sessionToken, action, workLocation) {
     lock.releaseLock();
   }
 }
+
+function recordWorkLocationChange(sessionToken, workLocation) {
+  const session = requireSession_(sessionToken);
+  const employee = session.employee;
+  const location = String(workLocation || '');
+  if (!isWorkLocation_(location)) throw new Error('勤務場所を確認してください。');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const context = getAttendanceContext_(employee.employeeId);
+    const before = context.attendance;
+    if (!['working','break'].includes(before.state)) {
+      throw new Error('勤務場所は勤務中または休憩中に変更できます。');
+    }
+
+    const previous = isWorkLocation_(before.workLocation) ? before.workLocation : '出社';
+    if (previous === location) {
+      return {
+        ok:true,
+        changed:false,
+        today:context.today,
+        serverTime:new Date().toISOString(),
+        attendance:before
+      };
+    }
+
+    const now = new Date();
+    const dateText = Utilities.formatDate(now, DB.timeZone, 'yyyy-MM-dd');
+    const timestampText = Utilities.formatDate(now, DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
+    const punchId = createId_('P');
+    getDb_().getSheetByName(DB.sheets.punches).appendRow([
+      punchId,
+      employee.employeeId,
+      employee.name,
+      dateText,
+      PUNCH.LOCATION_CHANGE,
+      timestampText,
+      location,
+      'WEB',
+      false,
+      '',
+      previous + ' → ' + location,
+      timestampText
+    ]);
+
+    appendAudit_({
+      employeeId:employee.employeeId,
+      employeeName:employee.name,
+      operation:'勤務場所変更',
+      target:'打刻ログ',
+      targetId:punchId,
+      before:previous,
+      after:location,
+      source:'WEB',
+      result:'SUCCESS',
+      note:previous + ' → ' + location
+    });
+
+    const nextRows=context.rows.concat([{id:punchId,action:PUNCH.LOCATION_CHANGE,timestamp:timestampText,workLocation:location}]);
+    return {
+      ok:true,
+      changed:true,
+      today:dateText,
+      serverTime:new Date().toISOString(),
+      attendance:buildAttendanceStateFromRows_(dateText,nextRows)
+    };
+  } catch (err) {
+    appendAudit_({
+      employeeId:employee.employeeId,
+      employeeName:employee.name,
+      operation:'勤務場所変更',
+      target:'打刻ログ',
+      targetId:'',
+      before:'',
+      after:location,
+      source:'WEB',
+      result:'ERROR',
+      note:String(err && err.message ? err.message : err)
+    });
+    throw err;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getActivePunchRows_(employeeId, startDate, endDate) {
   const sheet = getDb_().getSheetByName(DB.sheets.punches);
   const lastRow = sheet.getLastRow();
@@ -291,18 +390,57 @@ function getPunchHistory(sessionToken, limit) {
   }));
 }
 
+function summarizeWorkLocations_(rows) {
+  const ordered=(rows||[]).slice().sort((a,b)=>String(a.timestamp).localeCompare(String(b.timestamp)));
+  const locations=[];
+  ordered.forEach(row=>{
+    const location=String(row&&row.workLocation||'');
+    if(!isWorkLocation_(location))return;
+    if(locations[locations.length-1]!==location)locations.push(location);
+  });
+  return locations.join('→');
+}
+
 function buildAttendanceStateFromRows_(today,rows) {
-  const ordered=(rows||[]).slice().sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  const ordered=(rows||[]).slice().sort((a,b)=>String(a.timestamp).localeCompare(String(b.timestamp)));
   if (!ordered.length) return emptyAttendance_(today);
 
-  const last = ordered[ordered.length - 1];
   const clockIn = ordered.find(r => r.action === PUNCH.CLOCK_IN);
   const clockOut = [...ordered].reverse().find(r => r.action === PUNCH.CLOCK_OUT);
-
   let state = 'off';
-  if (last.action === PUNCH.CLOCK_IN || last.action === PUNCH.BREAK_END) state = 'working';
-  if (last.action === PUNCH.BREAK_START) state = 'break';
-  if (last.action === PUNCH.CLOCK_OUT) state = 'finished';
+  let currentLocation = '出社';
+  let previousLocation = '';
+  const history=[];
+
+  ordered.forEach(r=>{
+    const action=r.action;
+    const rowLocation=isWorkLocation_(r.workLocation)?r.workLocation:currentLocation;
+    if(action===PUNCH.CLOCK_IN)state='working';
+    else if(action===PUNCH.BREAK_START)state='break';
+    else if(action===PUNCH.BREAK_END)state='working';
+    else if(action===PUNCH.CLOCK_OUT)state='finished';
+
+    if(action===PUNCH.LOCATION_CHANGE){
+      const from=isWorkLocation_(previousLocation)?previousLocation:currentLocation;
+      history.push({
+        action:action,
+        time:String(r.timestamp||'').slice(11,16),
+        workLocation:rowLocation,
+        fromWorkLocation:from
+      });
+    }else{
+      history.push({
+        action:action,
+        time:String(r.timestamp||'').slice(11,16),
+        workLocation:rowLocation
+      });
+    }
+
+    if(isWorkLocation_(rowLocation)){
+      currentLocation=rowLocation;
+      previousLocation=rowLocation;
+    }
+  });
 
   const workedMinutes = calculateWorkedMinutes_(ordered);
   return {
@@ -310,15 +448,12 @@ function buildAttendanceStateFromRows_(today,rows) {
     stateLabel: state === 'working' ? '勤務中' : state === 'break' ? '休憩中' : state === 'finished' ? '退勤済み' : '勤務外',
     clockIn: clockIn ? clockIn.timestamp.slice(11, 16) : '',
     clockOut: clockOut ? clockOut.timestamp.slice(11, 16) : '',
-    workLocation: last.workLocation || '出社',
+    workLocation: currentLocation,
+    workLocationSummary: summarizeWorkLocations_(ordered),
     workedMinutes,
     worked: formatMinutes_(workedMinutes),
     today,
-    history: ordered.slice().reverse().map(r => ({
-      action: r.action,
-      time: r.timestamp.slice(11, 16),
-      workLocation: r.workLocation
-    }))
+    history: history.reverse()
   };
 }
 
@@ -391,7 +526,14 @@ function validatePunchSequence_(rows) {
 
   for (const row of ordered) {
     const action = row.action;
-    if (!Object.values(PUNCH).includes(action)) throw new Error('打刻種別が不正です。');
+    if (action === PUNCH.LOCATION_CHANGE) {
+      if (!['working','break'].includes(state)) {
+        throw new Error('勤務場所変更は勤務中または休憩中にのみ登録できます。');
+      }
+      if (!isWorkLocation_(row.workLocation)) throw new Error('勤務場所が不正です。');
+      continue;
+    }
+    if (!isTimePunchAction_(action)) throw new Error('打刻種別が不正です。');
     if (!allowed[state].includes(action)) {
       throw new Error('打刻修正後の順序が成立しません。出勤・休憩・退勤の時刻を確認してください。');
     }

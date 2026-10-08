@@ -64,7 +64,7 @@ function buildAttendanceSamplePreview(){
       if(pattern===1){
         Object.assign(row,{clockIn:'09:00',clockOut:'18:00',workMinutes:480,breakMinutes:60,worklogMinutes:480,workLocation:'出社'});
       }else if(pattern===2){
-        Object.assign(row,{clockIn:'08:55',clockOut:'18:15',workMinutes:500,overtimeMinutes:20,breakMinutes:60,worklogMinutes:500,workLocation:'在宅',remote:true});
+        Object.assign(row,{clockIn:'08:55',clockOut:'18:15',workMinutes:500,overtimeMinutes:20,breakMinutes:60,worklogMinutes:500,workLocation:'出社→在宅',remote:true});
       }else if(pattern===3){
         Object.assign(row,{clockIn:'09:03',clockOut:'18:05',workMinutes:482,overtimeMinutes:2,breakMinutes:60,worklogMinutes:420,worklogDifferenceMinutes:-62,worklogIssue:true,workLocation:'出社'});
       }else if(pattern===4){
@@ -164,17 +164,24 @@ function attendancePunchActions(a){
 }
 
 function attendanceLocationControl(){
-  return `<div class='attendance-location'><span>勤務場所</span><div>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
+  const a=state.data&&state.data.attendance;
+  const live=a&&['working','break'].includes(a.state);
+  return `<div class='attendance-location'><div class='attendance-location-label'><span>勤務場所</span>${live?`<small>変更すると時刻と一緒に履歴へ記録されます</small>`:''}</div><div>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
 }
 
 function attendanceTimeline(a,company){
   const history=(a.history||[]).slice().reverse();
   const rows=history.map(x=>{
-    const kind=x.action==='出勤'?'in':x.action==='退勤'?'out':x.action.includes('休憩')?'break':'normal';
-    return `<div class='attendance-timeline-row ${kind}'><time>${escapeHtml(x.time)}</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(x.action)}</strong><small>${escapeHtml(x.workLocation||'')}</small></div></div>`;
+    const locationChange=x.action==='勤務場所変更';
+    const kind=locationChange?'location':x.action==='出勤'?'in':x.action==='退勤'?'out':x.action.includes('休憩')?'break':'normal';
+    const title=locationChange?'勤務場所を変更':x.action;
+    const sub=locationChange
+      ? `${x.fromWorkLocation||'—'} → ${x.workLocation||'—'}`
+      : (x.workLocation||'');
+    return `<div class='attendance-timeline-row ${kind}'><time>${escapeHtml(x.time)}</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(sub)}</small></div></div>`;
   });
   if(a.state==='working'||a.state==='break'){
-    rows.push(`<div class='attendance-timeline-row current'><time>現在</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(a.stateLabel)}</strong><small>${a.state==='break'?'休憩中です':escapeHtml(liveWorkedText(a))+' 経過'}</small></div></div>`);
+    rows.push(`<div class='attendance-timeline-row current'><time>現在</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(a.stateLabel)}</strong><small>${a.state==='break'?'休憩中です':escapeHtml(liveWorkedText(a))+' 経過'} / ${escapeHtml(a.workLocation||state.workLocation||'')}</small></div></div>`);
   }
   if(!a.clockOut&&company&&company.end){
     rows.push(`<div class='attendance-timeline-row planned'><time>${escapeHtml(company.end)}</time><span class='attendance-timeline-dot'></span><div><strong>退勤予定</strong><small>${company.name?escapeHtml(company.name):'会社カレンダー'}</small></div></div>`);

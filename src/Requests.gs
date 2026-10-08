@@ -175,7 +175,7 @@ function submitRequest(sessionToken, payload) {
     if (type === '打刻修正') {
       const correction = payload.correction || {};
       const action = String(correction.action || '');
-      if (!Object.values(PUNCH).includes(action)) throw new Error('修正する打刻種別を選択してください。');
+      if (!isTimePunchAction_(action)) throw new Error('修正する打刻種別を選択してください。');
       const time = normalizeTime_(correction.time || '');
       if (!time) throw new Error('修正後の時刻を入力してください。');
       content = JSON.stringify({
@@ -418,7 +418,7 @@ function preparePunchCorrection_(requestRow) {
   const date = requestRow[5];
   const action = correction.action;
   const time = normalizeTime_(correction.time || '');
-  if (!Object.values(PUNCH).includes(action) || !time) throw new Error('打刻修正内容が不正です。');
+  if (!isTimePunchAction_(action) || !time) throw new Error('打刻修正内容が不正です。');
 
   const activeRows = getActivePunchRows_(employeeId, date, date);
   const originalId = String(correction.originalPunchId || '').trim();

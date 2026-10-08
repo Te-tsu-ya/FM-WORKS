@@ -18,6 +18,7 @@ for (const file of required) {
 const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
+const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
 }
@@ -311,6 +312,7 @@ for (const authMarker of [
 }
 for (const protectedMarker of [
   'function recordPunch(sessionToken',
+  'function recordWorkLocationChange(sessionToken',
   'function getScheduleBundle(sessionToken',
   'function saveSchedule(sessionToken',
   'function getCompanyCalendar(sessionToken'
@@ -544,6 +546,39 @@ for (const attendanceMarker of [
     failed = true;
   }
 }
+for (const marker of [
+  "LOCATION_CHANGE: '勤務場所変更'",
+  'function recordWorkLocationChange(sessionToken, workLocation)',
+  'function summarizeWorkLocations_(rows)',
+  'function isTimePunchAction_(action)'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('v0.10.9 work-location transition marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!requestCodeText.includes('isTimePunchAction_(action)')) {
+  console.error('Punch correction must exclude work-location transition events.');
+  failed = true;
+}
+for (const marker of [
+  'function getFontSizeMode()',
+  'function setFontSizeMode(mode)',
+  'function toggleFontSize()',
+  'function changeWorkLocation(location)',
+  "recordWorkLocationChange(state.sessionToken,location)"
+]) {
+  if (!app.includes(marker)) {
+    console.error('v0.10.9 accessibility/location UI marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!indexText.includes('id="fontSizeToggleButton"') ||
+    !styles.includes('html[data-font-size="large"]') ||
+    !styles.includes('.attendance-timeline-row.location')) {
+  console.error('Readable font mode or location-transition styling is missing.');
+  failed = true;
+}
 if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
     !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
   console.error('Nested workspace deep links must survive authenticated bootstrap.');
@@ -727,7 +762,7 @@ for (const [label, source, requiredMarkers] of [
   ['request concurrency', requestCode, ['withScriptLock_', "['APPROVE','REJECT']"]],
   ['worklog audit preservation', worklogCode, ["r[12] !== '削除'", "'削除', nowText", 'withScriptLock_']],
   ['employee concurrency', employeeCode, ['withScriptLock_', '標準勤務終了時刻は開始時刻より後']],
-  ['monthly attendance integrity', monthlyCode, ["r[12]!=='削除'", 'missingAllPunches', 'lateEarlyMinutes', 'absenceDays']],
+  ['monthly attendance integrity', monthlyCode, ["r[12]!=='削除'", 'missingAllPunches', 'lateEarlyMinutes', 'absenceDays', 'summarizeWorkLocations_(rows)']],
   ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_', 'assertMonthRangeOpen_']],
   ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_', 'assertMonthOpenForDate_']],
   ['punch correction resolution', serverCode, ['getActivePunchRows_', 'superseded.has', 'validatePunchSequence_']],
@@ -751,7 +786,7 @@ for (const match of app.matchAll(handlerPattern)) {
     failed = true;
   }
 }
-for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','projectAdminSection','openProjectModal','saveProjectFromModal','loadHomeOverview']) {
+for (const requiredHandler of ['syncRequestDates','openMobileDrawer','runConfirmAction','runReasonAction','closeMonthly','reopenMonthly','confirmMonthlyReviewFromPage','setAdminTab','toggleTheme','toggleFontSize','projectAdminSection','openProjectModal','saveProjectFromModal','loadHomeOverview']) {
   if (!definedClientFunctions.has(requiredHandler)) {
     console.error(`Required client function missing: ${requiredHandler}`);
     failed = true;
