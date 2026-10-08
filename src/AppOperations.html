@@ -1679,7 +1679,7 @@ function requestAnnualLeaveNotice(){
   const previous=typeof previousBanner==='string'?previousBanner:'';
   if(auto.status==='REVIEW')return previous+`<div class='leave-compliance-banner needs-review' role='status'>
     <span class='leave-compliance-icon'>!</span><div><strong>有給の付与条件を確認してください</strong>
-    <p>${escapeHtml(auto.dueDate||'')}の付与（${escapeHtml(String(auto.dueDays||0))}日）を確認中です。出勤率や会社カレンダーを管理者に確認してください。</p></div></div>`;
+    <p>${escapeHtml(auto.dueDate||'')}の付与（${escapeHtml(String(auto.dueDays||0))}日）を確認中です。付与履歴・出勤率・会社カレンダーを管理者に確認してください。</p></div></div>`;
   if(five.status!=='TRACKING'&&five.status!=='OVERDUE'&&five.status!=='COMPLETED')return previous;
   const remaining=Number(five.remainingDays||0),isOverdue=five.status==='OVERDUE',
     alert=isOverdue||(remaining>0&&Number(five.daysRemaining)<=180),
@@ -1973,7 +1973,7 @@ function requestApprovedCancel(id){openReasonDialog('承認済み申請の取消
 function approveCancellationRequest(id){openConfirmDialog('取消を承認','承認済み申請を取り消しますか？ 有給の場合は残日数を戻します。','取消を承認',function(){google.script.run.withSuccessHandler(function(){showToast('取消を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'取消承認できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'APPROVE','');},true);}
 function rejectCancellationRequest(id){openReasonDialog('取消を却下','申請者に表示する理由を入力してください。','取消を却下',function(reason){google.script.run.withSuccessHandler(function(){showToast('取消を却下しました');invalidatePageCache('requests');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'取消却下できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'REJECT',reason);});}
 function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){google.script.run.withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
-function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
+function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
 function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){google.script.run.withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
 
 

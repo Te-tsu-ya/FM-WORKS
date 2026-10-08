@@ -196,7 +196,7 @@ function renderLeaveLedgerModal(data){
 function postLeaveLedgerFromModal(employeeId){
   const type=document.getElementById('leaveLedgerType').value,days=Number(document.getElementById('leaveLedgerDays').value),date=document.getElementById('leaveLedgerDate').value,note=document.getElementById('leaveLedgerNote').value;
   if(!Number.isFinite(days)||days===0){showToast('日数を入力してください');return;}
-  google.script.run.withSuccessHandler(function(){showToast('年休台帳を更新しました');openLeaveLedgerModal(employeeId);invalidatePageCache('authAdmin');loadAuthAdmin({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'年休台帳を更新できませんでした');}).postLeaveLedgerEntry(state.sessionToken,employeeId,type,days,date,note);
+  google.script.run.withSuccessHandler(function(){showToast('年休台帳を更新しました');openLeaveLedgerModal(employeeId);invalidatePageCache('authAdmin','requests','homeOverview');loadAuthAdmin({force:true,silent:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'年休台帳を更新できませんでした');}).postLeaveLedgerEntry(state.sessionToken,employeeId,type,days,date,note);
 }
 
 function employeeManagerOptions(e){
@@ -404,7 +404,7 @@ function performEmployeeSave(payload){
     ui.selectedEmployeeId=String(payload.employeeId||'').trim().toUpperCase();
     ui.search='';ui.role='ALL';ui.status='ALL';ui.detailTab='basic';ui.wizard=false;
     closeModal();showToast('社員情報を保存しました');
-    refreshAppData(function(){invalidatePageCache('authAdmin');loadAuthAdmin({force:true,scope:'people'});});
+    refreshAppData(function(){invalidatePageCache('authAdmin','requests','homeOverview');loadAuthAdmin({force:true,scope:'people'});loadHomeOverview({force:true,silent:true});});
   }).withFailureHandler(function(err){
     ui.saving=false;
     if(session!==state.sessionToken||ui!==state.adminUi)return;

@@ -61,16 +61,32 @@ function leaveAutoAlreadyGranted_(employee,part,rows){
   return String(employee.leaveBasisDate||'')>=part.date||
     (rows||getLeaveLedgerRows_(employee.employeeId)).some(r=>r.transactionDate===part.date&&['GRANT','OPENING'].includes(r.type));
 }
+// Due dates preceding the current year remain reviewable, not silently forgotten.
+// Years missed since activation cannot be blindly credited because rights may have expired.
+function leaveAutoEarlierMissing_(employee,plan,policy,rows){
+  if(!policy.enabled||!plan||!plan.due)return [];
+  const entries=rows||getLeaveLedgerRows_(employee.employeeId),missing=[];
+  for(let i=0;i<plan.due.index;i++){
+    const date=leaveDueAtIndex_(employee.hireDate,i);
+    if(!date||date<policy.from)continue;
+    if(entries.some(r=>r.transactionDate===date&&['GRANT','OPENING'].includes(r.type)))continue;
+    missing.push({date,days:AUTO_LEAVE_DAYS[Math.min(i,6)]});
+  }
+  return missing;
+}
 function leaveAutoForecast_(employee,today){
   const policy=leaveAutoPolicy_(employee.employeeId),plan=leaveEntitlement_(employee.hireDate,today);
   if(!plan)return {status:'NO_HIRE_DATE',enabled:policy.enabled,message:'入社日が未設定です。'};
   const next=plan.next,base={enabled:policy.enabled,nextDate:next&&next.date||'',nextDays:next&&next.days||null};
   if(!policy.enabled)return {...base,status:'DISABLED',message:'自動付与は無効です。'};
   if(!plan.due||plan.due.date<policy.from)return {...base,status:'SCHEDULED',message:'次回の付与を待っています。過去分は自動加算しません。'};
-  const granted=leaveAutoAlreadyGranted_(employee,plan.due);
+  const rows=getLeaveLedgerRows_(employee.employeeId),prior=leaveAutoEarlierMissing_(employee,plan,policy,rows);
+  if(prior.length)return {...base,status:'REVIEW',dueDate:prior[0].date,dueDays:prior[0].days,
+    overdueCount:prior.length,message:'過年度に付与記録のない期間があります。過去分は自動加算せず管理者が履歴を確認してください。'};
+  const granted=leaveAutoAlreadyGranted_(employee,plan.due,rows);
   return {...base,dueDate:plan.due.date,dueDays:plan.due.days,
     status:granted?'GRANTED':'REVIEW',
-    message:granted?'今回分は付与記録があります。':'出勤率や会社カレンダーの確認が必要です。'};
+    message:granted?'今回分の付与記録があります。':'出勤率や会社カレンダーの確認が必要です。'};
 }
 function repairAnnualLeaveMaster_(employee,part,rows){
   const ledgerRows=rows||getLeaveLedgerRows_(employee.employeeId);
