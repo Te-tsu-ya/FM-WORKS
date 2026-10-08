@@ -365,10 +365,10 @@ function worklogMinutesToTime(value){
 
 function buildWorklogSampleData(date){
   const rows=[
-    ['SAMPLE-W1','会津屋アプリ','UI設計','画面改善案の検討','09:00','10:00',60],
-    ['SAMPLE-W2','丸栄様提案','資料作成','提案資料の修正','10:00','12:00',120],
+    ['SAMPLE-W1','サンプル案件A','UI設計','画面改善案の検討','09:00','10:00',60],
+    ['SAMPLE-W2','サンプル案件B','資料作成','提案資料の修正','10:00','12:00',120],
     ['SAMPLE-W3','社内MTG','打合せ','開発方針確認','13:00','15:00',120],
-    ['SAMPLE-W4','会津屋アプリ','テスト','UI確認・動作確認','15:00','16:30',90]
+    ['SAMPLE-W4','サンプル案件A','テスト','UI確認・動作確認','15:00','16:30',90]
   ];
   return {
     sample:true,
@@ -488,7 +488,7 @@ function worklogQuickForm(display){
   const realProjects=(state.data.projects||[]).filter(p=>!p.status||p.status==='進行中');
   const gap=worklogFirstGap(display);
   const sampleFallback=display.sample&&!realProjects.length;
-  const options=(realProjects.length?realProjects.map(p=>p.name):['会津屋アプリ','丸栄様提案','社内MTG']).map((name,i)=>`<option value='${sampleFallback?'':escapeHtml(name)}'>${escapeHtml(name)}${sampleFallback?'（表示例）':''}</option>`).join('');
+  const options=(realProjects.length?realProjects.map(p=>p.name):['サンプル案件A','サンプル案件B','社内MTG']).map((name,i)=>`<option value='${sampleFallback?'':escapeHtml(name)}'>${escapeHtml(name)}${sampleFallback?'（表示例）':''}</option>`).join('');
   return `<section class='worklog-panel worklog-quick-card'>
     <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div>${display.sample?`<span class='worklog-sample-chip'>表示確認用</span>`:''}</header>
     <div class='worklog-quick-grid'>

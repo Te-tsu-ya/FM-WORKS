@@ -214,8 +214,8 @@ const result=vm.runInContext(`
   const worklogHtml=worklogPage();
   expect('worklog hybrid renders timeline quick input and table',worklogHtml.includes('本日のタイムライン')&&worklogHtml.includes('クイック入力')&&worklogHtml.includes('本日の工数一覧'));
 
-  state.data.projects=[{name:'会津屋アプリ',status:'進行中'}];
-  document.getElementById('wlQuickProject').value='会津屋アプリ';
+  state.data.projects=[{name:'テスト案件A',status:'進行中'}];
+  document.getElementById('wlQuickProject').value='テスト案件A';
   document.getElementById('wlQuickCategory').value='UI設計';
   document.getElementById('wlQuickStart').value='16:30';
   document.getElementById('wlQuickEnd').value='18:00';
@@ -223,7 +223,7 @@ const result=vm.runInContext(`
   resetCalls();
   saveQuickWorklog();
   call=lastCall();
-  expect('quick worklog input reaches existing saveWorklog contract',call&&call.method==='saveWorklog'&&call.args[0]==='SESSION_TOKEN'&&call.args[1].project==='会津屋アプリ'&&call.args[1].start==='16:30'&&call.args[1].end==='18:00');
+  expect('quick worklog input reaches existing saveWorklog contract',call&&call.method==='saveWorklog'&&call.args[0]==='SESSION_TOKEN'&&call.args[1].project==='テスト案件A'&&call.args[1].start==='16:30'&&call.args[1].end==='18:00');
   state.busy=false;
 
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
