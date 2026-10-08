@@ -69,7 +69,6 @@ for(const scenario of cases){
     '</head><body><div class="app-shell"><aside class="sidebar"><div class="brand">FM WORKS</div></aside>'+
     '<div class="workspace"><header class="topbar"><div class="search-box">社員・申請・予定を検索</div></header>'+
     '<main class="content one-screen">'+home+'</main></div></div>'+
-    '<output id="qa-result" style="display:none"></output>'+
     '<script>'+
     'window.addEventListener("load",()=>{requestAnimationFrame(()=>{'+
     'const c=document.querySelector(".content"),portal=document.querySelector(".home-portal-screen"),'+
@@ -85,16 +84,29 @@ for(const scenario of cases){
       'contentHeight:c.clientHeight,contentScrollHeight:c.scrollHeight,'+
       'overflowY:getComputedStyle(c).overflowY,punchHeight:Math.round(punch.getBoundingClientRect().height),'+
       'statsCount:statButtons.length,panelsCount:panels.length};'+
-    'document.getElementById("qa-result").setAttribute("data-payload",encodeURIComponent(JSON.stringify(info)));'+
+    'parent.postMessage({kind:"FM_WORKS_QA",info:info},"*");'+
     '});});'+
     '</script></body></html>';
+  // A same-origin local iframe has the exact requested CSS viewport. Chrome's
+  // CLI reserves roughly 87px for headless window chrome and clamps width>=500px.
+  // Rendering inside a fixed-size iframe avoids both measurement distortions.
+  const innerFile=path.join(temporaryDir,id+'-frame.html');
+  fs.writeFileSync(innerFile,html);
   const file=path.join(temporaryDir,id+'.html');
-  fs.writeFileSync(file,html);
+  const outer='<html><head><meta charset="utf-8"><script>'+
+    'window.addEventListener("message",e=>{if(e.data&&e.data.kind==="FM_WORKS_QA")'+
+    'document.getElementById("qa-result").setAttribute("data-payload",'+
+    'encodeURIComponent(JSON.stringify(e.data.info)));});'+
+    '</script></head><body style="margin:0;overflow:hidden">'+
+    '<iframe title="FM WORKS test viewport" src="'+pathToFileURL(innerFile).href+
+    '" style="display:block;border:0;width:'+scenario.width+'px;height:'+scenario.height+'px"></iframe>'+
+    '<output id="qa-result" style="display:none"></output></body></html>';
+  fs.writeFileSync(file,outer);
   const screenshot=path.join(outputDir,id+'.png');
   const args=['--headless=new','--disable-gpu','--no-sandbox','--disable-dev-shm-usage',
     '--no-first-run','--disable-extensions','--force-device-scale-factor=1',
-    '--hide-scrollbars','--window-size='+scenario.width+','+scenario.height,
-    '--virtual-time-budget=1800','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
+    '--hide-scrollbars','--window-size='+Math.max(500,scenario.width)+','+(scenario.height+115),
+    '--virtual-time-budget=2600','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
   let result;
   try {
     const stdout=execFileSync(chrome,args,{encoding:'utf8',timeout:45000,maxBuffer:4*1024*1024,
