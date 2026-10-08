@@ -1,9 +1,10 @@
 <script>
 /* FM WORKS v0.13.0 finance UI. No confidential data in persistent browser storage. */
-let financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160};
+const FINANCE_READ_TTL=30000;
+let financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 function resetFinanceUi(){
   financeActiveForm=null;
-  financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160};
+  financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 }
 function financeIdentity(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
@@ -11,31 +12,50 @@ function financeIdentity(){
 function financeAccessAllowed(){
   return !!(state.data&&state.data.permissions&&state.data.permissions.financeWorkspace);
 }
-function loadFinanceOverview(){
-  if(!financeAccessAllowed()||financeUi.loading||!state.sessionToken)return;
-  const identity=financeIdentity();financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
-  if(state.page==='finance')renderPage();
+function loadFinanceOverview(options={}){
+  if(!financeAccessAllowed()||!state.sessionToken)return;
+  const now=Date.now();
+  if(!options.force&&financeUi.overview&&financeUi.identity===financeIdentity()&&
+    now-financeUi.at<FINANCE_READ_TTL)return;
+  if(financeUi.loading){if(options.force)financeUi.refreshNeeded=true;return;}
+  const identity=financeIdentity(),hadData=!!financeUi.overview;
+  financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
+  if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
+  const started=Date.now();
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
-    financeUi.overview=result;financeUi.loading=false;financeUi.error='';
+    financeUi.overview=result;financeUi.at=Date.now();financeUi.loading=false;financeUi.error='';
+    if(typeof console!=='undefined'&&console.debug)console.debug('[FM PERF] finance API '+(Date.now()-started)+'ms');
+    if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
     renderPageIfActive('finance');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.error=cleanApiErrorMessage(error,'経理情報を取得できませんでした。');
-    financeUi.loading=false;renderPageIfActive('finance');
+    financeUi.loading=false;
+    if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
+    renderPageIfActive('finance');
   }).getFinanceOverview(state.sessionToken,{limit:financeUi.limit||160});
 }
-function loadMyFinanceItems(){
-  if(!state.sessionToken||financeUi.ownLoading)return;
-  const identity=financeIdentity();financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
-  renderPageIfActive('requests');
+function loadMyFinanceItems(options={}){
+  if(!state.sessionToken)return;
+  const now=Date.now();
+  if(!options.force&&financeUi.mine&&financeUi.identity===financeIdentity()&&
+    now-financeUi.mineAt<FINANCE_READ_TTL)return;
+  if(financeUi.ownLoading){if(options.force)financeUi.ownRefreshNeeded=true;return;}
+  const identity=financeIdentity(),hadData=!!financeUi.mine;
+  financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
+  if(!hadData&&!options.silent)renderPageIfActive('requests');
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
-    financeUi.mine=result;financeUi.ownLoading=false;renderPageIfActive('requests');
+    financeUi.mine=result;financeUi.mineAt=Date.now();financeUi.ownLoading=false;
+    if(financeUi.ownRefreshNeeded){financeUi.ownRefreshNeeded=false;loadMyFinanceItems({force:true,silent:true});return;}
+    renderPageIfActive('requests');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.ownError=cleanApiErrorMessage(error,'経費・出張の履歴を取得できませんでした。');
-    financeUi.ownLoading=false;renderPageIfActive('requests');
+    financeUi.ownLoading=false;
+    if(financeUi.ownRefreshNeeded){financeUi.ownRefreshNeeded=false;loadMyFinanceItems({force:true,silent:true});return;}
+    renderPageIfActive('requests');
   }).getMyFinanceItems(state.sessionToken);
 }
 function financeYen(value){
@@ -68,7 +88,7 @@ function financeSelfSection(){
     '<p>立替経費と出張結果を登録し、自分の申請状況を確認できます。</p></div></header>'+
     '<div class="finance-actions"><button type="button" class="primary-button" onclick="openFinanceForm(\'expense\')">経費を申請</button>'+
     '<button type="button" class="secondary-button" onclick="openFinanceForm(\'travel\')">出張報告を登録</button>'+
-    '<button type="button" class="secondary-button" onclick="loadMyFinanceItems()"'+(financeUi.ownLoading?' disabled':'')+'>申請履歴を確認</button></div>'+
+    '<button type="button" class="secondary-button" onclick="loadMyFinanceItems({force:true})"'+(financeUi.ownLoading?' disabled':'')+'>申請履歴を確認</button></div>'+
     '<small class="finance-note">証憑の管理番号は入力できますが、領収書画像の保存・電子帳簿保存法への対応は別機能です。原本は社内の保管ルールに従って保存してください。</small>'+
     (financeUi.ownError?'<p role="alert">'+escapeHtml(financeUi.ownError)+'</p>':'')+
     (financeUi.ownLoading?'<p role="status">経費・出張履歴を読込中です…</p>':'')+
@@ -180,8 +200,8 @@ function submitFinanceForm(){
     financeUi.busy=false;
     if(financeActiveForm===activeForm){financeActiveForm=null;closeModal();}
     showToast(result&&result.duplicate?'既に登録済みの申請です':activeForm.editId?'再申請しました':'登録しました');
-    if(kind==='receipt')loadFinanceOverview();
-    else {loadMyFinanceItems();if(financeAccessAllowed())loadFinanceOverview();}
+    if(kind==='receipt')loadFinanceOverview({force:true});
+    else {loadMyFinanceItems({force:true});if(financeAccessAllowed())loadFinanceOverview({force:true});}
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
@@ -193,7 +213,7 @@ function submitFinanceForm(){
 function financeShowMore(){
   if(!financeAccessAllowed()||financeUi.loading||financeUi.limit>=1000)return;
   financeUi.limit=Math.min(1000,(financeUi.limit||160)+160);
-  loadFinanceOverview();
+  loadFinanceOverview({force:true});
 }
 function financeTabSelect(tab){
   if(!['receipt','expense','travel'].includes(tab)||!financeAccessAllowed())return;
@@ -280,7 +300,7 @@ function financePage(){
     '<div class="finance-rule-note">管理者・経理・総務の担当者専用。本人申請の自己承認はできません。帳簿作成・領収書画像保存は未対応です。</div>'+
     '<div class="finance-actions">'+
       '<button class="primary-button" type="button" onclick="openFinanceForm(\'receipt\')">経費・レシートを記録</button>'+
-      '<button class="secondary-button" type="button" onclick="loadFinanceOverview()"'+(financeUi.loading?' disabled':'')+'>データを更新</button>'+
+      '<button class="secondary-button" type="button" onclick="loadFinanceOverview({force:true})"'+(financeUi.loading?' disabled':'')+'>データを更新</button>'+
     '</div>'+
     '<nav class="finance-tabs" aria-label="経理メニュー">'+
       [['receipt','経費記録'],['expense','経費精算申請'],['travel','出張報告']].map(x=>
@@ -322,7 +342,7 @@ function financeSubmitDecision(kind,id,decision){
   const identity=financeIdentity();financeUi.busy=true;
   google.script.run.withSuccessHandler(()=>{
     if(identity!==financeIdentity())return;
-    financeUi.busy=false;closeModal();showToast('処理しました');loadFinanceOverview();
+    financeUi.busy=false;closeModal();showToast('処理しました');loadFinanceOverview({force:true});
   }).withFailureHandler(err=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
@@ -349,7 +369,7 @@ function financeSubmitSettlement(kind,id){
   const identity=financeIdentity();financeUi.busy=true;
   google.script.run.withSuccessHandler(()=>{
     if(identity!==financeIdentity())return;
-    financeUi.busy=false;closeModal();showToast('精算済みに更新しました');loadFinanceOverview();
+    financeUi.busy=false;closeModal();showToast('精算済みに更新しました');loadFinanceOverview({force:true});
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;

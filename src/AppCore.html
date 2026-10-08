@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false,refreshing:false,error:'',loadedKey:'',historyFilter:'ALL',historyQuery:'',historyLimit:10,approvalLimit:4,submitting:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'people',officeUi:{selected:'documents'},adminUi:{selectedEmployeeId:'',detailTab:'basic',search:'',role:'ALL',status:'ALL',menuOpen:false,wizard:false,wizardStep:1,saving:false},documents:{requirements:null,technical:null,loading:null},schedule:{date:null,selectedDate:null,selectedEventId:null,mobileDetailOpen:false,loadedKey:'',loadedIdentity:'',refreshing:false,highlightEmployeeId:'ALL',rawEvents:[],error:'',view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false,refreshing:false,error:'',loadedKey:'',historyFilter:'ALL',historyQuery:'',historyLimit:10,approvalLimit:4,submitting:false},monthly:{yearMonth:null,employeeId:null,data:null,loadedKey:'',error:'',view:'calendar',loading:false},adminTab:'people',officeUi:{selected:'documents'},adminUi:{selectedEmployeeId:'',detailTab:'basic',search:'',role:'ALL',status:'ALL',menuOpen:false,wizard:false,wizardStep:1,saving:false},documents:{requirements:null,technical:null,loading:null},schedule:{date:null,selectedDate:null,selectedEventId:null,mobileDetailOpen:false,loadedKey:'',loadedIdentity:'',refreshing:false,highlightEmployeeId:'ALL',rawEvents:[],error:'',view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:180000,company:300000,requests:90000,monthly:120000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:180000,maintenance:60000,documents:600000};
 const pageCache={};
 const pendingLoads=new Set();
@@ -13,7 +13,7 @@ let routePrefetchTimer=null;
 function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
 function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
 function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
-function invalidatePageCache(...names){names.forEach(name=>{if(name==='authAdmin'){delete pageCache.authAdminPeople;delete pageCache.authAdminAuth;delete pageCache.authAdminProjects;}else delete pageCache[name]});if(names.includes('worklog')&&typeof invalidateWorklogWindowCache==='function')invalidateWorklogWindowCache();if(names.includes('schedule')&&typeof invalidateScheduleWindowCache==='function')invalidateScheduleWindowCache()}
+function invalidatePageCache(...names){names.forEach(name=>{if(name==='authAdmin'){delete pageCache.authAdminPeople;delete pageCache.authAdminAuth;delete pageCache.authAdminProjects;}else delete pageCache[name]});if(names.includes('worklog')&&typeof invalidateWorklogWindowCache==='function')invalidateWorklogWindowCache();if(names.includes('schedule')&&typeof invalidateScheduleWindowCache==='function')invalidateScheduleWindowCache();if(names.includes('monthly')&&typeof invalidateMonthlyResultCache==='function')invalidateMonthlyResultCache()}
 function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
 function endPageLoad(ticket){if(ticket)pendingLoads.delete(ticket)}
 function renderPageIfActive(page){if(state.page===page)renderPage()}
@@ -194,7 +194,7 @@ function setSessionToken(token,persistent=false){
   }
 }
 function getStoredSessionToken(){return localStorage.getItem('fmworks.session')||sessionStorage.getItem('fmworks.session')||null}
-function clearLocalSession(){if(typeof resetLeaveDemoSession==='function')resetLeaveDemoSession();if(typeof resetFinanceUi==='function')resetFinanceUi();setSessionToken(null);stopLiveAttendanceTicker();clearWorklogQuickDrafts();invalidateWorklogWindowCache();invalidateScheduleWindowCache();worklogActiveRequest=null;delete pageCache.requests;state.requests=createEmptyRequestsState();state.data=null;state.authAdmin=null;state.adminUi=createAdminUiState();state.adminTab='people';invalidatePageCache('authAdmin');state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
+function clearLocalSession(){if(typeof resetLeaveDemoSession==='function')resetLeaveDemoSession();if(typeof resetFinanceUi==='function')resetFinanceUi();setSessionToken(null);stopLiveAttendanceTicker();clearWorklogQuickDrafts();invalidateWorklogWindowCache();invalidateScheduleWindowCache();worklogActiveRequest=null;invalidateMonthlyResultCache();delete pageCache.requests;state.requests=createEmptyRequestsState();state.data=null;state.authAdmin=null;state.adminUi=createAdminUiState();state.adminTab='people';invalidatePageCache('authAdmin');state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
 function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 587" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg>`}
 
 
@@ -337,11 +337,11 @@ function navigate(page){
   if(page==='finance'&&!(state.data&&state.data.permissions&&state.data.permissions.financeWorkspace)){page='home'}
   if(page==='admin'&&state.adminTab==='people')page='people';
   if(page!=='schedule')state.schedule.mobileDetailOpen=false;
-  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage(true);window.scrollTo({top:0,behavior:'auto'});
+  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
   const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
-  if(page==='schedule')loadSchedule();
+  if(page==='schedule')loadSchedule({silent:true});
   if(page==='companyCalendar')loadCompanyCalendar();
-  if(page==='worklog')loadWorklogs();
+  if(page==='worklog')loadWorklogs({silent:true});
   if(page==='requests')loadRequests();
   if(page==='finance')loadFinanceOverview();
   if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
