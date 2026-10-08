@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.4  
+**文書版:** 0.11.5  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.4`
+`APP.version = 0.11.5`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -635,6 +635,20 @@ disabledは `cursor:not-allowed`。
 `:focus-visible` は青系3pxアウトライン。
 
 ダークテーマでは、管理画面のsmall-button / security-item / readiness-row / maintenance-detail / auth-stateにも個別の暗色面・枠・文字色を指定し、ライト背景の取り残しを防ぐ。
+
+
+## 16.1 申請ダッシュボード/ガイド付き入力 v0.11.5
+
+- `src/AppOperations.html` の `requestsPage()` は、役割別4指標→クイック申請＋承認/直近状況→本人履歴の順で描画する。APIは引き続き `getRequestsBundle(state.sessionToken)` の1回。
+- `requestOverview()` は本人の `own`、承認権限者は `requestPendingTeam()` を使用。取消申請中の部下を対応対象とし、自己承認はUI/サーバー双方で防止する。
+- `requestHistoryPanel()`、`filteredOwnRequests()`、`setRequestHistoryFilter()`、`searchRequestHistory()` は取得済み `state.requests.own` のみをローカル処理し、DOMリストだけを再描画する。検索とステータス変更では通信せず、入力フォーカスも維持する。
+- ページの表示状態 `state.requests` は `createEmptyRequestsState()` で初期化。キャッシュキー `requestsIdentity()` はセッショントークン＋社員番号。ログアウト/認証マウントでキャッシュと申請データを消去。非同期応答ではキー/トークンが一致する時だけ代入する。
+- ステータス詳細は `openRequestDetail(id,teamMode)` がサーバーから認可済みの `own/team` から取得し、`escapeHtml` で文字列をサニタイズする。申請IDは inline JS引用文字列へ埋めず、data属性＋DOM datasetで渡す。
+- 入力画面 `openRequestModal()` は既存の申請入力項目を維持し、3段ガイドと `updateRequestDraftSummary()` によるブラウザ内確認を追加。半休区分変更時に `reqContent` と `reqReason` と日付を維持する。
+- 送信では `state.requests.submitting` で二重リクエストをブロックし、失敗時は解除。ログインユーザーが変わった後の古い成功/失敗応答はUIに適用しない。
+- `src/Styles.html` の `.request-dashboard` を起点にCSSをスコープ化。4列KPI/メイン2列/スマホ2列以下で適応、darkテーマにも対応。モーダルは本文領域のみスクロールし、下部の送信ボタンを維持。
+- 既存 `submitRequest`/`cancelRequest`/`approveRequest`/`requestApprovedCancellation`/`decideApprovedCancellation` および有給残日数検証・監査を変更しない。権限は引き続きサーバーを正本とする。
+- `scripts/test_client_contract.mjs` でステータス/役割切替、履歴ローカル処理、二重送信、ログイン分離、エスケープの動作契約をテストする。CI成功とは別に実端末の画面・操作・読込秒数を確認する。
 
 ## 17. クライアントキャッシュ
 

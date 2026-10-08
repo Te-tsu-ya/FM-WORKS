@@ -689,6 +689,42 @@ if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('functio
   console.error('Request page must use a single bundled server read.');
   failed = true;
 }
+
+for (const requestDashboardMarker of [
+  'function createEmptyRequestsState()',
+  'function requestsIdentity()',
+  'function requestsDataReady()',
+  'function requestOverview()',
+  'function requestPendingTeam()',
+  'function requestApprovalPanel()',
+  'function requestHistoryPanel()',
+  'function filteredOwnRequests()',
+  'function searchRequestHistory(query)',
+  'function updateRequestDraftSummary()',
+  'function openRequestDetail(id,teamMode=false)',
+  "class='request-overview",
+  "class='request-form-steps'",
+  'requestState.submitting=true',
+  "if(requestState!==state.requests||identity!==requestsIdentity())return"
+]){
+  if(!app.includes(requestDashboardMarker)){console.error('v0.11.5 request dashboard missing: '+requestDashboardMarker);failed=true;}
+}
+for (const requestDashboardStyle of [
+  '.request-overview{display:grid',
+  '.request-action-layout{display:grid',
+  '.request-dashboard .request-quick-grid',
+  '.request-history-filters button.active',
+  '.request-guided-modal',
+  '@media(max-width:760px)'
+]){
+  if(!styles.includes(requestDashboardStyle)){console.error('v0.11.5 request responsive style missing: '+requestDashboardStyle);failed=true;}
+}
+if(!app.includes('state.requests=createEmptyRequestsState();')||
+  !app.includes('delete pageCache.requests;')||
+  !app.includes('requestState.submitting=false')){
+  console.error('v0.11.5 request session reset or safe retry contract missing.');failed=true;
+}
+
 for (const requestUxMarker of [
   'const REQUEST_UI=',
   "id='requestFormError'",

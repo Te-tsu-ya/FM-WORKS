@@ -1477,24 +1477,39 @@ function openCompanyDay(date){const cd=(state.company.days||[]).find(x=>x.date==
 function saveCompanyDayFromModal(date){if(!canEditCompanyCalendar()){showToast('会社カレンダーの編集権限がありません');return}const payload={date,type:document.getElementById('companyType').value,name:document.getElementById('companyName').value,start:document.getElementById('companyStart').value,end:document.getElementById('companyEnd').value,breakMinutes:document.getElementById('companyBreak').value};google.script.run.withSuccessHandler(()=>{closeModal();showToast('会社カレンダーを更新しました');invalidatePageCache('company','schedule','monthly');loadCompanyCalendar(state.company.year,{force:true});if(state.page==='schedule')loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'更新に失敗しました')).saveCompanyCalendarDay(state.sessionToken,payload)}
 
 
+
+function createEmptyRequestsState(){
+  return {own:[],team:[],context:null,loading:false,refreshing:false,error:'',loadedKey:'',historyFilter:'ALL',historyQuery:'',historyLimit:10,approvalLimit:4,submitting:false};
+}
+function requestsIdentity(){
+  return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+}
+function requestsDataReady(){return !!(state.requests.loadedKey&&state.requests.loadedKey===requestsIdentity());}
 function loadRequests(options={}){
-  const key='current';
-  if(!options.force&&cacheFresh('requests',key))return;
-  const ticket=beginPageLoad('requests',key);if(!ticket)return;
-  const hasCurrent=cacheHas('requests',key);
-  state.requests.loading=!hasCurrent;
+  if(!state.sessionToken||!state.data)return;
+  const key=requestsIdentity(),r=state.requests,ready=requestsDataReady();
+  if(!options.force&&ready&&cacheFresh('requests',key))return;
+  const ticket=beginPageLoad('requests',key);
+  if(!ticket)return;
+  r.loading=!ready;r.refreshing=ready;r.error='';
   if(!options.silent)renderPageIfActive('requests');
-  google.script.run.withSuccessHandler(function(data){
+  const token=state.sessionToken;
+  google.script.run.withSuccessHandler(data=>{
     endPageLoad(ticket);
-    state.requests.own=data&&data.own||[];
-    state.requests.team=data&&data.team||[];
-    state.requests.context=data&&data.context||null;
-    state.requests.loading=false;
+    if(token!==state.sessionToken||key!==requestsIdentity())return;
+    r.own=Array.isArray(data&&data.own)?data.own:[];
+    r.team=Array.isArray(data&&data.team)?data.team:[];
+    r.context=data&&data.context||null;
+    r.loadedKey=key;r.loading=false;r.refreshing=false;r.error='';
     markPageCache('requests',key);
     renderPageIfActive('requests');
-  }).withFailureHandler(function(err){
-    endPageLoad(ticket);state.requests.loading=false;
-    if(!handleApiError(err,'申請を読み込めませんでした')&&!options.silent)renderPageIfActive('requests');
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);
+    if(token!==state.sessionToken||key!==requestsIdentity())return;
+    r.loading=false;r.refreshing=false;
+    r.error='申請情報を読み込めませんでした。再読込してください。';
+    if(!options.silent)handleApiError(err,'申請を読み込めませんでした');
+    renderPageIfActive('requests');
   }).getRequestsBundle(state.sessionToken);
 }
 const REQUEST_UI={
@@ -1527,40 +1542,222 @@ function leaveBalancePanel(){
   }
   return `<section class='leave-overview'><div class='leave-balance-main'><small>現在の有給残</small><strong>${formatLeaveDays(x.leaveBalance)}</strong></div><div class='leave-balance-stat'><span>承認待ち</span><b>${formatLeaveDays(x.pendingLeaveDays||0)}</b></div><div class='leave-balance-stat available'><span>申請可能残</span><b>${formatLeaveDays(x.availableLeaveDays)}</b></div><small class='leave-balance-note'>承認待ちの有給申請を差し引いた目安です。</small></section>`;
 }
+
 function requestHistoryRows(items,adminMode){
-  if(!items||!items.length)return '<div class="request-empty"><strong>まだ申請はありません</strong><span>上のカードからすぐ申請できます。</span></div>';
+  if(!items||!items.length)return '<div class="request-empty"><strong>該当する申請はありません</strong><span>表示条件を変更するか、新しく申請してください。</span></div>';
   return items.map(x=>{
     const meta=REQUEST_UI[x.type]||{mark:'申',tone:'blue'};
-    let actions='';
+    const id=escapeHtml(x.id||'');
+    let action='';
     if(adminMode&&x.status==='承認待ち'){
-      actions=`<div class='admin-actions'><button class='small-button approve' onclick="approveTeamRequest('${x.id}')">承認</button><button class='small-button' onclick="rejectTeamRequest('${x.id}')">差戻し</button></div>`;
+      action=`<button type='button' class='small-button approve' data-request-id='${id}' onclick='approveTeamRequest(this.dataset.requestId)'>承認</button><button type='button' class='small-button' data-request-id='${id}' onclick='rejectTeamRequest(this.dataset.requestId)'>差戻し</button>`;
     }else if(adminMode&&x.status==='取消申請中'){
-      actions=`<div class='admin-actions'><button class='small-button approve' onclick="approveCancellationRequest('${x.id}')">取消承認</button><button class='small-button' onclick="rejectCancellationRequest('${x.id}')">取消却下</button></div>`;
-    }else{
-      actions=`<div class='admin-actions'>${requestStatusBadge(x.status)}${x.status==='承認待ち'?`<button class='small-button' onclick="cancelOwnRequest('${x.id}')">取消</button>`:x.status==='承認済'&&x.type!=='打刻修正'?`<button class='small-button' onclick="requestApprovedCancel('${x.id}')">取消依頼</button>`:''}</div>`;
+      action=`<button type='button' class='small-button approve' data-request-id='${id}' onclick='approveCancellationRequest(this.dataset.requestId)'>取消承認</button><button type='button' class='small-button' data-request-id='${id}' onclick='rejectCancellationRequest(this.dataset.requestId)'>取消却下</button>`;
+    }else if(!adminMode&&x.status==='承認待ち'){
+      action=`<button type='button' class='small-button' data-request-id='${id}' onclick='cancelOwnRequest(this.dataset.requestId)'>取消</button>`;
+    }else if(!adminMode&&x.status==='承認済'&&x.type!=='打刻修正'){
+      action=`<button type='button' class='small-button' data-request-id='${id}' onclick='requestApprovedCancel(this.dataset.requestId)'>取消依頼</button>`;
     }
-    const cancelText=x.cancelReason?`<em>取消理由：${escapeHtml(x.cancelReason)}</em>`:'';
-    return `<div class='request-row'><span class='request-row-mark ${meta.tone}'>${escapeHtml(meta.mark)}</span><div class='request-row-main'><div><strong>${adminMode?escapeHtml(x.name)+' / ':''}${escapeHtml(meta.label||x.type)}</strong><span>${escapeHtml(x.startDate)}${x.endDate!==x.startDate?'〜'+escapeHtml(x.endDate):''}</span></div><p>${escapeHtml(x.reason||'理由なし')}${x.rejectReason?`<em>差戻し理由：${escapeHtml(x.rejectReason)}</em>`:''}${cancelText}</p></div>${actions}</div>`;
+    const when=String(x.startDate||'')+(x.endDate&&x.endDate!==x.startDate?'〜'+String(x.endDate):'');
+    return `<div class='request-row request-dashboard-row'>
+      <span class='request-row-mark ${meta.tone}'>${escapeHtml(meta.mark)}</span>
+      <div class='request-row-main'><div><strong>${adminMode?escapeHtml(x.name||'')+' / ':''}${escapeHtml(meta.label||x.type||'申請')}</strong><span>${escapeHtml(when)}</span></div>
+        <p>${escapeHtml(x.reason||'理由未入力')}${x.rejectReason?`<em>差戻し理由：${escapeHtml(x.rejectReason)}</em>`:''}${x.cancelReason?`<em>取消理由：${escapeHtml(x.cancelReason)}</em>`:''}</p></div>
+      <div class='request-row-tools'>${requestStatusBadge(x.status)}
+        <button type='button' class='small-button' data-request-id='${id}' onclick='openRequestDetail(this.dataset.requestId,${adminMode?'true':'false'})'>詳細</button>${action}
+      </div>
+    </div>`;
   }).join('');
+}
+function openRequestDetail(id,teamMode=false){
+  const allowed=!!(state.data&&state.data.permissions&&state.data.permissions.requestApprove);
+  const items=teamMode&&allowed?state.requests.team:state.requests.own;
+  const item=(items||[]).find(x=>String(x.id)===String(id));
+  if(!item){showToast('申請内容を確認できませんでした');return;}
+  const meta=REQUEST_UI[item.type]||{label:item.type},root=ensureModal();
+  const fields=[
+    ['申請者',teamMode?item.name:state.data.user&&state.data.user.displayName],
+    ['申請種別',meta.label||item.type],
+    ['対象期間',String(item.startDate||'')+(item.endDate&&item.endDate!==item.startDate?' ～ '+item.endDate:'')],
+    ['申請理由',item.reason||'未入力'],['補足',item.content||'なし'],
+    ['差戻し理由',item.rejectReason||''],['取消理由',item.cancelReason||''],
+    ['承認者',item.approver||'']
+  ].filter(x=>x[1]);
+  root.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small request-readonly-modal' role='dialog' aria-modal='true' aria-label='申請内容の詳細'>
+    <div class='modal-head'><div><small>申請内容の確認</small><h2>${escapeHtml(meta.label||'申請')}</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
+    <div class='request-readonly-status'>${requestStatusBadge(item.status)}</div>
+    <dl class='request-readonly-list'>${fields.map(([label,value])=>`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    <div class='modal-actions'><span></span><button type='button' class='primary-button' onclick='closeModal()'>閉じる</button></div>
+  </section>`;
+}
+const REQUEST_HISTORY_FILTERS=[
+  ['ALL','すべて'],['承認待ち','承認待ち'],['承認済','承認済'],
+  ['差戻し','差戻し'],['取消関連','取消関連']
+];
+function requestStatusMatches(item,filter){
+  if(filter==='ALL')return true;
+  return filter==='取消関連'?['取消申請中','取消','取消済'].includes(item.status):item.status===filter;
+}
+function filteredOwnRequests(){
+  const r=state.requests,q=String(r.historyQuery||'').trim().toLocaleLowerCase('ja-JP');
+  return (r.own||[]).filter(x=>
+    requestStatusMatches(x,r.historyFilter||'ALL')&&
+    (!q||[x.type,x.startDate,x.endDate,x.reason,x.content,x.status,x.rejectReason].some(v=>String(v||'').toLocaleLowerCase('ja-JP').includes(q)))
+  );
+}
+function requestHistoryFilterCounts(filter){
+  return (state.requests.own||[]).filter(x=>requestStatusMatches(x,filter)).length;
+}
+function requestHistoryContent(){
+  const rows=filteredOwnRequests(),limit=Number(state.requests.historyLimit||10),visible=rows.slice(0,limit),remaining=rows.length-visible.length;
+  return `<div class='request-history-result-count' aria-live='polite'>${rows.length}件の申請</div>
+    ${requestHistoryRows(visible,false)}
+    ${remaining?`<button type='button' class='secondary-button request-more-button' onclick='showMoreRequestHistory()'>さらに表示（残り${remaining}件）</button>`:''}`;
+}
+function refreshRequestHistory(){
+  const container=document.getElementById('requestHistoryResults');
+  if(container)container.innerHTML=requestHistoryContent();
+  const panel=document.getElementById('requestHistoryPanel');
+  if(panel&&typeof panel.querySelectorAll==='function')panel.querySelectorAll('[data-request-filter]').forEach(button=>{
+    const active=button.dataset.requestFilter===state.requests.historyFilter;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  });
+}
+function setRequestHistoryFilter(filter,scroll=false){
+  if(!REQUEST_HISTORY_FILTERS.some(x=>x[0]===filter))return;
+  state.requests.historyFilter=filter;state.requests.historyLimit=10;
+  refreshRequestHistory();
+  if(scroll)focusRequestHistory();
+}
+function searchRequestHistory(query){
+  state.requests.historyQuery=String(query||'');state.requests.historyLimit=10;refreshRequestHistory();
+}
+function showMoreRequestHistory(){
+  state.requests.historyLimit=Math.min(filteredOwnRequests().length,Number(state.requests.historyLimit||10)+10);
+  refreshRequestHistory();
+}
+function focusRequestHistory(){
+  const el=document.getElementById('requestHistoryPanel');
+  if(el&&typeof el.scrollIntoView==='function')el.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function focusRequestApprovals(){
+  const el=document.getElementById('requestApprovalPanel');
+  if(el&&typeof el.scrollIntoView==='function')el.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function requestPendingTeam(){
+  const ownId=String(state.data&&state.data.user&&state.data.user.employeeId||'');
+  return (state.requests.team||[]).filter(x=>String(x.employeeId)!==ownId&&['承認待ち','取消申請中'].includes(x.status));
+}
+function showMoreRequestApprovals(){
+  state.requests.approvalLimit=Math.min(100,Number(state.requests.approvalLimit||4)+8);
+  const node=document.getElementById('requestApprovalPanel');
+  if(node)node.outerHTML=requestApprovalPanel();
+}
+function requestMetric(label,value,hint,tone,action){
+  return `<button type='button' class='request-overview-metric ${tone}' onclick="${action}">
+    <span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(hint)}</small><i aria-hidden='true'>↗</i>
+  </button>`;
+}
+function requestCompactLeaveAlert(){
+  if((state.requests.context||{}).leaveBalanceConfigured)return '';
+  const editor=!!(state.data&&state.data.permissions&&state.data.permissions.employeeAdmin);
+  return `<div class='request-inline-alert' role='status'><div><strong>有給残日数が未設定です</strong>
+    <span>有給・半休の申請には残日数の設定が必要です。その他の申請は利用できます。</span></div>
+    ${editor?`<button type='button' class='secondary-button compact' onclick="navigate('people')">社員設定を開く</button>`:''}</div>`;
+}
+function requestOverview(){
+  const r=state.requests,own=r.own||[],ctx=r.context||{},
+    canApprove=!!(state.data&&state.data.permissions&&state.data.permissions.requestApprove);
+  const pending=own.filter(x=>x.status==='承認待ち').length,
+    returned=own.filter(x=>x.status==='差戻し').length,approved=own.filter(x=>x.status==='承認済').length;
+  return `<section class='request-overview' aria-label='申請の状況'>
+    ${canApprove?requestMetric('チームの要対応',requestPendingTeam().length+'件','承認・取消確認','tone-amber','focusRequestApprovals()'):
+      requestMetric('承認待ち',pending+'件','自分の申請','tone-amber',"setRequestHistoryFilter('承認待ち',true)")}
+    ${canApprove?requestMetric('自分の承認待ち',pending+'件','申請状況を見る','tone-blue',"setRequestHistoryFilter('承認待ち',true)"):
+      requestMetric('差戻し',returned+'件','理由を確認','tone-rose',"setRequestHistoryFilter('差戻し',true)")}
+    ${canApprove?requestMetric('自分の差戻し',returned+'件','確認が必要','tone-rose',"setRequestHistoryFilter('差戻し',true)"):
+      requestMetric('承認済',approved+'件','これまでの申請','tone-green',"setRequestHistoryFilter('承認済',true)")}
+    ${requestMetric('申請可能な有給',ctx.leaveBalanceConfigured?formatLeaveDays(ctx.availableLeaveDays):'未設定',
+      ctx.leaveBalanceConfigured?'承認待ち分を差し引いた残数':'社員設定が必要',
+      ctx.leaveBalanceConfigured?'tone-green':'tone-muted',
+      ctx.leaveBalanceConfigured?'openRequestModal("有給")':(state.data.permissions&&state.data.permissions.employeeAdmin?"navigate('people')":'openRequestModal("有給")'))}
+  </section>`;
+}
+function requestApprovalPanel(){
+  const queue=requestPendingTeam(),pending=queue.filter(x=>x.status==='承認待ち').length,
+    cancels=queue.filter(x=>x.status==='取消申請中').length,limit=Number(state.requests.approvalLimit||4);
+  return `<section class='request-side-card request-approval-panel' id='requestApprovalPanel'>
+    <header class='request-panel-heading'><div><span class='eyebrow'>FOR APPROVERS</span><h2>対応が必要な申請</h2></div><span class='request-total-pill'>${queue.length}件</span></header>
+    <div class='request-approval-counts'><span>承認待ち <b>${pending}件</b></span><span>取消確認 <b>${cancels}件</b></span></div>
+    ${queue.length?requestHistoryRows(queue.slice(0,limit),true):`<div class='request-empty'><strong>対応が必要な申請はありません</strong><span>新しい申請が届くとここに表示されます。</span></div>`}
+    ${queue.length>limit?`<button type='button' class='secondary-button request-more-button' onclick='showMoreRequestApprovals()'>さらに表示（残り${queue.length-limit}件）</button>`:''}
+  </section>`;
+}
+function requestRecentPanel(){
+  const last=(state.requests.own||[]).slice(0,3);
+  return `<section class='request-side-card request-recent-panel'>
+    <header class='request-panel-heading'><div><span class='eyebrow'>MY ACTIVITY</span><h2>最近の申請</h2></div><button type='button' class='request-text-link' onclick='focusRequestHistory()'>履歴を見る ›</button></header>
+    ${last.length?requestHistoryRows(last,false):`<div class='request-empty'><strong>まだ申請はありません</strong><span>左側から申請を作成できます。</span></div>`}
+  </section>`;
+}
+function requestGuidePanel(){
+  return `<section class='request-side-card request-guide-panel'>
+    <header class='request-panel-heading'><div><span class='eyebrow'>GUIDE</span><h2>申請の進め方</h2></div></header>
+    <ol class='request-guide-steps'>
+      <li><b>1</b><div><strong>種類を選択</strong><span>申請したい内容を選びます。</span></div></li>
+      <li><b>2</b><div><strong>日付と理由を入力</strong><span>必要な項目だけ入力します。</span></div></li>
+      <li><b>3</b><div><strong>確認して申請</strong><span>申請後の状況は履歴で確認できます。</span></div></li>
+    </ol>
+  </section>`;
+}
+function requestHistoryPanel(){
+  const filter=state.requests.historyFilter||'ALL';
+  return `<section class='request-history-panel' id='requestHistoryPanel'>
+    <header class='request-panel-heading request-history-heading'><div><span class='eyebrow'>REQUEST HISTORY</span><h2>自分の申請履歴</h2><p>申請内容・承認状況・差戻し理由を確認できます。</p></div></header>
+    <div class='request-history-controls'>
+      <div class='request-history-filters' role='group' aria-label='申請ステータスで絞り込む'>
+        ${REQUEST_HISTORY_FILTERS.map(([id,label])=>`<button type='button' class='${filter===id?'active':''}' aria-pressed='${filter===id}' data-request-filter='${escapeHtml(id)}' onclick='setRequestHistoryFilter(this.dataset.requestFilter)'>${label}<span>${requestHistoryFilterCounts(id)}</span></button>`).join('')}
+      </div>
+      <label class='request-history-search'><span>申請履歴を検索</span><input type='search' aria-label='申請履歴を検索' placeholder='種類・日付・理由で検索' value='${escapeHtml(state.requests.historyQuery||'')}' oninput='searchRequestHistory(this.value)'></label>
+    </div>
+    <div class='request-history-results' id='requestHistoryResults'>${requestHistoryContent()}</div>
+  </section>`;
 }
 function requestsPage(){
   const r=state.requests;
-  if(r.loading&&!cacheHas('requests','current'))return pageHead('申請','やりたいことから選ぶだけで申請できます。')+'<div class="loading-card"></div>';
-  const teamPending=(r.team||[]).filter(x=>x.status==='承認待ち');
+  if(!requestsDataReady())return `<div class='request-dashboard'>
+    ${pageHead('申請','申請の作成・状況確認・承認をひとつの画面で。')}
+    <section class='request-load-panel' role='${r.error?'alert':'status'}'>
+      ${r.error?`<strong>${escapeHtml(r.error)}</strong><button type='button' class='primary-button' onclick='loadRequests({force:true})'>再読込</button>`:
+        `<div class='loading-card'></div><span>申請情報を読み込んでいます…</span>`}
+    </section></div>`;
+  const canApprove=!!(state.data.permissions&&state.data.permissions.requestApprove);
   const quick=[
-    requestTypeCard('有給','有給休暇','残日数を見ながら申請'),
+    requestTypeCard('有給','有給休暇','残日数を確認して申請'),
     requestTypeCard('午前半休','半休・1/4日','午前・午後・1/4日から選択'),
-    requestTypeCard('打刻修正'),
+    requestTypeCard('打刻修正','打刻修正','出勤・退勤などを修正'),
     requestTypeCard('在宅勤務'),
     requestTypeCard('残業'),
     requestTypeCard('休日出勤'),
     requestTypeCard('欠勤')
   ].join('');
-  const canApprove=state.data.permissions&&state.data.permissions.requestApprove;
-  return pageHead('申請','申請種別を探すのではなく、やりたいことから選べます。')+
-    leaveBalancePanel()+
-    `<section class='request-launch'><div class='request-section-head'><div><span class='eyebrow'>QUICK REQUEST</span><h2>何を申請しますか？</h2></div><span>クリックすると必要な項目だけ表示します。</span></div><div class='request-quick-grid'>${quick}</div></section>`+
-    `<div class='grid cols-2 section-gap'>${card('自分の申請',requestHistoryRows(r.own||[],false), 'request-history-card')}${canApprove?card('承認待ち '+teamPending.length+'件',requestHistoryRows(teamPending,true),'request-history-card'):card('申請の流れ',"<div class='request-help-flow'><span><b>1</b>種類を選ぶ</span><i>→</i><span><b>2</b>日付と理由</span><i>→</i><span><b>3</b>申請</span></div><p class='muted'>申請後はこの画面で承認状況を確認できます。</p>")}</div>`;
+  return `<div class='request-dashboard'>
+    ${pageHead('申請','申請の作成・状況確認・承認を、ひとつの画面で。')}
+    ${requestCompactLeaveAlert()}
+    ${requestOverview()}
+    ${r.refreshing?`<div class='request-refresh-hint' role='status'>最新の申請情報を確認中です。表示中の内容はそのまま操作できます。</div>`:''}
+    <div class='request-action-layout'>
+      <section class='request-launch request-dashboard-launch'>
+        <header class='request-panel-heading'><div><span class='eyebrow'>QUICK REQUEST / 新規申請</span><h2>何を申請しますか？</h2><p>申請したい種類を選び、必要な項目だけ入力します。</p></div></header>
+        <div class='request-quick-grid'>${quick}</div>
+      </section>
+      <div class='request-side-column'>
+        ${canApprove?requestApprovalPanel():requestRecentPanel()}
+        ${requestGuidePanel()}
+      </div>
+    </div>
+    ${requestHistoryPanel()}
+  </div>`;
 }
 function requestReasonSuggestions(type){
   if(type==='打刻修正')return ['打刻漏れ','操作ミス','その他'];
@@ -1583,23 +1780,26 @@ function requestBalanceSummary(){
   return `<div class='request-balance-strip'><span>現在 ${formatLeaveDays(x.leaveBalance)}</span><span>承認待ち ${formatLeaveDays(x.pendingLeaveDays||0)}</span><b>申請可能 ${formatLeaveDays(x.availableLeaveDays)}</b></div>`;
 }
 function openRequestModal(type='有給',presetDate=''){
+  if(state.requests.submitting)return;
+  requestPreviewSequence++;
   const meta=REQUEST_UI[type]?REQUEST_UI[type]:REQUEST_UI['有給'];
   type=REQUEST_UI[type]?type:'有給';
   const r=ensureModal(),today=presetDate||state.data.today;
   const isPaid=['有給','午前半休','午後半休','1/4日有給'].includes(type);
   const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
   const reasonChips=requestReasonSuggestions(type).map(x=>`<button type='button' onclick="setRequestReason('${escapeHtml(x)}')">${escapeHtml(x)}</button>`).join('');
-  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card request-modal-card' role='dialog' aria-modal='true' aria-labelledby='requestModalTitle'>
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card request-modal-card request-guided-modal' role='dialog' aria-modal='true' aria-labelledby='requestModalTitle'>
     <div class='modal-head request-modal-head'><div><small>新規申請</small><h2 id='requestModalTitle'>${escapeHtml(meta.label)}を申請</h2></div><button class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
     <div id='requestFormError' class='request-form-error' role='alert' aria-live='assertive'></div>
+    <div class='request-form-steps' role='list' aria-label='申請の進め方'><span role='listitem'><b>1</b>種類を選択</span><i>›</i><span role='listitem'><b>2</b>日付・理由</span><i>›</i><span role='listitem'><b>3</b>内容を確認</span></div>
     ${requestTypeHeader(type)}
     ${requestSubtypeSelector(type)}
     ${isPaid?requestBalanceSummary():''}
     <input id='reqType' type='hidden' value='${escapeHtml(type)}'>
     <div class='request-form-body'>
       <div class='request-date-grid ${single?'single':''}'>
-        <label id='reqStartField' class='field'><span>${single?'対象日':'開始日'} <em>必須</em></span><input id='reqStart' type='date' value='${today}' onchange='syncRequestDates()'></label>
-        <label id='reqEndField' class='field ${single?'is-hidden':''}'><span>終了日 <em>必須</em></span><input id='reqEnd' type='date' value='${today}' onchange='refreshRequestPreview()'></label>
+        <label id='reqStartField' class='field'><span>${single?'対象日':'開始日'} <em>必須</em></span><input id='reqStart' type='date' value='${today}' onchange='syncRequestDates();updateRequestDraftSummary()'></label>
+        <label id='reqEndField' class='field ${single?'is-hidden':''}'><span>終了日 <em>必須</em></span><input id='reqEnd' type='date' value='${today}' onchange='refreshRequestPreview();updateRequestDraftSummary()'></label>
       </div>
       <div id='requestPreview' class='request-preview ${isPaid?'':'is-hidden'}'></div>
       <div id='correctionFields' class='request-correction ${type==='打刻修正'?'':'is-hidden'}'>
@@ -1607,34 +1807,52 @@ function openRequestModal(type='有給',presetDate=''){
         <div class='form-grid'>
           <label class='field full'><span>元の打刻</span><select id='reqOriginalPunch'><option value=''>不足打刻として追加</option></select></label>
           <label id='reqActionField' class='field'><span>打刻種別 <em>必須</em></span><select id='reqAction'><option>出勤</option><option>休憩開始</option><option>休憩終了</option><option>退勤</option></select></label>
-          <label id='reqTimeField' class='field'><span>修正後時刻 <em>必須</em></span><input id='reqTime' type='time'></label>
+          <label id='reqTimeField' class='field'><span>修正後時刻 <em>必須</em></span><input id='reqTime' type='time' onchange='updateRequestDraftSummary()'></label>
           <label class='field'><span>勤務場所</span><select id='reqLocation'><option>出社</option><option>在宅</option><option>外出</option></select></label>
         </div>
       </div>
-      <label id='reqReasonField' class='field full request-reason-field'><span>申請理由 <em>必須</em></span><div class='request-reason-chips'>${reasonChips}</div><textarea id='reqReason' rows='2' maxlength='600' placeholder='例：私用のため'></textarea></label>
-      <label class='field full'><span>補足 <i>任意</i></span><textarea id='reqContent' rows='2' maxlength='1500' placeholder='承認者に伝えたいことがあれば入力'></textarea></label>
+      <label id='reqReasonField' class='field full request-reason-field'><span>申請理由 <em>必須</em></span><div class='request-reason-chips'>${reasonChips}</div><textarea id='reqReason' rows='2' maxlength='600' placeholder='例：私用のため' oninput='updateRequestDraftSummary()'></textarea></label>
+      <label class='field full'><span>補足 <i>任意</i></span><textarea id='reqContent' rows='2' maxlength='1500' placeholder='承認者に伝えたいことがあれば入力' oninput='updateRequestDraftSummary()'></textarea></label>
+      <div id='requestDraftSummary' class='request-draft-summary' aria-label='申請前の入力内容確認'></div>
     </div>
     <div class='modal-actions request-modal-actions'><span class='request-submit-hint'>入力内容は申請後も履歴で確認できます。</span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button id='requestSubmitButton' class='primary-button' onclick='submitRequestFromModal()'>${escapeHtml(meta.label)}を申請</button></div></div>
   </section>`;
   if(type==='打刻修正')loadCorrectionPunchOptions();
   if(isPaid)refreshRequestPreview();
+  updateRequestDraftSummary();
 }
 function changeRequestSubtype(type){
   const currentReason=document.getElementById('reqReason')?document.getElementById('reqReason').value:'';
+  const currentContent=document.getElementById('reqContent')?document.getElementById('reqContent').value:'';
   const currentDate=document.getElementById('reqStart')?document.getElementById('reqStart').value:state.data.today;
   openRequestModal(type);
   const reason=document.getElementById('reqReason'),start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
   if(reason)reason.value=currentReason;if(start)start.value=currentDate;if(end)end.value=currentDate;
-  refreshRequestPreview();
+  const content=document.getElementById('reqContent');if(content)content.value=currentContent;
+  refreshRequestPreview();updateRequestDraftSummary();
 }
-function setRequestReason(value){const el=document.getElementById('reqReason');if(!el)return;el.value=value==='その他'?'':value+(value.endsWith('ため')?'':'のため');el.focus()}
+function setRequestReason(value){const el=document.getElementById('reqReason');if(!el)return;el.value=value==='その他'?'':value+(value.endsWith('ため')?'':'のため');el.focus();updateRequestDraftSummary()}
 function syncRequestDates(){
   const type=document.getElementById('reqType')?document.getElementById('reqType').value:'';
   const start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
   const single=['午前半休','午後半休','1/4日有給','打刻修正'].includes(type);
   if(start&&end&&single)end.value=start.value;
   if(type==='打刻修正')loadCorrectionPunchOptions();
-  refreshRequestPreview();
+  refreshRequestPreview();updateRequestDraftSummary();
+}
+function updateRequestDraftSummary(){
+  const root=document.getElementById('requestDraftSummary'),typeEl=document.getElementById('reqType');
+  if(!root||!typeEl)return;
+  const type=typeEl.value,meta=REQUEST_UI[type]||{label:type},
+    start=document.getElementById('reqStart'),end=document.getElementById('reqEnd'),
+    reason=document.getElementById('reqReason'),time=document.getElementById('reqTime');
+  const startText=start&&start.value||'未選択',endText=end&&end.value||startText;
+  const dateText=startText===endText?startText:startText+' ～ '+endText;
+  const fields=[['種類',meta.label],['対象日',dateText]];
+  if(type==='打刻修正')fields.push(['修正時刻',time&&time.value||'未入力']);
+  fields.push(['申請理由',reason&&reason.value.trim()||'未入力']);
+  root.innerHTML='<h3>申請内容の確認</h3><dl>'+
+    fields.map(([label,value])=>'<div><dt>'+escapeHtml(label)+'</dt><dd>'+escapeHtml(value)+'</dd></div>').join('')+'</dl>';
 }
 function requestPayloadFromForm(){
   const type=document.getElementById('reqType').value;
@@ -1693,20 +1911,27 @@ function loadCorrectionPunchOptions(){
   const date=document.getElementById('reqStart').value;if(!date)return;
   const select=document.getElementById('reqOriginalPunch');if(select)select.innerHTML='<option value="">読み込み中…</option>';
   google.script.run.withSuccessHandler(function(items){
-    const el=document.getElementById('reqOriginalPunch');if(!el)return;
+    const el=document.getElementById('reqOriginalPunch'),start=document.getElementById('reqStart');if(!el||!start||start.value!==date)return;
     el.innerHTML='<option value="">不足打刻として追加</option>'+items.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>').join('');
   }).withFailureHandler(function(err){showRequestError(cleanApiErrorMessage(err,'打刻履歴を読み込めませんでした。'),'');}).getPunchesForDate(state.sessionToken,date);
 }
 function submitRequestFromModal(){
+  if(state.requests.submitting)return;
   hideRequestError();
   const payload=requestPayloadFromForm(),invalid=validateRequestForm(payload);
   if(invalid){showRequestError(invalid[0],invalid[1]);return}
+  const requestState=state.requests,identity=requestsIdentity();
+  requestState.submitting=true;
   const button=document.getElementById('requestSubmitButton');
   if(button){button.disabled=true;button.dataset.label=button.textContent;button.textContent='申請中…'}
   google.script.run.withSuccessHandler(function(){
+    requestState.submitting=false;
+    if(requestState!==state.requests||identity!==requestsIdentity())return;
     closeModal();showToast('申請を登録しました');
     invalidatePageCache('requests','monthly');loadRequests({force:true});
   }).withFailureHandler(function(err){
+    requestState.submitting=false;
+    if(requestState!==state.requests||identity!==requestsIdentity())return;
     if(button){button.disabled=false;button.textContent=button.dataset.label||'申請する'}
     const msg=cleanApiErrorMessage(err,'申請を登録できませんでした。');
     const field=msg.includes('理由')?'reqReasonField':msg.includes('日')?'reqStartField':'';
