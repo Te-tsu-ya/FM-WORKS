@@ -1706,7 +1706,7 @@ function requestGuidePanel(){
     <ol class='request-guide-steps'>
       <li><b>1</b><div><strong>種類を選択</strong><span>申請したい内容を選びます。</span></div></li>
       <li><b>2</b><div><strong>日付と理由を入力</strong><span>必要な項目だけ入力します。</span></div></li>
-      <li><b>3</b><div><strong>確認して申請</strong><span>申請後の状況は履歴で確認できます。</span></div></li>
+      <li><b>3</b><div><strong>内容を確認して申請</strong><span>申請後の状況は履歴で確認できます。</span></div></li>
     </ol>
   </section>`;
 }
@@ -1779,7 +1779,7 @@ function requestBalanceSummary(){
   if(!x.leaveBalanceConfigured)return `<div class='request-balance-strip warning'><span>有給残日数が未設定です</span><b>管理者の設定が必要</b></div>`;
   return `<div class='request-balance-strip'><span>現在 ${formatLeaveDays(x.leaveBalance)}</span><span>承認待ち ${formatLeaveDays(x.pendingLeaveDays||0)}</span><b>申請可能 ${formatLeaveDays(x.availableLeaveDays)}</b></div>`;
 }
-function openRequestModal(type='有給',presetDate=''){
+function openRequestModal(type='有給',presetDate='',skipInitialPreview=false){
   if(state.requests.submitting)return;
   requestPreviewSequence++;
   const meta=REQUEST_UI[type]?REQUEST_UI[type]:REQUEST_UI['有給'];
@@ -1818,14 +1818,14 @@ function openRequestModal(type='有給',presetDate=''){
     <div class='modal-actions request-modal-actions'><span class='request-submit-hint'>入力内容は申請後も履歴で確認できます。</span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button id='requestSubmitButton' class='primary-button' onclick='submitRequestFromModal()'>${escapeHtml(meta.label)}を申請</button></div></div>
   </section>`;
   if(type==='打刻修正')loadCorrectionPunchOptions();
-  if(isPaid)refreshRequestPreview();
+  if(isPaid&&!skipInitialPreview)refreshRequestPreview();
   updateRequestDraftSummary();
 }
 function changeRequestSubtype(type){
   const currentReason=document.getElementById('reqReason')?document.getElementById('reqReason').value:'';
   const currentContent=document.getElementById('reqContent')?document.getElementById('reqContent').value:'';
   const currentDate=document.getElementById('reqStart')?document.getElementById('reqStart').value:state.data.today;
-  openRequestModal(type);
+  openRequestModal(type,currentDate,true);
   const reason=document.getElementById('reqReason'),start=document.getElementById('reqStart'),end=document.getElementById('reqEnd');
   if(reason)reason.value=currentReason;if(start)start.value=currentDate;if(end)end.value=currentDate;
   const content=document.getElementById('reqContent');if(content)content.value=currentContent;

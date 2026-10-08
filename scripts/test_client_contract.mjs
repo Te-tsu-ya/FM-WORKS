@@ -67,6 +67,7 @@ const document={
   activeElement:body,
   addEventListener(){},
   getElementById:getElement,
+  querySelector(){return null},
   querySelectorAll(){return []},
   createElement(){return makeElement('created')},
   contains(){return true}

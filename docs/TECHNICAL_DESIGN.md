@@ -644,6 +644,7 @@ disabledは `cursor:not-allowed`。
 - `requestHistoryPanel()`、`filteredOwnRequests()`、`setRequestHistoryFilter()`、`searchRequestHistory()` は取得済み `state.requests.own` のみをローカル処理し、DOMリストだけを再描画する。検索とステータス変更では通信せず、入力フォーカスも維持する。
 - ページの表示状態 `state.requests` は `createEmptyRequestsState()` で初期化。キャッシュキー `requestsIdentity()` はセッショントークン＋社員番号。ログアウト/認証マウントでキャッシュと申請データを消去。非同期応答ではキー/トークンが一致する時だけ代入する。
 - ステータス詳細は `openRequestDetail(id,teamMode)` がサーバーから認可済みの `own/team` から取得し、`escapeHtml` で文字列をサニタイズする。申請IDは inline JS引用文字列へ埋めず、data属性＋DOM datasetで渡す。
+- 半休区分変更は `openRequestModal(type,currentDate,true)` で初回プレビューを抑制し、値を復元した後 `refreshRequestPreview()` を一度だけ実行する。
 - 入力画面 `openRequestModal()` は既存の申請入力項目を維持し、3段ガイドと `updateRequestDraftSummary()` によるブラウザ内確認を追加。半休区分変更時に `reqContent` と `reqReason` と日付を維持する。
 - 送信では `state.requests.submitting` で二重リクエストをブロックし、失敗時は解除。ログインユーザーが変わった後の古い成功/失敗応答はUIに適用しない。
 - `src/Styles.html` の `.request-dashboard` を起点にCSSをスコープ化。4列KPI/メイン2列/スマホ2列以下で適応、darkテーマにも対応。モーダルは本文領域のみスクロールし、下部の送信ボタンを維持。
