@@ -676,7 +676,7 @@ for (const forbiddenTopRoute of ["['companyCalendar','会社カレンダー'","[
     failed = true;
   }
 }
-if (!app.includes("settingsTabs('people')") || !app.includes("['people','社員・権限']")) {
+if (!app.includes("settingsTabs('people')") || !app.includes("id:'people',label:'社員・権限'")) {
   console.error('Employee administration must live under the 管理 workspace.');
   failed = true;
 }
@@ -688,6 +688,44 @@ if (!styles.includes('.workspace-tabs') || !styles.includes('.nav-button[data-ro
 if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('function getRequestsBundle(sessionToken)')) {
   console.error('Request page must use a single bundled server read.');
   failed = true;
+}
+
+
+for(const adminUiMarker of [
+  'function createAdminUiState()',
+  'function adminWorkspaceShell(active,content',
+  'function adminOverviewStats()',
+  'function adminPeopleFiltered()',
+  'function adminPeopleRows()',
+  'function adminEmployeeDetail()',
+  'function selectAdminEmployee(employeeId)',
+  'function filterAdminPeople(kind,value)',
+  'function validateAdminWizardStep(step)',
+  'function adminWizardShowStep(step)',
+  'function adminWizardReviewHtml()',
+  'function adminWizardNext()',
+  'function adminWizardBack()',
+  'function openEmployeeModal(employeeId)',
+  "settingsTabs('people')",
+  'if(state.page===\'admin\'&&state.adminTab===\'people\')',
+  'state.adminUi=createAdminUiState();',
+  'identity!==String(state.sessionToken||\'\')',
+  'if(state.adminUi.saving)return'
+]){
+  if(!app.includes(adminUiMarker)){console.error('v0.11.6 admin UI marker missing: '+adminUiMarker);failed=true;}
+}
+for(const adminCssMarker of [
+  '.admin-overview{display:grid',
+  '.admin-workspace-body{display:grid',
+  '.admin-people-split{display:grid',
+  '.admin-employee-item.selected',
+  '.admin-employee-modal',
+  '.admin-wizard-progress',
+  '.admin-wizard-error',
+  '@media(max-width:880px)',
+  'html[data-theme="dark"] .admin-employee-item.selected'
+]){
+  if(!styles.includes(adminCssMarker)){console.error('v0.11.6 admin responsive style missing: '+adminCssMarker);failed=true;}
 }
 
 for (const requestDashboardMarker of [

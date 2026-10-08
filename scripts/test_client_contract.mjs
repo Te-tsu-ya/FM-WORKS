@@ -579,6 +579,138 @@ const result=vm.runInContext(`
   state.data.user.employeeId='FM0001';
   state.requests=createEmptyRequestsState();
 
+
+  // v0.11.6: role-secured admin hub, local employee filters, workflow and session scope.
+  const adminRecords=[
+    {employeeId:'FM0001',name:'青木 悠真',displayName:'青木',department:'管理',role:'ADMIN',active:true,leaveBalance:8,leaveBalanceConfigured:true,
+     pinConfigured:true,payrollIncluded:true,workStart:'09:00',workEnd:'18:00',breakMinutes:60,managerId:'',email:'aoki@example.jp'},
+    {employeeId:'FM0002',name:'森川 彩乃',displayName:'森川',department:'管理',role:'ADMIN',active:true,leaveBalance:0,leaveBalanceConfigured:false,
+     pinConfigured:false,payrollIncluded:true,workStart:'09:00',workEnd:'18:00',breakMinutes:60,managerId:''},
+    {employeeId:'FM0003',name:'神谷 直人',displayName:'神谷',department:'開発',role:'USER',active:true,leaveBalance:3,leaveBalanceConfigured:true,
+     pinConfigured:true,lockedUntil:'2026-10-08 18:00',payrollIncluded:true,workStart:'09:00',workEnd:'18:00',breakMinutes:60,managerId:'FM0001'},
+    {employeeId:'FM0004',name:'小林 美月',displayName:'小林',department:'開発',role:'USER',active:false,leaveBalance:0,leaveBalanceConfigured:false,
+     pinConfigured:false,payrollIncluded:false}
+  ];
+  state.page='people';
+  state.adminTab='people';
+  state.adminUi=createAdminUiState();
+  state.authAdmin={employees:adminRecords,resetRequests:[],support:{}};
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',name:'青木 悠真',displayName:'青木'},
+    permissions:{adminConsole:true,employeeAdmin:true},app:{version:'0.11.6'},employees:adminRecords};
+  state.sessionToken='SESSION_TOKEN';
+  resetCalls();
+  const initialHub=peoplePage();
+  expect('management opens integrated employee hub with six vertical sections',
+    initialHub.includes('admin-workspace-body')&&initialHub.includes('admin-overview-card')&&
+    initialHub.includes('admin-people-split')&&initialHub.includes('admin-side-nav')&&
+    ADMIN_CATEGORIES.length===6&&settingsTabs('people').split('data-admin-tab=').length===7);
+  expect('management KPI counts only real active employees, leave and PIN statuses',
+    adminRecords.filter(x=>x.active!==false).length===3&&
+    adminOverviewStats().includes('年休未設定')&&
+    adminOverviewStats().includes('PIN要確認')&&
+    adminOverviewStats().includes('>2</strong>'));
+  expect('employee list displays names and safely selects a detail panel',
+    initialHub.includes('青木 悠真')&&initialHub.includes('森川 彩乃')&&initialHub.includes('社員情報を編集'));
+  filterAdminPeople('role','ADMIN');
+  expect('role filter runs without API and returns real administrators',
+    adminPeopleFiltered().length===2&&apiCalls.length===0);
+  filterAdminPeople('status','leave');
+  expect('leave status filter finds only active unconfigured employees',
+    adminPeopleFiltered().length===1&&adminPeopleFiltered()[0].employeeId==='FM0002'&&apiCalls.length===0);
+  resetAdminPeopleFilters();
+  filterAdminPeople('search','神谷');
+  expect('employee text search executes entirely in browser',
+    adminPeopleFiltered().length===1&&adminPeopleFiltered()[0].employeeId==='FM0003'&&apiCalls.length===0);
+  resetAdminPeopleFilters();
+  selectAdminEmployee('FM0003');
+  setAdminDetailTab('security');
+  const selectedProfile=adminEmployeeDetail();
+  expect('selected employee detail includes security state, correct action and no PIN secret',
+    state.adminUi.selectedEmployeeId==='FM0003'&&selectedProfile.includes('ロック中')&&selectedProfile.includes('ロック解除')&&apiCalls.length===0);
+  state.authAdmin.employees[0].name='<img src=x onerror=alert(1)>';
+  const escapedProfile=adminEmployeeDetailFields([['社員名',state.authAdmin.employees[0].name]]);
+  expect('admin detail escapes untrusted employee information',!escapedProfile.includes('<img src=x')&&escapedProfile.includes('&lt;img'));
+  state.authAdmin.employees[0].name='青木 悠真';
+  state.data.permissions={adminConsole:false,employeeAdmin:false};
+  expect('unauthorized visitor cannot display the admin hub',!peoplePage().includes('admin-people-split')&&!adminPage().includes('admin-overview'));
+  state.data.permissions={adminConsole:true,employeeAdmin:true};
+
+  openEmployeeModal();
+  const wizardHtml=document.getElementById('modalRoot').innerHTML;
+  expect('new employee wizard has four guided stages and a final save control',
+    state.adminUi.wizard&&wizardHtml.includes('admin-wizard-progress')&&
+    wizardHtml.includes("data-admin-wizard-step='4'")&&wizardHtml.includes("id='empManagerId'")&&
+    wizardHtml.includes('adminEmployeeSaveButton')&&wizardHtml.includes('年休基準日'));
+  document.getElementById('empId').value='BAD';
+  document.getElementById('empName').value='';
+  expect('wizard requires well-formed employee IDs and a name',validateAdminWizardStep(1)===false);
+  document.getElementById('empId').value='FM0001';
+  document.getElementById('empName').value='田中 試験';
+  expect('wizard prevents accidental overwrite of existing employee',validateAdminWizardStep(1)===false);
+  document.getElementById('empId').value='FM0006';
+  document.getElementById('empDisplayName').value='田中';
+  document.getElementById('empDepartment').value='開発';
+  document.getElementById('empTitle').value='担当';
+  document.getElementById('empEmail').value='tanaka@example.jp';
+  document.getElementById('empRole').value='USER';
+  document.getElementById('empManagerId').value='FM0001';
+  document.getElementById('empActive').checked=true;
+  document.getElementById('empPayroll').checked=true;
+  document.getElementById('empWorkStart').value='09:00';
+  document.getElementById('empWorkEnd').value='18:00';
+  document.getElementById('empBreak').value='60';
+  document.getElementById('empLeave').value='1.25';
+  document.getElementById('empLeaveBasisDate').value='';
+  document.getElementById('empHireDate').value='2026-10-08';
+  document.getElementById('empNote').value='試験用';
+  resetCalls();
+  adminWizardNext();
+  adminWizardNext();
+  expect('wizard moves to the third step without saving anything',state.adminUi.wizardStep===3&&apiCalls.length===0);
+  expect('wizard blocks leave-balance submission without basis date',validateAdminWizardStep(3)===false);
+  document.getElementById('empLeaveBasisDate').value='2026-10-08';
+  adminWizardNext();
+  expect('wizard reaches final review with no API call',state.adminUi.wizardStep===4&&apiCalls.length===0);
+  document.getElementById('empName').value='<img src=x onerror=alert(1)>';
+  const reviewMarkup=adminWizardReviewHtml();
+  expect('wizard review escapes user-entered markup',reviewMarkup.includes('&lt;img')&&!reviewMarkup.includes('<img src=x'));
+  document.getElementById('empName').value='田中 試験';
+  saveEmployeeFromModal();
+  saveEmployeeFromModal();
+  expect('employee registration blocks double submission and retains existing GAS contract',
+    apiCalls.length===1&&lastCall().method==='saveEmployee'&&
+    lastCall().args[1].employeeId==='FM0006'&&state.adminUi.saving);
+  invokeServerFailure({message:'QA expected save error'});
+  expect('employee save failure resets busy state without discarding form inputs',
+    !state.adminUi.saving&&document.getElementById('empName').value==='田中 試験');
+  openEmployeeModal('FM0003');
+  expect('existing employee editing keeps all fields without forcing the wizard',
+    !state.adminUi.wizard&&document.getElementById('modalRoot').innerHTML.includes('empWorkEnd')&&
+    !document.getElementById('modalRoot').innerHTML.includes('admin-wizard-progress'));
+
+  state.authAdmin=null;
+  invalidatePageCache('authAdmin');
+  state.page='people';
+  state.sessionToken='OLD_SESSION';
+  resetCalls();
+  loadAuthAdmin({force:true,scope:'people'});
+  const firstAuthCall=lastCall();
+  state.sessionToken='NEW_SESSION';
+  state.data.user.employeeId='FM0009';
+  state.authAdmin=null;
+  invokeServerSuccess({employees:adminRecords});
+  expect('outdated admin response is discarded after user changes',
+    state.authAdmin===null&&firstAuthCall.method==='getAuthAdminData'&&firstAuthCall.args[1]==='people');
+  loadAuthAdmin({force:true,scope:'people'});
+  expect('fresh admin session gets its own scoped API call',apiCalls.length===2&&lastCall().method==='getAuthAdminData');
+  invokeServerSuccess({employees:[{employeeId:'FM0009',name:'新アカウント',role:'ADMIN',active:true}]});
+  expect('fresh administrator sees only freshly authorized data',
+    state.authAdmin.employees.length===1&&state.authAdmin.employees[0].employeeId==='FM0009');
+  state.adminUi=createAdminUiState();
+  state.authAdmin=null;
+  state.sessionToken='SESSION_TOKEN';
+  state.page='home';
+
   state.page='home';
 
   return {failures};
