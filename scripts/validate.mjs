@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
@@ -32,7 +32,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Code.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -726,6 +726,34 @@ for(const adminCssMarker of [
   'html[data-theme="dark"] .admin-employee-item.selected'
 ]){
   if(!styles.includes(adminCssMarker)){console.error('v0.11.6 admin responsive style missing: '+adminCssMarker);failed=true;}
+}
+
+
+const annualAutomation=fs.readFileSync(path.join(root,'src','AnnualLeaveAutomation.gs'),'utf8');
+for(const marker of [
+  'function leaveDueAtIndex_(hire,index)',
+  'function leaveEntitlement_(hire,asOf)',
+  'function leaveAttendanceEvidence_(employee,part)',
+  'function reconcileLeaveUnlocked_(employee,today)',
+  'function maybeReconcileLeave_(employeeId,asOf)',
+  'function annualLeaveDailyJob_()',
+  'function installAnnualLeaveDailyJob(sessionToken)',
+  "operation:'法定年休自動付与'"
+]){
+  if(!annualAutomation.includes(marker)){console.error('v0.11.7 annual leave engine marker missing: '+marker);failed=true;}
+}
+for(const marker of [
+  'function requestAnnualLeaveNotice()',
+  'function installLeaveDailyAutomation()',
+  "autoLeaveEnabled:document.getElementById('empAutoLeave').checked",
+  "requestAnnualLeaveNotice()",
+  'function existingBeforeSaveLeaveBalance_()'
+]){
+  if(!app.includes(marker)){console.error('v0.11.7 annual leave UI marker missing: '+marker);failed=true;}
+}
+if(!styles.includes('.leave-compliance-banner')||
+  !styles.includes('.leave-auto-setup-note')){
+  console.error('v0.11.7 leave reminder styles missing.');failed=true;
 }
 
 for (const requestDashboardMarker of [

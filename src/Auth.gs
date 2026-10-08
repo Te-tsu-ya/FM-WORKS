@@ -372,7 +372,11 @@ function getAuthAdminData(sessionToken, scope) {
           breakMinutes:Number(r[9]||60), leaveBalance:Number(r[10]||0), leaveBalanceConfigured:String(r[10]||'').trim()!=='',
           email:r[11]||'', note:r[12]||'', pinConfigured:!!r[14], mustChangePin:String(r[15]).toUpperCase()==='TRUE',
           failures:Number(r[16]||0), lockedUntil:r[17]||'', lastLogin:r[18]||'', authState:r[20]||'',
-          payrollIncluded:String(r[22]).toUpperCase()==='TRUE', managerId:r[23]||'', leaveBasisDate:r[24]||'', hireDate:r[25]||''
+          payrollIncluded:String(r[22]).toUpperCase()==='TRUE', managerId:r[23]||'', leaveBasisDate:r[24]||'', hireDate:r[25]||'',
+          autoLeaveEnabled:leaveAutoPolicy_(r[0]).enabled,
+          autoLeaveForecast:mode==='people'?leaveAutoForecast_({
+            employeeId:r[0],hireDate:r[25]||'',leaveBasisDate:r[24]||'',active:r[6]==='在籍'
+          },Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd')):null
         });
       });
     }

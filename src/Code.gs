@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.11.6',
+  version: '0.11.7',
   locale: 'ja-JP'
 });
 
@@ -177,6 +177,8 @@ function getHomeOverview(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
+  maybeReconcileLeave_(employee.employeeId,today);
+  const currentLeave=getLeaveLedgerState_(getEmployee_(employee.employeeId));
   const monthStats = getHomeMonthStats_(employee,today);
   const pendingRequests = getPendingRequestCount_(employee);
   const worklogGap = Math.max(0, monthStats.totalMinutes - monthStats.worklogMinutes);
@@ -185,7 +187,7 @@ function getHomeOverview(sessionToken) {
     month: {
       workHours: formatMinutes_(monthStats.totalMinutes),
       overtime: formatMinutes_(monthStats.overtimeMinutes),
-      leaveBalance: employee.leaveBalanceConfigured ? employee.leaveBalance + '日' : '未設定',
+      leaveBalance: currentLeave.configured ? currentLeave.balance + '日' : '未設定',
       worklogMinutes: monthStats.worklogMinutes,
       worklogGapMinutes: worklogGap,
       missingPunchDays: monthStats.missingPunchDays

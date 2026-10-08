@@ -706,6 +706,38 @@ const result=vm.runInContext(`
   invokeServerSuccess({employees:[{employeeId:'FM0009',name:'新アカウント',role:'ADMIN',active:true}]});
   expect('fresh administrator sees only freshly authorized data',
     state.authAdmin.employees.length===1&&state.authAdmin.employees[0].employeeId==='FM0009');
+
+  // v0.11.7: notices for statutory five-day usage, uncertain grants and employee setting.
+  state.sessionToken='SESSION_TOKEN';
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'青木'},permissions:{adminConsole:true,employeeAdmin:true,requestApprove:false}};
+  state.page='requests';
+  state.requests=createEmptyRequestsState();
+  state.requests.loadedKey=requestsIdentity();
+  state.requests.context={leaveBalanceConfigured:true,leaveBalance:10,availableLeaveDays:9,
+    fiveDay:{status:'TRACKING',takenDays:2,remainingDays:3,periodEnd:'2027-04-01',daysRemaining:150}};
+  const compliance=requestAnnualLeaveNotice();
+  expect('five-day reminder shows actual progress, remaining days and deadline',
+    compliance.includes('取得 2日')&&compliance.includes('あと3日')&&compliance.includes('2027-04-01'));
+  state.requests.context.fiveDay={status:'COMPLETED',takenDays:5,remainingDays:0,periodEnd:'2027-04-01'};
+  expect('fully acquired five days is marked complete without warning to apply',
+    requestAnnualLeaveNotice().includes('達成しました')&&!requestAnnualLeaveNotice().includes('有給を申請'));
+  state.requests.context.fiveDay={status:'OVERDUE',takenDays:1,remainingDays:4,periodEnd:'2026-04-01'};
+  expect('overdue five days produces a clear caution',requestAnnualLeaveNotice().includes('期限を過ぎています'));
+  state.requests.context.fiveDay={status:'UNKNOWN'};
+  state.requests.context.autoLeave={status:'REVIEW',dueDate:'2026-10-01',dueDays:10};
+  expect('unverified attendance is not portrayed as granted',
+    requestAnnualLeaveNotice().includes('付与条件を確認')&&requestAnnualLeaveNotice().includes('2026-10-01'));
+  state.page='people';
+  state.adminUi=createAdminUiState();
+  state.authAdmin={employees:[{employeeId:'FM0001',name:'青木',role:'ADMIN',active:true,
+    autoLeaveEnabled:true,leaveBalance:10,leaveBalanceConfigured:true,
+    hireDate:'2026-04-01',leaveBasisDate:'2026-10-01'}]};
+  openEmployeeModal('FM0001');
+  expect('employee form offers standard-worker annual-leave automation with hire-date input',
+    document.getElementById('modalRoot').innerHTML.includes('empAutoLeave')&&
+    document.getElementById('modalRoot').innerHTML.includes('出勤率80％'));
+  state.page='home';
+
   state.adminUi=createAdminUiState();
   state.authAdmin=null;
   state.sessionToken='SESSION_TOKEN';

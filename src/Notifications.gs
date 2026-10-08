@@ -4,6 +4,7 @@ function getNotifications(sessionToken) {
   const employee = session.employee;
   const items = [];
   const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
+  maybeReconcileLeave_(employee.employeeId,today);
 
   const monthlyReview=getMonthlyReviewPrompt_(employee.employeeId);
   if(monthlyReview.needsAttention){
@@ -23,8 +24,20 @@ function getNotifications(sessionToken) {
     });
   }
 
-  const annualLeave=getAnnualLeaveFiveDayStatus_(employee,today);
-  if(annualLeave.status==='OVERDUE'||(annualLeave.status==='TRACKING'&&annualLeave.remainingDays>0&&annualLeave.daysRemaining<=120)){
+  const annualLeave=getAnnualLeaveFiveDayStatus_(getEmployee_(employee.employeeId),today);
+  const automatic=leaveAutoForecast_(getEmployee_(employee.employeeId),today);
+  if(automatic.status==='REVIEW'){
+    items.push({type:'年休付与要確認',title:'有給の付与条件を確認してください',
+      subtitle:'付与予定 '+automatic.dueDate+' / '+automatic.dueDays+'日。勤怠や会社カレンダーの記録を管理者に確認してください。',
+      route:'requests',priority:'warning'});
+  }
+  if(annualLeave.previousOverdue){
+    items.push({type:'年休5日',title:'前年度の年休5日未達を確認してください',
+      subtitle:annualLeave.previousOverdue.periodStart+'〜'+annualLeave.previousOverdue.periodEnd+
+        ' の取得が '+annualLeave.previousOverdue.takenDays+'日でした。管理者が履歴を確認してください。',
+      route:'requests',priority:'danger'});
+  }
+  if(annualLeave.status==='OVERDUE'||(annualLeave.status==='TRACKING'&&annualLeave.remainingDays>0&&annualLeave.daysRemaining<=180)){
     items.push({
       type:'年休5日',
       title:annualLeave.status==='OVERDUE'?'年5日の年休取得を確認してください':'年休5日まで残り'+annualLeave.remainingDays+'日',

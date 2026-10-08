@@ -99,6 +99,16 @@ function saveEmployee(sessionToken, payload) {
     }
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
+    const oldPolicy=leaveAutoPolicy_(employeeId);
+    const autoEnabled=Object.prototype.hasOwnProperty.call(payload,'autoLeaveEnabled')?
+      payload.autoLeaveEnabled===true:oldPolicy.enabled;
+    if(autoEnabled&&!hireDate)throw new Error('年休自動付与には入社日を設定してください。');
+    const currentState=existingBefore?getLeaveLedgerState_(existingBefore):null;
+    if(existingBefore&&Object.prototype.hasOwnProperty.call(payload,'expectedLeaveBalance')){
+      const wanted=String(payload.expectedLeaveBalance==null?'':payload.expectedLeaveBalance);
+      const actual=currentState&&currentState.configured?String(currentState.balance):'';
+      if(wanted!==actual)throw new Error('有給残日数が他の操作で更新されました。社員情報を再読込してください。');
+    }
     if (leaveText !== '' && !leaveBasisDate) throw new Error('有給残日数を設定する場合は年休基準日も設定してください。');
     if (existingBefore && existingBefore.leaveBalanceConfigured && leaveText === '') {
       throw new Error('有給台帳運用開始後は残日数を未設定へ戻せません。調整値を入力してください。');
@@ -139,6 +149,8 @@ function saveEmployee(sessionToken, payload) {
       existingBefore?existingBefore.leaveBalance:0,
       leaveText!=='',leaveBalance,admin
     );
+    if(autoEnabled!==oldPolicy.enabled)storeLeaveAutoPolicy_(employeeId,autoEnabled,hireDate,admin);
+    if(autoEnabled)reconcileLeaveUnlocked_(getEmployee_(employeeId),Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'));
 
     if (existingEmployee && existingEmployee.active && status !== '在籍') {
       invalidateEmployeeSessions_(employeeId, 0);
@@ -152,11 +164,11 @@ function saveEmployee(sessionToken, payload) {
         role:existingEmployee.role,status:existingEmployee.active?'在籍':'退職',workStart:existingEmployee.workStart,workEnd:existingEmployee.workEnd,
         breakMinutes:existingEmployee.breakMinutes,leaveBalance:existingEmployee.leaveBalanceConfigured?existingEmployee.leaveBalance:null,
         email:existingEmployee.email,payrollIncluded:!!existingEmployee.payrollIncluded,managerId:existingEmployee.managerId||'',
-        leaveBasisDate:existingEmployee.leaveBasisDate||'',hireDate:existingEmployee.hireDate||''
+        leaveBasisDate:existingEmployee.leaveBasisDate||'',hireDate:existingEmployee.hireDate||'',autoLeaveEnabled:oldPolicy.enabled
       }) : '',
       after:auditJson_({name:name,displayName:displayName,department:department,title:title,role:role,status:status,workStart:workStart,workEnd:workEnd,
         breakMinutes:breakMinutes,leaveBalance:leaveText!==''?leaveBalance:null,email:email,payrollIncluded:payrollIncluded,managerId:managerId,
-        leaveBasisDate:leaveBasisDate,hireDate:hireDate}),
+        leaveBasisDate:leaveBasisDate,hireDate:hireDate,autoLeaveEnabled:autoEnabled}),
       source:'WEB',result:'SUCCESS',note:''
     });
     SpreadsheetApp.flush();
