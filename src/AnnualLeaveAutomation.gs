@@ -72,10 +72,33 @@ function leaveAutoForecast_(employee,today){
     status:granted?'GRANTED':'REVIEW',
     message:granted?'今回分は付与記録があります。':'出勤率や会社カレンダーの確認が必要です。'};
 }
+function repairAnnualLeaveMaster_(employee,part,rows){
+  const ledgerRows=rows||getLeaveLedgerRows_(employee.employeeId);
+  const autoGrant=ledgerRows.some(r=>r.type==='GRANT'&&r.transactionDate===part.date&&String(r.note||'').startsWith('AUTO_LEAVE_V1|'));
+  if(!autoGrant)return false;
+  const latest=ledgerRows[ledgerRows.length-1];
+  if(!latest)return false;
+  const needBalance=!employee.leaveBalanceConfigured||Number(employee.leaveBalance)!==Number(latest.balance);
+  const needDate=String(employee.leaveBasisDate||'')<part.date;
+  if(!needBalance&&!needDate)return false;
+  const sheet=getDb_().getSheetByName(DB.sheets.employees);
+  if(needBalance)sheet.getRange(employee.rowNumber,11).setValue(Number(latest.balance));
+  if(needDate)sheet.getRange(employee.rowNumber,25).setValue(part.date);
+  invalidateEmployeeDirectoryCache_();
+  appendAudit_({employeeId:'SYSTEM',employeeName:'年休自動付与',
+    operation:'年休台帳と社員残数の同期',target:'社員マスタ',targetId:employee.employeeId,
+    before:String(employee.leaveBalance),after:String(latest.balance),source:'SYSTEM',result:'SUCCESS',note:part.date});
+  SpreadsheetApp.flush();
+  return true;
+}
 function reconcileLeaveUnlocked_(employee,today){
   const policy=leaveAutoPolicy_(employee.employeeId),plan=leaveEntitlement_(employee.hireDate,today),part=plan&&plan.due;
   if(!employee.active||!policy.enabled||!part||part.date<policy.from)return {granted:false,reason:'NOT_APPLICABLE'};
-  if(leaveAutoAlreadyGranted_(employee,part))return {granted:false,reason:'ALREADY_GRANTED'};
+  const posted=getLeaveLedgerRows_(employee.employeeId);
+  if(leaveAutoAlreadyGranted_(employee,part,posted)){
+    const repaired=repairAnnualLeaveMaster_(employee,part,posted);
+    return {granted:false,reason:'ALREADY_GRANTED',repaired};
+  }
   const evidence=leaveAttendanceEvidence_(employee,part);
   if(!evidence.verified)return {granted:false,reason:'ATTENDANCE_REVIEW',evidence,part};
   const initial=getLeaveLedgerState_(employee),actor={employeeId:'SYSTEM',name:'年休自動付与'};
@@ -100,8 +123,15 @@ function reconcileLeaveUnlocked_(employee,today){
 function maybeReconcileLeave_(employeeId,asOf){
   const employee=getEmployee_(employeeId),today=asOf||Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),
     policy=leaveAutoPolicy_(employeeId),plan=leaveEntitlement_(employee.hireDate,today),part=plan&&plan.due;
-  if(!employee.active||!policy.enabled||!part||part.date<policy.from||
-    leaveAutoAlreadyGranted_(employee,part))return {granted:false};
+  if(!employee.active||!policy.enabled||!part||part.date<policy.from)return {granted:false};
+  const ledger=getLeaveLedgerRows_(employee.employeeId),recorded=leaveAutoAlreadyGranted_(employee,part,ledger);
+  if(recorded){
+    const auto=ledger.some(r=>r.type==='GRANT'&&r.transactionDate===part.date&&String(r.note||'').startsWith('AUTO_LEAVE_V1|'));
+    if(!auto)return {granted:false};
+    const latest=ledger[ledger.length-1];
+    if(latest&&employee.leaveBalanceConfigured&&Number(employee.leaveBalance)===Number(latest.balance)&&
+      String(employee.leaveBasisDate||'')>=part.date)return {granted:false};
+  }
   return withScriptLock_(()=>reconcileLeaveUnlocked_(getEmployee_(employeeId),today));
 }
 function annualLeaveDailyJob_(){

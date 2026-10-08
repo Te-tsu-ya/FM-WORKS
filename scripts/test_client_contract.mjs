@@ -723,6 +723,10 @@ const result=vm.runInContext(`
     requestAnnualLeaveNotice().includes('達成しました')&&!requestAnnualLeaveNotice().includes('有給を申請'));
   state.requests.context.fiveDay={status:'OVERDUE',takenDays:1,remainingDays:4,periodEnd:'2026-04-01'};
   expect('overdue five days produces a clear caution',requestAnnualLeaveNotice().includes('期限を過ぎています'));
+  state.requests.context.fiveDay={status:'TRACKING',takenDays:1,remainingDays:4,periodEnd:'2027-10-01',daysRemaining:355,
+    previousOverdue:{periodStart:'2025-10-01',periodEnd:'2026-09-30',takenDays:2,remainingDays:3}};
+  expect('prior-year noncompliance remains visible alongside current-year progress',
+    requestAnnualLeaveNotice().includes('前年度の有給5日')&&requestAnnualLeaveNotice().includes('2027-10-01'));
   state.requests.context.fiveDay={status:'UNKNOWN'};
   state.requests.context.autoLeave={status:'REVIEW',dueDate:'2026-10-01',dueDays:10};
   expect('unverified attendance is not portrayed as granted',

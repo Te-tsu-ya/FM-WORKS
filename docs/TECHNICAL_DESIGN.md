@@ -671,6 +671,7 @@ disabledは `cursor:not-allowed`。
 - 出勤率評価は勤務対象日の会社カレンダーと有効な打刻・承認済み年休を合算。カレンダー欠落、出勤記録不足、未集計のみなし出勤期間があれば法令遵守を勝手に確定せず、管理者確認が必要な状態を返す。
 - reconcileLeaveUnlocked_ は既存のGRANT/OPENING・付与基準日と照合して重複を防ぐ。maybeReconcileLeave_ は対象期間で付与が必要なときだけスクリプトロックを使用し、平常時のナビゲーション通信を増やさない。
 - 社員編集・申請の承認処理など、既にロックを使っている処理では再帰ロックをかけずreconcileLeaveUnlocked_を呼び出す。
+- repairAnnualLeaveMaster_ は自動GRANTが台帳にあるのに社員マスタ11/25列の書込に失敗した状態を次回判定で再同期する。再GRANTせず修復を監査記録する。
 - 年休台帳、社員マスタ11列・25列、監査ログの既存スキーマを利用。従来のUSE/RESTORE/OPENING/ADJUST/GRANTは破壊しない。最初の有効化前の初期残数は管理者が確認する。
 - 日次ジョブ annualLeaveDailyJob_ は管理者が installAnnualLeaveDailyJob を承認すると午前5時ごろに実行。トリガー実行はApps Scriptの実行時間仕様に従う。
 - 前回の年10日以上付与期間の取得未達は previousOverdue として現行年度とは別に返す。翌年度の新GRANTが前年度の警告を消さないようにする。
