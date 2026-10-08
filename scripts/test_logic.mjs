@@ -94,8 +94,10 @@ globalThis.__fmTest = {
   lateNightOverlapMinutes_,
   applyWeeklyStatutoryOvertimeToFacts_,
   schemaHeaderIssues_,
+  requestSheetHeaders:DB_SCHEMA_SPECS['申請'],
   dateRangeStrings_,
   dateRangeRegex_,
+  readRowsByDateRange_,
   contiguousRowBlocks_,
   columnLetter_,
   managerAssignmentCreatesCycle_,
@@ -166,6 +168,24 @@ expect('travel payload includes destination and actual costs',(()=>{
 })());
 expectThrows('travel return date before departure rejected',()=>api.financeTravelPayload_({
  startsOn:'2026-10-09',endsOn:'2026-10-08',destination:'架空',purpose:'会議',outcome:'成果'},{}));
+
+
+expect('schema declaration matches real request-sheet column positions',
+  api.schemaHeaderIssues_(
+   ['申請ID','申請日','社員ID','氏名','申請種別','対象日開始','対象日終了','申請内容',
+    '理由','ステータス','承認者','承認日時','差戻し理由','登録日時',
+    '取消理由','取消申請日時','取消判断理由','取消判断者','取消判断日時'],
+   api.requestSheetHeaders
+  ).length===0);
+const mockDateSheet={
+ getLastRow:()=>3,
+ getRange:()=>({getDisplayValues:()=>[['E-1','2026-01-01'],['E-2','2028-01-01']]})
+};
+const longRange=api.readRowsByDateRange_(mockDateSheet,2,2,'2026-01-01','2027-12-31');
+expect('date-index fallback never leaks rows outside a long requested interval',
+ longRange.length===1&&longRange[0][0]==='E-1');
+expect('inverted date interval never returns all rows',
+ api.readRowsByDateRange_(mockDateSheet,2,2,'2028-01-01','2026-01-01').length===0);
 
 expect('09:00-18:00 is 540 minutes', api.timeRangeMinutes_('09:00','18:00') === 540);
 expect('08:30 is 510 minutes', api.timeToMinutes_('08:30') === 510);

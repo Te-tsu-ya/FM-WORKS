@@ -48,7 +48,7 @@ for(const kind of Object.keys(models))sheets[models[kind].sheet]=new Sheet(specs
 ctx.mockDb={getSheetByName:name=>sheets[name]||null};
 ctx.mockAudits=audits;
 vm.runInContext('getDb_=()=>mockDb;appendAudit_=item=>mockAudits.push(item);',ctx);
-const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest})',ctx);
+const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest,resubmitFinanceRequest,financeReceiptCrossCheck_,financeNormalizeDateText_,financeOutstandingFirst_,financeMyActionFirst_,financeAmountDisplay_,assertDatabaseMigrationSafe_})',ctx);
 const expense={
  usedOn:'2026-10-08',vendor:'架空の販売店',item:'事務用品',category:'消耗品費',
  amount:'2500',purpose:'架空業務用品の購入',paymentMethod:'立替',
@@ -102,6 +102,70 @@ const returned=api.reviewFinanceRequest('ACCOUNTING','travel',trip.id,'RETURN','
 ok('travel report can be returned to employee',returned.status==='差戻し'&&
  sheets['出張報告'].rows[1][23]==='理由を確認してください');
 denied('returned trip cannot be settled',()=>api.settleFinanceRequest('GENERAL','travel',trip.id,'2026-10-10'),/承認済/);
+denied('other employee cannot resubmit a returned trip',()=>api.resubmitFinanceRequest('ACCOUNTING','travel',trip.id,
+ {...travel,requestKey:'test-20261008-travel-B'}),/他の社員/);
+const revised=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
+ ...travel,outcome:'差戻しを修正した出張報告',requestKey:'test-20261008-travel-B'
+});
+ok('returned travel may be resubmitted by its original owner',
+ revised.ok&&revised.id===trip.id&&revised.status==='承認待ち'&&
+ sheets['出張報告'].rows[1][11]==='差戻しを修正した出張報告'&&
+ sheets['出張報告'].rows[1][23]==='');
+const revisionRetry=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
+ ...travel,outcome:'差戻しを修正した出張報告',requestKey:'test-20261008-travel-B'
+});
+ok('resubmission retry is idempotent',revisionRetry.duplicate&&revisionRetry.id===trip.id);
+denied('pending trip cannot be edited through resubmit endpoint',
+ ()=>api.resubmitFinanceRequest('STAFF','travel',trip.id,{
+  ...travel,requestKey:'test-20261008-travel-C'}),/差戻/);
+ok('resubmitted travel enters approval and can settle',(()=>{
+ const approved=api.reviewFinanceRequest('GENERAL','travel',trip.id,'APPROVE','');
+ const completed=api.settleFinanceRequest('ACCOUNTING','travel',trip.id,'2026-10-10');
+ return approved.status==='承認済'&&completed.status==='精算済';
+})());
+ok('receipt amount parser tolerates currency display formatting',
+ api.financeAmountDisplay_('¥2,500')===2500&&api.financeAmountDisplay_('2,500円')===2500);
+ok('date transport normalizes Japanese-style display dates',
+ api.financeNormalizeDateText_('2026/10/8')==='2026-10-08');
+const linked=api.financeReceiptCrossCheck_(
+ [{id:'E-1',receiptRef:'r-123',amount:'2,500',status:'承認待ち'}],
+ [{id:'R-1',receiptRef:'R-123',amount:'2500'}]
+);
+ok('receipt number links a single expense claim to recorded cost',linked['E-1'].status==='MATCHED');
+const mismatch=api.financeReceiptCrossCheck_(
+ [{id:'E-2',receiptRef:'R-123',amount:'2600',status:'承認待ち'}],
+ [{id:'R-2',receiptRef:'R-123',amount:'2500'}]
+);
+ok('receipt-to-claim mismatch is flagged',mismatch['E-2'].status==='AMOUNT_MISMATCH');
+const split=api.financeReceiptCrossCheck_(
+ [{id:'E-3',receiptRef:'R-123',amount:'1000',status:'承認待ち'},
+  {id:'E-4',receiptRef:'R-123',amount:'1500',status:'承認待ち'}],
+ [{id:'R-3',receiptRef:'R-123',amount:'2500'}]
+);
+ok('multiple claims against one receipt use combined amount',
+ split['E-3'].status==='MATCHED'&&split['E-4'].status==='MATCHED');
+const prioritized=api.financeOutstandingFirst_([
+ {id:'old',status:'承認待ち',createdAt:'2025-01-01'},
+ {id:'recent',status:'精算済',createdAt:'2026-10-08'}],1);
+ok('pending approvals cannot be hidden by newer settled records',prioritized[0].id==='old');
+const ownPrioritized=api.financeMyActionFirst_([{id:'recent',status:'承認待ち',createdAt:'2026-10-08'},
+  {id:'returned',status:'差戻し',createdAt:'2025-01-01'}],1);
+ok('employee returned request stays visible even if a newer request exists',ownPrioritized[0].id==='returned');
+ok('schema preflight permits matching existing legacy request headers',(()=>{
+ const requestHeaders=['申請ID','申請日','社員ID','氏名','申請種別','対象日開始','対象日終了',
+  '申請内容','理由','ステータス','承認者','承認日時','差戻し理由','登録日時',
+  '取消理由','取消申請日時','取消判断理由','取消判断者','取消判断日時'];
+ const requestSheet=new Sheet(requestHeaders);
+ return api.assertDatabaseMigrationSafe_({
+  getSheetByName:name=>name==='申請'?requestSheet:null
+ })===undefined;
+})());
+denied('schema preflight rejects unexpected populated columns before modifying any sheet',()=>{
+ const requestSheet=new Sheet(['申請ID','申請日','社員ID','氏名','申請種別',
+  '対象日開始','対象日終了','申請内容','理由','誤った列名']);
+ api.assertDatabaseMigrationSafe_({getSheetByName:name=>name==='申請'?requestSheet:null});
+},/既存シート/);
+
 const owned=api.submitFinanceExpense('ACCOUNTING',{...expense,requestKey:'test-20261008-expense-B'});
 denied('accountant cannot approve own request',()=>api.reviewFinanceRequest('ACCOUNTING','expense',owned.id,'APPROVE',''),/自分自身/);
 const rec=api.saveFinanceReceipt('GENERAL',receipt);

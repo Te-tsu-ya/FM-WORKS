@@ -824,7 +824,7 @@ const financeUi=fs.readFileSync(path.join(root,'src','AppFinance.html'),'utf8');
 for(const marker of [
  'function requireFinanceOperator_(token)','function submitFinanceExpense(sessionToken,payload)',
  'function submitFinanceTravel(sessionToken,payload)','function saveFinanceReceipt(sessionToken,payload)',
- 'function getMyFinanceItems(sessionToken)','function getFinanceOverview(sessionToken)',
+ 'function getMyFinanceItems(sessionToken)','function getFinanceOverview(sessionToken,params)',
  'function reviewFinanceRequest(sessionToken,kind,id,decision,reason)',
  'function settleFinanceRequest(sessionToken,kind,id,paidOn,receivedOn)',
  'if(String(item.employeeId)===String(reviewer.employeeId))','function financeStorageStatus_()'
@@ -832,7 +832,7 @@ for(const marker of [
  if(!financeServer.includes(marker)){console.error('Finance server contract missing: '+marker);failed=true;}
 }
 for(const marker of ['function financePage()','function financeSelfSection()',
- 'function openFinanceForm(kind)','function financeApprovalDialog(kind,id,decision)',
+ 'function openFinanceForm(kind,editId=\'\')','function financeApprovalDialog(kind,id,decision)',
  'function financeSubmitSettlement(kind,id)']){
  if(!financeUi.includes(marker)){console.error('Finance client contract missing: '+marker);failed=true;}
 }

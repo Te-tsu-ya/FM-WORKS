@@ -7,7 +7,7 @@ const DB_SCHEMA_SPECS = Object.freeze({
     '最終ログイン日時','PIN更新日時','認証状態','権限詳細','給与集計対象','直属承認者ID','年休基準日','雇入日'
   ],
   '申請': [
-    '申請ID','申請日','社員ID','氏名','申請種別','開始日','終了日','内容','理由','状態','承認者','承認日時','差戻し理由','登録日時',
+    '申請ID','申請日','社員ID','氏名','申請種別','対象日開始','対象日終了','申請内容','理由','ステータス','承認者','承認日時','差戻し理由','登録日時',
     '取消理由','取消申請日時','取消判断理由','取消判断者','取消判断日時'
   ],
   '月次締め': ['年月','状態','締め日時','締め者','再開日時','再開者','備考','更新日時','スナップショットID'],
@@ -70,11 +70,27 @@ function ensureSchemaSheet_(db,name,headers){
   return sheet;
 }
 
+function assertDatabaseMigrationSafe_(db){
+  // Prevent partial creation/extension when any existing nonempty header disagrees.
+  const issues=[];
+  Object.keys(DB_SCHEMA_SPECS).forEach(name=>{
+    const sheet=db.getSheetByName(name);
+    if(!sheet)return;
+    const expected=DB_SCHEMA_SPECS[name];
+    const actual=sheet.getRange(1,1,1,expected.length).getDisplayValues()[0];
+    schemaHeaderIssues_(actual,expected).forEach(issue=>{
+      if(String(issue.actual||'').trim())
+        issues.push(name+' '+issue.column+'列 ('+issue.actual+' / '+issue.expected+')');
+    });
+  });
+  if(issues.length)throw new Error('既存シートの列名が一致しないためDB更新を中止しました。変更せず管理者へ確認してください: '+issues.slice(0,8).join('; '));
+}
 function migrateDatabaseToCurrent(sessionToken){
   const admin=requireAdminSession_(sessionToken).employee;
   return withScriptLock_(function(){
     const before=getDatabaseSchemaStatus_();
     if(before.ready)return {ok:true,changed:false,before,after:before,backup:null};
+    assertDatabaseMigrationSafe_(getDb_());
     const backup=createDatabaseBackup_(admin);
     const db=getDb_();
     Object.keys(DB_SCHEMA_SPECS).forEach(name=>ensureSchemaSheet_(db,name,DB_SCHEMA_SPECS[name]));

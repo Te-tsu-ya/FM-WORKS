@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.13.0  
+**文書版:** 0.13.1  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.13.0`
+`APP.version = 0.13.1`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1622,3 +1622,15 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 ### 50.1 Finite in-memory integration tests
 - `scripts/test_finance_integration.mjs` は実GAS接続と実顧客データを使わず、社員役割5種類と3シートをメモリ内で再現。作成・二重登録、申請者本人だけの履歴、閲覧拒否、自己承認拒否、承認／差戻し／精算、再精算拒否、数値・日付チェック、Spreadsheet式インジェクション対策、監査、スキーマ不一致を実証する。
 - CI・Deployで共通のテストを実行する。Finance.gsは画面へ返す一覧にgetDisplayValuesを使用し、状態更新に使用する対象行はgetValuesを維持して型を保存する。
+
+
+## 51. 実データ構造との整合と経理ワークフローデバッグ（v0.13.1）
+
+- `Schema.gs`: 読み取り専用で取得したFM WORKS DBの実ヘッダーと `DB_SCHEMA_SPECS['申請']` を一致。`assertDatabaseMigrationSafe_` が既存シートの非空見出し不一致をDB変更より先に検出して中断する。
+- `Finance.gs`: `resubmitFinanceRequest` は本人の差戻し申請だけをScript Lock下で再登録し、申請ID・作成日時・本人IDを維持、旧判断は監査ログへ保存する。承認・精算は既存権限を維持。
+- `financeReceiptCrossCheck_` は経費精算申請と経費記録の `receiptRef` を大小文字・前後空白を正規化して照合する。分割申請の合計額、金額差異、未登録、複数登録を区別し、会計原本の更新はしない。
+- `getFinanceOverview` は承認待ち・承認済み優先の表示と、閲覧上限1000件・未表示件数をサーバーから返す。`financeRows_` の送信用日付は文字列に正規化し、対象行を書換える際は元のセル型を維持する。
+- `AppFinance.html`: 社員の差戻し理由と修正・再提出導線、経理担当の詳細照会・承認前確認、証憑整理番号の一致状況、追加読み込みを表示。文字列はHTMLエスケープする。
+- `DataAccess.gs`: 370日を超える読み取りで検索用正規表現を使えない場合は、全行読み取り後にも入力期間で絞る。逆順指定は空配列を返す。
+- 本番公開URL・スクリプトプロパティが接続するPRODUCTION DBは接続環境次第なので、読み取り専用で確認したDBと同一とは断定しない。データ移行・本番操作は実施しない。
+- `scripts/test_finance_integration.mjs`, `scripts/test_logic.mjs`, `scripts/test_client_contract.mjs`, ChromiumホームQAで回帰検証し、CIが不合格の変更はmainへ統合しない。
