@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,office:officePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
@@ -119,6 +119,7 @@ function acceptLogin(result){
 
 function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
+  resetFinanceUi();
   state.officeUi={selected:'documents'};
   state.authAdmin=null;
   state.adminUi=createAdminUiState();
@@ -139,6 +140,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='admin'&&state.adminTab==='people')state.page='people';
   if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
   if(state.page==='office'&&!(data.permissions&&data.permissions.officeWorkspace))state.page='home';
+  if(state.page==='finance'&&!(data.permissions&&data.permissions.financeWorkspace))state.page='home';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
   document.getElementById('app').hidden=false;
@@ -157,6 +159,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs();
   if(state.page==='requests')loadRequests();
+  if(state.page==='finance')loadFinanceOverview();
   if(state.page==='monthly')loadMonthly();
   if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
   if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){

@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
+  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -15,7 +15,7 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
@@ -32,7 +32,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Code.gs','Finance.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -278,7 +278,7 @@ if (!serverCode.includes('function auditJson_(') ||
   failed = true;
 }
 
-for (const marker of ['const DB_SCHEMA_VERSION = 9','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+for (const marker of ['const DB_SCHEMA_VERSION = 10','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
   if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
@@ -655,7 +655,7 @@ if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") |
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['office','事務','i-briefcase'],['admin','管理','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",
@@ -810,6 +810,38 @@ if(officePreview.includes('google.script.run')||officePreview.includes('Spreadsh
 if(!designNotes.includes('共通UI/UXデザインシステム')||!officeSources.includes('出張記録')||
   !officeSources.includes('ベンダーコード')){
   console.error('v0.12.0 UI design rulebook / sanitized office source mapping missing.');failed=true;
+}
+
+
+/* v0.13.0 finance least-privilege and schema integration. */
+for(const workflow of ['.github/workflows/ci.yml','.github/workflows/deploy.yml']){
+  if(!fs.readFileSync(path.join(root,workflow),'utf8').includes('node scripts/test_finance_integration.mjs')){
+    console.error('Missing finance integration test in '+workflow);failed=true;
+  }
+}
+const financeServer=fs.readFileSync(path.join(root,'src','Finance.gs'),'utf8');
+const financeUi=fs.readFileSync(path.join(root,'src','AppFinance.html'),'utf8');
+for(const marker of [
+ 'function requireFinanceOperator_(token)','function submitFinanceExpense(sessionToken,payload)',
+ 'function submitFinanceTravel(sessionToken,payload)','function saveFinanceReceipt(sessionToken,payload)',
+ 'function getMyFinanceItems(sessionToken)','function getFinanceOverview(sessionToken)',
+ 'function reviewFinanceRequest(sessionToken,kind,id,decision,reason)',
+ 'function settleFinanceRequest(sessionToken,kind,id,paidOn,receivedOn)',
+ 'if(String(item.employeeId)===String(reviewer.employeeId))','function financeStorageStatus_()'
+]){
+ if(!financeServer.includes(marker)){console.error('Finance server contract missing: '+marker);failed=true;}
+}
+for(const marker of ['function financePage()','function financeSelfSection()',
+ 'function openFinanceForm(kind)','function financeApprovalDialog(kind,id,decision)',
+ 'function financeSubmitSettlement(kind,id)']){
+ if(!financeUi.includes(marker)){console.error('Finance client contract missing: '+marker);failed=true;}
+}
+for(const marker of ["include_('AppFinance')","finance:financePage",
+ "id==='finance'?!!p.financeWorkspace","financeWorkspace: role ===",
+ "'経費記録':","'経費精算申請':","'出張報告':"]){
+ if(!(app+indexText+serverCode+fs.readFileSync(path.join(root,'src','Schema.gs'),'utf8')).includes(marker)){
+  console.error('Finance integration missing: '+marker);failed=true;
+ }
 }
 
 const annualAutomation=fs.readFileSync(path.join(root,'src','AnnualLeaveAutomation.gs'),'utf8');

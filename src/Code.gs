@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.12.0',
+  version: '0.13.0',
   locale: 'ja-JP'
 });
 
@@ -572,15 +572,21 @@ function validatePunchTransition_(attendance, action) {
   }
 }
 
+function financeDepartmentAllowed_(department) {
+  const name=String(department||'').replace(/\s+/g,'').replace(/[／/]/g,'・');
+  if(/^(?:経理総務|総務経理)(?:部|課|担当)?$/.test(name))return true;
+  const parts=name.split('・');
+  return parts.length>=1&&parts.length<=2&&parts.every(part=>/^(?:経理|総務)(?:部|課|室|担当|チーム)?$/.test(part));
+}
 function getPermissions_(employee) {
   const role = String(employee && employee.role || 'USER').toUpperCase();
   return {
     companyCalendarView: true,
     companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
     adminConsole: role === 'ADMIN',
-    // Navigation-only preview. Financial CRUD will need separately authorized server APIs.
-    officeWorkspace: role === 'ADMIN' || role === 'MANAGER' ||
-      String(employee && employee.department || '').includes('総務'),
+    // The finance APIs independently enforce this permission on the server.
+    officeWorkspace: role === 'ADMIN' || role === 'MANAGER' || financeDepartmentAllowed_(employee && employee.department),
+    financeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     employeeAdmin: role === 'ADMIN',
     requestApprove: role === 'ADMIN' || role === 'MANAGER',
     monthlyTeamView: role === 'ADMIN' || role === 'MANAGER',
