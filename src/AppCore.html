@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,selectedDate:null,selectedEventId:null,mobileDetailOpen:false,loadedKey:'',error:'',view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:180000,maintenance:60000,documents:600000};
 const pageCache={};
 const pendingLoads=new Set();
@@ -319,6 +319,7 @@ function scheduleWorkspaceTabs(activeId){
 function navigate(page){
   closeMobileDrawer();
   if(page==='admin'&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
+  if(page!=='schedule')state.schedule.mobileDetailOpen=false;
   state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage(true);window.scrollTo({top:0,behavior:'auto'});
   const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
   if(page==='schedule')loadSchedule();
@@ -442,7 +443,7 @@ function homePunchHistory(a){
 }
 function homeScheduleRows(events){
   if(!events.length)return `<div class='home-empty-state'><strong>今日の予定はありません</strong><span>新しい予定は予定表から追加できます。</span></div>`;
-  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' onclick="state.schedule.date='${escapeHtml(e.date||state.data.today)}';navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
+  return `<div class='home-scroll-list'>${events.map(e=>`<button class='home-schedule-row' data-date='${escapeHtml(e.date||state.data.today)}' data-event-id='${escapeHtml(e.id||'')}' onclick="state.schedule.date=this.dataset.date;state.schedule.selectedDate=this.dataset.date;state.schedule.selectedEventId=this.dataset.eventId||null;navigate('schedule')"><span class='home-schedule-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span><div><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></div><i style='background:${categoryColor(e.category)}'></i></button>`).join('')}</div>`;
 }
 function homeTaskRows(tasks){
   if(!tasks)return state.homeOverview.error?homeOverviewError():homeOverviewLoading();

@@ -53,7 +53,7 @@ for(const marker of [
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
-  "<button type='button' class='agenda-item'"
+  "class='schedule-timed-event'"
 ]){
   if(!app.includes(marker)){console.error('Usability/a11y hardening marker missing: '+marker);failed=true;}
 }
@@ -737,6 +737,29 @@ if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
   failed = true;
 }
+
+for(const marker of [
+  'function scheduleDetailPanel()',
+  'function selectScheduleDay(date,eventId',
+  'function selectScheduleEvent(id)',
+  'function scheduleTimeboard(columns,bounds,kind)',
+  'function scheduleTimelineLayout(events,bounds)',
+  'function onScheduleDetailKeydown(e)',
+  'function closeScheduleDetail()',
+  "class='schedule-timeboard",
+  "class='schedule-detail-panel",
+  "class='schedule-sheet-backdrop",
+  'scheduleLoaded()'
+]){
+  if(!app.includes(marker)){console.error('v0.11.3 hybrid schedule missing: '+marker);failed=true;}
+}
+if(!styles.includes('.schedule-layout{display:grid')||
+  !styles.includes('@media(max-width:1320px)')||
+  !styles.includes('.schedule-detail-panel.is-open')||
+  !styles.includes('.schedule-day-dots')){
+  console.error('v0.11.3 responsive hybrid schedule style missing.');failed=true;
+}
+
 for (const schedulePrivacyMarker of [
   'function normalizeScheduleVisibility_(',
   'function canViewScheduleRow_(',
