@@ -762,6 +762,7 @@ function scheduleRange(){
   return {start:s.date,end:s.date};
 }
 const SCHEDULE_WINDOW_TTL=180000;
+const SCHEDULE_RETRY_COOLDOWN=30000;
 const SCHEDULE_MAX_WINDOWS=6;
 const scheduleWindowCache=new Map();
 const scheduleWindowRequests=new Map();
@@ -854,7 +855,7 @@ function loadSchedule(options={}){
     cached=scheduleWindowCache.get(requestKey);
   let available=scheduleLoaded();
   if(cached)available=applyScheduleWindow(cached);
-  if(cached&&!options.force&&Date.now()-cached.at<SCHEDULE_WINDOW_TTL){
+  if(cached&&!options.force&&(Date.now()-cached.at<SCHEDULE_WINDOW_TTL||Date.now()<Number(cached.retryAfter||0))){
     s.refreshing=false;
     if(!options.silent)renderPageIfActive('schedule');
     return;
@@ -892,6 +893,7 @@ function loadSchedule(options={}){
     finalize();
     if(generation!==scheduleWindowGeneration||session!==state.sessionToken||identity!==scheduleWindowIdentity())return;
     const isAuth=/AUTH_REQUIRED|SESSION_EXPIRED/.test(sessionErrorMessage(err));
+    if(!isAuth){const existing=scheduleWindowCache.get(requestKey);if(existing)existing.retryAfter=Date.now()+SCHEDULE_RETRY_COOLDOWN;}
     if(isAuth){handleApiError(err,'予定表の認証に失敗しました');return;}
     if(scheduleCacheKey()===displayKey){
       s.loading=false;

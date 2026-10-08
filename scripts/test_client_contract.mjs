@@ -440,6 +440,15 @@ const result=vm.runInContext(`
   scheduleJumpTo('2026-10-08');
   scheduleJumpTo('2026-11-08');
   expect('returning to either cached month is network-free',apiCalls.length===0&&state.schedule.events.some(e=>e.id==='NOV1'));
+  const novCache=scheduleWindowForDate('2026-11-08');
+  novCache.at=Date.now()-SCHEDULE_WINDOW_TTL-1000;
+  resetCalls();
+  loadSchedule();
+  expect('expired month stays visible while revalidation is requested',apiCalls.length===1&&scheduleLoaded()&&state.schedule.refreshing);
+  invokeServerFailure({message:'QA temporary network failure'});
+  resetCalls();
+  changeScheduleView('week');
+  expect('temporary GAS failure does not trigger repeat calls on every view switch',apiCalls.length===0&&scheduleLoaded()&&state.schedule.events.some(e=>e.id==='NOV1'));
   invalidatePageCache('schedule');
   expect('schedule mutation invalidates all window caches',scheduleWindowCache.size===0&&!scheduleLoaded());
   resetCalls();

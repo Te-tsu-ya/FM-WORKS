@@ -488,6 +488,8 @@ home-screen
 ## 10.2 スケジュールのクライアントデータ層 v0.11.4
 
 - `scheduleCacheKey()` は表示形式やフィルターではなく対象月の `monthGridRange()` だけに依存させる。4つの表示は同じ全社員・全分類の元データを共有する。
+- `SCHEDULE_RETRY_COOLDOWN` は一時的な通信失敗後30秒の再検証間隔を設け、読み込み済みの予定を残したままリクエスト連打を防ぐ。
+- 休日ラベルの色は土曜青、日曜・祝日赤に背景とあわせて統一する。
 - `scheduleWindowCache` (`Map`) はセッションID + 社員ID + 期間で管理する。保持数6、TTL 180秒。古いデータは即時表示しつつ非同期再検証する（SWR）。
 - `getScheduleBundle` は `{start,end,employeeId:'ALL',category:'ALL',includeEmployees:false}` の1回だけ。サーバーの `canViewScheduleRow_` による行単位の閲覧認可を必ず維持する。
 - `scheduleFilterEvents(rawEvents,employeeId,category)` は取得済みの認可済みデータだけを絞り込み、`state.schedule.events` に反映する。日別索引 `eventsFor` は表示配列の参照が変わった時だけ再生成。

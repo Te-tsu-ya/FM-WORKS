@@ -1075,6 +1075,14 @@ html[data-theme="dark"] .schedule-hybrid .month-day.day-off{background:color-mix
 
 <style>
 /* v0.11.4: clearly separated dates and actionable person-highlighting. */
+
+.schedule-hybrid .month-day.schedule-saturday .day-type.offday{background:#cfe3ff;color:#245bad}
+.schedule-hybrid .month-day.schedule-sunday .day-type.offday,
+.schedule-hybrid .month-day.schedule-holiday .day-type.offday{background:#ffd0d8;color:#a52c45}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-saturday .day-type.offday{background:#36577a;color:#d7eaff}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-sunday .day-type.offday,
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-holiday .day-type.offday{background:#683344;color:#ffe1e8}
+
 .schedule-hybrid .weekday-row{background:#e9eef6;border-bottom:2px solid #c5d2e2}
 .schedule-hybrid .weekday-row>div{border-right:1px solid #cad6e5;color:#475b77;font-weight:800}
 .schedule-hybrid .weekday-row>div:first-child{background:#ffe5e9;color:#ad2c44}
