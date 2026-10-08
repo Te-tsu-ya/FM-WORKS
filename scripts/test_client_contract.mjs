@@ -727,6 +727,11 @@ const result=vm.runInContext(`
     previousOverdue:{periodStart:'2025-10-01',periodEnd:'2026-09-30',takenDays:2,remainingDays:3}};
   expect('prior-year noncompliance remains visible alongside current-year progress',
     requestAnnualLeaveNotice().includes('前年度の有給5日')&&requestAnnualLeaveNotice().includes('2027-10-01'));
+  state.requests.context.fiveDay={status:'DATA_INCOMPLETE',reason:'会社カレンダーが不足しています'};
+  state.requests.context.autoLeave={status:'DISABLED'};
+  expect('incomplete company calendar is displayed as unverified compliance',
+    requestAnnualLeaveNotice().includes('年5日取得の判定に必要な記録')&&
+    requestAnnualLeaveNotice().includes('会社カレンダーが不足'));
   state.requests.context.fiveDay={status:'UNKNOWN'};
   state.requests.context.autoLeave={status:'REVIEW',dueDate:'2026-10-01',dueDays:10};
   expect('unverified attendance is not portrayed as granted',

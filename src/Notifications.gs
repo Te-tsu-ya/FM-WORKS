@@ -24,11 +24,19 @@ function getNotifications(sessionToken) {
     });
   }
 
-  const annualLeave=getAnnualLeaveFiveDayStatus_(getEmployee_(employee.employeeId),today);
-  const automatic=leaveAutoForecast_(getEmployee_(employee.employeeId),today);
+  const freshEmployee=getEmployee_(employee.employeeId);
+  const annualLeave=getAnnualLeaveFiveDayStatus_(freshEmployee,today);
+  const automatic=leaveAutoForecast_(freshEmployee,today);
   if(automatic.status==='REVIEW'){
     items.push({type:'年休付与要確認',title:'有給の付与条件を確認してください',
       subtitle:'付与予定 '+automatic.dueDate+' / '+automatic.dueDays+'日。勤怠や会社カレンダーの記録を管理者に確認してください。',
+      route:'requests',priority:'warning'});
+  }
+  const dueSchedule=leaveEntitlement_(freshEmployee.hireDate,today);
+  if(annualLeave.status==='DATA_INCOMPLETE'||(annualLeave.status==='UNKNOWN'&&
+     freshEmployee.leaveBalanceConfigured&&dueSchedule&&dueSchedule.due)){
+    items.push({type:'年休5日',title:'有給5日取得状況の確認が必要です',
+      subtitle:annualLeave.reason||'年休の付与記録・会社カレンダーを確認してください。',
       route:'requests',priority:'warning'});
   }
   if(annualLeave.previousOverdue){

@@ -1676,15 +1676,21 @@ function requestAnnualLeaveNotice(){
       <small>過去の勤務・休暇実績に不足がないか管理者へ確認してください。</small>
       </div></div>`;
   }
-  const previous=typeof previousBanner==='string'?previousBanner:'';
-  if(auto.status==='REVIEW')return previous+`<div class='leave-compliance-banner needs-review' role='status'>
+  let notices=typeof previousBanner==='string'?previousBanner:'';
+  if(auto.status==='REVIEW')notices+=`<div class='leave-compliance-banner needs-review' role='status'>
     <span class='leave-compliance-icon'>!</span><div><strong>有給の付与条件を確認してください</strong>
     <p>${escapeHtml(auto.dueDate||'')}の付与（${escapeHtml(String(auto.dueDays||0))}日）を確認中です。付与履歴・出勤率・会社カレンダーを管理者に確認してください。</p></div></div>`;
-  if(five.status!=='TRACKING'&&five.status!=='OVERDUE'&&five.status!=='COMPLETED')return previous;
+  if(five.status==='DATA_INCOMPLETE'||(five.status==='UNKNOWN'&&context.leaveBalanceConfigured)){
+    notices+=`<div class='leave-compliance-banner needs-review' role='status'>
+      <span class='leave-compliance-icon'>!</span><div><strong>年5日取得の判定に必要な記録が不足しています</strong>
+      <p>${escapeHtml(five.reason||'年休の付与履歴や会社カレンダーを管理者に確認してください。')}</p>
+      </div></div>`;
+  }
+  if(five.status!=='TRACKING'&&five.status!=='OVERDUE'&&five.status!=='COMPLETED')return notices;
   const remaining=Number(five.remainingDays||0),isOverdue=five.status==='OVERDUE',
     alert=isOverdue||(remaining>0&&Number(five.daysRemaining)<=180),
     complete=five.status==='COMPLETED';
-  return previous+`<div class='leave-compliance-banner ${complete?'is-complete':alert?'needs-review':''}' role='status'>
+  return notices+`<div class='leave-compliance-banner ${complete?'is-complete':alert?'needs-review':''}' role='status'>
     <span class='leave-compliance-icon'>${complete?'✓':alert?'!':'5'}</span>
     <div><strong>${complete?'今年の年5日取得を達成しました':isOverdue?'年5日の取得期限を過ぎています':'年5日の有給取得状況'}</strong>
       <p>取得 ${escapeHtml(String(five.takenDays||0))}日 / 目標5日${!complete?'・あと'+escapeHtml(String(remaining))+'日':''}
