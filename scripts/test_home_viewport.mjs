@@ -99,8 +99,8 @@ for(const scenario of cases){
   try {
     const stdout=execFileSync(chrome,args,{encoding:'utf8',timeout:45000,maxBuffer:4*1024*1024,
       stdio:['ignore','pipe','ignore']});
-    const payload=stdout.match(/<output id="qa-result" data-payload="([^"]+)"/);
-    if(!payload)throw new Error('Chrome did not emit expected layout metrics');
+    const payload=stdout.match(/<output[^>]*id="qa-result"[^>]*data-payload="([^"]+)"/);
+    if(!payload)throw new Error('Chrome did not emit expected layout metrics; document tail: '+stdout.slice(-1600));
     result=JSON.parse(decodeURIComponent(payload[1]));
   }catch(err){
     problems++;
