@@ -608,7 +608,7 @@ for (const marker of [
   }
 }
 if (!app.includes("display.sample&&!realProjects.length") ||
-    !app.includes("admin&&date===state.data.today&&!realItems.length")) {
+    !app.includes("admin&&ready&&date===state.data.today&&!realItems.length")) {
   console.error('Worklog QA sample must remain ADMIN-only and non-persistable without real projects.');
   failed = true;
 }
