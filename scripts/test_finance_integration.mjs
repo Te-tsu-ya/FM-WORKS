@@ -117,7 +117,7 @@ const revisionRetry=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
 ok('resubmission retry is idempotent',revisionRetry.duplicate&&revisionRetry.id===trip.id);
 denied('pending trip cannot be edited through resubmit endpoint',
  ()=>api.resubmitFinanceRequest('STAFF','travel',trip.id,{
-  ...travel,requestKey:'test-20261008-travel-C'}),/差戻し/);
+  ...travel,requestKey:'test-20261008-travel-C'}),/差戻/);
 ok('resubmitted travel enters approval and can settle',(()=>{
  const approved=api.reviewFinanceRequest('GENERAL','travel',trip.id,'APPROVE','');
  const completed=api.settleFinanceRequest('ACCOUNTING','travel',trip.id,'2026-10-10');
