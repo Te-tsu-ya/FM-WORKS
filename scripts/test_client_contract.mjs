@@ -333,12 +333,51 @@ const result=vm.runInContext(`
     companyDays:[],
     events:[{id:'E1',date:'2026-10-01',allDay:false,start:'09:00',end:'10:00',title:'会議',category:'予定',participantIds:'FM0001',participantNames:'青木 悠真',ownerEmployeeId:'FM0001',ownerName:'青木 悠真'}]
   };
+  state.schedule.loadedKey=scheduleCacheKey();
+  state.schedule.selectedDate='2026-10-01';
   expect('month schedule exposes keyboard-focusable day control',monthView().includes("class='day-open'"));
-  expect('day schedule uses native button for appointment row',dayView().includes("<button type='button' class='agenda-item'"));
+  expect('day schedule exposes employee timelines',dayView().includes('schedule-timeboard day-board')&&dayView().includes('schedule-time-lane'));
+  expect('week schedule exposes seven time lanes',weekView().includes('schedule-timeboard week-board')&&weekView().split("class='schedule-time-lane'").length===8);
   state.schedule.events=[{id:'E-XSS',date:'2026-10-01',allDay:false,start:'09:00',end:'10:00',title:'<img src=x onerror=alert(1)>',category:'予定',participantIds:'FM0001',participantNames:'<b>攻撃</b>',ownerEmployeeId:'FM0001',ownerName:'<b>攻撃</b>'}];
   const escapedMonth=monthView();
   expect('schedule title is HTML-escaped before innerHTML rendering',!escapedMonth.includes('<img src=x')&&escapedMonth.includes('&lt;img'));
 
+
+
+  // Selected day must remain within month mode, and all hidden events must be accessible.
+  state.page='schedule';
+  state.schedule.date='2026-10-08';
+  state.schedule.selectedDate='2026-10-08';
+  state.schedule.view='month';
+  state.schedule.events=[
+    {id:'S1',date:'2026-10-08',start:'09:00',end:'10:00',title:'資料作成',category:'業務',employeeIds:['FM0001'],employeeNames:['青木 悠真'],canEdit:true},
+    {id:'S2',date:'2026-10-08',start:'09:30',end:'11:00',title:'調整会議',category:'社内',employeeIds:['FM0001'],employeeNames:['青木 悠真'],canEdit:false},
+    {id:'S3',date:'2026-10-08',start:'13:00',end:'14:00',title:'顧客対応',category:'予定',employeeIds:['FM0001'],employeeNames:['青木 悠真']},
+    {id:'S4',date:'2026-10-08',allDay:true,title:'研修',category:'業務',employeeIds:['FM0001'],employeeNames:['青木 悠真']}
+  ];
+  state.schedule.companyDays=[{date:'2026-10-08',type:'会社休日',name:'社内記念日',working:false}];
+  state.schedule.loadedKey=scheduleCacheKey();
+  state.schedule.loading=false;
+  const hybridMonth=monthView();
+  expect('month uses short event previews and a +N affordance',hybridMonth.includes('＋2件')&&hybridMonth.includes('schedule-day-dots'));
+  const callsBeforeSelect=apiCalls.length;
+  selectScheduleDay('2026-10-08');
+  expect('day selection keeps month view and avoids an extra GAS call',state.schedule.view==='month'&&apiCalls.length===callsBeforeSelect);
+  const hybridDetail=scheduleDetailPanel();
+  expect('detail shows all events and company holiday',hybridDetail.includes('資料作成')&&hybridDetail.includes('調整会議')&&hybridDetail.includes('顧客対応')&&hybridDetail.includes('研修')&&hybridDetail.includes('社内記念日'));
+  selectScheduleEvent('S2');
+  const readonlyDetail=scheduleDetailPanel();
+  expect('readonly schedule selection shows view-only action',readonlyDetail.includes('詳細を確認')&&!readonlyDetail.includes("class='schedule-selected-event'"));
+  const overlap=scheduleTimelineLayout(state.schedule.events,scheduleTimeBounds(state.schedule.events));
+  expect('overlapping events are laid out side-by-side',overlap.length===3&&overlap[0].columns===2&&overlap[1].columns===2&&overlap[0].column!==overlap[1].column);
+  expect('day view retains all-day and timed events',dayView().includes('終日 · 研修')&&dayView().includes('schedule-timed-event'));
+  closeScheduleDetail();
+  expect('mobile detail can be closed without losing the selected date',!state.schedule.mobileDetailOpen&&state.schedule.selectedDate==='2026-10-08');
+  state.schedule.events=[{id:'E-XSS',date:'2026-10-08',start:'09:00',end:'10:00',title:'<img src=x onerror=alert(1)>',category:'予定',employeeIds:['FM0001'],employeeNames:['<b>攻撃</b>']}];
+  state.schedule.selectedEventId='E-XSS';
+  expect('detail never interpolates untrusted HTML',!scheduleDetailPanel().includes('<img src=x')&&scheduleDetailPanel().includes('&lt;img'));
+  expect('schedule rejects invalid day navigation',(()=>{const old=state.schedule.selectedDate;scheduleJumpTo('2026-02-30');return state.schedule.selectedDate===old})());
+  state.page='home';
 
   return {failures};
 })()

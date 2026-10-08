@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.2  
+**文書版:** 0.11.3  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.2`
+`APP.version = 0.11.3`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -467,6 +467,22 @@ home-screen
 - パネル内部は必要に応じて最大高を設定
 
 共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
+
+
+## 10.1 予定表月・週・日ハイブリッド v0.11.3
+
+- 変更ファイル：`AppCore.html`（選択日・イベント・モバイルペイン状態）、`AppOperations.html`（ビュー描画と制御）、`AppShell.html`（初期選択日・検索導線・Escape）、`Styles.html`（応答的な2ペイン/タイムボード）、テスト、要件定義。
+- データ：既存の `getScheduleBundle(sessionToken,{start,end,employeeId,category,includeEmployees:false})` の認可済み `events/companyDays` のみ使用。保存APIは変更しない。
+- `schedule.loadedKey` を `scheduleCacheKey()` と照合。フィルター等が変わる間は以前の結果を表示せずスケルトンか再試行を表示し、成功時だけ最新条件のイベントを表示する。古いレスポンスはキーで破棄する。
+- `eventsFor(date)` は取得結果の参照が変わるたびに日別 `Map` を再構築する。
+- `selectScheduleDay(date,eventId)` は選択日を保持し、同一月では週/月ビューを変更せず、選択日の詳細を即時再描画する。`eventChip`/一覧/時間軸も詳細ペインで詳細表示に統一。
+- `scheduleDetailPanel()` は選択日に含まれる予定の全件、会社カレンダーの公開日区分、選択予定の時間/参加者/場所/メモ、権限に合った編集導線を提供する。
+- `scheduleTimeboard` / `scheduleTimelineLayout` は週7列・日社員列に時間軸のカードを配置し、時間重複は同じ時間帯の列に分離する。社員6人以上は5人ずつ段を分割。
+- 1320px以下はボトムシート、760px以下は時間軸カードを縦に並べ、月表示は各日の件数・分類色を表示して横スクロールを避ける。
+- ボトムシートは選択日の詳細から戻る際に閉じる・背景・Escapeを提供し、表示時はフォーカスを移動する。Tabはシート内に保持。
+- 会社カレンダーの年次画面、編集権限、予定のセキュリティ判定は既存のサーバー実装を再利用する。
+- 試験は `scripts/test_client_contract.mjs` に月選択/予定詳細/フィルター/重複/スマホペイン/エスケープを追加。`scripts/validate.mjs` はUI必須マーカーを検証する。
+- 実端末での画面描画、iOS/Android/Windows/Mac、ズーム5〜500%、Apps Script実通信時間の確認は別途実ブラウザで実施する。
 
 ## 11. 管理画面
 
