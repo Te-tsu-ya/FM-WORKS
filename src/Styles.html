@@ -2332,3 +2332,18 @@ html[data-theme="dark"] .office-status-done{color:#8ce2b4;background:#1b4133;bor
 }
 @media(prefers-reduced-motion:reduce){.office-v2 button{transition:none}}
 </style>
+
+<style>
+/* v0.13.4 Mobile office heading: keep the short Japanese heading together. */
+@media(max-width:640px){
+  .office-v2.office-overview > .page-head{
+    display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+  }
+  .office-v2.office-overview > .page-head h1{
+    white-space:nowrap;max-width:100%;
+  }
+  .office-v2.office-overview > .page-head p{
+    margin:0;max-width:100%;
+  }
+}
+</style>

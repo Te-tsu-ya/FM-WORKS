@@ -110,13 +110,15 @@ for(const test of cases){
       'homeTiles=[...document.querySelectorAll(".office-shortcut-tile")],'+
       'records=[...document.querySelectorAll(".office-record-row")],'+
       'list=document.querySelector(".office-workspace-list"),detail=document.querySelector(".office-workspace-detail"),'+
-      'button=document.querySelector(".office-command-actions button")||document.querySelector(".office-record-row");'+
+      'button=document.querySelector(".office-command-actions button")||document.querySelector(".office-record-row"),'+
+      'pageTitle=document.querySelector(".office-v2 > .page-head h1");'+
       'const info={width:innerWidth,height:innerHeight,htmlWidth:doc.scrollWidth,htmlHeight:doc.scrollHeight,'+
       'contentWidth:content.getBoundingClientRect().width,officeWidth:office.getBoundingClientRect().width,'+
       'tiles:homeTiles.length,records:records.length,listWidth:list?list.getBoundingClientRect().width:0,'+
       'detailWidth:detail?detail.getBoundingClientRect().width:0,'+
       'buttonHeight:button?Math.round(button.getBoundingClientRect().height):0,'+
-      'visible:office.getBoundingClientRect().width>0};'+
+      'visible:office.getBoundingClientRect().width>0,'+
+      'pageTitleLines:pageTitle?Math.round(pageTitle.getBoundingClientRect().height/parseFloat(getComputedStyle(pageTitle).lineHeight)):0};'+
       'parent.postMessage({kind:"FM_WORKS_OFFICE_QA",info},"*");})();'+
     '</script></body></html>';
   const direct=test.width===1366;
@@ -160,6 +162,9 @@ for(const test of cases){
     contentWidth:result.officeWidth<=result.contentWidth+2
   };
   if(test.kind==='overview'){checks.sixBusinessCards=result.tiles===6;checks.buttonSize=result.buttonHeight>=40;}
+  if(test.kind==='overview'&&test.width<=390){
+    checks.mobileOfficeHeadingSingleLine=result.pageTitleLines===1;
+  }
   if(test.kind==='records'){
     checks.recordPresent=result.records>=1;
     checks.listAndDetailsHaveWidth=result.listWidth>=200&&result.detailWidth>=200;
