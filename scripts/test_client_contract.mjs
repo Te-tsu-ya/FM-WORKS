@@ -275,6 +275,52 @@ const result=vm.runInContext(`
   invalidatePageCache('worklog');
   expect('worklog mutation invalidates all cached windows',worklogCachedWindow('2026-10-08')===null&&worklogCachedWindow('2026-09-08')===null);
 
+  // Keep edits intact while switching dates and while a cached day is rendered.
+  state.worklog.date='2026-10-08';
+  state.worklog.loadedDate='2026-10-08';
+  const worklogWithPicker=worklogPage();
+  expect('worklog exposes accessible direct date picker',worklogWithPicker.includes("id='worklogDatePicker'")&&worklogWithPicker.includes("aria-label='前の日へ'")&&worklogWithPicker.includes("aria-label='次の日へ'"));
+  const workProject=document.getElementById('wlQuickProject');
+  workProject.closest=()=>({className:'worklog-quick-card'});
+  workProject.value='テスト案件A';
+  const workDesc=document.getElementById('wlQuickDescription');
+  const workCategory=document.getElementById('wlQuickCategory');
+  const workStart=document.getElementById('wlQuickStart');
+  const workEnd=document.getElementById('wlQuickEnd');
+  workDesc.value='未保存の画面設計';
+  workCategory.value='設計';
+  workStart.value='09:15';
+  workEnd.value='10:45';
+  rememberWorklogQuickDraft();
+  state.worklog.renderedDate='2026-10-07';
+  workDesc.value='別の日の打合せ';
+  rememberWorklogQuickDraft();
+  state.worklog.renderedDate='2026-10-08';
+  workDesc.value='';
+  workCategory.value='';
+  restoreWorklogQuickDraft();
+  expect('quick-input draft survives a date change',workDesc.value==='未保存の画面設計'&&workCategory.value==='設計'&&workStart.value==='09:15');
+  state.worklog.renderedDate='2026-10-07';
+  restoreWorklogQuickDraft();
+  expect('quick-input draft stays assigned to its own date',workDesc.value==='別の日の打合せ');
+  state.sessionToken='ANOTHER_SESSION';
+  workDesc.value='異なる社員の入力';
+  restoreWorklogQuickDraft();
+  expect('draft does not leak across sessions',workDesc.value==='異なる社員の入力');
+  state.sessionToken='SESSION_TOKEN';
+  state.worklog.renderedDate='2026-10-08';
+  restoreWorklogQuickDraft();
+  resetCalls();
+  state.busy=false;
+  saveQuickWorklog();
+  saveQuickWorklog();
+  expect('double click causes exactly one worklog save',apiCalls.length===1&&apiCalls[0].method==='saveWorklog');
+  invokeServerFailure({message:'QA expected failure'});
+  expect('failed worklog save releases busy state and retains draft',state.busy===false&&worklogQuickDrafts.has(worklogDraftKey('2026-10-08')));
+  clearWorklogQuickDrafts();
+  expect('worklog drafts clear on logout helper',worklogQuickDrafts.size===0&&state.worklog.renderedDate===null);
+
+
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
 
 

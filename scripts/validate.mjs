@@ -634,6 +634,21 @@ if(!app.includes("names.includes('worklog')&&typeof invalidateWorklogWindowCache
   console.error('Worklog cache invalidation or accessible quick-save layout missing.');
   failed=true;
 }
+for(const marker of [
+  'function jumpWorklogDate(date)',
+  'function rememberWorklogQuickDraft()',
+  'function restoreWorklogQuickDraft()',
+  'function clearWorklogQuickDrafts()',
+  "id='worklogDatePicker'",
+  "id='wlQuickSaveButton'",
+  'state.worklog.renderedDate=date'
+]){
+  if(!app.includes(marker)){console.error('v0.11.2 worklog date/draft marker missing: '+marker);failed=true;}
+}
+if(!styles.includes('.worklog-date-picker')||!app.includes('rememberWorklogQuickDraft();')||!app.includes('restoreWorklogQuickDraft();')){
+  console.error('Worklog date picker styling or render preservation is missing.');failed=true;
+}
+
 if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
     !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
   console.error('Nested workspace deep links must survive authenticated bootstrap.');

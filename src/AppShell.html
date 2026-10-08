@@ -3,10 +3,17 @@ function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
+    const previouslyFocused=document.activeElement;
+    const canRestoreFocus=state.page==='worklog'&&previouslyFocused&&['worklogPrevDate','worklogToday','worklogNextDate','worklogDatePicker',...WORKLOG_QUICK_FIELDS].includes(previouslyFocused.id);
+    const focusId=canRestoreFocus?previouslyFocused.id:'';
+    rememberWorklogQuickDraft();
     content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance'||state.page==='worklog');
     content.classList.toggle('attendance-one-screen',state.page==='attendance');
     content.classList.toggle('worklog-one-screen',state.page==='worklog');
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
+    if(state.page==='worklog')restoreWorklogQuickDraft();
+    else state.worklog.renderedDate=null;
+    if(focusId){const next=document.getElementById(focusId);if(next&&typeof next.focus==='function')next.focus({preventScroll:true})}
   };
   if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();
 }

@@ -330,6 +330,41 @@ function attendancePage(){
 }
 
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
+const WORKLOG_QUICK_FIELDS=['wlQuickProject','wlQuickCategory','wlQuickStart','wlQuickEnd','wlQuickDescription'];
+const worklogQuickDrafts=new Map();
+function worklogDraftKey(date){return worklogWindowIdentity()+'|'+date;}
+function rememberWorklogQuickDraft(){
+  const date=state.worklog.renderedDate;
+  if(!date||!state.sessionToken)return;
+  const first=document.getElementById('wlQuickProject');
+  if(!first||typeof first.closest!=='function'||!first.closest('.worklog-quick-card'))return;
+  const draft={};
+  for(const id of WORKLOG_QUICK_FIELDS){
+    const field=document.getElementById(id);
+    if(!field)return;
+    draft[id]=String(field.value||'');
+  }
+  const key=worklogDraftKey(date);
+  worklogQuickDrafts.delete(key);
+  worklogQuickDrafts.set(key,draft);
+  while(worklogQuickDrafts.size>20)worklogQuickDrafts.delete(worklogQuickDrafts.keys().next().value);
+}
+function restoreWorklogQuickDraft(){
+  const date=state.worklog.renderedDate;
+  if(!date||state.page!=='worklog')return;
+  const project=document.getElementById('wlQuickProject');
+  if(!project||typeof project.closest!=='function'||!project.closest('.worklog-quick-card'))return;
+  const draft=worklogQuickDrafts.get(worklogDraftKey(date));
+  if(!draft)return;
+  for(const id of WORKLOG_QUICK_FIELDS){
+    const field=document.getElementById(id);
+    if(!field||!(id in draft))continue;
+    if(id==='wlQuickProject'&&field.options&&!Array.from(field.options).some(option=>option.value===draft[id]))continue;
+    field.value=draft[id];
+  }
+}
+function clearWorklogQuickDrafts(){worklogQuickDrafts.clear();state.worklog.renderedDate=null;}
+
 const worklogWindowCache=new Map();
 
 let worklogWindowGeneration=0;
@@ -464,7 +499,13 @@ function loadWorklogs(options={}){
   });
 }
 
-function moveWorklogDate(n){state.worklog.date=addDays(state.worklog.date||state.data.today,n);loadWorklogs();}
+function jumpWorklogDate(date){
+  const next=String(date||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(next))return;
+  state.worklog.date=next;
+  loadWorklogs();
+}
+function moveWorklogDate(n){jumpWorklogDate(addDays(state.worklog.date||state.data.today,n));}
 function worklogTimeToMinutes(value){
   const p=String(value||'').split(':').map(Number);
   return p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])?p[0]*60+p[1]:0;
@@ -612,11 +653,12 @@ function worklogQuickForm(display){
       <label class='field full'><span>作業内容</span><textarea id='wlQuickDescription' rows='2' placeholder='実施した内容を入力'></textarea></label>
     </div>
     ${sampleFallback?`<div class='worklog-sample-note'>実プロジェクトを登録すると、このフォームからそのまま保存できます。</div>`:''}
-    <button class='primary-button worklog-quick-save' ${sampleFallback?'disabled':''} onclick='saveQuickWorklog()'>登録する</button>
+    <button id='wlQuickSaveButton' class='primary-button worklog-quick-save' ${sampleFallback||state.busy?'disabled':''} onclick='saveQuickWorklog()'>登録する</button>
   </section>`;
 }
 
 function saveQuickWorklog(){
+  if(state.busy)return;
   const get=id=>document.getElementById(id);
   const payload={
     id:'',
@@ -631,11 +673,20 @@ function saveQuickWorklog(){
   if(!payload.project){showToast('プロジェクトを選択してください');return}
   if(!payload.description){showToast('作業内容を入力してください');return}
   if(!payload.start||!payload.end){showToast('開始・終了時刻を入力してください');return}
+  if(worklogTimeToMinutes(payload.start)>=worklogTimeToMinutes(payload.end)){showToast('終了時刻は開始時刻より後にしてください');return}
   state.busy=true;
+  const actionButton=get('wlQuickSaveButton');
+  if(actionButton){actionButton.disabled=true;actionButton.setAttribute('aria-busy','true')}
   google.script.run.withSuccessHandler(function(){
-    state.busy=false;showToast('工数を登録しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
+    state.busy=false;
+    worklogQuickDrafts.delete(worklogDraftKey(payload.date));
+    if(state.worklog.renderedDate===payload.date)state.worklog.renderedDate=null;
+    showToast('工数を登録しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
   }).withFailureHandler(function(err){
-    state.busy=false;handleApiError(err,'工数を保存できませんでした');
+    state.busy=false;
+    const button=get('wlQuickSaveButton');
+    if(button){button.disabled=false;button.setAttribute('aria-busy','false')}
+    handleApiError(err,'工数を保存できませんでした');
   }).saveWorklog(state.sessionToken,payload);
 }
 
@@ -653,13 +704,15 @@ function worklogPage(){
   const attendanceMinutes=display.attendanceMinutes;
   const unentered=attendanceMinutes===null?null:Math.max(0,Number(attendanceMinutes||0)-Number(display.totalMinutes||0));
   const action=`<div class='worklog-head-actions'>${display.sample?`<span class='worklog-sample-chip'>表示確認用サンプル</span>`:''}<button class='primary-button compact' onclick='openWorklogModal()'>＋ 工数追加</button></div>`;
-  const toolbar=`<div class='worklog-datebar'><div><button class='secondary-button compact' onclick='moveWorklogDate(-1)'>‹</button><button class='secondary-button compact' onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class='secondary-button compact' onclick='moveWorklogDate(1)'>›</button><strong>${escapeHtml(fmtDate(date))}</strong></div>${display.sample?`<small>ダミーデータは保存されません</small>`:''}</div>`;
+  const toolbar=`<div class='worklog-datebar'><div><button id='worklogPrevDate' type='button' class='secondary-button compact' aria-label='前の日へ' title='前の日へ' onclick='moveWorklogDate(-1)'>‹</button><button id='worklogToday' type='button' class='secondary-button compact' onclick='jumpWorklogDate(state.data.today)'>今日</button><button id='worklogNextDate' type='button' class='secondary-button compact' aria-label='次の日へ' title='次の日へ' onclick='moveWorklogDate(1)'>›</button><label class='worklog-date-picker'><span>日付</span><input id='worklogDatePicker' type='date' aria-label='表示日を選択' value='${escapeHtml(date)}' onchange='jumpWorklogDate(this.value)'></label><strong>${escapeHtml(fmtDate(date))}</strong></div>${display.sample?`<small>ダミーデータは保存されません</small>`:''}</div>`;
   if(w.loadedDate!==date){
+    state.worklog.renderedDate=null;
     const status=w.error
       ? `<div class='worklog-load-error' role='alert'><strong>${escapeHtml(w.error)}</strong><button class='secondary-button compact' onclick="loadWorklogs({force:true})">再読込</button></div>`
       : "<div class='loading-card' aria-label='工数を読み込み中'></div>";
     return `<div class='worklog-dashboard'>${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}${toolbar}${status}</div>`;
   }
+  state.worklog.renderedDate=date;
   return `<div class='worklog-dashboard'>
     ${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}
     ${toolbar}
@@ -671,13 +724,13 @@ function worklogPage(){
     </div>
     <div class='worklog-main-grid'>
       <section class='worklog-panel worklog-timeline-card'>
-        <header><div><span class='eyebrow'>TODAY</span><h2>本日のタイムライン</h2></div>${unentered>0?`<span class='worklog-gap-badge'>未入力 ${formatMinutesClient(unentered)}</span>`:''}</header>
+        <header><div><span class='eyebrow'>TODAY</span><h2>${date===state.data.today?'本日のタイムライン':'選択日のタイムライン'}</h2></div>${unentered>0?`<span class='worklog-gap-badge'>未入力 ${formatMinutesClient(unentered)}</span>`:''}</header>
         ${worklogTimelineHtml(display)}
       </section>
       ${worklogQuickForm(display)}
     </div>
     <section class='worklog-panel worklog-list-card'>
-      <header><div><span class='eyebrow'>WORKLOG</span><h2>本日の工数一覧</h2></div><span class='muted'>${display.items.length}件 / 合計 ${formatMinutesClient(display.totalMinutes)}</span></header>
+      <header><div><span class='eyebrow'>WORKLOG</span><h2>${date===state.data.today?'本日の工数一覧':'選択日の工数一覧'}</h2></div><span class='muted'>${display.items.length}件 / 合計 ${formatMinutesClient(display.totalMinutes)}</span></header>
       ${worklogTableHtml(display)}
     </section>
   </div>`;
