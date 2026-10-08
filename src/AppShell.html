@@ -118,6 +118,7 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  invalidateScheduleWindowCache();
   state.data=data;
   state.workLocation=data.attendance.workLocation||'出社';
   state.schedule.date=data.today;

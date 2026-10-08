@@ -760,6 +760,30 @@ if(!styles.includes('.schedule-layout{display:grid')||
   console.error('v0.11.3 responsive hybrid schedule style missing.');failed=true;
 }
 
+
+// v0.11.4: calendar client cache, instant filters, employee highlighting and weekend contrast.
+for(const name of [
+  'function scheduleWindowIdentity()',
+  'function scheduleFilterEvents(events,employeeId,category)',
+  'function invalidateScheduleWindowCache()',
+  'const scheduleWindowCache=new Map()',
+  'const scheduleWindowRequests=new Map()',
+  "employeeId:'ALL',category:'ALL',includeEmployees:false",
+  'function toggleScheduleEmployeeHighlight(employeeId)',
+  'function scheduleHighlightClass(e)',
+  "class='schedule-person-button",
+  'schedule-sunday',
+  'schedule-saturday',
+  'schedule-holiday'
+]){
+  if(!app.includes(name)){console.error('v0.11.4 calendar performance/UX marker missing: '+name);failed=true;}
+}
+if(!styles.includes('.schedule-hybrid .month-day.schedule-holiday')||
+   !styles.includes('schedule-person-button.is-emphasized')||
+   !styles.includes('.schedule-hybrid .schedule-is-emphasized')){
+  console.error('Calendar contrast and employee emphasis CSS missing.');failed=true;
+}
+
 for (const schedulePrivacyMarker of [
   'function normalizeScheduleVisibility_(',
   'function canViewScheduleRow_(',

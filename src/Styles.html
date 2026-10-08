@@ -1071,3 +1071,57 @@ html[data-theme="dark"] .schedule-hybrid .month-day.day-off{background:color-mix
 .schedule-timeboard.schedule-all-day-only .schedule-all-day{min-height:40px;height:auto;overflow:visible}
 .schedule-lane-empty{color:var(--muted);font-size:11px;padding:5px}
 </style>
+
+
+<style>
+/* v0.11.4: clearly separated dates and actionable person-highlighting. */
+.schedule-hybrid .weekday-row{background:#e9eef6;border-bottom:2px solid #c5d2e2}
+.schedule-hybrid .weekday-row>div{border-right:1px solid #cad6e5;color:#475b77;font-weight:800}
+.schedule-hybrid .weekday-row>div:first-child{background:#ffe5e9;color:#ad2c44}
+.schedule-hybrid .weekday-row>div:last-child{background:#e4efff;color:#1b5ab5}
+.schedule-hybrid .month-grid{border-left:1px solid #c8d5e5}
+.schedule-hybrid .month-day{border-right:1px solid #c8d5e5;border-bottom:1px solid #c8d5e5;transition:background .12s,box-shadow .12s}
+.schedule-hybrid .month-day.schedule-sunday,.schedule-hybrid .month-day.schedule-holiday{background:#ffe8ed}
+.schedule-hybrid .month-day.schedule-saturday{background:#e5f0ff}
+.schedule-hybrid .month-day.schedule-adjusted-workday{background:#dff4e9}
+.schedule-hybrid .month-day.schedule-sunday .day-open,.schedule-hybrid .month-day.schedule-holiday .day-open{color:#b62945}
+.schedule-hybrid .month-day.schedule-saturday .day-open{color:#1c60b7}
+.schedule-hybrid .month-day.selected .day-open{color:#fff}
+.schedule-hybrid .month-day.outside{opacity:.72}
+.schedule-hybrid .month-day:hover:not(.selected){box-shadow:inset 0 0 0 2px rgba(39,113,219,.23);filter:brightness(.992)}
+.schedule-hybrid .schedule-interactive-legend{align-items:center;gap:7px}
+.schedule-hybrid .schedule-person-button{font:inherit;cursor:pointer;border:1px solid #cbd6e5;min-height:31px;transition:transform .12s,box-shadow .12s,background .12s}
+.schedule-hybrid .schedule-person-button:hover{transform:translateY(-1px);border-color:var(--person-color);box-shadow:0 2px 9px rgba(20,50,90,.08)}
+.schedule-hybrid .schedule-person-button.is-emphasized{outline:2px solid var(--person-color);outline-offset:1px;box-shadow:0 2px 12px rgba(23,56,104,.12)}
+.schedule-hybrid .schedule-highlight-hint{font-size:11px;color:var(--muted);margin-left:4px}
+.schedule-hybrid .schedule-highlight-reset{background:var(--surface);color:var(--blue);border:1px solid var(--line);border-radius:8px;min-height:30px;padding:0 9px;font-size:11px;font-weight:800;cursor:pointer}
+.schedule-hybrid .schedule-highlight-reset[hidden]{display:none}
+.schedule-hybrid .schedule-is-emphasized{position:relative;z-index:2;outline:2px solid var(--person-color,#1478ff);outline-offset:0;box-shadow:0 3px 13px rgba(16,45,99,.12)}
+.schedule-hybrid .schedule-is-dimmed{opacity:.30;filter:grayscale(.35)}
+.schedule-hybrid .schedule-event.schedule-is-dimmed,.schedule-hybrid .schedule-timed-event.schedule-is-dimmed{opacity:.29}
+.schedule-hybrid .schedule-person-button:focus-visible{outline:3px solid var(--person-color);outline-offset:2px}
+.schedule-refresh-status{padding:7px 10px;border:1px solid #bfd6f0;border-radius:9px;margin:-3px 0 11px;background:#edf6ff;color:#315c8d;font-size:12px}
+html[data-theme="dark"] .schedule-hybrid .weekday-row{background:#223044;border-color:#44556b}
+html[data-theme="dark"] .schedule-hybrid .weekday-row>div{border-color:#44556b;color:#d0dbea}
+html[data-theme="dark"] .schedule-hybrid .weekday-row>div:first-child{background:#412937;color:#ffb7c4}
+html[data-theme="dark"] .schedule-hybrid .weekday-row>div:last-child{background:#223b59;color:#c2ddff}
+html[data-theme="dark"] .schedule-hybrid .month-grid{border-color:#44556b}
+html[data-theme="dark"] .schedule-hybrid .month-day{border-color:#44556b}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-sunday,
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-holiday{background:#472c37}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-saturday{background:#263f5e}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-adjusted-workday{background:#244536}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-sunday .day-open,
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-holiday .day-open{color:#ffb4c2}
+html[data-theme="dark"] .schedule-hybrid .month-day.schedule-saturday .day-open{color:#add2ff}
+html[data-theme="dark"] .schedule-hybrid .month-day.selected .day-open{color:#fff}
+html[data-theme="dark"] .schedule-refresh-status{background:#193046;color:#cee4fa;border-color:#3c5d7e}
+@media(max-width:760px){
+  .schedule-hybrid .schedule-interactive-legend{flex-wrap:wrap}
+  .schedule-hybrid .schedule-highlight-hint{flex-basis:100%;margin-left:0}
+  .schedule-hybrid .month-day{border-color:#bbcbe1}
+}
+@media(prefers-reduced-motion:reduce){
+  .schedule-hybrid .schedule-person-button,.schedule-hybrid .month-day{transition:none}
+}
+</style>

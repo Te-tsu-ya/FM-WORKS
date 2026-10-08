@@ -754,14 +754,82 @@ function saveWorklogFromModal(id){var payload={id:id,date:document.getElementByI
 function deleteWorklogItem(id){openConfirmDialog('工数を削除','削除後も監査用データは保持されます。削除しますか？','削除',function(){google.script.run.withSuccessHandler(function(){showToast('工数を削除しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});}).withFailureHandler(function(err){handleApiError(err,'工数を削除できませんでした');}).deleteWorklog(state.sessionToken,id);},true);}
 
 
+
 function scheduleRange(){
   const s=state.schedule;
   if(s.view==='month'||s.view==='list')return monthGridRange(s.date);
   if(s.view==='week')return {start:startOfWeek(s.date),end:endOfWeek(s.date)};
   return {start:s.date,end:s.date};
 }
+const SCHEDULE_WINDOW_TTL=180000;
+const SCHEDULE_MAX_WINDOWS=6;
+const scheduleWindowCache=new Map();
+const scheduleWindowRequests=new Map();
+let scheduleWindowGeneration=0;
 let scheduleDateIndexSource=null;
 let scheduleDateIndex=null;
+function scheduleWindowIdentity(){
+  return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+}
+function scheduleWindowKey(identity,range){
+  return identity+'|'+range.start+'|'+range.end;
+}
+function scheduleWindowForDate(date){
+  const range=monthGridRange(date);
+  return scheduleWindowCache.get(scheduleWindowKey(scheduleWindowIdentity(),range))||null;
+}
+function scheduleFilterEvents(events,employeeId,category){
+  return (events||[]).filter(e=>
+    (employeeId==='ALL'||(Array.isArray(e.employeeIds)&&e.employeeIds.includes(employeeId)))&&
+    (category==='ALL'||e.category===category)
+  );
+}
+function scheduleLoaded(){
+  const s=state.schedule;
+  return !!(s.loadedKey&&s.loadedKey===scheduleCacheKey()&&s.loadedIdentity===scheduleWindowIdentity());
+}
+function applyScheduleWindow(entry){
+  if(!entry||entry.identity!==scheduleWindowIdentity()||entry.key!==scheduleCacheKey())return false;
+  const s=state.schedule;
+  s.rawEvents=entry.events;
+  s.events=scheduleFilterEvents(entry.events,s.employeeId,s.category);
+  s.companyDays=entry.companyDays;
+  s.loadedIdentity=entry.identity;
+  s.loadedKey=entry.key;
+  s.loading=false;
+  s.error='';
+  if(s.selectedEventId&&!s.events.some(e=>e.id===s.selectedEventId))s.selectedEventId=null;
+  markPageCache('schedule',entry.key);
+  return true;
+}
+function saveScheduleWindow(identity,range,data){
+  const entry={
+    identity,key:range.start+'|'+range.end,start:range.start,end:range.end,at:Date.now(),
+    events:Array.isArray(data&&data.events)?data.events:[],
+    companyDays:Array.isArray(data&&data.companyDays)?data.companyDays:[]
+  };
+  const cacheKey=scheduleWindowKey(identity,range);
+  scheduleWindowCache.delete(cacheKey);
+  scheduleWindowCache.set(cacheKey,entry);
+  while(scheduleWindowCache.size>SCHEDULE_MAX_WINDOWS)scheduleWindowCache.delete(scheduleWindowCache.keys().next().value);
+  return entry;
+}
+function invalidateScheduleWindowCache(){
+  scheduleWindowGeneration++;
+  scheduleWindowCache.clear();
+  scheduleWindowRequests.clear();
+  scheduleDateIndexSource=null;
+  scheduleDateIndex=null;
+  const s=state.schedule;
+  s.loadedKey='';
+  s.loadedIdentity='';
+  s.events=[];
+  s.rawEvents=[];
+  s.companyDays=[];
+  s.loading=false;
+  s.refreshing=false;
+  s.error='';
+}
 function eventsFor(date){
   const items=state.schedule.events||[];
   if(scheduleDateIndexSource!==items){
@@ -777,41 +845,65 @@ function eventsFor(date){
 }
 function companyDayMap(){return Object.fromEntries((state.schedule.companyDays||[]).map(d=>[d.date,d]));}
 function scheduleSelectedDate(){return state.schedule.selectedDate||state.schedule.date||state.data.today;}
-function scheduleLoaded(){return state.schedule.loadedKey===scheduleCacheKey();}
 function loadSchedule(options={}){
-  if(!state.sessionToken||!state.data||!state.schedule.date)return;
-  const range=scheduleRange(),key=scheduleCacheKey(),same=scheduleLoaded();
-  if(!options.force&&same&&cacheFresh('schedule',key))return;
-  const ticket=beginPageLoad('schedule',key);
-  if(!ticket)return;
-  state.schedule.loading=!same;
-  state.schedule.error='';
+  const s=state.schedule;
+  if(!state.sessionToken||!state.data||!s.date)return;
+  const identity=scheduleWindowIdentity(),range=monthGridRange(s.date),
+    displayKey=range.start+'|'+range.end,
+    requestKey=scheduleWindowKey(identity,range),
+    cached=scheduleWindowCache.get(requestKey);
+  let available=scheduleLoaded();
+  if(cached)available=applyScheduleWindow(cached);
+  if(cached&&!options.force&&Date.now()-cached.at<SCHEDULE_WINDOW_TTL){
+    s.refreshing=false;
+    if(!options.silent)renderPageIfActive('schedule');
+    return;
+  }
+  const generation=scheduleWindowGeneration;
+  const activeKey=generation+'|'+requestKey;
+  s.loading=!available;
+  s.refreshing=available;
+  s.error='';
   if(!options.silent)renderPageIfActive('schedule');
+  if(scheduleWindowRequests.has(activeKey))return;
+  if(scheduleWindowRequests.size>=2)return;
+  const ticket=beginPageLoad('scheduleWindow',activeKey);
+  if(!ticket)return;
+  const session=state.sessionToken;
+  scheduleWindowRequests.set(activeKey,{generation,identity,session,displayKey});
+  const finalize=()=>{
+    endPageLoad(ticket);
+    scheduleWindowRequests.delete(activeKey);
+  };
   google.script.run.withSuccessHandler(data=>{
-    endPageLoad(ticket);
-    if(scheduleCacheKey()!==key||!state.sessionToken)return;
-    state.schedule.events=Array.isArray(data&&data.events)?data.events:[];
-    state.schedule.companyDays=Array.isArray(data&&data.companyDays)?data.companyDays:[];
-    if(Array.isArray(data&&data.employees)&&data.employees.length)state.schedule.employees=data.employees;
-    state.schedule.loadedKey=key;
-    state.schedule.loading=false;
-    state.schedule.error='';
-    if(state.schedule.selectedEventId&&!state.schedule.events.some(e=>e.id===state.schedule.selectedEventId)){
-      state.schedule.selectedEventId=null;
+    finalize();
+    if(generation!==scheduleWindowGeneration||session!==state.sessionToken||identity!==scheduleWindowIdentity())return;
+    const stored=saveScheduleWindow(identity,range,data);
+    if(scheduleCacheKey()===displayKey){
+      applyScheduleWindow(stored);
+      s.refreshing=false;
+      if(Array.isArray(data&&data.employees)&&data.employees.length)s.employees=data.employees;
+      renderPageIfActive('schedule');
+      if(s.mobileDetailOpen)scheduleFocusDetail();
+    }else if(!scheduleLoaded()){
+      loadSchedule({silent:state.page!=='schedule'});
     }
-    markPageCache('schedule',key);
-    renderPageIfActive('schedule');
-    if(state.schedule.mobileDetailOpen)scheduleFocusDetail();
   }).withFailureHandler(err=>{
-    endPageLoad(ticket);
-    if(scheduleCacheKey()!==key)return;
-    state.schedule.loading=false;
-    state.schedule.error='予定を読み込めませんでした。通信状態を確認して再読込してください。';
-    if(!options.silent)handleApiError(err,'予定表の読み込みに失敗しました');
-    renderPageIfActive('schedule');
-  }).getScheduleBundle(state.sessionToken,{
-    start:range.start,end:range.end,employeeId:state.schedule.employeeId,
-    category:state.schedule.category,includeEmployees:false
+    finalize();
+    if(generation!==scheduleWindowGeneration||session!==state.sessionToken||identity!==scheduleWindowIdentity())return;
+    const isAuth=/AUTH_REQUIRED|SESSION_EXPIRED/.test(sessionErrorMessage(err));
+    if(isAuth){handleApiError(err,'予定表の認証に失敗しました');return;}
+    if(scheduleCacheKey()===displayKey){
+      s.loading=false;
+      s.refreshing=false;
+      if(!scheduleLoaded())s.error='予定を読み込めませんでした。通信状態を確認して再読込してください。';
+      if(!options.silent)showToast('予定表の最新データを取得できませんでした');
+      renderPageIfActive('schedule');
+    }else if(!scheduleLoaded()){
+      loadSchedule({silent:state.page!=='schedule'});
+    }
+  }).getScheduleBundle(session,{
+    start:range.start,end:range.end,employeeId:'ALL',category:'ALL',includeEmployees:false
   });
 }
 function changeScheduleView(view){
@@ -822,7 +914,6 @@ function changeScheduleView(view){
   s.date=s.selectedDate||s.date;
   s.selectedEventId=null;
   s.mobileDetailOpen=false;
-  renderPageIfActive('schedule');
   loadSchedule();
 }
 function moveSchedule(step){
@@ -833,27 +924,27 @@ function moveSchedule(step){
   s.selectedDate=s.date;
   s.selectedEventId=null;
   s.mobileDetailOpen=false;
-  renderPageIfActive('schedule');
   loadSchedule();
 }
 function scheduleToday(){scheduleJumpTo(state.data.today);}
 function scheduleJumpTo(date){
   const value=String(date||'');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||iso(parseIso(value))!==value)return;
-  state.schedule.date=value;
-  state.schedule.selectedDate=value;
-  state.schedule.selectedEventId=null;
-  state.schedule.mobileDetailOpen=false;
-  renderPageIfActive('schedule');
+  const s=state.schedule;
+  s.date=value;
+  s.selectedDate=value;
+  s.selectedEventId=null;
+  s.mobileDetailOpen=false;
   loadSchedule();
 }
 function setScheduleFilter(kind,value){
   if(!['employeeId','category'].includes(kind))return;
   const s=state.schedule;
   s[kind]=String(value||'ALL');
+  if(kind==='employeeId')s.highlightEmployeeId='ALL';
   s.selectedEventId=null;
   s.mobileDetailOpen=false;
-  renderPageIfActive('schedule');
+  if(scheduleLoaded())s.events=scheduleFilterEvents(s.rawEvents||[],s.employeeId,s.category);
   loadSchedule();
 }
 function scheduleIsSmallScreen(){
@@ -921,9 +1012,42 @@ function onScheduleDetailKeydown(e){
   if(e.shiftKey&&active===first){e.preventDefault();last.focus();}
   else if(!e.shiftKey&&active===last){e.preventDefault();first.focus();}
 }
+
+function scheduleHighlightClass(e){
+  const chosen=state.schedule.highlightEmployeeId||'ALL';
+  if(chosen==='ALL')return '';
+  return (e.employeeIds||[]).includes(chosen)?'schedule-is-emphasized':'schedule-is-dimmed';
+}
+function scheduleEmployeeData(e){
+  return escapeHtml((e.employeeIds||[]).join(','));
+}
+function toggleScheduleEmployeeHighlight(employeeId){
+  const s=state.schedule,employees=s.employees.length?s.employees:(state.data&&state.data.employees||[]),
+    id=String(employeeId||'ALL');
+  if(id!=='ALL'&&!employees.some(x=>x.employeeId===id))return;
+  s.highlightEmployeeId=id==='ALL'||s.highlightEmployeeId===id?'ALL':id;
+  const chosen=s.highlightEmployeeId;
+  const root=document.getElementById('content');
+  if(!root||state.page!=='schedule')return;
+  root.querySelectorAll('[data-schedule-employee-ids]').forEach(el=>{
+    const ids=String(el.dataset.scheduleEmployeeIds||'').split(',').filter(Boolean);
+    el.classList.toggle('schedule-is-emphasized',chosen!=='ALL'&&ids.includes(chosen));
+    el.classList.toggle('schedule-is-dimmed',chosen!=='ALL'&&!ids.includes(chosen));
+  });
+  root.querySelectorAll('.schedule-person-button[data-employee-id]').forEach(el=>{
+    const selected=chosen===el.dataset.employeeId;
+    el.classList.toggle('is-emphasized',selected);
+    el.setAttribute('aria-pressed',String(selected));
+  });
+  const label=employees.find(e=>e.employeeId===chosen);
+  const status=document.getElementById('scheduleHighlightStatus');
+  if(status)status.textContent=label?shortPersonName(label.name)+'さんの予定を強調中':'名前をクリックすると予定を強調します';
+  const reset=document.getElementById('scheduleHighlightReset');
+  if(reset)reset.hidden=chosen==='ALL';
+}
 function eventChip(e){
   const person=eventPeople(e)[0]||{id:'unknown'},color=personColor(person.id);
-  return `<button type='button' class='schedule-event' style='--person-color:${color.line};--person-bg:${color.bg};--category-color:${categoryColor(e.category)}' data-event-id='${escapeHtml(e.id)}' onclick="event.stopPropagation();selectScheduleEvent(this.dataset.eventId)" title='${escapeHtml(e.title)}'>
+  return `<button type='button' class='schedule-event ${scheduleHighlightClass(e)}' data-schedule-employee-ids='${scheduleEmployeeData(e)}' style='--person-color:${color.line};--person-bg:${color.bg};--category-color:${categoryColor(e.category)}' data-event-id='${escapeHtml(e.id)}' onclick="event.stopPropagation();selectScheduleEvent(this.dataset.eventId)" title='${escapeHtml(e.title)}'>
     <span class='schedule-event-time'>${e.allDay?'終日':escapeHtml(e.start||'')}</span>
     <strong class='schedule-event-title'>${escapeHtml(e.title)}</strong>
     <span class='schedule-event-owner'>${eventPersonAvatar(e)}<b>${escapeHtml(eventPeopleLabel(e))}</b></span>
@@ -964,7 +1088,10 @@ function monthView(){
   for(let date=range.start;;date=addDays(date,1)){
     const dt=parseIso(date),ev=eventsFor(date),day=map[date],
       off=day&&!day.working,selectedDay=date===selected;
-    cells.push(`<div class='month-day ${dt.getMonth()!==currentMonth?'outside':''} ${isToday(date)?'today':''} ${off?'day-off':''} ${selectedDay?'selected':''}' data-date='${date}' onclick="selectScheduleDay(this.dataset.date)">
+    const holiday=!!(day&&!day.working&&day.type!=='週末');
+    const weekend=dt.getDay()===0?'schedule-sunday':dt.getDay()===6?'schedule-saturday':'';
+    const dayTone=holiday?'schedule-holiday':day&&day.working&&weekend?'schedule-adjusted-workday':weekend;
+    cells.push(`<div class='month-day ${dt.getMonth()!==currentMonth?'outside':''} ${isToday(date)?'today':''} ${off?'day-off':''} ${dayTone} ${selectedDay?'selected':''}' data-date='${date}' onclick="selectScheduleDay(this.dataset.date)">
       <div class='day-head'>
         <button type='button' class='day-open' data-date='${date}' aria-pressed='${selectedDay}' aria-label='${escapeHtml(fmtDate(date))}の予定${ev.length}件を表示' onclick='event.stopPropagation();selectScheduleDay(this.dataset.date)'>${dt.getDate()}</button>
         ${day&&day.type!=='通常勤務'?`<em class='day-type ${day.working?'workday':'offday'}'>${escapeHtml(day.name||day.type)}</em>`:''}
@@ -1029,7 +1156,7 @@ function scheduleTimelineEvent(item,bounds){
   const e=item.event,p=eventPeople(e)[0]||{id:'unknown'},color=personColor(p.id),
     top=(item.start-bounds.start*60)*.8,height=Math.max(28,(item.end-item.start)*.8-3),
     left=100*item.column/item.columns,width=100/item.columns;
-  return `<button type='button' class='schedule-timed-event' data-event-id='${escapeHtml(e.id)}'
+  return `<button type='button' class='schedule-timed-event ${scheduleHighlightClass(e)}' data-schedule-employee-ids='${scheduleEmployeeData(e)}' data-event-id='${escapeHtml(e.id)}'
     style='top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--person-color:${color.line};--person-bg:${color.bg}'
     onclick='selectScheduleEvent(this.dataset.eventId)' title='${escapeHtml(e.title)}'>
     <small>${escapeHtml(e.start||'--:--')}${e.end?' - '+escapeHtml(e.end):''}</small>
@@ -1048,7 +1175,7 @@ function scheduleTimeboard(columns,bounds,kind){
       const allDay=col.events.filter(e=>e.allDay||scheduleMinutes(e.start)===null);
       return `<section class='schedule-time-lane'>
         <header><strong>${escapeHtml(col.label)}</strong><small>${col.events.length}件${col.note?' / '+escapeHtml(col.note):''}</small></header>
-        <div class='schedule-all-day'>${allDay.length?allDay.map(e=>`<button type='button' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>終日 · ${escapeHtml(e.title)}</button>`).join(''):(!hasTimed?`<small class='schedule-lane-empty'>予定なし</small>`:'')}</div>
+        <div class='schedule-all-day'>${allDay.length?allDay.map(e=>`<button type='button' class='schedule-all-day-item ${scheduleHighlightClass(e)}' data-schedule-employee-ids='${scheduleEmployeeData(e)}' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>終日 · ${escapeHtml(e.title)}</button>`).join(''):(!hasTimed?`<small class='schedule-lane-empty'>予定なし</small>`:'')}</div>
         <div class='schedule-time-track' style='height:${height}px'>
           ${scheduleTimelineLayout(col.events,bounds).map(item=>scheduleTimelineEvent(item,bounds)).join('')}
         </div>
@@ -1100,7 +1227,7 @@ function dayView(){
 function listView(){
   const events=state.schedule.events||[];
   return `<div class='schedule-list'><div class='schedule-list-head'><span>日付</span><span>時間</span><span>予定</span><span>担当・参加者</span><span>分類</span></div>
-    ${events.length?events.map(e=>`<button type='button' class='schedule-list-row' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>
+    ${events.length?events.map(e=>`<button type='button' class='schedule-list-row ${scheduleHighlightClass(e)}' data-schedule-employee-ids='${scheduleEmployeeData(e)}' data-event-id='${escapeHtml(e.id)}' onclick='selectScheduleEvent(this.dataset.eventId)'>
       <span><strong>${escapeHtml(fmtDate(e.date))}</strong></span>
       <span>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span>
       <span><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</span>
@@ -1113,7 +1240,7 @@ function scheduleDetailPanel(){
     events=eventsFor(date),selected=events.find(e=>e.id===s.selectedEventId),
     small=scheduleIsSmallScreen(),expanded=!!(small&&s.mobileDetailOpen);
   const companyText=day?escapeHtml(day.name||day.type):'会社カレンダー未登録';
-  const detail=selected?`<section class='schedule-selected-event' aria-label='選択した予定の詳細'>
+  const detail=selected?`<section class='schedule-selected-event ${scheduleHighlightClass(selected)}' data-schedule-employee-ids='${scheduleEmployeeData(selected)}' aria-label='選択した予定の詳細'>
     <div class='schedule-detail-selected-title'><span class='schedule-category-badge' style='--category-color:${categoryColor(selected.category)}'>${escapeHtml(selected.category)}</span><strong>${escapeHtml(selected.title)}</strong></div>
     <dl>
       <div><dt>時間</dt><dd>${selected.allDay?'終日':escapeHtml(selected.start||'--:--')+(selected.end?' ～ '+escapeHtml(selected.end):'')}</dd></div>
@@ -1125,7 +1252,7 @@ function scheduleDetailPanel(){
   </section>`:''; 
   const entries=events.length?events.map(e=>{
     const p=eventPeople(e)[0]||{id:'unknown'},tone=personColor(p.id),chosen=selected&&selected.id===e.id;
-    return `<button type='button' class='schedule-detail-entry ${chosen?'is-selected':''}' aria-pressed='${!!chosen}' data-event-id='${escapeHtml(e.id)}'
+    return `<button type='button' class='schedule-detail-entry ${chosen?'is-selected':''} ${scheduleHighlightClass(e)}' aria-pressed='${!!chosen}' data-schedule-employee-ids='${scheduleEmployeeData(e)}' data-event-id='${escapeHtml(e.id)}'
        style='--person-color:${tone.line};--person-bg:${tone.bg}' onclick='selectScheduleEvent(this.dataset.eventId)'>
        <span class='schedule-detail-entry-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')+(e.end?' - '+escapeHtml(e.end):'')}</span>
        <strong>${escapeHtml(e.title)}</strong>
@@ -1162,9 +1289,10 @@ function schedulePage(){
   const detail=unavailable?'':scheduleDetailPanel();
   const action=`<button type='button' id='scheduleOpenDetails' class='secondary-button compact schedule-mobile-open-detail' onclick='selectScheduleDay(scheduleSelectedDate())'>選択日の予定を見る</button>`;
   return `<div class='schedule-hybrid'>
-    ${pageHead('予定表','社員名を予定カードに直接表示し、予定と会社カレンダーを1か所で確認します。',action)}
+    ${pageHead('予定表','予定の表示切替と社員の強調を、通信待ちなしで操作できます。',action)}
     ${scheduleWorkspaceTabs('schedule')}
     ${scheduleToolbar()}
+    ${s.refreshing?`<div class='schedule-refresh-status' role='status'>最新の予定を確認しています。操作はそのまま続けられます。</div>`:''}
     ${schedulePeopleLegend()}
     <div class='schedule-layout'>
       <div class='schedule-surface'>${body}</div>
