@@ -276,6 +276,7 @@ const result=vm.runInContext(`
   expect('worklog mutation invalidates all cached windows',worklogCachedWindow('2026-10-08')===null&&worklogCachedWindow('2026-09-08')===null);
 
   // Keep edits intact while switching dates and while a cached day is rendered.
+  state.page='worklog';
   state.worklog.date='2026-10-08';
   state.worklog.loadedDate='2026-10-08';
   const worklogWithPicker=worklogPage();
@@ -319,6 +320,7 @@ const result=vm.runInContext(`
   expect('failed worklog save releases busy state and retains draft',state.busy===false&&worklogQuickDrafts.has(worklogDraftKey('2026-10-08')));
   clearWorklogQuickDrafts();
   expect('worklog drafts clear on logout helper',worklogQuickDrafts.size===0&&state.worklog.renderedDate===null);
+  state.page='home';
 
 
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
