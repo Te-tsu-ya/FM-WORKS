@@ -432,23 +432,113 @@ function refreshAppData(callback){
   }).withFailureHandler(function(err){handleApiError(err,'最新情報を取得できませんでした');}).getInitialData(state.sessionToken);
 }
 
+// In-memory, session-scoped month result cache. Never put employee summaries in localStorage.
+const MONTHLY_RESULT_TTL=120000;
+const MONTHLY_CACHE_MAX=10;
+const monthlyResultCache=new Map();
+const monthlyPendingRequests=new Map();
+let monthlyResultGeneration=0;
+function monthlyResultKey_(month,employeeId){
+  const owner=state.data&&state.data.user&&state.data.user.employeeId||'';
+  return String(state.sessionToken||'')+'|'+String(owner)+'|'+String(month||'')+'|'+String(employeeId||'');
+}
+function monthlyCachedResult_(month,employeeId){
+  return monthlyResultCache.get(monthlyResultKey_(month,employeeId))||null;
+}
+function monthlyRememberResult_(key,data){
+  monthlyResultCache.delete(key);
+  monthlyResultCache.set(key,{data:data,at:Date.now()});
+  while(monthlyResultCache.size>MONTHLY_CACHE_MAX)monthlyResultCache.delete(monthlyResultCache.keys().next().value);
+}
+function invalidateMonthlyResultCache(){
+  monthlyResultGeneration++;
+  monthlyResultCache.clear();
+  const cancelled=[...monthlyPendingRequests.values()];
+  monthlyPendingRequests.clear();
+  // Release page-load tickets so a mutation can start a fresh request immediately.
+  cancelled.forEach(request=>request.callbacks.forEach(fn=>fn(new Error('CACHE_INVALIDATED'),null,false)));
+  state.monthly.data=null;
+  state.monthly.loadedKey='';
+  state.monthly.loading=false;
+  if(state.attendancePreview){
+    state.attendancePreview.at=0;
+    state.attendancePreview.data=null;
+    state.attendancePreview.key='';
+  }
+}
+// Coalesce duplicate GAS requests from Attendance and Monthly for the SAME month/employee.
+function requestMonthlyResult_(month,employeeId,callback,options={}){
+  const key=monthlyResultKey_(month,employeeId),cached=monthlyResultCache.get(key);
+  if(cached&&!options.force&&(Date.now()-cached.at)<MONTHLY_RESULT_TTL){
+    callback(null,cached.data,true);
+    return;
+  }
+  const pending=monthlyPendingRequests.get(key);
+  if(pending){
+    pending.callbacks.push(callback);
+    return;
+  }
+  const request={callbacks:[callback],generation:monthlyResultGeneration,session:state.sessionToken};
+  monthlyPendingRequests.set(key,request);
+  const started=Date.now();
+  google.script.run.withSuccessHandler(data=>{
+    if(monthlyPendingRequests.get(key)!==request)return;
+    monthlyPendingRequests.delete(key);
+    if(request.generation!==monthlyResultGeneration||request.session!==state.sessionToken)return;
+    monthlyRememberResult_(key,data);
+    if(console&&console.debug)console.debug('[FM PERF] monthly API '+(Date.now()-started)+'ms');
+    request.callbacks.forEach(fn=>fn(null,data,false));
+  }).withFailureHandler(err=>{
+    if(monthlyPendingRequests.get(key)!==request)return;
+    monthlyPendingRequests.delete(key);
+    if(request.generation!==monthlyResultGeneration||request.session!==state.sessionToken)return;
+    request.callbacks.forEach(fn=>fn(err,null,false));
+  }).getMonthlySummary(request.session,month,employeeId);
+}
 function loadMonthly(options={}){
+  if(!state.data||!state.sessionToken)return;
   if(!state.monthly.yearMonth)state.monthly.yearMonth=state.data.today.slice(0,7);
   if(!state.monthly.employeeId)state.monthly.employeeId=state.data.user.employeeId;
-  const key=monthlyCacheKey();
-  if(!options.force&&cacheFresh('monthly',key))return;
-  const ticket=beginPageLoad('monthly',key);if(!ticket)return;
-  const hasCurrent=cacheHas('monthly',key);
-  state.monthly.loading=!hasCurrent;
-  if(!options.silent)renderPageIfActive('monthly');
-  google.script.run.withSuccessHandler(function(data){
+  const month=state.monthly.yearMonth,employeeId=state.monthly.employeeId,key=monthlyResultKey_(month,employeeId);
+  const cached=monthlyResultCache.get(key);
+  const hasCurrent=state.monthly.loadedKey===key&&!!state.monthly.data;
+  const isFresh=!!(cached&&(Date.now()-cached.at)<MONTHLY_RESULT_TTL);
+  if(cached){
+    state.monthly.data=cached.data;
+    state.monthly.loadedKey=key;
+    state.monthly.loading=false;
+    state.monthly.error='';
+    if(!hasCurrent&&state.page==='monthly')renderPageIfActive('monthly');
+    if(isFresh&&!options.force)return;
+  }else if(!hasCurrent){
+    state.monthly.data=null;
+    state.monthly.loadedKey='';
+    state.monthly.loading=true;
+    state.monthly.error='';
+  }
+  const ticket=beginPageLoad('monthly',key);
+  if(!ticket){
+    if(!options.silent&&!cached&&state.page==='monthly')renderPageIfActive('monthly');
+    return;
+  }
+  state.monthly.loading=!cached&&!hasCurrent;
+  if(!options.silent&&state.page==='monthly')renderPageIfActive('monthly');
+  requestMonthlyResult_(month,employeeId,(err,data)=>{
     endPageLoad(ticket);
-    if(monthlyCacheKey()!==key)return;
-    state.monthly.data=data;state.monthly.loading=false;markPageCache('monthly',key);renderPageIfActive('monthly');
-  }).withFailureHandler(function(err){
-    endPageLoad(ticket);state.monthly.loading=false;
-    if(!handleApiError(err,'月次集計を読み込めませんでした')&&!options.silent)renderPageIfActive('monthly');
-  }).getMonthlySummary(state.sessionToken,state.monthly.yearMonth,state.monthly.employeeId);
+    if(monthlyResultKey_(state.monthly.yearMonth,state.monthly.employeeId)!==key)return;
+    state.monthly.loading=false;
+    if(err&&err.message==='CACHE_INVALIDATED')return;
+    if(err){
+      state.monthly.error='最新の月次データを取得できませんでした。';
+      if(!handleApiError(err,'月次集計を読み込めませんでした'))renderPageIfActive('monthly');
+      return;
+    }
+    state.monthly.data=data;
+    state.monthly.loadedKey=key;
+    state.monthly.error='';
+    markPageCache('monthly',monthlyCacheKey());
+    renderPageIfActive('monthly');
+  },{force:!!options.force});
 }
 function moveMonthly(n){var p=state.monthly.yearMonth.split('-').map(Number),d=new Date(p[0],p[1]-1+n,1);state.monthly.yearMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');loadMonthly();}
 function monthlyStatusTone(x){
@@ -509,13 +599,17 @@ function monthlyPage(){
   const m=state.monthly,d=m.data,p=state.data.permissions||{},teamView=!!p.monthlyTeamView,admin=!!p.adminConsole,employees=state.data.employees||[];
   const visibleEmployees=admin?employees:teamView?employees.filter(e=>e.employeeId===state.data.user.employeeId||e.managerId===state.data.user.employeeId):employees.filter(e=>e.employeeId===state.data.user.employeeId);
   if(!visibleEmployees.some(e=>e.employeeId===state.monthly.employeeId))state.monthly.employeeId=state.data.user.employeeId;
-  const selector=teamView?`<select class='filter-select' onchange="state.monthly.employeeId=this.value;loadMonthly({force:true})">${visibleEmployees.map(e=>`<option value='${e.employeeId}' ${state.monthly.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select>`:'';
+  const selector=teamView?`<select class='filter-select' onchange="state.monthly.employeeId=this.value;loadMonthly()">${visibleEmployees.map(e=>`<option value='${e.employeeId}' ${state.monthly.employeeId===e.employeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('')}</select>`:'';
   const closeStatus=d&&d.closeStatus?d.closeStatus:{closed:false,status:'OPEN'};
   const closeButton=admin&&d?(closeStatus.closed?`<button class='secondary-button compact' onclick='reopenMonthly()'>締め解除</button>`:`<button class='secondary-button compact' onclick='closeMonthly()'>月次締め</button>`):'';
   const actions=`<div class='button-row monthly-actions'>${selector}${closeButton}<button class='secondary-button compact' onclick='downloadMonthlyExport()'>Excel</button>${admin?`<button class='primary-button compact' onclick='downloadTeamMonthlyExport()'>給与対象を一括出力</button>`:''}</div>`;
-  const toolbar=`<div class='monthly-toolbar'><div><button class='secondary-button compact' onclick='moveMonthly(-1)'>‹</button><button class='secondary-button compact' onclick="state.monthly.yearMonth=state.data.today.slice(0,7);loadMonthly({force:true})">今月</button><button class='secondary-button compact' onclick='moveMonthly(1)'>›</button><strong>${escapeHtml(state.monthly.yearMonth||state.data.today.slice(0,7))}</strong></div></div>`;
+  const toolbar=`<div class='monthly-toolbar'><div><button class='secondary-button compact' onclick='moveMonthly(-1)'>‹</button><button class='secondary-button compact' onclick="state.monthly.yearMonth=state.data.today.slice(0,7);loadMonthly()">今月</button><button class='secondary-button compact' onclick='moveMonthly(1)'>›</button><button class='secondary-button compact' onclick="loadMonthly({force:true})" aria-label="月次を再読込">更新</button><strong>${escapeHtml(state.monthly.yearMonth||state.data.today.slice(0,7))}</strong></div></div>`;
   const workspaceActive=m.view==='list'?'history':'monthly';
-  if((m.loading&&!cacheHas('monthly',monthlyCacheKey()))||!d)return pageHead('勤怠','月ごとの勤怠を確認します。',actions)+attendanceWorkspaceTabs(workspaceActive)+toolbar+'<div class="loading-card"></div>';
+  const expectedKey=monthlyResultKey_(state.monthly.yearMonth,state.monthly.employeeId);
+  if(!d||m.loadedKey!==expectedKey||d.yearMonth!==state.monthly.yearMonth||!d.employee||d.employee.employeeId!==state.monthly.employeeId){
+    return pageHead('勤怠','月ごとの勤怠を確認します。',actions)+attendanceWorkspaceTabs(workspaceActive)+toolbar+
+      (m.error?'<div class="card" role="alert">'+escapeHtml(m.error)+' <button type="button" class="secondary-button" onclick="loadMonthly({force:true})">再読込</button></div>':'<div class="loading-card" role="status" aria-label="月次データを読込中"></div>');
+  }
   const closeBanner=`<div class='monthly-close-banner ${closeStatus.closed?'closed':'open'}'><div><span class='badge ${closeStatus.closed?'success':'warning'}'>${closeStatus.closed?'締め済み':'未締め'}</span><strong>${escapeHtml(d.yearMonth)} 月次</strong></div><small>${closeStatus.closed?escapeHtml((closeStatus.closedAt||'')+' / '+(closeStatus.closedBy||'')):'管理者が締めるまで編集可能です。'}</small></div>`;
   const body=m.view==='list'?monthlyListView(d):monthlyCalendarView(d);
   return `<div class='single-screen-layout monthly-screen'>${pageHead('勤怠',escapeHtml(d.employee.name)+' / '+escapeHtml(d.yearMonth)+' の勤怠確認',actions)}${attendanceWorkspaceTabs(workspaceActive)}${toolbar}${monthlyReviewPanel(d)}${monthlySummaryStrip(d)}${laborRulePanel(d)}${closeBanner}<div class='monthly-main'>${body}<div class='monthly-legend'><span><i class='ok'></i>正常</span><span><i class='leave'></i>休暇</span><span><i class='warn'></i>工数差異</span><span><i class='danger'></i>要確認</span></div></div></div>`;

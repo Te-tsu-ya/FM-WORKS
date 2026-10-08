@@ -120,6 +120,8 @@ function acceptLogin(result){
 function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
   resetFinanceUi();
+  invalidateMonthlyResultCache();
+  state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   state.officeUi={selected:'documents'};
   state.authAdmin=null;
   state.adminUi=createAdminUiState();
@@ -133,6 +135,10 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.schedule.date=data.today;
   state.schedule.selectedDate=data.today;
   state.schedule.employees=data.employees||[];
+  // Never carry previous employee's monthly selection across a new login.
+  state.monthly.yearMonth=data.today.slice(0,7);
+  state.monthly.employeeId=data.user.employeeId;
+  state.monthly.view='calendar';
   state.company.year=parseIso(data.today).getFullYear();
   const requested=(location.hash||'#home').slice(1);
   const nestedRoutes=['monthly','companyCalendar','people'];
@@ -155,9 +161,9 @@ function mountAuthenticatedApp(data,mustChangePin){
 
   if(state.page==='home')loadHomeOverview();
   if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
-  if(state.page==='schedule')loadSchedule();
+  if(state.page==='schedule')loadSchedule({silent:true});
   if(state.page==='companyCalendar')loadCompanyCalendar();
-  if(state.page==='worklog')loadWorklogs();
+  if(state.page==='worklog')loadWorklogs({silent:true});
   if(state.page==='requests')loadRequests();
   if(state.page==='finance')loadFinanceOverview();
   if(state.page==='monthly')loadMonthly();

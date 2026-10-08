@@ -1,23 +1,34 @@
 <script>
 function loadAttendancePreview(options={}){
   if(!state.data||!state.sessionToken)return;
-  const key=state.data.today.slice(0,7)+'|'+state.data.user.employeeId;
+  const month=state.data.today.slice(0,7),employeeId=state.data.user.employeeId;
+  const key=month+'|'+employeeId,session=state.sessionToken;
   const preview=state.attendancePreview||(state.attendancePreview={data:null,key:'',at:0,loading:false,error:''});
   if(!options.force&&preview.data&&preview.key===key&&(Date.now()-Number(preview.at||0))<120000)return;
-  const ticket=beginPageLoad('attendancePreview',key);if(!ticket)return;
+  // The attendance monthly preview and the detailed monthly tab share one GAS result.
+  const cache=monthlyCachedResult_(month,employeeId);
+  if(!options.force&&cache&&(Date.now()-cache.at)<MONTHLY_RESULT_TTL){
+    preview.data=cache.data;preview.key=key;preview.at=cache.at;
+    preview.loading=false;preview.error='';renderPageIfActive('attendance');
+    return;
+  }
+  const ticket=beginPageLoad('attendancePreview',session+'|'+key);if(!ticket)return;
   preview.loading=!(preview.data&&preview.key===key);
   preview.error='';
-  google.script.run.withSuccessHandler(data=>{
+  requestMonthlyResult_(month,employeeId,(err,data)=>{
     endPageLoad(ticket);
     const currentKey=state.data?state.data.today.slice(0,7)+'|'+state.data.user.employeeId:'';
-    if(currentKey!==key)return;
-    preview.data=data;preview.key=key;preview.at=Date.now();preview.loading=false;preview.error='';
+    if(session!==state.sessionToken||currentKey!==key)return;
+    preview.loading=false;
+    if(err&&err.message==='CACHE_INVALIDATED')return;
+    if(err){
+      preview.error='月間情報を読み込めませんでした。';
+      handleApiError(err,'勤怠の月間情報を読み込めませんでした');
+    }else{
+      preview.data=data;preview.key=key;preview.at=Date.now();preview.error='';
+    }
     renderPageIfActive('attendance');
-  }).withFailureHandler(err=>{
-    endPageLoad(ticket);preview.loading=false;preview.error='月間情報を読み込めませんでした。';
-    handleApiError(err,'勤怠の月間情報を読み込めませんでした');
-    renderPageIfActive('attendance');
-  }).getMonthlySummary(state.sessionToken,state.data.today.slice(0,7),state.data.user.employeeId);
+  },{force:!!options.force});
 }
 
 function invalidateAttendancePreview(){
@@ -132,9 +143,9 @@ function openAttendanceMonthly(view){
   state.monthly.yearMonth=state.data.today.slice(0,7);
   state.monthly.employeeId=state.data.user.employeeId;
   state.monthly.view=view==='list'?'list':'calendar';
-  if(preview){
+  if(preview&&!preview._sample){
     state.monthly.data=preview;
-    markPageCache('monthly',monthlyCacheKey());
+    state.monthly.loadedKey=monthlyResultKey_(state.monthly.yearMonth,state.monthly.employeeId);
   }
   navigate('monthly');
 }
@@ -147,7 +158,7 @@ function openAttendancePreviewDay(date){
   state.monthly.employeeId=state.data.user.employeeId;
   state.monthly.view='calendar';
   state.monthly.data=preview;
-  markPageCache('monthly',monthlyCacheKey());
+  state.monthly.loadedKey=monthlyResultKey_(state.monthly.yearMonth,state.monthly.employeeId);
   navigate('monthly');
   setTimeout(()=>openMonthlyDay(date),0);
 }
@@ -370,6 +381,9 @@ const worklogWindowCache=new Map();
 let worklogWindowGeneration=0;
 
 let worklogActiveRequest=null;
+// Limit concurrency, but do not let an obsolete range block the currently selected range.
+const worklogWindowRequests=new Map();
+const WORKLOG_MAX_CONCURRENT_READS=2;
 
 function worklogWindowIdentity(){
   const employeeId=state.data&&state.data.user&&state.data.user.employeeId||'';
@@ -421,6 +435,9 @@ function worklogShowCachedDay(date,entry){
 function invalidateWorklogWindowCache(){
   worklogWindowGeneration++;
   worklogWindowCache.clear();
+  worklogWindowRequests.forEach(request=>endPageLoad(request.ticket));
+  worklogWindowRequests.clear();
+  worklogActiveRequest=null;
   state.worklog.loadedDate=null;
 }
 
@@ -431,8 +448,9 @@ function loadWorklogs(options={}){
   const cached=worklogCachedWindow(date);
   const fresh=!!(cached&&(Date.now()-cached.at)<120000);
   if(cached){
+    const switchedDay=state.worklog.loadedDate!==date;
     worklogShowCachedDay(date,cached);
-    if(!options.silent)renderPageIfActive('worklog');
+    if(switchedDay||!options.silent)renderPageIfActive('worklog');
     if(fresh&&!options.force)return;
   }else{
     state.worklog.loadedDate=null;
@@ -442,19 +460,26 @@ function loadWorklogs(options={}){
     state.worklog.error='';
     if(!options.silent)renderPageIfActive('worklog');
   }
-  // Serialize GAS reads: rapid clicks only change the selected date,
-  // not the number of queued server calls.
-  if(worklogActiveRequest)return;
   const range=worklogWindowRange(date);
   const generation=worklogWindowGeneration;
-  const ticket=beginPageLoad('worklogWindow',identity+'|'+range.start+'|'+range.end);
+  const requestKey=identity+'|'+range.start+'|'+range.end;
+  if(worklogWindowRequests.has(requestKey))return;
+  // A second distinct range may load while the previous one is still running.
+  // Rapid repeated clicks inside the same range remain a single request.
+  if(worklogWindowRequests.size>=WORKLOG_MAX_CONCURRENT_READS)return;
+  const ticket=beginPageLoad('worklogWindow',generation+'|'+requestKey);
   if(!ticket)return;
-  const request={ticket,identity,generation,range};
+  const request={ticket,identity,generation,range,key:requestKey};
+  worklogWindowRequests.set(requestKey,request);
   worklogActiveRequest=request;
+  const finalize=()=>{
+    endPageLoad(ticket);
+    if(worklogWindowRequests.get(requestKey)===request)worklogWindowRequests.delete(requestKey);
+    if(worklogActiveRequest===request)worklogActiveRequest=worklogWindowRequests.values().next().value||null;
+  };
   const started=Date.now();
   google.script.run.withSuccessHandler(data=>{
-    endPageLoad(ticket);
-    if(worklogActiveRequest===request)worklogActiveRequest=null;
+    finalize();
     const currentIdentity=worklogWindowIdentity();
     if(identity!==currentIdentity)return;
     if(generation!==worklogWindowGeneration){
@@ -475,8 +500,7 @@ function loadWorklogs(options={}){
       loadWorklogs();
     }
   }).withFailureHandler(err=>{
-    endPageLoad(ticket);
-    if(worklogActiveRequest===request)worklogActiveRequest=null;
+    finalize();
     if(identity!==worklogWindowIdentity())return;
     if(generation!==worklogWindowGeneration){
       if(state.page==='worklog')loadWorklogs({force:true});
@@ -854,10 +878,11 @@ function loadSchedule(options={}){
     requestKey=scheduleWindowKey(identity,range),
     cached=scheduleWindowCache.get(requestKey);
   let available=scheduleLoaded();
+  const wasLoaded=available;
   if(cached)available=applyScheduleWindow(cached);
   if(cached&&!options.force&&(Date.now()-cached.at<SCHEDULE_WINDOW_TTL||Date.now()<Number(cached.retryAfter||0))){
     s.refreshing=false;
-    if(!options.silent)renderPageIfActive('schedule');
+    if(!options.silent||(!wasLoaded&&available))renderPageIfActive('schedule');
     return;
   }
   const generation=scheduleWindowGeneration;

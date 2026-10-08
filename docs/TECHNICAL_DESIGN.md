@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.13.1  
+**文書版:** 0.13.2  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.13.1`
+`APP.version = 0.13.2`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1634,3 +1634,14 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `DataAccess.gs`: 370日を超える読み取りで検索用正規表現を使えない場合は、全行読み取り後にも入力期間で絞る。逆順指定は空配列を返す。
 - 本番公開URL・スクリプトプロパティが接続するPRODUCTION DBは接続環境次第なので、読み取り専用で確認したDBと同一とは断定しない。データ移行・本番操作は実施しない。
 - `scripts/test_finance_integration.mjs`, `scripts/test_logic.mjs`, `scripts/test_client_contract.mjs`, ChromiumホームQAで回帰検証し、CIが不合格の変更はmainへ統合しない。
+
+
+## 52. 画面レスポンス高速化（v0.13.2）
+
+- AppCore.html: navigateは即時renderPageを使用し、不要なView Transitionフレームを省略する。invalidatePageCache('monthly')とログアウト時は月次メモリキャッシュを無効化する。
+- AppPeopleMonthly.html: monthlyResultCache（Map、TTL120秒、最大10件）をセッション|本人ID|対象月|対象社員で厳密に隔離。monthlyPendingRequestsに同一キーへのコールバックを統合し、getMonthlySummaryへの同時RPCを1件にまとめる。月・社員・セッションが違う応答を画面へ反映しない。
+- AppOperations.html: 勤怠月間プレビューは月次の共通取得関数を使用。worklogWindowRequestsは同一レンジの重複を除外し、異なる14日レンジを最大2件まで同時読み込む。既存LRUと世代番号、セッション判定を維持する。
+- AppFinance.html: 経理と本人の経費・出張履歴に30秒のメモリTTLを適用。保存・承認・精算・手動更新はforceで再取得。進行中の強制再取得要求は完了後に1回追加で処理する。
+- 表示中のデータの鮮度・権限は元のサーバー側の検証を維持する。キャッシュはlocalStorage・sessionStorage・GitHub・実DBへ書き込まない。
+- scripts/test_client_contract.mjsにRPC削減、同時呼び出しの集約、月の取り違え防止、キャッシュ失効、経理強制更新、工数の最大2並列の検証を追加する。
+- 認証済み実端末の表示所要時間・通信待ち時間はこのCIでは測定していない。運用環境で別途計測する。

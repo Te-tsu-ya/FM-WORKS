@@ -1045,6 +1045,79 @@ const result=vm.runInContext(`
   state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''};
   resetCalls();
 
+  // v0.13.2 performance contracts: no unnecessary GAS roundtrip for cached tabs.
+  const savedPerfData=state.data,savedPerfPage=state.page;
+  state.page='home';
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'架空社員',fullName:'架空社員'},
+    employees:[],permissions:{financeWorkspace:true,adminConsole:false,monthlyTeamView:false},
+    attendance:{state:'off',history:[]},app:{version:'0.13.2'}};
+  state.sessionToken='SESSION_TOKEN';
+  invalidateMonthlyResultCache();
+  state.monthly={yearMonth:'2026-10',employeeId:'FM0001',data:null,loadedKey:'',view:'calendar',loading:false,error:''};
+  state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
+  resetCalls();
+  loadMonthly();
+  loadAttendancePreview();
+  expect('attendance preview and monthly detail share one in-flight GAS request',
+    apiCalls.filter(x=>x.method==='getMonthlySummary').length===1);
+  const october={yearMonth:'2026-10',employee:{employeeId:'FM0001',name:'架空社員'},
+    daily:[],totals:{},closeStatus:{closed:false}};
+  invokeServerSuccess(october);
+  expect('shared result reaches both attendance and detailed monthly caches',
+    state.monthly.data===october&&state.attendancePreview.data===october);
+  resetCalls();loadMonthly();loadAttendancePreview();
+  expect('revisiting already loaded month makes zero GAS requests',
+    apiCalls.filter(x=>x.method==='getMonthlySummary').length===0);
+  state.monthly.yearMonth='2026-09';
+  resetCalls();loadMonthly();
+  const september={yearMonth:'2026-09',employee:{employeeId:'FM0001',name:'架空社員'},
+    daily:[],totals:{},closeStatus:{closed:false}};
+  expect('first visit to uncached month makes one request',
+    apiCalls.filter(x=>x.method==='getMonthlySummary').length===1);
+  invokeServerSuccess(september);
+  state.monthly.yearMonth='2026-10';
+  resetCalls();loadMonthly();
+  expect('returning to October displays cached data instantly with zero network',
+    state.monthly.data===october&&apiCalls.filter(x=>x.method==='getMonthlySummary').length===0);
+  state.monthly.yearMonth='2026-09';
+  state.monthly.data=october;
+  state.monthly.loadedKey=monthlyResultKey_('2026-10','FM0001');
+  const mismatchedMonth=monthlyPage();
+  expect('switching months never displays the previous month as if it were selected',
+    mismatchedMonth.includes('月次データを読込中')&&!mismatchedMonth.includes('2026-10 月次'));
+  state.monthly.yearMonth='2026-10';
+  resetCalls();invalidatePageCache('monthly');loadMonthly();
+  expect('data mutation invalidates monthly result memory',apiCalls.filter(x=>x.method==='getMonthlySummary').length===1);
+  invokeServerSuccess(october);
+
+  resetFinanceUi();
+  resetCalls();loadFinanceOverview();
+  expect('first finance tab visit calls its restricted backend once',
+    apiCalls.filter(x=>x.method==='getFinanceOverview').length===1);
+  invokeServerSuccess({setupRequired:false,expenses:[],travels:[],receipts:[]});
+  resetCalls();loadFinanceOverview();
+  expect('switching back to finance within 30 seconds uses in-memory data',
+    apiCalls.filter(x=>x.method==='getFinanceOverview').length===0);
+  loadFinanceOverview({force:true});
+  expect('explicit financial refresh bypasses the short-lived finance cache',
+    apiCalls.filter(x=>x.method==='getFinanceOverview').length===1);
+  invokeServerSuccess({setupRequired:false,expenses:[],travels:[],receipts:[]});
+  resetFinanceUi();
+
+  invalidatePageCache('worklog');
+  state.worklog={date:'2026-10-08',loadedDate:null,items:[],totalMinutes:0,loading:false,error:''};
+  resetCalls();loadWorklogs();
+  state.worklog.date='2026-08-12';loadWorklogs();
+  expect('distinct worklog range no longer waits behind the previous pending range',
+    apiCalls.filter(x=>x.method==='getWorklogs').length===2);
+  state.worklog.date='2026-07-01';loadWorklogs();
+  expect('rapid worklog navigation caps concurrent GAS reads at two',
+    apiCalls.filter(x=>x.method==='getWorklogs').length===2);
+  invalidatePageCache('worklog');
+  resetCalls();
+  state.data=savedPerfData;state.page=savedPerfPage;
+  state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''};
+
   state.adminUi=createAdminUiState();
   state.authAdmin=null;
   state.sessionToken='SESSION_TOKEN';
