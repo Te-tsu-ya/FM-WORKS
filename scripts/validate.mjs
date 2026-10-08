@@ -612,6 +612,28 @@ if (!app.includes("display.sample&&!realProjects.length") ||
   console.error('Worklog QA sample must remain ADMIN-only and non-persistable without real projects.');
   failed = true;
 }
+for(const marker of [
+  'function worklogWindowRange(date)',
+  'function worklogCachedWindow(date)',
+  'function worklogShowCachedDay(date,entry)',
+  'function invalidateWorklogWindowCache()',
+  'function loadWorklogs(options={})',
+  'worklogActiveRequest',
+  'worklogWindowGeneration',
+  'start:range.start,end:range.end',
+  'state.worklog.loadedDate=date'
+]) {
+  if(!app.includes(marker)){
+    console.error('Worklog multi-day cache marker missing: ' + marker);
+    failed=true;
+  }
+}
+if(!app.includes("names.includes('worklog')&&typeof invalidateWorklogWindowCache==='function'") ||
+   !styles.includes('.worklog-one-screen .worklog-quick-grid') ||
+   !styles.includes('.worklog-one-screen .worklog-quick-save')){
+  console.error('Worklog cache invalidation or accessible quick-save layout missing.');
+  failed=true;
+}
 if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
     !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
   console.error('Nested workspace deep links must survive authenticated bootstrap.');

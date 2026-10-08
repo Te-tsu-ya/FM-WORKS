@@ -330,28 +330,140 @@ function attendancePage(){
 }
 
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
-function loadWorklogs(options={}){
-  if(!state.worklog.date)state.worklog.date=state.data.today;
-  const key=worklogCacheKey();
-  if(!options.force&&cacheFresh('worklog',key))return;
-  const ticket=beginPageLoad('worklog',key);if(!ticket)return;
-  const hasCurrent=cacheHas('worklog',key);
-  state.worklog.loading=!hasCurrent;
-  if(!options.silent)renderPageIfActive('worklog');
-  google.script.run.withSuccessHandler(function(data){
-    endPageLoad(ticket);
-    if(worklogCacheKey()!==key)return;
-    state.worklog.items=data.items||[];
-    state.worklog.totalMinutes=data.totalMinutes||0;
-    if(Array.isArray(data.projects))state.data.projects=data.projects;
-    state.worklog.loading=false;
-    markPageCache('worklog',key);
-    renderPageIfActive('worklog');
-  }).withFailureHandler(function(err){
-    endPageLoad(ticket);state.worklog.loading=false;
-    if(!handleApiError(err,'工数を読み込めませんでした')&&!options.silent)renderPageIfActive('worklog');
-  }).getWorklogs(state.sessionToken,{start:state.worklog.date,end:state.worklog.date,includeProjects:true});
+const worklogWindowCache=new Map();
+
+let worklogWindowGeneration=0;
+
+let worklogActiveRequest=null;
+
+function worklogWindowIdentity(){
+  const employeeId=state.data&&state.data.user&&state.data.user.employeeId||'';
+  return String(state.sessionToken||'')+'|'+String(employeeId);
 }
+
+function worklogWindowRange(date){
+  const monday=addDays(date,-((parseIso(date).getDay()+6)%7));
+  return {start:addDays(monday,-7),end:addDays(monday,6)};
+}
+
+function worklogCachedWindow(date){
+  const identity=worklogWindowIdentity();
+  let winner=null;
+  worklogWindowCache.forEach(entry=>{
+    if(entry.identity!==identity||date<entry.start||date>entry.end)return;
+    if(!winner||entry.at>winner.at)winner=entry;
+  });
+  return winner;
+}
+
+function worklogStoreWindow(identity,range,data){
+  const entry={
+    identity:identity,start:range.start,end:range.end,at:Date.now(),
+    items:Array.isArray(data&&data.items)?data.items:[],
+    projects:Array.isArray(data&&data.projects)?data.projects:null
+  };
+  const key=identity+'|'+range.start+'|'+range.end;
+  worklogWindowCache.delete(key);
+  worklogWindowCache.set(key,entry);
+  while(worklogWindowCache.size>6){
+    const oldest=worklogWindowCache.keys().next().value;
+    worklogWindowCache.delete(oldest);
+  }
+  return entry;
+}
+
+function worklogShowCachedDay(date,entry){
+  const items=entry.items.filter(item=>item.date===date);
+  state.worklog.items=items;
+  state.worklog.totalMinutes=items.reduce((total,item)=>total+Number(item.minutes||0),0);
+  state.worklog.loadedDate=date;
+  state.worklog.loading=false;
+  state.worklog.error='';
+  if(Array.isArray(entry.projects))state.data.projects=entry.projects;
+  markPageCache('worklog',date);
+}
+
+function invalidateWorklogWindowCache(){
+  worklogWindowGeneration++;
+  worklogWindowCache.clear();
+  state.worklog.loadedDate=null;
+}
+
+function loadWorklogs(options={}){
+  if(!state.data||!state.data.user||!state.sessionToken)return;
+  if(!state.worklog.date)state.worklog.date=state.data.today;
+  const date=state.worklog.date,identity=worklogWindowIdentity();
+  const cached=worklogCachedWindow(date);
+  const fresh=!!(cached&&(Date.now()-cached.at)<120000);
+  if(cached){
+    worklogShowCachedDay(date,cached);
+    if(!options.silent)renderPageIfActive('worklog');
+    if(fresh&&!options.force)return;
+  }else{
+    state.worklog.loadedDate=null;
+    state.worklog.items=[];
+    state.worklog.totalMinutes=0;
+    state.worklog.loading=true;
+    state.worklog.error='';
+    if(!options.silent)renderPageIfActive('worklog');
+  }
+  // Serialize GAS reads: rapid clicks only change the selected date,
+  // not the number of queued server calls.
+  if(worklogActiveRequest)return;
+  const range=worklogWindowRange(date);
+  const generation=worklogWindowGeneration;
+  const ticket=beginPageLoad('worklogWindow',identity+'|'+range.start+'|'+range.end);
+  if(!ticket)return;
+  const request={ticket,identity,generation,range};
+  worklogActiveRequest=request;
+  const started=Date.now();
+  google.script.run.withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    if(worklogActiveRequest===request)worklogActiveRequest=null;
+    const currentIdentity=worklogWindowIdentity();
+    if(identity!==currentIdentity)return;
+    if(generation!==worklogWindowGeneration){
+      if(state.page==='worklog')loadWorklogs({force:true});
+      return;
+    }
+    worklogStoreWindow(identity,range,data||{});
+    if(typeof console!=='undefined'&&console.debug)console.debug('[FM WORKS] worklog range '+(Date.now()-started)+'ms ('+range.start+' / '+range.end+')');
+    const selected=state.worklog.date||state.data.today;
+    const selectedCache=worklogCachedWindow(selected);
+    if(selectedCache){
+      worklogShowCachedDay(selected,selectedCache);
+      renderPageIfActive('worklog');
+      if((Date.now()-selectedCache.at)>=120000&&state.page==='worklog'){
+        loadWorklogs({force:true,silent:true});
+      }
+    }else if(state.page==='worklog'){
+      loadWorklogs();
+    }
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);
+    if(worklogActiveRequest===request)worklogActiveRequest=null;
+    if(identity!==worklogWindowIdentity())return;
+    if(generation!==worklogWindowGeneration){
+      if(state.page==='worklog')loadWorklogs({force:true});
+      return;
+    }
+    const selected=state.worklog.date||state.data.today;
+    if(selected<range.start||selected>range.end){
+      if(state.page==='worklog')loadWorklogs();
+      return;
+    }
+    if(!worklogCachedWindow(selected)){
+      state.worklog.loading=false;
+      state.worklog.loadedDate=null;
+      state.worklog.error='工数の取得に失敗しました。';
+    }
+    if(!options.silent)handleApiError(err,'工数を読み込めませんでした');
+    renderPageIfActive('worklog');
+  }).getWorklogs(state.sessionToken,{
+    start:range.start,end:range.end,includeProjects:true
+  });
+}
+
 function moveWorklogDate(n){state.worklog.date=addDays(state.worklog.date||state.data.today,n);loadWorklogs();}
 function worklogTimeToMinutes(value){
   const p=String(value||'').split(':').map(Number);
@@ -381,9 +493,10 @@ function buildWorklogSampleData(date){
 
 function worklogDisplayData(){
   const w=state.worklog,date=w.date||state.data.today;
-  const realItems=(w.items||[]).slice();
+  const ready=w.loadedDate===date;
+  const realItems=ready?(w.items||[]).slice():[];
   const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
-  if(admin&&date===state.data.today&&!realItems.length)return buildWorklogSampleData(date);
+  if(admin&&ready&&date===state.data.today&&!realItems.length)return buildWorklogSampleData(date);
   const attendanceMinutes=date===state.data.today?liveWorkedMinutes(state.data.attendance):null;
   return {
     sample:false,
@@ -541,7 +654,12 @@ function worklogPage(){
   const unentered=attendanceMinutes===null?null:Math.max(0,Number(attendanceMinutes||0)-Number(display.totalMinutes||0));
   const action=`<div class='worklog-head-actions'>${display.sample?`<span class='worklog-sample-chip'>表示確認用サンプル</span>`:''}<button class='primary-button compact' onclick='openWorklogModal()'>＋ 工数追加</button></div>`;
   const toolbar=`<div class='worklog-datebar'><div><button class='secondary-button compact' onclick='moveWorklogDate(-1)'>‹</button><button class='secondary-button compact' onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class='secondary-button compact' onclick='moveWorklogDate(1)'>›</button><strong>${escapeHtml(fmtDate(date))}</strong></div>${display.sample?`<small>ダミーデータは保存されません</small>`:''}</div>`;
-  if(w.loading&&!cacheHas('worklog',worklogCacheKey()))return `<div class='worklog-dashboard'>${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}${toolbar}<div class='loading-card'></div></div>`;
+  if(w.loadedDate!==date){
+    const status=w.error
+      ? `<div class='worklog-load-error' role='alert'><strong>${escapeHtml(w.error)}</strong><button class='secondary-button compact' onclick="loadWorklogs({force:true})">再読込</button></div>`
+      : "<div class='loading-card' aria-label='工数を読み込み中'></div>";
+    return `<div class='worklog-dashboard'>${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}${toolbar}${status}</div>`;
+  }
   return `<div class='worklog-dashboard'>
     ${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}
     ${toolbar}

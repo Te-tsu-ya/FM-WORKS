@@ -101,6 +101,16 @@ const context=vm.createContext({
   localStorage:makeStorage(),
   sessionStorage:makeStorage(),
   google:{script:{run:runnerProxy}},
+  invokeServerSuccess:data=>{
+    const fn=successHandler;
+    successHandler=null;
+    if(typeof fn==='function')fn(data);
+  },
+  invokeServerFailure:error=>{
+    const fn=failureHandler;
+    failureHandler=null;
+    if(typeof fn==='function')fn(error);
+  },
   MutationObserver:class{observe(){} disconnect(){}},
   requestAnimationFrame:fn=>{fn();return 1},
   setTimeout:fn=>{if(typeof fn==='function')fn();return 1},
@@ -205,7 +215,7 @@ const result=vm.runInContext(`
     attendance:{state:'off',workedMinutes:0,worked:'0時間00分',clockIn:'',clockOut:'',history:[]},
     projects:[]
   };
-  state.worklog={date:'2026-10-08',items:[],totalMinutes:0,loading:false};
+  state.worklog={date:'2026-10-08',loadedDate:'2026-10-08',items:[],totalMinutes:0,loading:false,error:''};
   const worklogSample=worklogDisplayData();
   expect('empty admin worklog gets browser-only QA sample',worklogSample&&worklogSample.sample===true&&worklogSample.items.length===4);
   const worklogSegments=worklogTimelineSegments(worklogSample);
@@ -225,6 +235,45 @@ const result=vm.runInContext(`
   call=lastCall();
   expect('quick worklog input reaches existing saveWorklog contract',call&&call.method==='saveWorklog'&&call.args[0]==='SESSION_TOKEN'&&call.args[1].project==='テスト案件A'&&call.args[1].start==='16:30'&&call.args[1].end==='18:00');
   state.busy=false;
+
+  // One GAS call should fill a 14-day window, not just one selected day.
+  invalidatePageCache('worklog');
+  state.worklog.date='2026-10-08';
+  resetCalls();
+  loadWorklogs();
+  call=lastCall();
+  expect('worklog fetch requests a multi-day window',call&&call.method==='getWorklogs'&&call.args[1].start==='2026-09-28'&&call.args[1].end==='2026-10-11');
+  invokeServerSuccess({
+    items:[
+      {id:'W-7',date:'2026-10-07',project:'テスト案件A',category:'設計',description:'画面設計',start:'09:00',end:'10:00',minutes:60},
+      {id:'W-8',date:'2026-10-08',project:'テスト案件A',category:'開発',description:'テスト',start:'10:00',end:'12:00',minutes:120}
+    ],
+    projects:[{name:'テスト案件A',status:'進行中'}]
+  });
+  expect('worklog window presents the requested day',state.worklog.loadedDate==='2026-10-08'&&state.worklog.totalMinutes===120);
+  resetCalls();
+  moveWorklogDate(-1);
+  expect('adjacent date opens without another GAS call',apiCalls.length===0&&state.worklog.loadedDate==='2026-10-07'&&state.worklog.totalMinutes===60);
+  moveWorklogDate(-1);
+  expect('empty day from the cached range is immediate',apiCalls.length===0&&state.worklog.loadedDate==='2026-10-06'&&state.worklog.items.length===0);
+  moveWorklogDate(1);
+  expect('return to cached date stays network-free',apiCalls.length===0&&state.worklog.loadedDate==='2026-10-07'&&state.worklog.totalMinutes===60);
+  resetCalls();
+  state.worklog.date='2026-09-10';
+  loadWorklogs();
+  call=lastCall();
+  expect('uncached period starts exactly one ranged fetch',apiCalls.length===1&&call.method==='getWorklogs'&&call.args[1].start==='2026-08-31'&&call.args[1].end==='2026-09-13');
+  moveWorklogDate(-1);
+  moveWorklogDate(-1);
+  expect('rapid navigation does not queue repeated GAS requests',apiCalls.length===1&&state.worklog.date==='2026-09-08');
+  invokeServerSuccess({
+    items:[{id:'W-9',date:'2026-09-08',project:'テスト案件A',start:'09:00',end:'11:00',minutes:120}],
+    projects:[{name:'テスト案件A',status:'進行中'}]
+  });
+  expect('late server response applies the last selected day',state.worklog.loadedDate==='2026-09-08'&&state.worklog.items[0].id==='W-9');
+  expect('cached earlier days survive a later window fetch',worklogCachedWindow('2026-10-08')!==null);
+  invalidatePageCache('worklog');
+  expect('worklog mutation invalidates all cached windows',worklogCachedWindow('2026-10-08')===null&&worklogCachedWindow('2026-09-08')===null);
 
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
 
