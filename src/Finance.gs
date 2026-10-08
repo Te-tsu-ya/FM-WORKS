@@ -10,7 +10,7 @@ const FINANCE_MODELS=Object.freeze({
 function financeOperatorAllowed_(employee){
   if(!employee)return false;
   if(String(employee.role||'').toUpperCase()==='ADMIN')return true;
-  return /経理|総務/.test(String(employee.department||''));
+  return financeDepartmentAllowed_(employee.department);
 }
 function requireFinanceOperator_(token){
   const employee=requireSession_(token).employee;
@@ -76,7 +76,7 @@ function financeArray_(kind,entry){
 function financeRows_(kind,employeeId,limit){
   const sheet=financeSheet_(kind),last=sheet.getLastRow(),cols=FINANCE_MODELS[kind].keys.length;
   if(last<2)return [];
-  const rows=sheet.getRange(2,1,last-1,cols).getValues().map(row=>financeObject_(kind,row))
+  const rows=sheet.getRange(2,1,last-1,cols).getDisplayValues().map(row=>financeObject_(kind,row))
     .filter(item=>item.id&&(!employeeId||item.employeeId===employeeId));
   rows.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   return rows.slice(0,Math.max(1,Math.min(200,Number(limit)||80)));
@@ -99,7 +99,7 @@ function financeWriteNew_(kind,record,employee){
       const keys=sheet.getRange(2,keyIndex+1,last-1,1).getDisplayValues();
       const match=keys.findIndex(x=>x[0]===key);
       if(match!==-1){
-        const existing=financeObject_(kind,sheet.getRange(match+2,1,1,model.keys.length).getValues()[0]);
+        const existing=financeObject_(kind,sheet.getRange(match+2,1,1,model.keys.length).getDisplayValues()[0]);
         if(String(existing.employeeId||existing.creatorId)!==String(employee.employeeId))throw new Error('送信識別子が重複しています。');
         return {ok:true,id:existing.id,duplicate:true};
       }

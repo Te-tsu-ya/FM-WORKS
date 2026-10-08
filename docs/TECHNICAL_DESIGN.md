@@ -1618,3 +1618,7 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - Integrity: withScriptLock_、Sheet契約確認、厳密な整数金額・日付チェック、再送信識別子重複判定。承認／差戻し／精算は対象IDをロック内で再取得し、自己承認・自己精算を拒否し、既存appendAudit_で監査を記録する。
 - Financial domain constraints: 自動日当・宿泊費算定、領収書PDFや画像の保存、会計仕訳、銀行連携は未実装であり、原本証憑保存を代替しない。支給希望額は承認者が確認する。
 - Test: scripts/validate.mjs、test_logic.mjs、test_client_contract.mjs、既存ホームChromium QA。実社員E2Eと本番環境確認は別工程。
+
+### 50.1 Finite in-memory integration tests
+- `scripts/test_finance_integration.mjs` は実GAS接続と実顧客データを使わず、社員役割5種類と3シートをメモリ内で再現。作成・二重登録、申請者本人だけの履歴、閲覧拒否、自己承認拒否、承認／差戻し／精算、再精算拒否、数値・日付チェック、Spreadsheet式インジェクション対策、監査、スキーマ不一致を実証する。
+- CI・Deployで共通のテストを実行する。Finance.gsは画面へ返す一覧にgetDisplayValuesを使用し、状態更新に使用する対象行はgetValuesを維持して型を保存する。

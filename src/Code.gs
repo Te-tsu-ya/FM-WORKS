@@ -572,6 +572,12 @@ function validatePunchTransition_(attendance, action) {
   }
 }
 
+function financeDepartmentAllowed_(department) {
+  const name=String(department||'').replace(/\s+/g,'').replace(/[／/]/g,'・');
+  if(/^(?:経理総務|総務経理)(?:部|課|担当)?$/.test(name))return true;
+  const parts=name.split('・');
+  return parts.length>=1&&parts.length<=2&&parts.every(part=>/^(?:経理|総務)(?:部|課|室|担当|チーム)?$/.test(part));
+}
 function getPermissions_(employee) {
   const role = String(employee && employee.role || 'USER').toUpperCase();
   return {
@@ -579,8 +585,8 @@ function getPermissions_(employee) {
     companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
     adminConsole: role === 'ADMIN',
     // The finance APIs independently enforce this permission on the server.
-    officeWorkspace: role === 'ADMIN' || /経理|総務/.test(String(employee && employee.department || '')),
-    financeWorkspace: role === 'ADMIN' || /経理|総務/.test(String(employee && employee.department || '')),
+    officeWorkspace: role === 'ADMIN' || role === 'MANAGER' || financeDepartmentAllowed_(employee && employee.department),
+    financeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     employeeAdmin: role === 'ADMIN',
     requestApprove: role === 'ADMIN' || role === 'MANAGER',
     monthlyTeamView: role === 'ADMIN' || role === 'MANAGER',

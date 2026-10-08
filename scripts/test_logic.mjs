@@ -125,7 +125,7 @@ function expectThrows(name, fn) {
 expect('office access is offered to ADMIN but not implicitly to personnel editing',
   api.getPermissions_({role:'ADMIN',department:'開発'}).officeWorkspace===true);
 expect('office access is offered to MANAGER while employee admin remains false',
-  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===false&&
+  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===true&&
   api.getPermissions_({role:'MANAGER',department:'開発'}).financeWorkspace===false&&
   api.getPermissions_({role:'MANAGER',department:'開発'}).employeeAdmin===false);
 expect('office access includes general affairs department without granting admin console',
@@ -141,6 +141,10 @@ expect('finance privilege only for admin and accounting/general affairs departme
  api.financeOperatorAllowed_({role:'USER',department:'総務部'}) &&
  !api.financeOperatorAllowed_({role:'MANAGER',department:'開発'}) &&
  !api.financeOperatorAllowed_({role:'USER',department:'開発'}));
+expect('finance department checking rejects misleading names',
+ !api.financeOperatorAllowed_({role:'USER',department:'非経理'})&&
+ !api.financeOperatorAllowed_({role:'USER',department:'旧総務'})&&
+ api.financeOperatorAllowed_({role:'USER',department:'総務・経理'}));
 expect('finance access does not imply admin privilege',
  api.getPermissions_({role:'USER',department:'経理'}).financeWorkspace===true &&
  api.getPermissions_({role:'USER',department:'経理'}).adminConsole===false &&

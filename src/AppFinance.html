@@ -2,6 +2,7 @@
 /* FM WORKS v0.13.0 finance UI. No confidential data in persistent browser storage. */
 let financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:''};
 function resetFinanceUi(){
+  financeActiveForm=null;
   financeUi={tab:'expense',overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:''};
 }
 function financeIdentity(){
@@ -38,7 +39,7 @@ function loadMyFinanceItems(){
   }).getMyFinanceItems(state.sessionToken);
 }
 function financeYen(value){
-  const n=Number(value);
+  const n=Number(String(value).replace(/,/g,''));
   return Number.isFinite(n)?n.toLocaleString('ja-JP')+'円':'—';
 }
 function financeDateDisplay(value){return escapeHtml(String(value||'—'));}
