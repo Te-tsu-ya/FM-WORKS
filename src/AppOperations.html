@@ -1,6 +1,220 @@
 <script>
-function attendancePage(){const d=state.data,a=d.attendance;return `${pageHead('勤怠','出退勤、休憩、勤務場所、月間の勤怠をまとめて確認します。')}${attendanceWorkspaceTabs('attendance')}<div class='grid cols-2'>${card('現在の勤務状況',`<div class='status-row'><span class='status-dot' style='background:${a.state==='off'||a.state==='finished'?'#8090a8':a.state==='break'?'#f3a11b':'#18a46d'}'></span><strong>${a.stateLabel}</strong></div><div class='attendance-time'>${a.clockIn?a.clockIn+' に出勤':'まだ出勤していません'}</div><p class='muted'>現在の実働：<span data-live-worked>${liveWorkedText(a)}</span></p><div class='button-row'>${punchButtons(a)}</div>${workLocationSelector()}`)}${card('本日の打刻状況',a.history.length?list(a.history.map(x=>({title:`${x.time} ${x.action}`,sub:x.workLocation,color:x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}))):'<p class=\'muted\'>まだ打刻はありません。</p>')}</div><div class='grid cols-4 section-gap'>${metric('本日の実働',liveWorkedText(a),'tone-green')}${metric('出勤時刻',a.clockIn||'--:--')}${metric('退勤時刻',a.clockOut||'--:--','tone-orange')}${metric('保存先','Google Sheets','tone-purple')}</div>`}
+function loadAttendancePreview(options={}){
+  if(!state.data||!state.sessionToken)return;
+  const key=state.data.today.slice(0,7)+'|'+state.data.user.employeeId;
+  const preview=state.attendancePreview||(state.attendancePreview={data:null,key:'',at:0,loading:false,error:''});
+  if(!options.force&&preview.data&&preview.key===key&&(Date.now()-Number(preview.at||0))<120000)return;
+  const ticket=beginPageLoad('attendancePreview',key);if(!ticket)return;
+  preview.loading=!(preview.data&&preview.key===key);
+  preview.error='';
+  google.script.run.withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    const currentKey=state.data?state.data.today.slice(0,7)+'|'+state.data.user.employeeId:'';
+    if(currentKey!==key)return;
+    preview.data=data;preview.key=key;preview.at=Date.now();preview.loading=false;preview.error='';
+    renderPageIfActive('attendance');
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);preview.loading=false;preview.error='月間情報を読み込めませんでした。';
+    handleApiError(err,'勤怠の月間情報を読み込めませんでした');
+    renderPageIfActive('attendance');
+  }).getMonthlySummary(state.sessionToken,state.data.today.slice(0,7),state.data.user.employeeId);
+}
 
+function invalidateAttendancePreview(){
+  if(!state.attendancePreview)return;
+  state.attendancePreview.at=0;
+}
+
+function attendancePreviewData(){
+  const p=state.attendancePreview;
+  const key=state.data?state.data.today.slice(0,7)+'|'+state.data.user.employeeId:'';
+  return p&&p.data&&p.key===key?p.data:null;
+}
+
+function openAttendanceMonthly(view){
+  const preview=attendancePreviewData();
+  state.monthly.yearMonth=state.data.today.slice(0,7);
+  state.monthly.employeeId=state.data.user.employeeId;
+  state.monthly.view=view==='list'?'list':'calendar';
+  if(preview){
+    state.monthly.data=preview;
+    markPageCache('monthly',monthlyCacheKey());
+  }
+  navigate('monthly');
+}
+
+function openAttendancePreviewDay(date){
+  const preview=attendancePreviewData();if(!preview)return;
+  state.monthly.yearMonth=preview.yearMonth;
+  state.monthly.employeeId=state.data.user.employeeId;
+  state.monthly.view='calendar';
+  state.monthly.data=preview;
+  markPageCache('monthly',monthlyCacheKey());
+  navigate('monthly');
+  setTimeout(()=>openMonthlyDay(date),0);
+}
+
+function attendanceStatusTone(a){
+  return a.state==='working'?'working':a.state==='break'?'break':a.state==='finished'?'finished':'off';
+}
+
+function attendancePunchActions(a){
+  if(a.state==='off')return `<button class='attendance-action primary' onclick="performPunch('出勤')">${svg('i-clock')}<span>出勤する</span></button>`;
+  if(a.state==='working')return `<div class='attendance-action-stack'><button class='attendance-action danger' onclick="performPunch('退勤')">${svg('i-clock')}<span>退勤する</span></button><button class='attendance-secondary-action' onclick="performPunch('休憩開始')">休憩を開始</button></div>`;
+  if(a.state==='break')return `<button class='attendance-action resume' onclick="performPunch('休憩終了')">${svg('i-clock')}<span>休憩を終了</span></button>`;
+  return `<button class='attendance-action disabled' disabled>${svg('i-clock')}<span>本日の勤務は終了しました</span></button>`;
+}
+
+function attendanceLocationControl(){
+  return `<div class='attendance-location'><span>勤務場所</span><div>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
+}
+
+function attendanceTimeline(a,company){
+  const history=(a.history||[]).slice().reverse();
+  const rows=history.map(x=>{
+    const kind=x.action==='出勤'?'in':x.action==='退勤'?'out':x.action.includes('休憩')?'break':'normal';
+    return `<div class='attendance-timeline-row ${kind}'><time>${escapeHtml(x.time)}</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(x.action)}</strong><small>${escapeHtml(x.workLocation||'')}</small></div></div>`;
+  });
+  if(a.state==='working'||a.state==='break'){
+    rows.push(`<div class='attendance-timeline-row current'><time>現在</time><span class='attendance-timeline-dot'></span><div><strong>${escapeHtml(a.stateLabel)}</strong><small>${a.state==='break'?'休憩中です':escapeHtml(liveWorkedText(a))+' 経過'}</small></div></div>`);
+  }
+  if(!a.clockOut&&company&&company.end){
+    rows.push(`<div class='attendance-timeline-row planned'><time>${escapeHtml(company.end)}</time><span class='attendance-timeline-dot'></span><div><strong>退勤予定</strong><small>${company.name?escapeHtml(company.name):'会社カレンダー'}</small></div></div>`);
+  }
+  if(!rows.length&&company&&company.start){
+    rows.push(`<div class='attendance-timeline-row planned'><time>${escapeHtml(company.start)}</time><span class='attendance-timeline-dot'></span><div><strong>出勤予定</strong><small>まだ打刻はありません</small></div></div>`);
+  }
+  return rows.length?rows.join(''):`<div class='attendance-empty'><strong>本日の打刻はまだありません</strong><span>出勤するとここに時系列で表示されます。</span></div>`;
+}
+
+function attendanceScheduledMinutes(company){
+  if(!company||!company.working||!company.start||!company.end)return 0;
+  const toMin=v=>{const p=String(v).split(':').map(Number);return p.length===2?p[0]*60+p[1]:0};
+  return Math.max(0,toMin(company.end)-toMin(company.start)-Number(company.breakMinutes||0));
+}
+
+function attendanceTodayRow(preview){
+  return preview&&Array.isArray(preview.daily)?preview.daily.find(x=>x.date===state.data.today)||null:null;
+}
+
+function attendanceAlerts(preview){
+  const items=[],review=state.data&&state.data.monthlyReview,today=attendanceTodayRow(preview);
+  if(review&&review.needsAttention){
+    items.push({tone:'danger',title:`${review.targetMonth}の勤怠確認が${review.stale?'再度必要です':'未完了です'}`,sub:review.message,action:"openPreviousMonthReview()"});
+  }
+  if(today&&today.issue){
+    items.push({tone:'danger',title:today.issueType||'本日の勤怠に確認事項があります',sub:'内容を確認し、必要に応じて打刻修正を申請してください。',action:`openAttendancePreviewDay('${today.date}')`});
+  }
+  if(today&&today.worklogIssue){
+    const diff=Math.abs(Number(today.worklogDifferenceMinutes||0));
+    items.push({tone:'warning',title:'工数と実働に差異があります',sub:`差異 ${formatMinutesClient(diff)}。工数画面で確認してください。`,action:"navigate('worklog')"});
+  }
+  if(!items.length)return `<div class='attendance-alert-empty'><span>✓</span><div><strong>現在、確認が必要な勤怠はありません</strong><small>問題が見つかった場合はここに表示します。</small></div></div>`;
+  return items.slice(0,3).map(x=>`<button class='attendance-alert-item ${x.tone}' onclick="${x.action}"><span>!</span><div><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.sub)}</small></div><b>›</b></button>`).join('');
+}
+
+function attendanceTodayStats(a,company,preview){
+  const today=attendanceTodayRow(preview);
+  const breakMinutes=today?Number(today.breakMinutes||0):0;
+  const scheduled=attendanceScheduledMinutes(company);
+  const remaining=scheduled?Math.max(0,scheduled-Number(a.workedMinutes||0)):null;
+  return `<div class='attendance-today-stats'>
+    <div><span>実働</span><strong data-live-worked>${escapeHtml(liveWorkedText(a))}</strong><small>${scheduled?'予定 '+formatMinutesClient(scheduled):'勤務予定未設定'}</small></div>
+    <div><span>休憩</span><strong>${formatMinutesClient(breakMinutes)}</strong><small>${company&&company.breakMinutes?'予定 '+formatMinutesClient(company.breakMinutes):'—'}</small></div>
+    <div><span>残り</span><strong>${remaining===null?'—':formatMinutesClient(remaining)}</strong><small>${company&&company.end?'退勤予定 '+escapeHtml(company.end):'終了時刻未設定'}</small></div>
+  </div>`;
+}
+
+function attendanceDayTone(x){
+  if(x.issue)return 'danger';
+  if(x.worklogIssue)return 'warning';
+  if(x.leaveStatus)return 'leave';
+  if(!x.workingDay)return 'off';
+  if(x.workMinutes>0)return 'ok';
+  return 'empty';
+}
+
+function attendanceMonthCalendar(preview){
+  if(!preview){
+    const err=state.attendancePreview&&state.attendancePreview.error;
+    return err?`<div class='attendance-preview-error'><strong>${escapeHtml(err)}</strong><button onclick="loadAttendancePreview({force:true})">再読込</button></div>`:`<div class='attendance-calendar-skeleton'></div>`;
+  }
+  const parts=preview.yearMonth.split('-').map(Number),first=new Date(parts[0],parts[1]-1,1);
+  const blanks=Array.from({length:first.getDay()},()=>`<span class='attendance-mini-day blank'></span>`).join('');
+  const cells=preview.daily.map(x=>{
+    const n=Number(x.date.slice(-2)),tone=attendanceDayTone(x),today=x.date===state.data.today;
+    return `<button class='attendance-mini-day ${tone} ${today?'today':''}' onclick="openAttendancePreviewDay('${x.date}')" aria-label='${escapeHtml(x.date)}'><span>${n}</span><i></i></button>`;
+  }).join('');
+  return `<div class='attendance-mini-calendar'><div class='attendance-mini-weekdays'>${['日','月','火','水','木','金','土'].map(x=>`<span>${x}</span>`).join('')}</div><div class='attendance-mini-grid'>${blanks}${cells}</div><div class='attendance-calendar-legend'><span><i class='ok'></i>正常</span><span><i class='warning'></i>工数差異</span><span><i class='danger'></i>要確認</span><span><i class='off'></i>休日・未入力</span></div></div>`;
+}
+
+function attendanceMonthSummary(preview){
+  if(!preview)return `<div class='attendance-summary-skeleton'><span></span><span></span><span></span><span></span></div>`;
+  const t=preview.totals||{};
+  return `<div class='attendance-month-kpis'>
+    <div><span>出勤日数</span><strong>${Number(t.workDays||0)}日</strong></div>
+    <div><span>実働時間</span><strong>${formatMinutesClient(t.totalMinutes)}</strong></div>
+    <div><span>残業時間</span><strong>${formatMinutesClient(t.overtimeMinutes)}</strong></div>
+    <div><span>有給取得</span><strong>${Number(t.paidLeaveDays||0)}日</strong></div>
+  </div>`;
+}
+
+function attendanceRecentHistory(preview){
+  if(!preview)return `<div class='attendance-history-skeleton'></div>`;
+  const rows=(preview.daily||[]).filter(x=>x.date<=state.data.today&&(x.clockIn||x.clockOut||x.workMinutes||x.leaveStatus||x.issue)).slice(-5).reverse();
+  if(!rows.length)return `<div class='attendance-empty compact'><strong>今月の勤怠履歴はまだありません</strong></div>`;
+  return `<div class='attendance-recent-table'><div class='attendance-recent-head'><span>日付</span><span>出勤</span><span>退勤</span><span>実働</span><span>休憩</span><span>残業</span><span>勤務場所</span><span>状態</span></div>${rows.map(x=>{
+    const tone=attendanceDayTone(x);
+    const label=x.issue?'要確認':x.worklogIssue?'工数差異':x.leaveStatus||'正常';
+    return `<button class='attendance-recent-row' onclick="openAttendancePreviewDay('${x.date}')"><span><b>${escapeHtml(x.date.slice(5).replace('-','/'))}</b><small>${escapeHtml('日月火水木金土'[parseIso(x.date).getDay()])}</small></span><span>${escapeHtml(x.clockIn||'—')}</span><span>${escapeHtml(x.clockOut||'—')}</span><span>${formatMinutesClient(x.workMinutes)}</span><span>${formatMinutesClient(x.breakMinutes)}</span><span>${formatMinutesClient(x.overtimeMinutes)}</span><span>${escapeHtml(x.workLocation||'—')}</span><span><em class='${tone}'>${escapeHtml(label)}</em></span></button>`;
+  }).join('')}</div>`;
+}
+
+function attendancePage(){
+  const d=state.data,a=d.attendance,company=d.companyToday||null,preview=attendancePreviewData();
+  const dateAction=`<div class='attendance-date-chip'>${svg('i-calendar')}<strong>${escapeHtml(fmtDate(d.today))}</strong><span>${company?escapeHtml(company.name||company.type||'勤務日'):'会社カレンダー未登録'}</span></div>`;
+  const stateTone=attendanceStatusTone(a);
+  const currentMain=a.clockIn?`<strong class='attendance-live-value' data-live-worked>${escapeHtml(liveWorkedText(a))}</strong><span class='attendance-live-range'>${escapeHtml(a.clockIn)} 〜 ${escapeHtml(a.clockOut||'現在')}</span>`:`<strong class='attendance-live-value off-copy'>まだ出勤していません</strong><span class='attendance-live-range'>勤務を開始すると実働時間を表示します</span>`;
+  return `<div class='attendance-dashboard'>
+    ${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴、月間勤怠を1つの流れで確認します。',dateAction)}
+    ${attendanceWorkspaceTabs('attendance')}
+    <div class='attendance-top-grid'>
+      <section class='attendance-focus-card ${stateTone}'>
+        <header><div><span class='eyebrow'>CURRENT STATUS</span><h2>現在の勤務状況</h2></div><span class='attendance-state-pill ${stateTone}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
+        <div class='attendance-focus-main'>${currentMain}</div>
+        ${attendancePunchActions(a)}
+        ${attendanceLocationControl()}
+      </section>
+      <section class='attendance-panel attendance-timeline-card'>
+        <header><div><span class='eyebrow'>TODAY</span><h2>今日の勤務タイムライン</h2></div><button class='text-button' onclick="openAttendanceMonthly('list')">履歴を見る</button></header>
+        <div class='attendance-timeline'>${attendanceTimeline(a,company)}</div>
+        ${company&&company.working?`<div class='attendance-schedule-strip'><span>予定勤務</span><strong>${escapeHtml(company.start||'--:--')} 〜 ${escapeHtml(company.end||'--:--')}</strong><small>休憩 ${formatMinutesClient(company.breakMinutes||0)}</small></div>`:''}
+      </section>
+      <div class='attendance-side-stack'>
+        <section class='attendance-panel attendance-alert-card'>
+          <header><div><span class='eyebrow'>CHECK</span><h2>確認が必要なこと</h2></div></header>
+          <div class='attendance-alert-list'>${attendanceAlerts(preview)}</div>
+        </section>
+        <section class='attendance-panel attendance-today-card'>
+          <header><div><span class='eyebrow'>SUMMARY</span><h2>本日の集計</h2></div><button class='text-button' onclick="openAttendanceMonthly('calendar')">詳細</button></header>
+          ${attendanceTodayStats(a,company,preview)}
+        </section>
+      </div>
+    </div>
+    <div class='attendance-bottom-grid'>
+      <section class='attendance-panel attendance-calendar-card'>
+        <header><div><span class='eyebrow'>MONTH</span><h2>${escapeHtml(d.today.slice(0,7).replace('-','年'))}月のカレンダー</h2></div><button class='text-button' onclick="openAttendanceMonthly('calendar')">月間を開く</button></header>
+        ${attendanceMonthCalendar(preview)}
+      </section>
+      <section class='attendance-panel attendance-history-card'>
+        <header><div><span class='eyebrow'>MONTHLY SUMMARY</span><h2>今月の勤怠サマリー</h2></div><button class='text-button' onclick="openAttendanceMonthly('list')">すべて見る</button></header>
+        ${attendanceMonthSummary(preview)}
+        <div class='attendance-history-title'>直近の勤怠履歴</div>
+        ${attendanceRecentHistory(preview)}
+      </section>
+    </div>
+  </div>`;
+}
 
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
 function loadWorklogs(options={}){

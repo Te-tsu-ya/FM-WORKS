@@ -115,8 +115,9 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.schedule.employees=data.employees||[];
   state.company.year=parseIso(data.today).getFullYear();
   const requested=(location.hash||'#home').slice(1);
-  state.page=NAV.some(n=>n[0]===requested)?requested:'home';
-  if(state.page==='admin'&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
+  const nestedRoutes=['monthly','companyCalendar','people'];
+  state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
+  if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
   document.getElementById('app').hidden=false;
@@ -130,6 +131,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   startLiveAttendanceTicker();
 
   if(state.page==='home')loadHomeOverview();
+  if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
   if(state.page==='schedule')loadSchedule();
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs();

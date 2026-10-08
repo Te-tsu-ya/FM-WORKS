@@ -2,7 +2,7 @@
 const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']];
 const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
-let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:180000,maintenance:60000,documents:600000};
 const pageCache={};
 const pendingLoads=new Set();
@@ -169,9 +169,11 @@ function performPunch(action){
     if(data&&data.serverTime)state.data.serverTime=data.serverTime;
     state.busy=false;
     invalidatePageCache('worklog','monthly');
+    if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
     renderPage();
     showToast(`${action}をGoogle Sheetsへ保存しました`);
     scheduleBackgroundTask(()=>loadHomeOverview({force:true,silent:true}),1200);
+    if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview({force:true}),900);
   }).withFailureHandler(err=>{
     state.busy=false;
     if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage();
@@ -237,8 +239,13 @@ function workspaceTabs(items,activeId,label){
   return `<nav class='workspace-tabs' aria-label='${escapeHtml(label||'表示切替')}'>${items.map(item=>`<button type='button' class='${item[0]===activeId?'active':''}' onclick="navigate('${item[0]}')">${escapeHtml(item[1])}</button>`).join('')}</nav>`;
 }
 function attendanceWorkspaceTabs(activeId){
-  return workspaceTabs([['attendance','本日'],['monthly','月間']],activeId,'勤怠の表示切替');
+  return `<nav class='workspace-tabs attendance-workspace-tabs' aria-label='勤怠の表示切替'>
+    <button type='button' class='${activeId==='attendance'?'active':''}' onclick="navigate('attendance')">${svg('i-clock')}<span>本日</span></button>
+    <button type='button' class='${activeId==='monthly'?'active':''}' onclick="openAttendanceMonthly('calendar')">${svg('i-calendar')}<span>月間</span></button>
+    <button type='button' class='${activeId==='history'?'active':''}' onclick="openAttendanceMonthly('list')">${svg('i-chart')}<span>履歴</span></button>
+  </nav>`;
 }
+
 function scheduleWorkspaceTabs(activeId){
   return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
 }
@@ -251,6 +258,7 @@ function navigate(page){
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs();
   if(page==='requests')loadRequests();
+  if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
   if(page==='monthly')loadMonthly();
   if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
   if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){

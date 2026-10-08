@@ -177,7 +177,7 @@ const result=vm.runInContext(`
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
   expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
-  expect('attendance workspace exposes today and monthly views',attendanceWorkspaceTabs('monthly').includes('本日')&&attendanceWorkspaceTabs('monthly').includes('月間'));
+  expect('attendance workspace exposes today monthly and history views',attendanceWorkspaceTabs('history').includes('本日')&&attendanceWorkspaceTabs('history').includes('月間')&&attendanceWorkspaceTabs('history').includes('履歴'));
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
 
 

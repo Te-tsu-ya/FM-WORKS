@@ -526,6 +526,24 @@ for (const forbidden of ['loadSchedule({silent:true})','loadWorklogs({silent:tru
   }
 }
 
+for (const attendanceMarker of [
+  "function loadAttendancePreview(",
+  "function attendanceTimeline(",
+  "function attendanceMonthCalendar(",
+  "function attendanceRecentHistory(",
+  "attendance-top-grid",
+  "attendance-bottom-grid"
+]) {
+  if (!(app + styles).includes(attendanceMarker)) {
+    console.error('Attendance workspace redesign marker missing: ' + attendanceMarker);
+    failed = true;
+  }
+}
+if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
+    !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
+  console.error('Nested workspace deep links must survive authenticated bootstrap.');
+  failed = true;
+}
 for (const iaMarker of [
   "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",

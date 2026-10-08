@@ -1,7 +1,7 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.6  
-**更新日:** 2026-10-07  
+**文書版:** 0.10.7  
+**更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.6`
+`APP.version = 0.10.7`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -223,6 +223,41 @@ DBスキーマ: 9。
 
 クライアント `openNotificationItem` は `yearMonth` をstateへ入れて月次へ遷移する。
 
+## 9.1 勤怠ワークスペース v0.10.7
+
+トップナビの勤怠は、内部的に以下の既存ルートを束ねる。
+
+- 本日: `attendance`
+- 月間: `monthly` + `state.monthly.view='calendar'`
+- 履歴: `monthly` + `state.monthly.view='list'`
+
+`attendanceWorkspaceTabs(activeId)` が3タブを描画する。月次・履歴は既存の `getMonthlySummary` と月次UIを再利用し、別系統の集計ロジックを作らない。
+
+本日画面は初期データの `attendance` と `companyToday` だけで主要操作を即時描画する。二次情報は `state.attendancePreview` に保持し、`loadAttendancePreview()` が当月本人の `getMonthlySummary` を描画後に取得する。
+
+`attendancePreview`:
+- key: `YYYY-MM|employeeId`
+- TTL: 120秒
+- 初回失敗時は本日打刻を止めず、月間領域だけ再読込可能にする
+- 打刻成功時はpreviewをstale化し、勤怠画面を表示中なら遅延再取得する
+
+本日画面のDOM構成:
+
+```
+attendance-dashboard
+├─ attendance-workspace-tabs
+├─ attendance-top-grid
+│  ├─ attendance-focus-card
+│  ├─ attendance-timeline-card
+│  └─ attendance-side-stack
+│     ├─ attendance-alert-card
+│     └─ attendance-today-card
+└─ attendance-bottom-grid
+   ├─ attendance-calendar-card
+   └─ attendance-history-card
+```
+
+幅1260px以下は2列、820px以下は1列へ落とし、横スクロールを主要レイアウトに要求しない。履歴表だけは列情報を保持するためパネル内横スクロールを許可する。
 ## 10. 月次UI
 
 状態:
@@ -311,7 +346,7 @@ home-screen
 
 共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
 
-## 11. 設定画面
+## 11. 管理画面
 
 `state.adminTab`:
 
@@ -523,7 +558,8 @@ Apps Scriptの原則:
 - 今日の予定取得と社員マスタ取得の重複を避ける。
 - ホームの承認待ち件数は専用の軽量カウントを使う。
 - 管理画面は表示中タブに不要な保守APIを呼ばない。
-- 通知・バックアップ確認・先読みは初回描画後に段階実行する。
+- 通知・バックアップ確認は初回描画後に段階実行する。
+- 全画面の一括先読みは行わず、予定表・工数・申請は利用意図ベース、勤怠の月間プレビューは本日画面描画後のアイドル時間に取得する。
 - Sheets呼び出しを減らす。
 - 範囲を一括read。
 - JS配列で加工。
