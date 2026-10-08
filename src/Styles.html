@@ -1815,3 +1815,130 @@ html[data-theme="dark"] .home-portal-all-clear>span{background:#244934;color:#91
 }
 @media(prefers-reduced-motion:reduce){.home-portal-skeleton{animation:none}}
 </style>
+
+
+<style>
+/* v0.11.10 / FM WORKS cross-screen visual foundations.
+   Defaults are shared; dashboard-only compact rules never shrink other pages. */
+:root{
+  --fm-ui-radius-card:var(--radius);
+  --fm-ui-radius-control:12px;
+  --fm-ui-space-unit:4px;
+  --fm-ui-focus:var(--blue);
+}
+:is(.home-portal-panel,.attendance-panel,.attendance-focus-card,.worklog-panel,
+  .schedule-surface,.request-overview-metric,.admin-overview-card){
+  border-radius:var(--fm-ui-radius-card);
+}
+.home-portal-header{border-radius:var(--fm-ui-radius-card)}
+.home-portal-top{display:grid;grid-template-columns:minmax(300px,.83fr) minmax(0,1.45fr);gap:11px;align-items:stretch;min-width:0}
+.home-portal-top>.home-portal-header{display:flex;align-items:center;padding:12px 16px}
+.home-portal-top .home-portal-intro h1{font-size:21px;line-height:1.22;margin:7px 0 4px}
+.home-portal-top .home-portal-intro p{font-size:12px;line-height:1.5}
+.home-portal-top .home-portal-meta{gap:6px;font-size:11px}
+.home-portal-top .home-portal-today{padding:4px 7px}
+.home-portal-top .home-portal-stats{gap:8px}
+.home-portal-top .home-portal-stat{min-height:0;padding:9px 11px;gap:4px;border-radius:12px}
+.home-portal-top .home-portal-stat strong{font-size:20px;letter-spacing:-.03em}
+.home-portal-top .home-portal-stat>span:first-child{font-size:12px}
+.home-portal-top .home-portal-stat small{font-size:11px}
+.home-portal-layout{grid-template-areas:"attendance priorities" "attendance agenda" "shortcuts shortcuts";
+  grid-template-columns:minmax(0,1.07fr) minmax(0,.93fr);
+  grid-template-rows:auto auto auto;align-items:start;align-content:start;gap:10px}
+.home-portal-layout>.home-portal-attendance{grid-area:attendance;grid-column:1;grid-row:1 / span 2;align-self:start}
+.home-portal-layout>.home-portal-priorities{grid-area:priorities;grid-column:2;grid-row:1}
+.home-portal-layout>.home-portal-agenda{grid-area:agenda;grid-column:2;grid-row:2}
+.home-portal-layout>.home-portal-shortcuts{grid-area:shortcuts;grid-column:1 / -1;grid-row:3}
+.home-portal-layout>.home-portal-panel{padding:12px 14px}
+.home-portal-panel-head{margin-bottom:8px}
+.home-portal-punch-facts{gap:8px;margin-bottom:8px}
+.home-portal-punch-facts>div{padding:8px 6px;gap:4px}
+.home-portal-punch-facts strong{font-size:16px}
+.home-portal-punch-actions{margin-bottom:8px}
+.home-portal-punch-actions>button{min-height:44px}
+.home-portal-attendance .home-location{min-height:38px;margin-bottom:6px;padding:5px 9px}
+.home-portal-attendance .home-location-options button{min-height:32px}
+.home-portal-inline-head{margin:7px 1px 4px}
+.home-portal-punch-history{max-height:108px;overflow-y:auto;overscroll-behavior:contain}
+.home-portal-punch-history .home-empty-mini{padding:7px 10px}
+.home-portal-task-row{padding:9px 10px;gap:8px}
+.home-portal-task-list{gap:6px}
+.home-portal-other-tasks{margin-top:5px}
+.home-portal-other-tasks>summary{min-height:29px;display:list-item;line-height:20px}
+.home-portal-task-icon{width:27px;height:27px}
+.home-portal-agenda-empty{min-height:58px;padding:8px 11px;gap:9px}
+.home-portal-empty-icon{height:34px;width:34px}
+.home-portal-empty-icon svg{fill:none;stroke:currentColor;stroke-width:1.8}
+.home-portal-agenda-rows{gap:5px;max-height:116px;overflow-y:auto}
+.home-portal-agenda-row{padding:7px 9px}
+.home-portal-shortcut-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.home-portal-shortcut{min-width:0;min-height:54px;padding:7px 10px}
+.home-portal-shortcut strong{font-size:12px}
+.home-portal-shortcut small{font-size:11px}
+.home-portal-shortcut svg{flex:0 0 auto}
+.home-portal-panel-footer{margin-top:6px;padding-top:6px}
+.home-portal-more{min-height:30px}
+@media(min-width:1220px) and (min-height:700px){
+  /* Standard desktop: every section headline/CTA stays within one viewport;
+     long histories scroll inside their own panel. */
+  .content.one-screen:has(>.home-portal-screen){
+    height:calc(100svh - var(--topbar));min-height:0;max-width:none;
+    overflow:hidden;padding:12px 22px 12px
+  }
+  .home-portal-screen{height:100%;min-height:0;overflow:hidden;gap:10px;
+    grid-template-rows:auto minmax(0,1fr);align-content:stretch}
+  .home-portal-layout{min-height:0;overflow:auto;scrollbar-width:thin;overscroll-behavior:contain;
+    align-content:start;gap:9px}
+  .home-portal-layout>.home-portal-panel{min-height:0}
+}
+@media(max-width:1219px){
+  /* At high zoom/medium widths, readable natural scroll beats clipping. */
+  .content.one-screen:has(>.home-portal-screen){
+    height:auto;min-height:calc(100svh - var(--topbar));overflow:visible;
+    padding-top:16px;padding-bottom:24px
+  }
+  .home-portal-screen{height:auto;overflow:visible;gap:11px;grid-template-rows:none}
+  .home-portal-top{grid-template-columns:1fr;gap:9px}
+  .home-portal-top .home-portal-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .home-portal-layout{grid-template-columns:1fr;
+    grid-template-areas:"attendance" "priorities" "agenda" "shortcuts"}
+  .home-portal-layout>.home-portal-attendance,
+  .home-portal-layout>.home-portal-priorities,
+  .home-portal-layout>.home-portal-agenda,
+  .home-portal-layout>.home-portal-shortcuts{grid-column:1;grid-row:auto}
+  .home-portal-shortcut-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .home-portal-punch-history{max-height:140px}
+}
+@media(max-height:699px) and (min-width:1220px){
+  .content.one-screen:has(>.home-portal-screen){
+    height:auto;min-height:calc(100svh - var(--topbar));overflow:visible;
+    padding-top:14px;padding-bottom:24px
+  }
+  .home-portal-screen{height:auto;overflow:visible;grid-template-rows:none}
+}
+@media(max-width:760px){
+  .home-portal-top .home-portal-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home-portal-top>.home-portal-header{padding:12px 14px}
+  .home-portal-layout{gap:10px}
+  .home-portal-shortcut-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home-portal-agenda-empty{flex-wrap:wrap}
+  .home-portal-agenda-empty button{width:100%}
+}
+@media(max-width:390px){
+  .home-portal-shortcut-grid{grid-template-columns:1fr}
+}
+/* The app-wide mobile top bar must not force viewport shrink-to-fit at 320px. */
+@media(max-width:360px){
+  .topbar{gap:5px;padding-left:8px;padding-right:8px}
+  .mobile-brand{gap:0}
+  .mobile-brand strong{display:none}
+  .topbar .mobile-only.icon-button{width:34px;height:34px;flex:0 0 34px}
+  .top-actions{gap:3px}
+  .top-actions .icon-button{width:34px;height:34px;flex:0 0 34px}
+  .top-actions .font-size-toggle{font-size:12px}
+  .profile-button{padding:1px}
+  .profile-button .avatar{width:32px;height:32px}
+}
+/* Typography stays usable at high zoom; 1-screen layout is intentionally relaxed. */
+@media(prefers-reduced-motion:reduce){.home-portal-skeleton{animation:none}}
+</style>

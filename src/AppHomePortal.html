@@ -50,7 +50,7 @@ function homePortalScheduleRows(events){
     <div><strong>今日の予定はありません</strong><small>必要な予定は予定表から登録できます。</small></div>
     <button type='button' class='secondary-button compact' onclick="navigate('schedule')">予定を登録</button>
   </div>`;
-  return `<div class='home-portal-agenda-rows'>${list.slice(0,4).map(e=>`<button type='button' class='home-portal-agenda-row'
+  return `<div class='home-portal-agenda-rows'>${list.slice(0,2).map(e=>`<button type='button' class='home-portal-agenda-row'
       data-date='${escapeHtml(e.date||state.data.today)}' data-event-id='${escapeHtml(e.id||'')}'
       onclick="state.schedule.date=this.dataset.date;state.schedule.selectedDate=this.dataset.date;state.schedule.selectedEventId=this.dataset.eventId||null;navigate('schedule')">
       <span class='home-portal-agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span>
@@ -58,7 +58,7 @@ function homePortalScheduleRows(events){
         <small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></span>
       <i aria-hidden='true' style='background:${categoryColor(e.category)}'></i>
     </button>`).join('')}
-    ${list.length>4?`<button type='button' class='home-portal-more' onclick="navigate('schedule')">ほか${list.length-4}件を予定表で見る ›</button>`:''}
+    ${list.length>2?`<button type='button' class='home-portal-more' onclick="navigate('schedule')">ほか${list.length-2}件を予定表で見る ›</button>`:''}
   </div>`;
 }
 function homePortalSchedule(events){
@@ -127,6 +127,7 @@ function homePage(){
     tasks=Array.isArray(d.tasks)?d.tasks:null,company=d.companyToday,
     manager=!!(d.permissions&&d.permissions.requestApprove);
   return `<div class='single-screen-layout home-screen home-portal-screen'>
+    <div class='home-portal-top'>
     <header class='home-portal-header'>
       <div class='home-portal-intro'><div class='home-portal-meta'>
         <span class='home-portal-today'><i aria-hidden='true'></i>TODAY</span>
@@ -135,11 +136,9 @@ function homePage(){
         <h1>${homePortalGreeting()}、${escapeHtml(d.user&&d.user.displayName||'')}</h1>
         <p>${manager?'自分の勤務とチームの確認事項を、ここで確認できます。':'今日の勤務・予定・対応事項を、ここから確認できます。'}</p>
       </div>
-      <div class='home-portal-current'><span>${manager?'承認担当者':'個人ポータル'}</span>
-        <strong>${escapeHtml(a.stateLabel||'未打刻')}</strong>
-        <button type='button' onclick="navigate('attendance')">勤務状況を確認 ›</button></div>
     </header>
     <div class='home-portal-stats' aria-label='今月の状況'>${homePortalStats()}</div>
+    </div>
     ${state.homeOverview.error?`<div class='home-portal-load-error'>${homeOverviewError()}</div>`:''}
     <div class='home-portal-layout'>
       ${homePortalPunch(a)}

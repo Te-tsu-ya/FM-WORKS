@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','scripts/test_home_viewport.mjs',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
@@ -1350,6 +1350,39 @@ for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協�
 
 
 const portalFile=fs.readFileSync(path.join(root,'src','AppHomePortal.html'),'utf8');
+
+// v0.11.10: shared visual tokens and one-screen, zoom-safe desktop home.
+const homeVisual=fs.readFileSync(path.join(root,'scripts','test_home_viewport.mjs'),'utf8');
+const uiSystem=fs.readFileSync(path.join(root,'docs','UI_DESIGN_SYSTEM.md'),'utf8');
+for (const marker of [
+  '.home-portal-top',
+  'grid-template-areas:"attendance priorities" "attendance agenda" "shortcuts shortcuts"',
+  '--fm-ui-radius-card:var(--radius)',
+  '@media(min-width:1220px) and (min-height:700px)',
+  '.content.one-screen:has(>.home-portal-screen)',
+  '@media(max-width:1219px)',
+  '@media(max-height:699px)',
+  '@media(max-width:360px)',
+  '.mobile-brand strong{display:none}',
+  '.home-portal-empty-icon svg{fill:none;stroke:currentColor'
+]) {
+  if(!styles.includes(marker)){console.error('v0.11.10 unified home style missing: '+marker);failed=true;}
+}
+for (const marker of [
+  'home-portal-top',
+  'list.slice(0,2).map(e=>',
+  'list.length>2?',
+  "homePortalShortcuts()"
+]) {
+  if(!portalFile.includes(marker)){console.error('v0.11.10 compact home markup missing: '+marker);failed=true;}
+}
+if(!homeVisual.includes('chromium')||!homeVisual.includes("['desktop_1792x850'")||
+  !homeVisual.includes("['desktop_1366x768'")||
+  !homeVisual.includes("['mobile_390x844'")||
+  !uiSystem.includes('横断監査')||!uiSystem.includes('未完了')){
+  console.error('v0.11.10 cross-screen audit or Chromium viewport regression missing.');failed=true;
+}
+
 for (const homePortalMarker of [
   'function homePage()',
   'function homePortalGreeting()',

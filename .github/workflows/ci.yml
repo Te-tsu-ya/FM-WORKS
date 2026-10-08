@@ -26,3 +26,12 @@ jobs:
         run: node scripts/test_logic.mjs
       - name: Run client contract tests
         run: node scripts/test_client_contract.mjs
+      - name: Verify home viewports in Chromium
+        run: node scripts/test_home_viewport.mjs
+      - name: Upload home viewport screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-viewport-previews
+          path: .qa/home/*.png
+          if-no-files-found: ignore

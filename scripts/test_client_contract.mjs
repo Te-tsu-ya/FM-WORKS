@@ -868,6 +868,15 @@ const result=vm.runInContext(`
   };
   resetCalls();
   const portalStaff=homePage();
+  expect('home top combines greeting and KPIs before primary actions',
+    portalStaff.includes('home-portal-top')&&portalStaff.indexOf('home-portal-stats')<portalStaff.indexOf('home-portal-layout')&&
+    portalStaff.indexOf('home-portal-attendance')<portalStaff.indexOf('home-portal-priorities')&&
+    portalStaff.indexOf('home-portal-priorities')<portalStaff.indexOf('home-portal-agenda')&&
+    portalStaff.indexOf('home-portal-agenda')<portalStaff.indexOf('home-portal-shortcuts'));
+  const samplePreview=homePortalScheduleRows(Array.from({length:5},(_,i)=>({id:'E'+i,date:'2026-10-08',title:'サンプル'+i,start:'10:00'})));
+  expect('home shows at most two preview events and links to remaining three',
+    samplePreview.includes('サンプル0')&&samplePreview.includes('サンプル1')&&
+    !samplePreview.includes('サンプル2')&&samplePreview.includes('ほか3件を予定表で見る'));
   expect('personal home shows four real-data metrics and the own-pending label',
     portalStaff.includes('home-portal-screen')&&portalStaff.includes('home-portal-stats')&&
     portalStaff.includes('32時間00分')&&portalStaff.includes('11日')&&
