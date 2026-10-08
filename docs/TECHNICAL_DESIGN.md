@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.13.3  
+**文書版:** 0.13.4  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.13.3`
+`APP.version = 0.13.4`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1663,3 +1663,9 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - UI補足：officeRecentActivity_ は経費・出張の申請者または記録者を、許可された利用者に限り escapeHtml を通じて表示する。テストDOM取得も document.getElementById を使用する。
 
 - レイアウト追補: officeOverviewPage_ のDOMは対応待ち→業務メニュー→右側補助情報の順。CSSのgrid-areaは大画面でメニュー／対応待ち／補助情報の順、960px以下でDOM順に表示する。CIのChromeにはfonts-noto-cjkをインストールし、日本語の実字幅で検証する。
+
+## 54. 事務トップのモバイル見出し（v0.13.4）
+
+- `.office-v2.office-overview > .page-head` に限定した640px以下のCSSで見出し・説明を縦配置にし、短いタイトルの不自然な折り返しを防ぐ。
+- `test_office_viewport.mjs` にタイトルの描画行数を追加し、390pxで必ず1行を要求する。
+- 初回のv0.13.3公開後にスクリーンショットで発見した差分修正。経理API・保存データ・権限・DOM順は変更しない。
