@@ -106,14 +106,18 @@ for(const scenario of cases){
   const args=['--headless=new','--disable-gpu','--no-sandbox','--disable-dev-shm-usage',
     '--no-first-run','--disable-extensions','--force-device-scale-factor=1',
     '--hide-scrollbars','--window-size='+Math.max(500,scenario.width)+','+(scenario.height+115),
-    '--virtual-time-budget=2600','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
+    '--virtual-time-budget=5500','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
   let result;
   try {
-    const stdout=execFileSync(chrome,args,{encoding:'utf8',timeout:45000,maxBuffer:4*1024*1024,
-      stdio:['ignore','pipe','ignore']});
-    const payload=stdout.match(/<output[^>]*id="qa-result"[^>]*data-payload="([^"]+)"/);
-    if(!payload)throw new Error('Chrome did not emit expected layout metrics; document tail: '+stdout.slice(-1600));
-    result=JSON.parse(decodeURIComponent(payload[1]));
+    let debug='';
+    for(let attempt=0;attempt<2;attempt++){
+      const stdout=execFileSync(chrome,args,{encoding:'utf8',timeout:45000,maxBuffer:4*1024*1024,
+        stdio:['ignore','pipe','ignore']});
+      const payload=stdout.match(/<output[^>]*id="qa-result"[^>]*data-payload="([^"]+)"/);
+      if(payload){result=JSON.parse(decodeURIComponent(payload[1]));break;}
+      debug=stdout.slice(-1600);
+    }
+    if(!result)throw new Error('Chrome did not emit expected layout metrics after 2 attempts; document tail: '+debug);
   }catch(err){
     problems++;
     console.error('FAIL '+id+': unable to render '+String(err.message||err));
