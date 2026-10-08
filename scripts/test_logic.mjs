@@ -71,6 +71,7 @@ globalThis.__fmTest = {
   leaveDueAtIndex_,
   leaveEntitlement_,
   leaveAutoAlreadyGranted_,
+  leaveAutoEarlierMissing_,
   leaveAttendanceEvidence_,
   annualLeavePeriodEnd_,
   annualLeaveQualifyingUsage_,
@@ -357,6 +358,19 @@ expect('auto grant adds eleven days a year later only once',
   !accrualRun.repeat.granted&&accrualRun.auditCount===2);
 expect('auto leave never backfills an entitlement before activation',
   !accrualRun.retro.granted&&accrualRun.retro.reason==='NOT_APPLICABLE');
+
+
+const sampleEmployee={employeeId:'FM0001',hireDate:'2026-04-01',leaveBasisDate:''};
+const samplePeriod={due:{index:1,date:'2027-10-01'}};
+const policyBefore={enabled:true,from:'2026-09-01'};
+const missed=api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,policyBefore,[]);
+expect('missed older accrual remains visible after new annual due date',
+  missed.length===1&&missed[0].date==='2026-10-01'&&missed[0].days===10);
+expect('accrual older than automation activation is not flagged as past due',
+  api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,{enabled:true,from:'2026-10-08'},[]).length===0);
+expect('recorded initial accrual is not falsely marked missing',
+  api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,policyBefore,
+    [{transactionDate:'2026-10-01',type:'GRANT'}]).length===0);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);
