@@ -67,6 +67,7 @@ const document={
   activeElement:body,
   addEventListener(){},
   getElementById:getElement,
+  querySelector(){return null},
   querySelectorAll(){return []},
   createElement(){return makeElement('created')},
   contains(){return true}
@@ -475,6 +476,108 @@ const result=vm.runInContext(`
   state.schedule.events=[];
   expect('empty day does not render twelve hours of unused timeline',dayView().includes('schedule-all-day-only')&&dayView().includes('予定なし'));
   expect('home schedule deep link passes both date and selected event',homeScheduleRows([{id:'HOME1',date:'2026-10-08',title:'確認'}]).includes('state.schedule.selectedEventId=this.dataset.eventId||null'));
+
+
+  // v0.11.5 — request dashboard, authorization boundary and network-free status controls.
+  state.sessionToken='SESSION_TOKEN';
+  state.data={
+    today:'2026-10-08',
+    user:{employeeId:'FM0001',displayName:'青木さん'},
+    permissions:{requestApprove:false,employeeAdmin:false}
+  };
+  state.page='requests';
+  state.requests=createEmptyRequestsState();
+  state.requests.own=[
+    {id:'Q-1',type:'有給',status:'承認待ち',startDate:'2026-10-10',endDate:'2026-10-10',reason:'私用のため'},
+    {id:'Q-2',type:'在宅勤務',status:'承認済',startDate:'2026-10-07',endDate:'2026-10-07',reason:'会議のため'},
+    {id:'Q-3',type:'打刻修正',status:'差戻し',startDate:'2026-10-06',endDate:'2026-10-06',reason:'打刻漏れ',rejectReason:'時刻を確認してください'},
+    {id:'Q-4',type:'欠勤',status:'取消申請中',startDate:'2026-10-05',endDate:'2026-10-05',reason:'体調不良'}
+  ];
+  state.requests.context={leaveBalanceConfigured:false,availableLeaveDays:null};
+  state.requests.loadedKey=requestsIdentity();
+  const employeeDashboard=requestsPage();
+  expect('employee requests dashboard shows its own metrics and quick actions',employeeDashboard.includes('request-overview-metric')&&employeeDashboard.includes('QUICK REQUEST')&&employeeDashboard.includes('何を申請しますか？'));
+  expect('unconfigured leave is compact and never invents balance',employeeDashboard.includes('request-inline-alert')&&employeeDashboard.includes('未設定')&&!employeeDashboard.includes('12.0日'));
+  expect('employee does not see approval controls',!employeeDashboard.includes("id='requestApprovalPanel'")&&!employeeDashboard.includes('取消承認'));
+  expect('request guidance explains three steps',employeeDashboard.includes('申請の進め方')&&employeeDashboard.includes('内容を確認'));
+  resetCalls();
+  setRequestHistoryFilter('差戻し');
+  expect('returned requests filter locally',apiCalls.length===0&&filteredOwnRequests().length===1&&filteredOwnRequests()[0].id==='Q-3');
+  setRequestHistoryFilter('ALL');
+  searchRequestHistory('会議');
+  expect('search filters request history without API call',apiCalls.length===0&&filteredOwnRequests().length===1&&filteredOwnRequests()[0].id==='Q-2');
+  searchRequestHistory('');
+  setRequestHistoryFilter('取消関連');
+  expect('cancel-pending requests remain visible under cancel filter',filteredOwnRequests().length===1&&filteredOwnRequests()[0].id==='Q-4');
+  setRequestHistoryFilter('ALL');
+  const rowHtml=requestHistoryRows(state.requests.own,false);
+  expect('own request list keeps cancel and approved cancellation actions',rowHtml.includes('cancelOwnRequest(this.dataset.requestId)')&&rowHtml.includes('requestApprovedCancel(this.dataset.requestId)'));
+  state.requests.own.push({id:'Q-X',type:'欠勤',status:'承認待ち',startDate:'2026-10-08',endDate:'2026-10-08',reason:'<img src=x onerror=alert(1)>'});
+  const xssRow=requestHistoryRows(state.requests.own,false);
+  expect('request reasons are escaped in history',!xssRow.includes('<img src=x')&&xssRow.includes('&lt;img'));
+  openRequestDetail('Q-X',false);
+  const detailsMarkup=document.getElementById('modalRoot').innerHTML;
+  expect('request detail is readonly and escapes hostile content',detailsMarkup.includes('request-readonly-list')&&detailsMarkup.includes('&lt;img')&&!detailsMarkup.includes('<img src=x'));
+
+  state.data.permissions={requestApprove:true,employeeAdmin:true};
+  state.requests.team=[
+    {id:'T-1',type:'有給',status:'承認待ち',employeeId:'FM0002',name:'森川さん',startDate:'2026-10-09',endDate:'2026-10-09',reason:'私用'},
+    {id:'T-2',type:'在宅勤務',status:'取消申請中',employeeId:'FM0003',name:'神谷さん',startDate:'2026-10-07',endDate:'2026-10-07',reason:'変更'},
+    {id:'T-SELF',type:'有給',status:'承認待ち',employeeId:'FM0001',name:'青木さん'}
+  ];
+  state.requests.context={leaveBalanceConfigured:true,leaveBalance:6,pendingLeaveDays:1,availableLeaveDays:5};
+  const managerDashboard=requestsPage(),managerPanel=requestApprovalPanel();
+  expect('manager sees approval and cancellation queue, excluding self approval',managerDashboard.includes("id='requestApprovalPanel'")&&managerPanel.includes('取消承認')&&managerPanel.includes('承認')&&!managerPanel.includes('T-SELF'));
+  expect('manager metrics use the actual available leave balance',managerDashboard.includes('5日')&&!managerDashboard.includes('request-inline-alert'));
+  resetCalls();
+  setRequestHistoryFilter('承認待ち');
+  setRequestHistoryFilter('承認済');
+  expect('manager request filters also stay local',apiCalls.length===0);
+  state.requests.team=Array.from({length:110},(_,i)=>({id:'TEAM-'+i,type:'欠勤',status:'承認待ち',employeeId:'STAFF-'+i,name:'社員'+i,startDate:'2026-10-10',endDate:'2026-10-10',reason:'私用'}));
+  state.requests.approvalLimit=100;
+  showMoreRequestApprovals();
+  expect('approval list remains navigable beyond 100 records without extra API calls',state.requests.approvalLimit===108&&apiCalls.length===0);
+  state.requests.team=[
+    {id:'T-1',type:'有給',status:'承認待ち',employeeId:'FM0002',name:'森川さん',startDate:'2026-10-09',endDate:'2026-10-09',reason:'私用'},
+    {id:'T-2',type:'在宅勤務',status:'取消申請中',employeeId:'FM0003',name:'神谷さん',startDate:'2026-10-07',endDate:'2026-10-07',reason:'変更'}
+  ];
+  state.requests.approvalLimit=4;
+
+  const largeList=Array.from({length:25},(_,i)=>({id:'H-'+i,type:'欠勤',status:'承認済',startDate:'2026-10-01',endDate:'2026-10-01',reason:'私用'}));
+  state.requests.own=largeList;
+  state.requests.historyLimit=10;
+  setRequestHistoryFilter('ALL');
+  expect('long request history begins at ten rows',requestHistoryContent().split('request-dashboard-row').length===11);
+  showMoreRequestHistory();
+  expect('history expands by ten without a server request',state.requests.historyLimit===20&&apiCalls.length===0);
+
+  state.requests.submitting=false;
+  document.getElementById('requestSubmitButton').disabled=false;
+  resetCalls();
+  submitRequestFromModal();
+  submitRequestFromModal();
+  expect('double-click request submission sends one API call',apiCalls.length===1&&lastCall().method==='submitRequest'&&state.requests.submitting);
+  invokeServerFailure({message:'QA expected submit failure'});
+  expect('request submission failure permits a safe retry',!state.requests.submitting);
+
+  state.requests=createEmptyRequestsState();
+  state.sessionToken='SESSION_A';
+  state.data.user.employeeId='FM0001';
+  resetCalls();
+  loadRequests();
+  const oldUserCall=lastCall();
+  state.sessionToken='SESSION_B';
+  state.data.user.employeeId='FM0002';
+  state.requests=createEmptyRequestsState();
+  invokeServerSuccess({own:[{id:'LEAK',status:'承認済'}],team:[],context:{}});
+  expect('old login response cannot populate new user request data',state.requests.own.length===0&&!requestsDataReady());
+  loadRequests();
+  expect('new user requires a separate authorized bundle',apiCalls.length===2&&oldUserCall.method==='getRequestsBundle'&&lastCall().method==='getRequestsBundle');
+  invokeServerSuccess({own:[{id:'NEW-USER',type:'欠勤',status:'承認待ち'}],team:[],context:{leaveBalanceConfigured:false}});
+  expect('new login can only see its freshly loaded data',requestsDataReady()&&state.requests.own[0].id==='NEW-USER');
+  state.sessionToken='SESSION_TOKEN';
+  state.data.user.employeeId='FM0001';
+  state.requests=createEmptyRequestsState();
 
   state.page='home';
 

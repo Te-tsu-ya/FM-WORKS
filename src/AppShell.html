@@ -118,6 +118,8 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  state.requests=createEmptyRequestsState();
+  delete pageCache.requests;
   invalidateScheduleWindowCache();
   state.data=data;
   state.workLocation=data.attendance.workLocation||'出社';
