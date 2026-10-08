@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.9  
+**文書版:** 0.11.0  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.9`
+`APP.version = 0.11.0`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -319,6 +319,31 @@ PC幅1141px以上:
 - finished: 変更を拒否
 
 タイムラインではLOCATION_CHANGEを紫系の状態点で表示し、`変更前 → 変更後` を表示する。
+
+## 9.4 工数ハイブリッドUI v0.11.0
+
+工数画面は既存の `getWorklogs / saveWorklog / deleteWorklog` を維持し、クライアントの表示・入力導線を再構成する。
+
+主要クライアント関数:
+- `worklogDisplayData()`: 実データまたはADMIN向けQAサンプルを返す
+- `worklogTimelineSegments()`: 工数、休憩、未入力区間を時間境界で分割
+- `worklogTimelineHtml()`: 縦タイムラインを描画
+- `worklogFirstGap()`: 最初の未入力区間をクイック入力初期値へ利用
+- `setQuickWorklogRange()`: 未入力区間クリック時に時刻を転記
+- `worklogQuickForm()`: 常設入力フォーム
+- `saveQuickWorklog()`: 既存 `saveWorklog` APIへ保存
+- `worklogTableHtml()`: 当日一覧
+
+当日のタイムライン範囲:
+- QAサンプル: 09:00-18:00
+- 当日実データ: 出勤時刻から退勤時刻、勤務中なら現在時刻まで
+- 過去日: 登録済み工数の最初の開始から最後の終了まで
+
+休憩区間は当日の `attendance.history` の「休憩開始 / 休憩終了」を利用する。休憩以外で工数が存在しない区間を未入力として扱う。
+
+QAサンプルはADMINかつ当日工数0件の場合だけクライアントメモリ上で生成する。`_sample=true` を付け、編集・削除を無効化する。実プロジェクトが0件ならクイック入力の保存も無効化する。
+
+`renderPage` はworklogで `.one-screen.worklog-one-screen` を付与する。1141px以上ではページ全体を固定し、一覧のみ内部スクロールを許可する。1140px以下は固定高を解除する。
 
 ## 10. 月次UI
 

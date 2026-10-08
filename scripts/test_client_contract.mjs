@@ -197,6 +197,35 @@ const result=vm.runInContext(`
   expect('empty admin attendance gets a browser-only QA sample',attendanceSample&&attendanceSample._sample===true);
   expect('attendance QA sample covers issue and worklog-difference states',attendanceSample.daily.some(x=>x.issue)&&attendanceSample.daily.some(x=>x.worklogIssue));
   expect('attendance QA sample covers leave and remote-work states',attendanceSample.daily.some(x=>x.leaveStatus==='有給')&&attendanceSample.daily.some(x=>x.remote===true));
+
+  state.data={
+    today:'2026-10-08',
+    user:{employeeId:'FM0001',displayName:'青木さん',fullName:'青木 悠真'},
+    permissions:{adminConsole:true},
+    attendance:{state:'off',workedMinutes:0,worked:'0時間00分',clockIn:'',clockOut:'',history:[]},
+    projects:[]
+  };
+  state.worklog={date:'2026-10-08',items:[],totalMinutes:0,loading:false};
+  const worklogSample=worklogDisplayData();
+  expect('empty admin worklog gets browser-only QA sample',worklogSample&&worklogSample.sample===true&&worklogSample.items.length===4);
+  const worklogSegments=worklogTimelineSegments(worklogSample);
+  expect('worklog QA sample includes a lunch break',worklogSegments.some(x=>x.type==='break'&&x.start===720&&x.end===780));
+  expect('worklog QA sample exposes a 90-minute missing interval',worklogSegments.some(x=>x.type==='gap'&&(x.end-x.start)===90));
+  const worklogHtml=worklogPage();
+  expect('worklog hybrid renders timeline quick input and table',worklogHtml.includes('本日のタイムライン')&&worklogHtml.includes('クイック入力')&&worklogHtml.includes('本日の工数一覧'));
+
+  state.data.projects=[{name:'会津屋アプリ',status:'進行中'}];
+  document.getElementById('wlQuickProject').value='会津屋アプリ';
+  document.getElementById('wlQuickCategory').value='UI設計';
+  document.getElementById('wlQuickStart').value='16:30';
+  document.getElementById('wlQuickEnd').value='18:00';
+  document.getElementById('wlQuickDescription').value='工数画面の確認';
+  resetCalls();
+  saveQuickWorklog();
+  call=lastCall();
+  expect('quick worklog input reaches existing saveWorklog contract',call&&call.method==='saveWorklog'&&call.args[0]==='SESSION_TOKEN'&&call.args[1].project==='会津屋アプリ'&&call.args[1].start==='16:30'&&call.args[1].end==='18:00');
+  state.busy=false;
+
   expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
 
 

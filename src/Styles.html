@@ -822,3 +822,69 @@ html[data-font-size="large"] .attendance-recent-row em{font-size:13px}
   .attendance-location-label>small{text-align:left}
 }
 </style>
+<style>
+/* v0.11.0 worklog hybrid: timeline + quick input + compact table */
+.worklog-dashboard{display:grid;gap:12px}
+.worklog-dashboard>.page-head{margin-bottom:0;align-items:center}
+.worklog-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.worklog-sample-chip{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border-radius:999px;border:1px solid #b9d7ff;background:#edf6ff;color:#176de0;font-size:11px;font-weight:850;white-space:nowrap}
+.worklog-datebar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:0 5px 16px rgba(40,63,95,.035)}
+.worklog-datebar>div{display:flex;align-items:center;gap:7px}.worklog-datebar strong{min-width:125px;text-align:center;font-size:14px}.worklog-datebar small{font-size:11px;color:var(--muted)}
+.worklog-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.worklog-metrics>div{position:relative;display:grid;gap:3px;padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 7px 20px rgba(40,63,95,.04);overflow:hidden}
+.worklog-metrics>div:after{content:"";position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 8px color-mix(in srgb,var(--blue) 10%,transparent)}
+.worklog-metrics>div:first-child:after{background:var(--green);box-shadow:0 0 0 8px color-mix(in srgb,var(--green) 10%,transparent)}
+.worklog-metrics>div.warn:after{background:var(--orange);box-shadow:0 0 0 8px color-mix(in srgb,var(--orange) 10%,transparent)}
+.worklog-metrics>div:last-child:after{background:var(--purple);box-shadow:0 0 0 8px color-mix(in srgb,var(--purple) 10%,transparent)}
+.worklog-metrics span{font-size:12px;color:var(--muted);font-weight:700}.worklog-metrics strong{font-size:22px;letter-spacing:-.03em}.worklog-metrics small{font-size:11px;color:var(--muted)}
+.worklog-main-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(310px,.9fr);gap:10px;min-height:0}
+.worklog-panel{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px 15px;box-shadow:0 8px 24px rgba(40,63,95,.045)}
+.worklog-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}.worklog-panel h2{margin:2px 0 0;font-size:16px}
+.worklog-gap-badge{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border-radius:999px;background:#ffedef;color:#c83b4d;font-size:11px;font-weight:850;white-space:nowrap}
+.worklog-timeline-card{display:flex;flex-direction:column;min-height:0}
+.worklog-timeline-track{display:flex;flex-direction:column;min-height:0;flex:1;gap:4px}
+.worklog-time-block{flex:var(--duration) 1 0;min-height:35px;width:100%;display:grid;grid-template-columns:100px minmax(130px,.8fr) minmax(90px,.55fr);align-items:center;gap:10px;padding:6px 10px;border:1px solid transparent;border-left:4px solid var(--block-color,#1478ff);border-radius:9px;background:var(--block-bg,#edf5ff);color:var(--text);text-align:left}
+button.worklog-time-block{cursor:pointer}.worklog-time-block span{font-size:12px;font-weight:800;color:#52637c}.worklog-time-block strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.worklog-time-block small{font-size:12px;color:#657690;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.worklog-time-block.blue{--block-color:#1478ff;--block-bg:#eef6ff}.worklog-time-block.green{--block-color:#19a66d;--block-bg:#effaf5}.worklog-time-block.purple{--block-color:#7b61ff;--block-bg:#f4f1ff}.worklog-time-block.orange{--block-color:#f3a11b;--block-bg:#fff7e9}.worklog-time-block.pink{--block-color:#ef4d83;--block-bg:#fff0f5}.worklog-time-block.slate{--block-color:#64748b;--block-bg:#f3f6f9}
+.worklog-time-block.break{--block-color:#aab4c2;--block-bg:#f4f6f8;border-left-width:4px;color:#657690}
+.worklog-time-block.gap{--block-color:#ef4d5b;--block-bg:#fff4f5;border-color:#f3c5cc;border-left-color:#ef4d5b;border-style:dashed}
+.worklog-time-block.gap strong{color:#c63b4d}.worklog-time-block.gap:hover{background:#ffecef;border-color:#ef9aa6}
+.worklog-quick-card{display:flex;flex-direction:column;min-height:0;transition:.2s}.worklog-quick-card.attention{box-shadow:0 0 0 3px rgba(20,120,255,.16),0 8px 24px rgba(40,63,95,.05)}
+.worklog-quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.worklog-quick-grid .field{gap:4px}.worklog-quick-grid .field.full{grid-column:1/-1}.worklog-quick-grid .field>span{font-size:11px}.worklog-quick-grid input,.worklog-quick-grid select,.worklog-quick-grid textarea{min-height:38px}.worklog-quick-grid textarea{resize:none;padding-top:9px}
+.worklog-sample-note{margin:7px 0;padding:7px 9px;border:1px solid #d6e6fa;border-radius:9px;background:#f4f9ff;color:#5f7591;font-size:11px;line-height:1.4}
+.worklog-quick-save{width:100%;min-height:42px;margin-top:auto}
+.worklog-list-card{display:flex;flex-direction:column;min-height:0;overflow:hidden}.worklog-list-card>header{flex:0 0 auto}
+.worklog-table-wrap{min-height:0;overflow:auto;flex:1}.worklog-table-head,.worklog-table-row{min-width:850px;display:grid;grid-template-columns:100px minmax(150px,1fr) 110px minmax(190px,1.4fr) 95px 90px 105px;gap:8px;align-items:center}
+.worklog-table-head{position:sticky;top:0;z-index:1;padding:6px 8px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:11px;font-weight:800}
+.worklog-table-row{padding:7px 8px;border-bottom:1px solid var(--line);font-size:12px;color:var(--text)}.worklog-table-row:hover{background:color-mix(in srgb,var(--blue) 4%,transparent)}
+.worklog-table-row>span{min-width:0}.worklog-table-row>span:nth-child(2){display:flex;align-items:center;gap:7px}.worklog-table-row>span:last-child{display:flex;align-items:center;gap:3px}
+.project-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#1478ff}.project-dot.green{background:#19a66d}.project-dot.purple{background:#7b61ff}.project-dot.orange{background:#f3a11b}.project-dot.pink{background:#ef4d83}.project-dot.slate{background:#64748b}
+.worklog-table-row .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.worklog-table-row em{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:11px;font-style:normal;font-weight:800}.worklog-table-row em.ok{background:#e8f8f0;color:#128758}.worklog-table-row em.sample{background:#edf5ff;color:#176de0}
+.icon-text-button{border:0;background:transparent;color:var(--blue);font-size:11px;font-weight:750;padding:4px}.icon-text-button.danger{color:var(--red)}
+.worklog-empty-state{min-height:130px;display:grid;place-items:center;align-content:center;gap:4px;text-align:center;color:var(--muted)}.worklog-empty-state strong{font-size:13px;color:var(--text)}.worklog-empty-state span{font-size:11px}.worklog-empty-state.compact{min-height:80px}
+html[data-theme="dark"] .worklog-sample-chip,html[data-theme="dark"] .worklog-sample-note{background:#11263f;border-color:#244e7c;color:#9bc7ff}
+html[data-theme="dark"] .worklog-time-block.blue{--block-bg:#13273e}html[data-theme="dark"] .worklog-time-block.green{--block-bg:#142a21}html[data-theme="dark"] .worklog-time-block.purple{--block-bg:#211d38}html[data-theme="dark"] .worklog-time-block.orange{--block-bg:#302615}html[data-theme="dark"] .worklog-time-block.pink{--block-bg:#321b25}html[data-theme="dark"] .worklog-time-block.slate{--block-bg:#20262e}html[data-theme="dark"] .worklog-time-block.gap{--block-bg:#321a20;border-color:#63313b}
+
+@media(min-width:1141px){
+  .content.one-screen.worklog-one-screen{max-width:none;overflow:hidden;padding:12px 22px 10px;display:flex;flex-direction:column;min-height:0}
+  .content.worklog-one-screen>.global-action-banner-slot{flex:0 0 auto}
+  .content.worklog-one-screen>.worklog-dashboard{flex:1;min-height:0;display:grid;grid-template-rows:auto 42px 78px minmax(220px,1.15fr) minmax(160px,.75fr);gap:8px}
+  .worklog-one-screen .page-head{min-height:47px}.worklog-one-screen .page-head h1{font-size:24px}.worklog-one-screen .page-head p{margin-top:3px;font-size:13px}
+  .worklog-one-screen .worklog-datebar{min-height:42px;padding:5px 8px}.worklog-one-screen .worklog-metrics{gap:8px}.worklog-one-screen .worklog-metrics>div{padding:9px 11px}.worklog-one-screen .worklog-metrics strong{font-size:20px}
+  .worklog-one-screen .worklog-panel{padding:10px 12px}.worklog-one-screen .worklog-panel>header{margin-bottom:7px}.worklog-one-screen .worklog-panel h2{font-size:15px}
+  .worklog-one-screen .worklog-time-block{min-height:31px;padding:4px 9px}.worklog-one-screen .worklog-quick-grid{gap:6px}.worklog-one-screen .worklog-quick-grid input,.worklog-one-screen .worklog-quick-grid select{min-height:34px}.worklog-one-screen .worklog-quick-grid textarea{min-height:54px}
+  .worklog-one-screen .worklog-quick-save{min-height:37px}.worklog-one-screen .worklog-table-row{padding:5px 7px}
+}
+@media(max-height:760px) and (min-width:1141px){
+  .content.one-screen.worklog-one-screen{padding-top:8px;padding-bottom:8px}.content.worklog-one-screen>.worklog-dashboard{grid-template-rows:auto 38px 70px minmax(190px,1.1fr) minmax(145px,.7fr);gap:6px}
+  .worklog-one-screen .page-head p{display:none}.worklog-one-screen .worklog-metrics>div{padding:7px 10px}.worklog-one-screen .worklog-metrics small{display:none}.worklog-one-screen .worklog-time-block{min-height:27px}.worklog-one-screen .worklog-panel{padding:8px 10px}
+}
+@media(max-width:1140px){
+  .content.one-screen.worklog-one-screen{height:auto;overflow:visible;display:block}.worklog-main-grid{grid-template-columns:1fr}.worklog-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.worklog-timeline-track{min-height:340px}.worklog-quick-card{min-height:390px}
+}
+@media(max-width:680px){
+  .worklog-dashboard{gap:10px}.worklog-datebar{align-items:flex-start;flex-direction:column}.worklog-datebar>div{width:100%;flex-wrap:wrap}.worklog-datebar strong{min-width:0;text-align:left}
+  .worklog-metrics{grid-template-columns:1fr 1fr;gap:7px}.worklog-metrics>div{padding:10px}.worklog-metrics strong{font-size:18px}.worklog-metrics small{display:none}
+  .worklog-panel{padding:12px}.worklog-quick-grid{grid-template-columns:1fr}.worklog-quick-grid .field.full{grid-column:auto}.worklog-time-block{grid-template-columns:82px minmax(110px,1fr);grid-template-areas:"time title" "time meta";gap:3px 8px}.worklog-time-block span{grid-area:time}.worklog-time-block strong{grid-area:title}.worklog-time-block small{grid-area:meta}
+}
+</style>
