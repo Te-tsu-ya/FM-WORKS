@@ -118,6 +118,10 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  state.authAdmin=null;
+  state.adminUi=createAdminUiState();
+  state.adminTab='people';
+  invalidatePageCache('authAdmin');
   state.requests=createEmptyRequestsState();
   delete pageCache.requests;
   invalidateScheduleWindowCache();
@@ -130,6 +134,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   const requested=(location.hash||'#home').slice(1);
   const nestedRoutes=['monthly','companyCalendar','people'];
   state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
+  if(state.page==='admin'&&state.adminTab==='people')state.page='people';
   if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');

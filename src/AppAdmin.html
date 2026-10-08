@@ -6,19 +6,103 @@ function authStateBadge(emp){
   return "<span class='auth-state'>利用可能</span>";
 }
 
+
+const ADMIN_CATEGORIES=[
+  {id:'people',label:'社員・権限',short:'社員',icon:'人',help:'社員情報、権限と年休を管理'},
+  {id:'auth',label:'認証・サポート',short:'認証',icon:'鍵',help:'PIN、ロックとサポート'},
+  {id:'projects',label:'プロジェクト',short:'案件',icon:'案',help:'工数で利用する案件マスタ'},
+  {id:'operation',label:'運用・労務',short:'運用',icon:'運',help:'労務ルールと運用状態'},
+  {id:'requirements',label:'要件定義書',short:'要件',icon:'文',help:'アプリの要件と業務ルール'},
+  {id:'technical',label:'技術設計書',short:'設計',icon:'技',help:'実装・データ設計'}
+];
+function createAdminUiState(){
+  return {selectedEmployeeId:'',detailTab:'basic',search:'',role:'ALL',status:'ALL',menuOpen:false,wizard:false,wizardStep:1,saving:false};
+}
+function selectAdminSection(id){
+  if(!ADMIN_CATEGORIES.some(item=>item.id===id))return;
+  state.adminUi.menuOpen=false;
+  state.adminTab=id;
+  if(id==='people'){
+    if(state.page!=='people')navigate('people');
+    else renderPageIfActive('people');
+  }else setAdminTab(id);
+}
+function toggleAdminMenu(){
+  state.adminUi.menuOpen=!state.adminUi.menuOpen;
+  renderPage();
+}
+function adminStatAction(mode){
+  const ui=state.adminUi;
+  if(mode==='employees'){ui.status='active';ui.role='ALL';}
+  else if(mode==='admins'){ui.status='ALL';ui.role='ADMIN';}
+  else if(mode==='leave'){ui.status='leave';ui.role='ALL';}
+  else if(mode==='pin'){selectAdminSection('auth');return;}
+  ui.search='';
+  selectAdminSection('people');
+}
+function adminOverviewStats(){
+  const records=state.authAdmin&&Array.isArray(state.authAdmin.employees)?state.authAdmin.employees:null;
+  const count=fn=>records?String(records.filter(fn).length):'—';
+  const rows=[
+    ['在籍社員',count(e=>e.active!==false),'employees','staff'],
+    ['管理者',count(e=>e.active!==false&&e.role==='ADMIN'),'admins','manager'],
+    ['年休未設定',count(e=>e.active!==false&&!e.leaveBalanceConfigured),'leave','leave'],
+    ['PIN要確認',count(e=>e.active!==false&&(!e.pinConfigured||!!e.lockedUntil)),'pin','pin']
+  ];
+  return `<section class='admin-overview' aria-label='管理状況'>
+    ${rows.map(([label,num,action,tone])=>`<button type='button' class='admin-overview-card ${tone}'
+      onclick="adminStatAction('${action}')" aria-label='${escapeHtml(label)} ${escapeHtml(num)}件。関連画面を開く'>
+      <span>${escapeHtml(label)}</span><strong>${escapeHtml(num)}</strong>
+      <small>${records?'クリックして確認':'管理データを読み込み中'}</small></button>`).join('')}
+  </section>`;
+}
+function adminWorkspaceShell(active,content,action='',navigation=''){
+  const current=ADMIN_CATEGORIES.find(item=>item.id===active)||ADMIN_CATEGORIES[0];
+  const nav=navigation||settingsTabs(active);
+  return `<div class='admin-hybrid settings-screen'>
+    ${pageHead('管理','社員・権限・年休台帳や業務マスタを一か所で管理します。',action)}
+    ${adminOverviewStats()}
+    <button type='button' class='admin-nav-mobile-toggle' aria-expanded='${!!state.adminUi.menuOpen}'
+      aria-controls='adminInternalNavigation' onclick='toggleAdminMenu()'>管理メニュー：${escapeHtml(current.label)} <span aria-hidden='true'>${state.adminUi.menuOpen?'▲':'▼'}</span></button>
+    <div class='admin-workspace-body'>
+      <aside id='adminInternalNavigation' class='admin-internal-sidebar ${state.adminUi.menuOpen?'is-open':''}'>${nav}</aside>
+      <main class='admin-workspace-main' aria-label='${escapeHtml(current.label)}'>
+        <header class='admin-workspace-heading'><div><span class='eyebrow'>ADMINISTRATION</span>
+          <h2>${escapeHtml(current.label)}</h2><p>${escapeHtml(current.help)}</p></div></header>
+        <div class='settings-content admin-workspace-content'>${content}</div>
+      </main>
+    </div>
+  </div>`;
+}
+
+
 function settingsTabs(activeOverride){
-  const tabs=[['people','社員・権限'],['auth','認証・サポート'],['projects','プロジェクト'],['operation','運用・労務'],['requirements','要件定義書'],['technical','技術設計書']];
   const active=activeOverride||state.adminTab;
-  return `<div class='settings-tabs admin-workspace-tabs'>${tabs.map(([id,label])=>`<button class='${active===id?'active':''}' onclick="${id==='people'?"navigate('people')":`setAdminTab('${id}')`}">${escapeHtml(label)}</button>`).join('')}</div>`;
+  return `<nav class='settings-tabs admin-workspace-tabs admin-side-nav' aria-label='管理の設定項目'>
+    <span class='admin-nav-caption'>管理メニュー</span>
+    ${ADMIN_CATEGORIES.map(item=>`<button type='button' class='${active===item.id?'active':''}'
+      data-admin-tab='${item.id}' aria-current='${active===item.id?'page':'false'}'
+      onclick='selectAdminSection(this.dataset.adminTab)'>
+      <span class='admin-nav-icon' aria-hidden='true'>${item.icon}</span>
+      <span class='admin-nav-label'><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.help)}</small></span>
+      <span class='admin-nav-arrow' aria-hidden='true'>›</span>
+    </button>`).join('')}
+  </nav>`;
 }
 function setAdminTab(tab){
-  state.adminTab=tab;renderNav();renderPage(true);
+  if(!ADMIN_CATEGORIES.some(item=>item.id===tab))return;
+  if(tab==='people'){selectAdminSection('people');return;}
+  state.adminTab=tab;
+  state.adminUi.menuOpen=false;
+  if(state.page!=='admin'){navigate('admin');return;}
+  renderNav();renderPage();
   if(tab==='auth')loadAuthAdmin({scope:'auth'});
   if(tab==='projects')loadAuthAdmin({scope:'projects'});
   if(tab==='operation')loadMaintenance();
   if(tab==='requirements')loadSystemDocument('requirements');
   if(tab==='technical')loadSystemDocument('technical');
 }
+
 function authSettingsSection(){
   if(!state.authAdmin)return "<div class='loading-card'></div>";
   const a=state.authAdmin,configured=a.employees.filter(e=>e.pinConfigured).length,locked=a.employees.filter(e=>e.lockedUntil).length,pending=(a.resetRequests||[]).filter(r=>r.status==='未対応').length;
@@ -106,6 +190,7 @@ function documentPane(type){
 }
 function adminPage(){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('管理','この画面を表示する権限がありません。');
+  if(state.adminTab==='people')return peoplePage();
   let content='';
   if(state.adminTab==='auth')content=authSettingsSection();
   else if(state.adminTab==='projects')content=projectAdminSection();
@@ -113,7 +198,7 @@ function adminPage(){
   else if(state.adminTab==='requirements')content=documentPane('requirements');
   else if(state.adminTab==='technical')content=documentPane('technical');
   else content=authSettingsSection();
-  return `<div class='single-screen-layout settings-screen'>${pageHead('管理','社員・権限、業務マスタ、労務・運用、システム情報を管理します。')}${settingsTabs()}<div class='settings-content'>${content}</div></div>`;
+  return adminWorkspaceShell(state.adminTab,content);
 }
 
 function saveLaborRulesFromAdmin(){
@@ -236,19 +321,25 @@ function authAdminScope_(options={}){
 function authAdminCacheName_(scope){return scope==='people'?'authAdminPeople':scope==='projects'?'authAdminProjects':'authAdminAuth';}
 function loadAuthAdmin(options={}){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)) return;
-  const scope=authAdminScope_(options),cacheName=authAdminCacheName_(scope),key=scope;
+  const scope=authAdminScope_(options),cacheName=authAdminCacheName_(scope);
+  const identity=String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+  const key=scope+'|'+identity;
   if(!options.force&&cacheFresh(cacheName,key))return;
+  if(!options.force&&scope==='people'&&Array.isArray(state.authAdmin&&state.authAdmin.employees)&&cacheFresh('authAdminAuth','auth|'+identity)){
+    markPageCache(cacheName,key);renderPageIfActive('people');return;
+  }
   const ticket=beginPageLoad(cacheName,key);if(!ticket)return;
   const hasCurrent=cacheHas(cacheName,key)&&!!state.authAdmin;
   if(!hasCurrent&&!options.silent)renderPage();
   google.script.run
     .withSuccessHandler(data=>{
       endPageLoad(ticket);
+      if(identity!==String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||''))return;
       state.authAdmin={...(state.authAdmin||{}),...(data||{})};
       markPageCache(cacheName,key);
       if(state.page==='admin'||state.page==='people')renderPage();
     })
-    .withFailureHandler(err=>{endPageLoad(ticket);handleApiError(err,'管理情報を読み込めませんでした')})
+    .withFailureHandler(err=>{endPageLoad(ticket);if(identity!==String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||''))return;handleApiError(err,'管理情報を読み込めませんでした')})
     .getAuthAdminData(state.sessionToken,scope);
 }
 

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.5  
+**文書版:** 0.11.6  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.5`
+`APP.version = 0.11.6`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -651,6 +651,18 @@ disabledは `cursor:not-allowed`。
 - `src/Styles.html` の `.request-dashboard` を起点にCSSをスコープ化。4列KPI/メイン2列/スマホ2列以下で適応、darkテーマにも対応。モーダルは本文領域のみスクロールし、下部の送信ボタンを維持。
 - 既存 `submitRequest`/`cancelRequest`/`approveRequest`/`requestApprovedCancellation`/`decideApprovedCancellation` および有給残日数検証・監査を変更しない。権限は引き続きサーバーを正本とする。
 - `scripts/test_client_contract.mjs` でステータス/役割切替、履歴ローカル処理、二重送信、ログイン分離、エスケープの動作契約をテストする。CI成功とは別に実端末の画面・操作・読込秒数を確認する。
+
+
+## 16.2 管理ハイブリッドUI・社員登録ガイド v0.11.6
+
+- `AppAdmin.html`: `ADMIN_CATEGORIES`（6カテゴリ）と `settingsTabs()`（縦メニュー）、`adminOverviewStats()`（認可済み社員から4指標）、`adminWorkspaceShell()`（共通管理シェル）、`setAdminTab()`（既存scopeごとの遅延読込）を導入。社員タブは既存 `people` ルートを使用する。
+- `AppPeopleMonthly.html`: `adminPeopleFiltered()`、`adminPeopleRows()` と `adminEmployeeDetail()` を実装。検索/絞り込み/選択/詳細タブをクライアント内で反映し、GAS通信は追加しない。入力値はHTMLエスケープし、社員IDは `data-employee-id` に保持する。
+- `AppPeopleMonthly.html`: 追加モーダルは `adminWizardShowStep()` で4段階表示切替。必須社員ID・氏名、メール、権限、承認者、勤務時間、休憩、有給残・基準日を `validateAdminWizardStep()` で検証。最終確認は `adminWizardReviewHtml()` で生成し、保存処理は既存 `saveEmployeeFromModal()` → `performEmployeeSave()` → `saveEmployee` を再利用する。
+- `AppCore.html` / `AppShell.html`: `state.adminUi=createAdminUiState()` で検索条件と選択社員、ガイドの進行状態を管理。管理ルートの初期値は `people`。ログアウトおよびログインマウント時に管理データ・ページキャッシュ・UI選択を破棄する。
+- `loadAuthAdmin()`: 認可済み `getAuthAdminData(token,scope)` を利用。キャッシュキーを `scope|sessionToken|employeeId` とし、終了応答時に同じIDとトークンであることを確認。認証scopeが新鮮なら社員scopeは既取得社員一覧を再利用。既存の `auth` / `projects` / `people` の分割取得は維持する。
+- `Styles.html`：4指標・縦カテゴリメニュー・一覧＋詳細のレスポンシブレイアウト。880px以下ではメニューを折りたたみ、1520px以下では一覧と詳細を縦に配置する。新規登録モーダルは本文だけスクロールし、フッターの保存操作を維持する。
+- 危険操作の権限判定、年休台帳処理、管理者昇格や無効化の確認、監査ログは `Employees.gs`、`Auth.gs` 等の既存バックエンドを変更せず使用する。変更時はCIのリポジトリ検証、ロジック試験、クライアント契約試験を再実行する。
+- 実運用の画面・認証・ズーム/スマホの端末別目視は自動試験とは別に確認する。
 
 ## 17. クライアントキャッシュ
 

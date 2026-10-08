@@ -1,5 +1,169 @@
 <script>
-function peoplePage(){var admin=state.data.permissions&&state.data.permissions.employeeAdmin,emps=admin&&state.authAdmin?(state.authAdmin.employees||[]):(state.data.employees||[]);var action=admin?'<button class="primary-button" onclick="openEmployeeModal()">＋ 社員追加</button>':'';var rows=emps.map(function(e){var subtitle=escapeHtml(e.department||'未設定')+' / '+escapeHtml(roleLabel(e.role))+(e.payrollIncluded?' / 給与対象':'');var right=admin?'<div class="admin-actions"><button class="small-button" onclick="openEmployeeModal(\''+e.employeeId+'\')">編集</button><button class="small-button" onclick="openLeaveLedgerModal(\''+e.employeeId+'\')">年休</button><button class="small-button" onclick="openTempPinModal(\''+e.employeeId+'\')">PIN</button></div>':'';return '<div class="list-item"><span class="avatar" style="width:38px;height:38px">'+escapeHtml((e.displayName||e.name||'?').slice(0,1))+'</span><div><strong>'+escapeHtml(e.name)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+subtitle+(e.email?' / '+escapeHtml(e.email):'')+'</div></div>'+right+'</div>';}).join('');return pageHead('管理','社員・権限・年休台帳を管理します。',action)+settingsTabs('people')+'<div class="grid cols-2">'+card('社員・権限',rows||'<p class="muted">社員が登録されていません。</p>')+card('運用ルール','<p class="muted">社員追加・権限変更・PIN再発行・年休台帳は管理者だけが操作できます。</p><p class="muted">会社カレンダー編集だけを許可する場合は「会社カレンダー編集者」を設定します。</p>')+'</div>';}
+
+function adminPeopleRecords(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return [];
+  return state.authAdmin&&Array.isArray(state.authAdmin.employees)?state.authAdmin.employees:null;
+}
+function adminPeopleFiltered(){
+  const rows=adminPeopleRecords()||[],ui=state.adminUi;
+  const query=String(ui.search||'').trim().toLocaleLowerCase('ja-JP');
+  return rows.filter(e=>{
+    if(ui.role!=='ALL'&&e.role!==ui.role)return false;
+    if(ui.status==='active'&&e.active===false)return false;
+    if(ui.status==='inactive'&&e.active!==false)return false;
+    if(ui.status==='leave'&&(e.active===false||e.leaveBalanceConfigured))return false;
+    if(ui.status==='pin'&&(e.active===false||(e.pinConfigured&&!e.lockedUntil)))return false;
+    return !query||[e.name,e.displayName,e.employeeId,e.department,e.title,e.email]
+      .some(v=>String(v||'').toLocaleLowerCase('ja-JP').includes(query));
+  }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ja'));
+}
+function adminCurrentEmployee(){
+  const visible=adminPeopleFiltered(),ui=state.adminUi;
+  const selected=visible.find(e=>e.employeeId===ui.selectedEmployeeId)||visible[0]||null;
+  if(selected)ui.selectedEmployeeId=selected.employeeId;
+  else ui.selectedEmployeeId='';
+  return selected;
+}
+function adminPeopleRows(){
+  const rows=adminPeopleFiltered(),selected=adminCurrentEmployee();
+  if(!rows.length)return `<div class='admin-people-empty'><strong>条件に合う社員がいません</strong>
+    <p>検索条件を変えるか、絞り込みを解除してください。</p>
+    <button type='button' class='secondary-button compact' onclick='resetAdminPeopleFilters()'>絞り込みを解除</button></div>`;
+  return rows.map(e=>{
+    const selectedRow=!!(selected&&e.employeeId===selected.employeeId),active=e.active!==false;
+    const leave=!e.leaveBalanceConfigured,locked=!!e.lockedUntil;
+    return `<button type='button' class='admin-employee-item ${selectedRow?'selected':''}'
+      data-employee-id='${escapeHtml(e.employeeId)}' aria-pressed='${selectedRow}'
+      onclick='selectAdminEmployee(this.dataset.employeeId)'>
+      <span class='admin-employee-avatar'>${escapeHtml((e.displayName||e.name||'?').slice(0,1))}</span>
+      <span class='admin-employee-name'><strong>${escapeHtml(e.name||e.employeeId)}</strong><small>${escapeHtml(e.employeeId)} · ${escapeHtml(e.department||'部署未設定')}</small></span>
+      <span class='admin-employee-role'>${escapeHtml(roleLabel(e.role))}</span>
+      <span class='admin-employee-state ${active?'is-active':'is-inactive'}'>${active?'在籍':'退職'}</span>
+      <span class='admin-employee-warning' aria-label='${leave?'年休未設定 ':''}${locked?'PINロック中':''}'>${leave?'年休未設定':''}${leave&&locked?' · ':''}${locked?'ロック中':''}</span>
+      <span class='admin-employee-chevron' aria-hidden='true'>›</span>
+    </button>`;
+  }).join('');
+}
+function adminEmployeeDetailFields(fields){
+  return `<dl class='admin-employee-facts'>${fields.map(([label,value])=>`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value===null||value===undefined||value===''?'—':String(value))}</dd></div>`).join('')}</dl>`;
+}
+function adminEmployeeDetail(){
+  const e=adminCurrentEmployee();
+  if(!e)return `<div class='admin-detail-empty'><strong>社員を選択してください</strong><p>左の一覧から社員を選ぶと、詳細と操作をここに表示します。</p></div>`;
+  const canEdit=!!(state.data&&state.data.permissions&&state.data.permissions.employeeAdmin);
+  const ui=state.adminUi,all=adminPeopleRecords()||[];
+  const manager=all.find(p=>p.employeeId===e.managerId);
+  const name=e.name||e.employeeId,leave=e.leaveBalanceConfigured?String(e.leaveBalance)+'日':'未設定';
+  const tabs=[['basic','基本情報'],['access','権限・承認'],['leave','勤務・年休'],['security','認証']];
+  let content='';
+  if(ui.detailTab==='access')content=adminEmployeeDetailFields([
+    ['権限',roleLabel(e.role)],['直属承認者',manager?manager.name:(e.managerId||'未設定')],
+    ['給与集計',e.payrollIncluded?'対象':'対象外'],['在籍状態',e.active!==false?'在籍':'退職'],
+    ['会社カレンダー権限',e.role==='CALENDAR_EDITOR'||e.role==='ADMIN'?'編集可能':'役割の設定に準じる']
+  ]);
+  else if(ui.detailTab==='leave')content=adminEmployeeDetailFields([
+    ['標準勤務',String(e.workStart||'09:00')+' ～ '+String(e.workEnd||'18:00')],
+    ['休憩時間',String(e.breakMinutes??60)+'分'],['有給残日数',leave],
+    ['年休基準日',e.leaveBasisDate||'未設定'],['雇入日',e.hireDate||'未設定']
+  ]);
+  else if(ui.detailTab==='security')content=adminEmployeeDetailFields([
+    ['認証状態',e.lockedUntil?'ロック中':!e.pinConfigured?'PIN未設定':e.mustChangePin?'初回変更待ち':'利用可能'],
+    ['最終ログイン',e.lastLogin||'記録なし'],['PIN設定',e.pinConfigured?'設定済み':'未設定'],
+    ['PIN初回変更',e.mustChangePin?'必要':'不要']
+  ]);
+  else content=adminEmployeeDetailFields([
+    ['社員ID',e.employeeId],['氏名',e.name],['表示名',e.displayName],
+    ['部署',e.department||'未設定'],['役職',e.title||'未設定'],['メール',e.email||'未設定'],
+    ['備考',e.note||'—']
+  ]);
+  return `<div class='admin-employee-detail'>
+    <header class='admin-detail-head'>
+      <span class='admin-detail-avatar'>${escapeHtml((e.displayName||name).slice(0,1))}</span>
+      <div><span class='eyebrow'>EMPLOYEE PROFILE</span><h3>${escapeHtml(name)}</h3>
+        <p>${escapeHtml(roleLabel(e.role))} · ${escapeHtml(e.department||'部署未設定')}</p></div>
+      <span class='admin-employee-state ${e.active!==false?'is-active':'is-inactive'}'>${e.active!==false?'在籍':'退職'}</span>
+    </header>
+    <div class='admin-detail-tabs' role='group' aria-label='社員の詳細項目'>
+      ${tabs.map(([id,label])=>`<button type='button' class='${ui.detailTab===id?'active':''}'
+        aria-pressed='${ui.detailTab===id}' data-detail-tab='${id}'
+        onclick='setAdminDetailTab(this.dataset.detailTab)'>${escapeHtml(label)}</button>`).join('')}
+    </div>
+    <div class='admin-detail-content'>${content}</div>
+    ${canEdit?`<div class='admin-detail-actions'>
+      <button type='button' class='primary-button compact' data-employee-id='${escapeHtml(e.employeeId)}' onclick='openEmployeeModal(this.dataset.employeeId)'>社員情報を編集</button>
+      <button type='button' class='secondary-button compact' data-employee-id='${escapeHtml(e.employeeId)}' onclick='openLeaveLedgerModal(this.dataset.employeeId)'>年休台帳</button>
+      <button type='button' class='secondary-button compact' data-employee-id='${escapeHtml(e.employeeId)}' onclick='openTempPinModal(this.dataset.employeeId)'>PIN再発行</button>
+      ${e.lockedUntil?`<button type='button' class='secondary-button compact' data-employee-id='${escapeHtml(e.employeeId)}' onclick='unlockAccount(this.dataset.employeeId)'>ロック解除</button>`:''}
+    </div>`:''}
+  </div>`;
+}
+function selectAdminEmployee(employeeId){
+  const e=adminPeopleFiltered().find(x=>x.employeeId===employeeId);
+  if(!e)return;
+  state.adminUi.selectedEmployeeId=e.employeeId;
+  const list=document.getElementById('adminPeopleList'),detail=document.getElementById('adminEmployeeDetail');
+  if(list)list.innerHTML=adminPeopleRows();
+  if(detail)detail.innerHTML=adminEmployeeDetail();
+  const target=document.getElementById('adminEmployeeDetail');
+  if(target&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width:820px)').matches&&typeof target.scrollIntoView==='function')target.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function setAdminDetailTab(tab){
+  if(!['basic','access','leave','security'].includes(tab))return;
+  state.adminUi.detailTab=tab;
+  const el=document.getElementById('adminEmployeeDetail');
+  if(el)el.innerHTML=adminEmployeeDetail();
+}
+function refreshAdminPeople(){
+  const filtered=adminPeopleFiltered();
+  const count=document.getElementById('adminPeopleCount'),list=document.getElementById('adminPeopleList'),detail=document.getElementById('adminEmployeeDetail');
+  if(count)count.textContent=filtered.length+'件 / 全'+(adminPeopleRecords()||[]).length+'件';
+  if(list)list.innerHTML=adminPeopleRows();
+  if(detail)detail.innerHTML=adminEmployeeDetail();
+}
+function filterAdminPeople(kind,value){
+  if(!['search','role','status'].includes(kind))return;
+  if(kind==='role'&&!['ALL','USER','CALENDAR_EDITOR','MANAGER','ADMIN'].includes(value))return;
+  if(kind==='status'&&!['ALL','active','inactive','leave','pin'].includes(value))return;
+  state.adminUi[kind]=String(value||'');
+  refreshAdminPeople();
+}
+function resetAdminPeopleFilters(){
+  const ui=state.adminUi;ui.search='';ui.role='ALL';ui.status='ALL';
+  const input=document.getElementById('adminPeopleSearch'),role=document.getElementById('adminPeopleRole'),status=document.getElementById('adminPeopleStatus');
+  if(input)input.value='';if(role)role.value='ALL';if(status)status.value='ALL';
+  refreshAdminPeople();
+}
+function adminPeopleContent(){
+  const records=adminPeopleRecords(),ui=state.adminUi;
+  if(!records)return `<div class='admin-people-loading' role='status'><div class='loading-card'></div><p>社員情報を読み込んでいます…</p></div>`;
+  const filters=[
+    ['ALL','すべての在籍状態'],['active','在籍'],['inactive','退職'],['leave','年休未設定'],['pin','PIN要確認']
+  ];
+  const roles=[['ALL','すべての権限'],['ADMIN','管理者'],['MANAGER','マネージャー'],['CALENDAR_EDITOR','カレンダー編集者'],['USER','社員']];
+  const body=`<section class='admin-people-panel'>
+    <header class='admin-panel-heading'><div><h3>社員一覧</h3><p>氏名や部署で検索し、社員を選ぶと右側に詳細が表示されます。</p></div>
+      <span id='adminPeopleCount'>${adminPeopleFiltered().length}件 / 全${records.length}件</span></header>
+    <div class='admin-people-controls'>
+      <label class='admin-search-field'><span class='sr-only'>社員検索</span><input type='search' id='adminPeopleSearch'
+        value='${escapeHtml(ui.search)}' placeholder='氏名・部署・社員IDを検索' aria-label='社員検索'
+        oninput="filterAdminPeople('search',this.value)"></label>
+      <label class='admin-filter-label'><span>権限</span><select id='adminPeopleRole' aria-label='権限で絞り込む' onchange="filterAdminPeople('role',this.value)">
+        ${roles.map(([v,label])=>`<option value='${v}' ${ui.role===v?'selected':''}>${escapeHtml(label)}</option>`).join('')}</select></label>
+      <label class='admin-filter-label'><span>在籍・確認状況</span><select id='adminPeopleStatus' aria-label='在籍・確認状況で絞り込む' onchange="filterAdminPeople('status',this.value)">
+        ${filters.map(([v,label])=>`<option value='${v}' ${ui.status===v?'selected':''}>${escapeHtml(label)}</option>`).join('')}</select></label>
+    </div>
+    <div class='admin-list-header' aria-hidden='true'><span>社員</span><span>権限</span><span>状態</span><span>確認事項</span><span></span></div>
+    <div class='admin-employee-items' id='adminPeopleList'>${adminPeopleRows()}</div>
+  </section>`;
+  return `<div class='admin-people-split'>${body}<section class='admin-detail-panel' id='adminEmployeeDetail' aria-label='選択社員の詳細' tabindex='-1'>${adminEmployeeDetail()}</section></div>`;
+}
+function peoplePage(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('管理','権限がありません。');
+  const canAdd=!!(state.data.permissions&&state.data.permissions.employeeAdmin);
+  const action=canAdd?`<button type='button' class='primary-button' onclick='openEmployeeModal()'>＋ 社員追加</button>`:'';
+  return adminWorkspaceShell('people',adminPeopleContent(),action,settingsTabs('people'));
+}
+
 function leaveLedgerTypeLabel(type){return ({OPENING:'初期残数',GRANT:'付与',USE:'取得',RESTORE:'取消戻し',EXPIRE:'失効',ADJUST:'調整'})[type]||type||'—';}
 function openLeaveLedgerModal(employeeId){
   const r=ensureModal();
@@ -22,8 +186,170 @@ function employeeManagerOptions(e){
   const employees=state.authAdmin?(state.authAdmin.employees||[]):[];
   return ['<option value="">未設定</option>'].concat(employees.filter(x=>(!e||x.employeeId!==e.employeeId)&&x.active!==false&&['MANAGER','ADMIN'].includes(x.role)).map(x=>'<option value="'+escapeHtml(x.employeeId)+'" '+(e&&e.managerId===x.employeeId?'selected':'')+'>'+escapeHtml(x.name)+' / '+escapeHtml(roleLabel(x.role))+'</option>')).join('');
 }
-function openEmployeeModal(employeeId){if(!(state.data.permissions&&state.data.permissions.employeeAdmin)){showToast('社員編集の権限がありません');return;}var e=employeeId&&state.authAdmin?(state.authAdmin.employees||[]).find(function(x){return x.employeeId===employeeId;}):null,r=ensureModal();r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>社員マスター</small><h2>'+(e?'社員情報を編集':'社員を追加')+'</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="form-grid"><label class="field"><span>社員ID</span><input id="empId" value="'+escapeHtml(e?e.employeeId:'')+'" placeholder="FM0006" '+(e?'readonly':'')+'></label><label class="field"><span>氏名</span><input id="empName" value="'+escapeHtml(e?e.name:'')+'"></label><label class="field"><span>表示名</span><input id="empDisplayName" value="'+escapeHtml(e?e.displayName:'')+'"></label><label class="field"><span>部署</span><input id="empDepartment" value="'+escapeHtml(e?e.department:'')+'"></label><label class="field"><span>役職</span><input id="empTitle" value="'+escapeHtml(e?e.title:'')+'"></label><label class="field"><span>権限</span><select id="empRole"><option value="USER" '+((e?e.role:'USER')==='USER'?'selected':'')+'>社員</option><option value="CALENDAR_EDITOR" '+(e&&e.role==='CALENDAR_EDITOR'?'selected':'')+'>会社カレンダー編集者</option><option value="MANAGER" '+(e&&e.role==='MANAGER'?'selected':'')+'>マネージャー</option><option value="ADMIN" '+(e&&e.role==='ADMIN'?'selected':'')+'>管理者</option></select></label><label class="field full"><span>直属承認者</span><select id="empManagerId">'+employeeManagerOptions(e)+'</select><small>マネージャーまたは管理者を指定します。</small></label><label class="field"><span>標準勤務開始</span><input id="empWorkStart" type="time" value="'+escapeHtml(e?e.workStart:'09:00')+'"></label><label class="field"><span>標準勤務終了</span><input id="empWorkEnd" type="time" value="'+escapeHtml(e?e.workEnd:'18:00')+'"></label><label class="field"><span>休憩（分）</span><input id="empBreak" type="number" min="0" value="'+(e?e.breakMinutes:60)+'"></label><label class="field"><span>有給残日数</span><input id="empLeave" type="number" min="0" step="0.25" placeholder="未設定" value="'+(e&&e.leaveBalanceConfigured?e.leaveBalance:'')+'"></label><label class="field"><span>年休基準日</span><input id="empLeaveBasisDate" type="date" value="'+escapeHtml(e?e.leaveBasisDate:'')+'"></label><label class="field"><span>雇入日</span><input id="empHireDate" type="date" value="'+escapeHtml(e?e.hireDate:'')+'"></label><label class="field full"><span>メール</span><input id="empEmail" type="email" value="'+escapeHtml(e?e.email:'')+'"></label><label class="field full"><span>備考</span><textarea id="empNote" rows="2">'+escapeHtml(e?e.note:'')+'</textarea></label><label class="login-remember full"><input id="empActive" type="checkbox" '+(!e||e.active?'checked':'')+'><span>在籍（ログイン可能）</span></label><label class="login-remember full"><input id="empPayroll" type="checkbox" '+(e&&e.payrollIncluded?'checked':'')+'><span>給与集計対象（月次の税理士提出に含める）</span></label></div><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="saveEmployeeFromModal()">保存</button></div></div></section>';}
+
+function openEmployeeModal(employeeId){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.employeeAdmin)){showToast('社員編集の権限がありません');return;}
+  const employees=state.authAdmin&&state.authAdmin.employees||[];
+  const e=employeeId?employees.find(x=>x.employeeId===employeeId):null;
+  if(employeeId&&!e){showToast('対象社員が見つかりません。社員情報を再取得してください');return;}
+  state.adminUi.wizard=!e;
+  state.adminUi.wizardStep=1;
+  state.adminUi.saving=false;
+  const value=(key,defaultValue='')=>escapeHtml(e&&e[key]!==null&&e[key]!==undefined?String(e[key]):defaultValue);
+  const active=!e||e.active!==false,staffId=value('employeeId');
+  const role=e&&e.role||'USER';
+  const roleOptions=[
+    ['USER','社員'],['CALENDAR_EDITOR','会社カレンダー編集者'],
+    ['MANAGER','マネージャー'],['ADMIN','管理者']
+  ];
+  const roleChoices=roleOptions.map(([v,label])=>`<option value='${v}' ${role===v?'selected':''}>${label}</option>`).join('');
+  const stage1=`<div class='form-grid'>
+    <label class='field'><span>社員ID <em>必須</em></span><input id='empId' maxlength='8' autocomplete='off' value='${staffId}' placeholder='FM0006' ${e?'readonly':''}></label>
+    <label class='field'><span>氏名 <em>必須</em></span><input id='empName' maxlength='100' value='${value('name')}' placeholder='例：山田 花子'></label>
+    <label class='field'><span>表示名</span><input id='empDisplayName' maxlength='80' value='${value('displayName')}' placeholder='例：山田'></label>
+    <label class='field'><span>部署</span><input id='empDepartment' maxlength='80' value='${value('department')}' placeholder='例：開発部'></label>
+    <label class='field'><span>役職</span><input id='empTitle' maxlength='80' value='${value('title')}' placeholder='例：担当'></label>
+    <label class='field'><span>メール</span><input id='empEmail' type='email' maxlength='200' value='${value('email')}' placeholder='staff@example.jp'></label>
+  </div>`;
+  const stage2=`<div class='form-grid'>
+    <label class='field full'><span>権限 <em>必須</em></span><select id='empRole'>${roleChoices}</select>
+      <small>管理者権限は、社員・認証・労務設定の操作を許可します。</small></label>
+    <label class='field full'><span>直属承認者</span><select id='empManagerId'>${employeeManagerOptions(e)}</select>
+      <small>マネージャーまたは管理者から選択。未設定の場合、承認経路を確認してください。</small></label>
+    <label class='login-remember full'><input id='empActive' type='checkbox' ${active?'checked':''}><span>在籍（ログイン可能）</span></label>
+    <label class='login-remember full'><input id='empPayroll' type='checkbox' ${e&&e.payrollIncluded?'checked':''}><span>給与集計対象（月次集計に含める）</span></label>
+  </div>`;
+  const stage3=`<div class='form-grid'>
+    <label class='field'><span>標準勤務開始</span><input id='empWorkStart' type='time' value='${value('workStart','09:00')}'></label>
+    <label class='field'><span>標準勤務終了</span><input id='empWorkEnd' type='time' value='${value('workEnd','18:00')}'></label>
+    <label class='field'><span>休憩（分）</span><input id='empBreak' type='number' min='0' max='480' value='${value('breakMinutes','60')}'></label>
+    <label class='field'><span>有給残日数</span><input id='empLeave' type='number' min='0' max='999' step='0.25' placeholder='未設定' value='${e&&e.leaveBalanceConfigured?value('leaveBalance'):''}'></label>
+    <label class='field'><span>年休基準日</span><input id='empLeaveBasisDate' type='date' value='${value('leaveBasisDate')}'></label>
+    <label class='field'><span>雇入日</span><input id='empHireDate' type='date' value='${value('hireDate')}'></label>
+    <label class='field full'><span>備考</span><textarea id='empNote' rows='3' maxlength='500'>${e?escapeHtml(e.note||''):''}</textarea></label>
+    <p class='admin-wizard-hint'>有給残日数を設定する場合は、年休基準日も設定してください。残数を未設定のまま登録することもできます。</p>
+  </div>`;
+  const progress=!e?`<div class='admin-wizard-progress' role='list' aria-label='社員登録の進行状況'>
+    ${[['基本情報',1],['権限・承認',2],['勤務・年休',3],['最終確認',4]].map(([label,n])=>`<span role='listitem' data-admin-progress='${n}' class='${n===1?'active':''}'><b>${n}</b><small>${label}</small></span>`).join('')}
+  </div>`:'';
+  const panel=(step,title,body)=>`<section class='admin-wizard-step ${!e&&step!==1?'is-hidden':''}' data-admin-wizard-step='${step}'>
+    <h3>${title}</h3>${body}</section>`;
+  const r=ensureModal();
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div>
+    <section class='modal-card admin-employee-modal ${!e?'admin-employee-wizard':''}' role='dialog' aria-modal='true' aria-label='${e?'社員情報を編集':'社員を追加'}'>
+      <header class='modal-head'><div><small>社員マスター</small><h2>${e?'社員情報を編集':'新しい社員を登録'}</h2></div>
+        <button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></header>
+      ${progress}
+      <div id='adminWizardError' class='admin-wizard-error is-hidden' role='alert' aria-live='assertive'></div>
+      <div class='admin-employee-modal-body'>
+        ${panel(1,'基本情報',stage1)}
+        ${panel(2,'権限と承認者',stage2)}
+        ${panel(3,'勤務時間と年休',stage3)}
+        ${!e?panel(4,'入力内容の最終確認',`<div id='adminWizardReview' class='admin-wizard-review'></div>`):''}
+      </div>
+      <footer class='modal-actions admin-wizard-actions'>
+        <span class='admin-wizard-footer-hint'>${e?'変更内容を確認してから保存してください。':'入力途中では保存されません。'}</span>
+        <div><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button>
+        ${!e?`<button type='button' class='secondary-button' id='adminWizardBack' hidden onclick='adminWizardBack()'>戻る</button>
+          <button type='button' class='primary-button' id='adminWizardNext' onclick='adminWizardNext()'>次へ</button>
+          <button type='button' class='primary-button' id='adminEmployeeSaveButton' hidden onclick='saveEmployeeFromModal()'>内容を確認して登録</button>`:
+          `<button type='button' class='primary-button' id='adminEmployeeSaveButton' onclick='saveEmployeeFromModal()'>変更を保存</button>`}
+        </div>
+      </footer>
+    </section>`;
+}
+function adminWizardError(message,id){
+  const error=document.getElementById('adminWizardError');
+  if(error){error.textContent=message;error.classList.remove('is-hidden');}
+  const input=id&&document.getElementById(id);
+  if(input&&typeof input.focus==='function')input.focus();
+  return false;
+}
+function validateAdminWizardStep(step){
+  const read=id=>String(document.getElementById(id)&&document.getElementById(id).value||'').trim();
+  if(step===1){
+    const id=read('empId').toUpperCase(),name=read('empName'),mail=read('empEmail');
+    if(!/^FM\d{4,6}$/.test(id))return adminWizardError('社員IDは FM0006 の形式で入力してください。','empId');
+    if((state.authAdmin&&state.authAdmin.employees||[]).some(e=>e.employeeId===id))return adminWizardError('その社員IDは既に登録されています。既存社員を編集してください。','empId');
+    if(!name)return adminWizardError('氏名を入力してください。','empName');
+    if(mail&&!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(mail))return adminWizardError('メールアドレスの形式を確認してください。','empEmail');
+  }
+  if(step===2){
+    if(read('empId').toUpperCase()===read('empManagerId').toUpperCase())return adminWizardError('自分自身を直属承認者に指定できません。','empManagerId');
+  }
+  if(step===3){
+    const a=read('empWorkStart'),b=read('empWorkEnd'),rest=Number(read('empBreak'));
+    if(!a||!b||a>=b)return adminWizardError('勤務終了は開始より後の時刻を設定してください。','empWorkEnd');
+    const total=(Number(b.slice(0,2))*60+Number(b.slice(3)))-(Number(a.slice(0,2))*60+Number(a.slice(3)));
+    if(!Number.isFinite(rest)||rest<0||rest>=total||rest>480)return adminWizardError('休憩時間は勤務時間より短い0～480分で指定してください。','empBreak');
+    const leave=read('empLeave');
+    if(leave){
+      const days=Number(leave);
+      if(!Number.isFinite(days)||days<0||days>999||Math.abs(days*4-Math.round(days*4))>.00001)return adminWizardError('有給残日数は0.25日単位で入力してください。','empLeave');
+      if(!read('empLeaveBasisDate'))return adminWizardError('有給残日数を設定するときは年休基準日も入力してください。','empLeaveBasisDate');
+    }
+  }
+  const error=document.getElementById('adminWizardError');
+  if(error){error.textContent='';error.classList.add('is-hidden');}
+  return true;
+}
+function adminWizardReviewHtml(){
+  const get=id=>String(document.getElementById(id)&&document.getElementById(id).value||'');
+  const checked=id=>!!(document.getElementById(id)&&document.getElementById(id).checked);
+  const fields=[
+    ['社員ID',get('empId').toUpperCase()],['氏名',get('empName')],['表示名',get('empDisplayName')||get('empName')],
+    ['部署',get('empDepartment')||'未設定'],['メール',get('empEmail')||'未設定'],
+    ['権限',roleLabel(get('empRole'))],['直属承認者',get('empManagerId')||'未設定'],
+    ['在籍',checked('empActive')?'在籍':'退職'],['給与集計',checked('empPayroll')?'対象':'対象外'],
+    ['勤務時間',(get('empWorkStart')||'—')+' ～ '+(get('empWorkEnd')||'—')],
+    ['有給残日数',get('empLeave')?get('empLeave')+'日':'未設定'],
+    ['年休基準日',get('empLeaveBasisDate')||'未設定']
+  ];
+  return `<p class='admin-wizard-check-note'>以下の内容で社員を登録します。登録後のPIN設定は「認証」から行います。</p>
+    <dl class='admin-wizard-facts'>${fields.map(([label,value])=>`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    ${get('empRole')==='ADMIN'?`<div class='admin-wizard-important' role='status'>管理者権限を付与します。社員・認証・会社設定を変更できます。保存時にもう一度確認します。</div>`:''}`;
+}
+function adminWizardShowStep(step){
+  if(!state.adminUi.wizard||step<1||step>4)return;
+  state.adminUi.wizardStep=step;
+  document.querySelectorAll('.admin-wizard-step').forEach(el=>{
+    const active=Number(el.dataset.adminWizardStep)===step;
+    el.hidden=!active;el.classList.toggle('is-hidden',!active);
+  });
+  document.querySelectorAll('[data-admin-progress]').forEach(el=>{
+    const n=Number(el.dataset.adminProgress);el.classList.toggle('active',n===step);el.classList.toggle('completed',n<step);
+  });
+  const back=document.getElementById('adminWizardBack'),next=document.getElementById('adminWizardNext'),save=document.getElementById('adminEmployeeSaveButton');
+  if(back)back.hidden=step===1;if(next)next.hidden=step===4;if(save)save.hidden=step!==4;
+  const review=document.getElementById('adminWizardReview');
+  if(step===4&&review)review.innerHTML=adminWizardReviewHtml();
+  const error=document.getElementById('adminWizardError');
+  if(error){error.textContent='';error.classList.add('is-hidden');}
+  const title=document.querySelector('.admin-wizard-step:not(.is-hidden) h3');
+  if(title&&typeof title.scrollIntoView==='function')title.scrollIntoView({block:'nearest'});
+}
+function adminWizardNext(){
+  if(!state.adminUi.wizard||state.adminUi.wizardStep>=4)return;
+  const current=state.adminUi.wizardStep;
+  if(validateAdminWizardStep(current))adminWizardShowStep(current+1);
+}
+function adminWizardBack(){
+  if(!state.adminUi.wizard||state.adminUi.wizardStep<=1)return;
+  adminWizardShowStep(state.adminUi.wizardStep-1);
+}
+
 function saveEmployeeFromModal(){
+  if(state.adminUi&&state.adminUi.saving)return;
+  if(state.adminUi&&state.adminUi.wizard){
+    if(state.adminUi.wizardStep!==4){adminWizardError('登録前に最終確認へ進んでください。');return;}
+    for(let step=1;step<=3;step++){
+      if(!validateAdminWizardStep(step)){
+        adminWizardShowStep(step);
+        validateAdminWizardStep(step);
+        return;
+      }
+    }
+  }
   var payload={employeeId:document.getElementById('empId').value,name:document.getElementById('empName').value,displayName:document.getElementById('empDisplayName').value,department:document.getElementById('empDepartment').value,title:document.getElementById('empTitle').value,role:document.getElementById('empRole').value,managerId:document.getElementById('empManagerId').value,workStart:document.getElementById('empWorkStart').value,workEnd:document.getElementById('empWorkEnd').value,breakMinutes:document.getElementById('empBreak').value,leaveBalance:document.getElementById('empLeave').value,leaveBasisDate:document.getElementById('empLeaveBasisDate').value,hireDate:document.getElementById('empHireDate').value,payrollIncluded:document.getElementById('empPayroll').checked,email:document.getElementById('empEmail').value,note:document.getElementById('empNote').value,active:document.getElementById('empActive').checked};
   var existing=state.authAdmin&&(state.authAdmin.employees||[]).find(function(x){return x.employeeId===payload.employeeId;});
   var adminElevation=payload.role==='ADMIN'&&(!existing||existing.role!=='ADMIN');
@@ -39,7 +365,24 @@ function saveEmployeeFromModal(){
   performEmployeeSave(payload);
 }
 function performEmployeeSave(payload){
-  google.script.run.withSuccessHandler(function(){closeModal();showToast('社員情報を保存しました');refreshAppData(function(){invalidatePageCache('authAdmin');loadAuthAdmin({force:true});});}).withFailureHandler(function(err){handleApiError(err,'社員情報を保存できませんでした');}).saveEmployee(state.sessionToken,payload);
+  if(state.adminUi.saving)return;
+  const ui=state.adminUi,session=state.sessionToken;
+  ui.saving=true;
+  const button=document.getElementById('adminEmployeeSaveButton');
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+  google.script.run.withSuccessHandler(function(){
+    ui.saving=false;
+    if(session!==state.sessionToken||ui!==state.adminUi)return;
+    ui.selectedEmployeeId=String(payload.employeeId||'').trim().toUpperCase();
+    ui.search='';ui.role='ALL';ui.status='ALL';ui.detailTab='basic';ui.wizard=false;
+    closeModal();showToast('社員情報を保存しました');
+    refreshAppData(function(){invalidatePageCache('authAdmin');loadAuthAdmin({force:true,scope:'people'});});
+  }).withFailureHandler(function(err){
+    ui.saving=false;
+    if(session!==state.sessionToken||ui!==state.adminUi)return;
+    if(button){button.disabled=false;button.setAttribute('aria-busy','false');}
+    handleApiError(err,'社員情報を保存できませんでした');
+  }).saveEmployee(state.sessionToken,payload);
 }
 function refreshAppData(callback){
   const previous=state.data||{};
