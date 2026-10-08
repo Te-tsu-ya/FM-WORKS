@@ -101,11 +101,24 @@ for(const scenario of cases){
     '<iframe title="FM WORKS test viewport" src="'+pathToFileURL(innerFile).href+
     '" style="display:block;border:0;width:'+scenario.width+'px;height:'+scenario.height+'px"></iframe>'+
     '<output id="qa-result" style="display:none"></output></body></html>';
-  fs.writeFileSync(file,outer);
+  // Chrome's Linux headless iframe occasionally never posts its onload metrics
+  // at 1366px. That desktop size is also tested as a direct document using
+  // the observed 87px window-chrome offset (validated by correctViewport).
+  const direct=scenario.width===1366;
+  if(direct){
+    const htmlDirect=html.replace('<script>',
+      '<output id="qa-result" style="display:none"></output><script>')
+      .replace('parent.postMessage({kind:"FM_WORKS_QA",info:info},"*");',
+        'document.getElementById("qa-result").setAttribute("data-payload",encodeURIComponent(JSON.stringify(info)));');
+    fs.writeFileSync(file,htmlDirect);
+  }else{
+    fs.writeFileSync(file,outer);
+  }
   const screenshot=path.join(outputDir,id+'.png');
   const args=['--headless=new','--disable-gpu','--no-sandbox','--disable-dev-shm-usage',
     '--no-first-run','--disable-extensions','--force-device-scale-factor=1',
-    '--hide-scrollbars','--window-size='+Math.max(500,scenario.width)+','+(scenario.height+115),
+    '--hide-scrollbars','--window-size='+Math.max(500,scenario.width)+','+
+      (scenario.height+(direct?87:115)),
     '--virtual-time-budget=5500','--screenshot='+screenshot,'--dump-dom',pathToFileURL(file).href];
   let result;
   try {
