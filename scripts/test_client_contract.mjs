@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -746,6 +746,106 @@ const result=vm.runInContext(`
     document.getElementById('modalRoot').innerHTML.includes('empAutoLeave')&&
     document.getElementById('modalRoot').innerHTML.includes('出勤率80％'));
   state.page='home';
+
+
+  // v0.11.8: isolated dummy dataset, grant dates and interactive approval arithmetic.
+  state.sessionToken='SESSION_TOKEN';
+  state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'青木'},
+    permissions:{adminConsole:true,employeeAdmin:true,requestApprove:false}};
+  state.authAdmin={employees:[{employeeId:'FM0001',name:'青木',role:'ADMIN',active:true,
+    leaveBalanceConfigured:true,leaveBalance:10}]};
+  state.page='requests';state.requests=createEmptyRequestsState();
+  state.requests.loadedKey=requestsIdentity();
+  resetCalls();
+  expect('annual leave demo is available from the requests page',
+    requestsPage().includes('有給の動作デモを見る'));
+  expect('annual leave demo is linked in employee administration',
+    adminPeopleContent().includes('架空の社員で動作を試す'));
+  expect('demo opens for authenticated staff without a server call',
+    leaveDemoOpen()&&apiCalls.length===0);
+  const demoStart=leaveDemoCompute();
+  expect('second-year fixture grants ten plus eleven days',
+    demoStart.grants.valid.length===2&&demoStart.grants.valid[0].days===10&&
+    demoStart.grants.latest.days===11&&demoStart.granted===21);
+  expect('seeded dummy usage, pending, available and five-day progress are consistent',
+    demoStart.used===7.5&&demoStart.pending===1&&demoStart.balance===13.5&&
+    demoStart.available===12.5&&demoStart.taken===2.5&&demoStart.needed===2.5);
+  expect('demo is clearly labeled as nonpersistent fictitious data',
+    document.getElementById('modalRoot').innerHTML.includes('架空データ')&&
+    document.getElementById('modalRoot').innerHTML.includes('保存されません'));
+  leaveDemoApprove();
+  const approvedDemo=leaveDemoCompute();
+  expect('demo approval reduces confirmed balance and counts toward five-day use',
+    approvedDemo.balance===12.5&&approvedDemo.pending===0&&
+    approvedDemo.available===12.5&&approvedDemo.taken===3.5&&apiCalls.length===0);
+  leaveDemoCancel();
+  const cancelledDemo=leaveDemoCompute();
+  expect('demo cancellation restores confirmed balance and five-day progress',
+    cancelledDemo.balance===13.5&&cancelledDemo.pending===0&&
+    cancelledDemo.available===13.5&&cancelledDemo.taken===2.5);
+  leaveDemoApplyRequest(.5);
+  expect('half-day request only reserves half a day before approval',
+    leaveDemoCompute().pending===.5&&leaveDemoCompute().balance===13.5&&
+    leaveDemoCompute().available===13);
+  leaveDemoWithdraw();
+  expect('withdrawn sample request returns the reserved half-day',
+    leaveDemoCompute().pending===0&&leaveDemoCompute().available===13.5);
+  leaveDemoApplyRequest(1);
+  leaveDemoApprove();
+  leaveDemoApplyRequest(1);
+  expect('one calendar date cannot count more than one day of leave',
+    leaveDemoDayReserved()===1&&leaveDemoCompute().taken===3.5&&
+    leaveDemoCompute().pending===0);
+  leaveDemoSelect('first');
+  const initialDemo=leaveDemoCompute();
+  expect('first sample employee grants ten days, then eleven the next year',
+    initialDemo.grants.latest.days===10&&initialDemo.grants.next.days===11&&
+    initialDemo.grants.latest.date==='2026-10-01');
+  leaveDemoSelect('senior');
+  const seniorDemo=leaveDemoCompute();
+  expect('long service sample grants twenty, achieves five and stays under forty',
+    seniorDemo.grants.latest.days===20&&seniorDemo.granted===40&&
+    seniorDemo.used===13&&seniorDemo.balance===27&&
+    seniorDemo.taken===5&&seniorDemo.complete);
+  leaveDemoSelect('deadline');
+  const warningDemo=leaveDemoCompute();
+  expect('near-deadline fixture displays actual shortfall and caution',
+    warningDemo.grants.latest.days===10&&warningDemo.taken===1.5&&
+    warningDemo.needed===3.5&&warningDemo.caution&&warningDemo.daysLeft===11);
+  leaveDemoSelect('first');
+  document.getElementById('leaveDemoHireDate').value='2026-08-08';
+  leaveDemoEditHire();
+  const futureDemo=leaveDemoCompute();
+  expect('changing dummy hire date recalculates before-first-grant and resets usage',
+    futureDemo.grants.latest===null&&futureDemo.granted===0&&
+    futureDemo.grants.next.date==='2027-02-08'&&leaveDemoState.records.length===0);
+  leaveDemoApplyRequest(1);
+  expect('demo cannot consume leave before first grant',leaveDemoCompute().pending===0);
+  document.getElementById('leaveDemoHireDate').value='2019-04-01';
+  leaveDemoEditHire();
+  expect('custom long service date reaches maximum annual twenty',
+    leaveDemoCompute().grants.latest.days===20&&leaveDemoCompute().balance===40);
+  document.getElementById('leaveDemoHireDate').value='2026-13-99';
+  leaveDemoEditHire();
+  expect('invalid sample hire date is rejected without changing the stored fixture date',
+    leaveDemoState.hire==='2019-04-01'&&leaveDemoState.notice.includes('有効な日付'));
+  leaveDemoReset();
+  expect('reset only restores synthetic sample, without touching backend',
+    leaveDemoState.hire==='2026-04-01'&&leaveDemoCompute().used===1&&apiCalls.length===0);
+  leaveDemoOpen('second');
+  expect('reopening sample starts from original fictitious records',
+    leaveDemoCompute().pending===1&&leaveDemoCompute().balance===13.5);
+  leaveDemoClose();
+  expect('clicking close releases synthetic demo data',leaveDemoState===null&&
+    !document.getElementById('modalRoot').innerHTML.includes('leave-demo-modal'));
+  leaveDemoOpen('second');
+  resetLeaveDemoSession();
+  expect('logout discard removes demo state and closes its modal',
+    leaveDemoState===null&&!document.getElementById('modalRoot').innerHTML.includes('leave-demo-modal'));
+  state.sessionToken=null;
+  expect('logged out visitor cannot access the demo',leaveDemoOpen()===false);
+  state.sessionToken='SESSION_TOKEN';
+  expect('no simulated application, approval or cancellation called the backend',apiCalls.length===0);
 
   state.adminUi=createAdminUiState();
   state.authAdmin=null;

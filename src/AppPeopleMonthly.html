@@ -161,7 +161,10 @@ function adminPeopleContent(){
   </section>`;
   const setupNote=`<div class='leave-auto-setup-note'><div><strong>入社日から有給を自動管理</strong>
     <span>社員ごとに「年休自動付与」を有効にし、出勤記録で80％以上を確認した付与日だけ台帳に記録します。過去分は自動加算しません。</span></div>
-    <button type='button' class='secondary-button compact' onclick='installLeaveDailyAutomation()'>日次自動処理を設定</button></div>`;
+    <div class='leave-auto-demo-actions'>
+      <button type='button' class='secondary-button compact' onclick='leaveDemoOpen()'>架空の社員で動作を試す</button>
+      <button type='button' class='secondary-button compact' onclick='installLeaveDailyAutomation()'>日次自動処理を設定</button>
+    </div></div>`;
   return setupNote+`<div class='admin-people-split'>${body}<section class='admin-detail-panel' id='adminEmployeeDetail' aria-label='選択社員の詳細' tabindex='-1'>${adminEmployeeDetail()}</section></div>`;
 }
 function installLeaveDailyAutomation(){
