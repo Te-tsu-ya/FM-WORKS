@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.10  
+**文書版:** 0.12.0  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.10`
+`APP.version = 0.12.0`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -715,6 +715,24 @@ disabledは `cursor:not-allowed`。
 - Styles.html に .leave-demo-* の専用スタイル、4シナリオボタン、確定残・申請可能の数字カード、5日進捗バー、ダミー台帳、モバイルでの縦積みを追加する。デモラベルを常時表示する。
 - scripts/test_client_contract.mjs に付与10/11/20、初期21日−7.5日=13.5日、承認待ち1日、承認・取消・半休・取下げ、期限間近と達成、付与前の申請防止、入社日入力検証、再オープン・ログアウト破棄、実サーバーAPI呼び出し0回の試験を追加する。
 - デモ表示は出勤率80％を確認済みと仮定した説明であり、実際の短時間勤務の比例付与、実出勤率、法定付与の確定や本番の2年間の自動失効を代行しない。
+
+## 16.5 全画面UIトークン・ダークロゴ・ホーム1画面密度（v0.12.0）
+
+- `Styles.html` の最後の `<style>` を正規の **FM WORKS Design System v1** とする。ページごとに増えた `font-size` / `border-radius` / `color` は、共通UI用の `--ui-type-*` / `--ui-radius-*` / `--muted` / `--blue` に収束させる。
+- `--blue` はライトで `#0969da`、ダークで `#4d9aff`、`--muted` はライト `#60728a`、ダーク `#aebcd0`。テキスト色はW3C WCAG 2.2 AAの通常文字の比率4.5:1を目標とする。カレンダー社員色など意味のある個別色は維持する。
+- インラインSVGのFMロゴは既存 `fill=currentColor` を維持し、全モード共通の `--ui-brand-ink` でライト `#111c23`／ダーク `#f5f9ff`。画像データは再生成せず、PC・モバイル・ログインに共通適用する。
+- ホームは `@media(min-width:1100px) and (min-height:700px)` の範囲でカラムカードの余白・高さを圧縮し、スクロール可能な100svh枠内に収める。A＋モードと画面が狭い場合は高さ制限を解除して自然スクロールに切り替える。隠したり読み取り不能にする圧縮は行わない。
+- `docs/UI_DESIGN_SYSTEM.md` を全画面共通のデザイン契約とする。CIでトークン、ダークロゴ、ホームの1画面条件、専用モジュールとCSSの組み込みを検証する。
+
+## 16.6 事務・経理の基本ナビゲーション（v0.12.0）
+
+- `Code.gs/getPermissions_(employee)` に `officeWorkspace` を追加。 `ADMIN`・`MANAGER`・部署名に総務を含む利用者へ「事務」画面の閲覧権を付与する。金銭情報のサーバーAPI権限には利用しない。
+- `AppCore.html` の `NAV` に `office` を追加し、`visibleNav()` と `navigate()` で権限を確認する。`MOBILE_NAV` は日常業務の5タブを維持し、事務はモバイルドロワーに表示。`AppShell.html` の `renderPage()` とログインマウントで `officePage` を接続し、`state.officeUi.selected` を切り替える。ログイン切替時は初期化。
+- `Index.html` に `i-briefcase` SVGアイコンと `AppOffice` スクリプトを読み込む。
+- `AppOffice.html` は `OFFICE_MODULES`（帳票・領収書・経費申請・出張履歴・備品・取引先）の名称・説明・項目一覧だけを宣言する。クリック時の `selectOfficeModule()` はブラウザだけの状態変更。`officePage()` は許可された利用者だけを表示。
+- 完了していない保存・発行・承認・証憑アップロードをUIで押せる形にしない。本番Sheets、監査ログ、スタッフの個人情報、金額を読み込むコードは一切追加しない。
+- 参照元4つのExcelのシート・列は `docs/OFFICE_SOURCE_MAPPING.md` に個人名・金額を除外して整理済み。将来の要件決定時に詳細を確定する。
+- テストは権限の役割差、officeモジュール6件の切替、レンダリング時のAPI呼び出し0、初期化、共通メニュー連携、ページ欠落なし、CSSの可読性を追加する。
 
 ## 17. クライアントキャッシュ
 

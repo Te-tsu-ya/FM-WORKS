@@ -65,6 +65,7 @@ globalThis.__fmTest = {
   monthlyReviewUrgency_,
   yearMonthsBetween_,
   canManageEmployeeRecord_,
+  getPermissions_,
   monthlySnapshotPayload_,
   normalizeLeaveDays_,
   leaveBalanceAfterDelta_,
@@ -114,6 +115,18 @@ function expectThrows(name, fn) {
   try { fn(); } catch (_) { threw = true; }
   expect(name, threw, 'expected an exception');
 }
+
+
+expect('office access is offered to ADMIN but not implicitly to personnel editing',
+  api.getPermissions_({role:'ADMIN',department:'開発'}).officeWorkspace===true);
+expect('office access is offered to MANAGER while employee admin remains false',
+  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===true&&
+  api.getPermissions_({role:'MANAGER',department:'開発'}).employeeAdmin===false);
+expect('office access includes general affairs department without granting admin console',
+  api.getPermissions_({role:'USER',department:'総務部'}).officeWorkspace===true&&
+  api.getPermissions_({role:'USER',department:'総務部'}).adminConsole===false);
+expect('standard employees outside general affairs do not gain office access',
+  api.getPermissions_({role:'USER',department:'開発'}).officeWorkspace===false);
 
 expect('09:00-18:00 is 540 minutes', api.timeRangeMinutes_('09:00','18:00') === 540);
 expect('08:30 is 510 minutes', api.timeToMinutes_('08:30') === 510);

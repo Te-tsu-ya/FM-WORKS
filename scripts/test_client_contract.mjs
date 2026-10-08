@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -196,12 +196,63 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('top navigation definition is limited to five daily jobs plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','admin']));
+  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','office','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
   expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
   expect('attendance workspace exposes today monthly and history views',attendanceWorkspaceTabs('history').includes('本日')&&attendanceWorkspaceTabs('history').includes('月間')&&attendanceWorkspaceTabs('history').includes('履歴'));
+
+  // v0.12.0: unified office navigation with least-privilege preview access.
+  const beforeOfficeData=state.data;
+  const beforeOfficePage=state.page;
+  state.data={today:'2026-10-08',user:{employeeId:'FM9000',displayName:'一般社員',department:'開発'},
+    permissions:{adminConsole:false,employeeAdmin:false,officeWorkspace:false}};
+  state.officeUi={selected:'documents'};
+  state.page='home';
+  resetCalls();
+  expect('non-office staff never see the office or administrator routes',
+    !visibleNav().some(x=>x[0]==='office'||x[0]==='admin'));
+  const officeDenied=officePage();
+  expect('office page is protected when link is opened directly',
+    officeDenied.includes('権限')&&!officeDenied.includes('office-module-detail'));
+  const initialDeniedModule=state.officeUi.selected;
+  selectOfficeModule('expenses');
+  expect('unauthorized office module selection does not change UI state or call the backend',
+    state.officeUi.selected===initialDeniedModule&&apiCalls.length===0);
+  state.data.permissions.officeWorkspace=true;
+  expect('office member sees only office navigation, not administrative navigation',
+    visibleNav().some(x=>x[0]==='office')&&!visibleNav().some(x=>x[0]==='admin'));
+  const moduleHtml=officePage();
+  expect('office scaffold lists six reference-grounded modules',
+    OFFICE_MODULES.length===6&&moduleHtml.includes('office-module-nav')&&
+    OFFICE_MODULES.every(m=>moduleHtml.includes("data-office-module='"+m.id+"'")));
+  expect('office scaffold clearly states that saving and PDF export are not available',
+    moduleHtml.includes('入力・保存機能は未実装')&&
+    moduleHtml.includes('PDF発行はできません')&&moduleHtml.includes('金額・取引先・社員の実データ'));
+  selectOfficeModule('expenses');
+  const expenseScaffold=officePage();
+  expect('expense scaffold shows source columns without uploading any real business data',
+    state.officeUi.selected==='expenses'&&expenseScaffold.includes('立替者受取日')&&
+    expenseScaffold.includes('出金日')&&expenseScaffold.includes('申請理由'));
+  selectOfficeModule('travel');
+  const travelScaffold=officePage();
+  expect('travel scaffold includes traveler dates, lodging and allowance fields',
+    state.officeUi.selected==='travel'&&travelScaffold.includes('宿泊地域')&&
+    travelScaffold.includes('日当区分'));
+  selectOfficeModule('vendors');
+  expect('vendor scaffold includes invoice registration and vendor code',
+    officePage().includes('適格請求書発行事業者登録番号')&&officePage().includes('ベンダーコード'));
+  selectOfficeModule('not-a-module');
+  expect('unknown office module ID is rejected without changing state',
+    state.officeUi.selected==='vendors'&&apiCalls.length===0);
+  state.data.permissions.adminConsole=true;
+  expect('administrators can access both office and administrator routes',
+    visibleNav().some(x=>x[0]==='office')&&visibleNav().some(x=>x[0]==='admin'));
+  expect('office module switching sends zero GAS requests',apiCalls.length===0);
+  state.data=beforeOfficeData;
+  state.page=beforeOfficePage;
+
   state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'青木さん',fullName:'青木 悠真'},permissions:{adminConsole:true}};
   state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   const attendanceSample=attendanceDisplayPreview();

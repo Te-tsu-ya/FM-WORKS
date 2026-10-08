@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.11.10',
+  version: '0.12.0',
   locale: 'ja-JP'
 });
 
@@ -578,6 +578,9 @@ function getPermissions_(employee) {
     companyCalendarView: true,
     companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
     adminConsole: role === 'ADMIN',
+    // Navigation-only preview. Financial CRUD will need separately authorized server APIs.
+    officeWorkspace: role === 'ADMIN' || role === 'MANAGER' ||
+      String(employee && employee.department || '').includes('総務'),
     employeeAdmin: role === 'ADMIN',
     requestApprove: role === 'ADMIN' || role === 'MANAGER',
     monthlyTeamView: role === 'ADMIN' || role === 'MANAGER',

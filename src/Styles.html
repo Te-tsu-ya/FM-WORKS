@@ -1879,3 +1879,177 @@ html[data-theme="dark"] .home-portal-all-clear>span{background:#244934;color:#91
   outline:2px solid var(--blue);outline-offset:2px;
 }
 </style>
+
+<style>
+/* FM WORKS Design System v1 (v0.12.0)
+   Canonical tokens shared across home, attendance, worklog, schedule, requests,
+   people, admin and the office planning workspace.
+   In-page complex calendars/timelines keep their own domain-specific density. */
+:root{
+  --blue:#0969da;
+  --muted:#60728a;
+  --ui-type-body:13px;
+  --ui-type-help:12px;
+  --ui-type-label:12px;
+  --ui-type-section:16px;
+  --ui-type-page:25px;
+  --ui-space-inline:10px;
+  --ui-space-card:16px;
+  --ui-radius-control:10px;
+  --ui-radius-card:15px;
+  --ui-focus:var(--blue);
+  --ui-brand-ink:#111c23;
+}
+html[data-theme="dark"]{--ui-brand-ink:#f5f9ff;--muted:#aebcd0}
+html,body{font-family:Inter,"Noto Sans JP","Hiragino Kaku Gothic ProN",system-ui,-apple-system,"Segoe UI",sans-serif}
+.fm-logo,.brand .fm-logo,.mobile-brand .fm-logo,.login-brand .fm-logo,.mobile-drawer-head .fm-logo{
+  color:var(--ui-brand-ink);
+}
+html[data-theme="dark"] .mobile-brand,
+html[data-theme="dark"] .brand,
+html[data-theme="dark"] .mobile-drawer-head{color:var(--text)}
+.page-head h1{font-size:clamp(22px,1.65vw,var(--ui-type-page));font-weight:850;line-height:1.3}
+.page-head p{font-size:13px;line-height:1.65;color:var(--muted)}
+.page-head,.admin-workspace-heading,.request-section-head{gap:14px}
+.eyebrow{font-size:11px;line-height:1.5;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+.card{border-color:var(--line);border-radius:var(--ui-radius-card);box-shadow:0 6px 22px rgba(25,55,100,.035)}
+.card h3,.settings-panel h3{font-size:var(--ui-type-section);font-weight:800;line-height:1.45}
+.admin-workspace-heading h2,.request-panel-heading h2,.attendance-panel header h2,
+.worklog-panel header h2,.home-portal-panel-head h2,.office-module-head h2{
+  font-size:var(--ui-type-section);font-weight:850;line-height:1.4
+}
+.primary-button,.secondary-button,.small-button{
+  border-radius:var(--ui-radius-control);font-weight:750;line-height:1.3;
+}
+.primary-button:not(.compact),.secondary-button:not(.compact){min-height:42px}
+.nav-button{border-radius:var(--ui-radius-control);font-size:13px;font-weight:650}
+.nav-button.active{font-weight:800}
+.nav-button:hover,.nav-button:focus-visible{
+  background:color-mix(in srgb,var(--blue) 9%,var(--surface));
+}
+.field>span,.login-field>span{font-size:var(--ui-type-label);font-weight:750}
+.field input,.field select,.field textarea{
+  border-radius:var(--ui-radius-control);line-height:1.45
+}
+.muted,.page-head p,.office-screen small{line-height:1.55}
+.data-table th,.auth-table th,.data-table td,.auth-table td{font-size:var(--ui-type-body);line-height:1.5}
+.nav-button,.settings-tabs button,.admin-side-nav button,.request-quick-card,
+.home-portal-shortcut,.office-module-link{
+  transition:background-color .16s ease,border-color .16s ease,color .16s ease
+}
+button:focus-visible,a:focus-visible,select:focus-visible,
+input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,
+.office-module-link:focus-visible{
+  outline:2px solid var(--ui-focus);outline-offset:3px;
+}
+html[data-theme="dark"] .card,html[data-theme="dark"] .office-module-detail{
+  border-color:var(--line)
+}
+html[data-theme="dark"] .secondary-button{
+  background:var(--surface2)!important;
+  color:var(--text)!important;
+  border-color:var(--line)!important
+}
+html[data-theme="dark"] .secondary-button:hover{
+  background:color-mix(in srgb,var(--blue) 12%,var(--surface2))!important;
+  border-color:color-mix(in srgb,var(--blue) 40%,var(--line))!important;
+}
+html[data-theme="dark"] .profile-button:hover,
+html[data-theme="dark"] .icon-button:hover{
+  background:var(--surface2)
+}
+html[data-theme="dark"] .sidebar-footer,
+html[data-theme="dark"] .mobile-drawer-head small{color:var(--muted)}
+/* Keep the home-fit layout from v0.11.10 as the sole desktop height contract. */
+html[data-font-size="large"] .content.one-screen:has(>.home-portal-screen){
+  height:auto;min-height:calc(100svh - var(--topbar));overflow:visible
+}
+html[data-font-size="large"] .home-portal-stat>span,
+html[data-font-size="large"] .home-portal-shortcut small,
+html[data-font-size="large"] .home-portal-task-copy small,
+html[data-font-size="large"] .office-module-label small{font-size:13px}
+html[data-font-size="large"] .home-portal-panel-head h2,
+html[data-font-size="large"] .office-module-head h2{font-size:18px}
+.home-portal-empty-icon svg{fill:none;stroke:currentColor;stroke-width:1.8}
+@media(max-width:760px){
+  input,select,textarea{font-size:16px}
+  .page-head h1{font-size:23px}
+  .nav-button{font-size:14px}
+}
+/* Office / administration scaffolding: information architecture only. */
+.office-screen{display:grid;gap:14px;align-content:start;min-width:0}
+.office-screen .page-head{margin-bottom:0}
+.office-intro{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:15px 17px;border-radius:var(--ui-radius-card);border:1px solid var(--line);
+  background:linear-gradient(115deg,color-mix(in srgb,var(--blue) 8%,var(--surface)),var(--surface) 65%)}
+.office-intro>div{min-width:0}
+.office-intro strong{display:block;margin:3px 0 6px;font-size:16px;font-weight:850;color:var(--text)}
+.office-intro p{margin:0;font-size:12px;line-height:1.6;color:var(--muted)}
+.office-intro-chip{white-space:nowrap;flex:0 0 auto;color:var(--blue);
+  border-radius:8px;background:color-mix(in srgb,var(--blue) 10%,var(--surface));
+  padding:7px 10px;font-size:12px;font-weight:850}
+.office-grid{display:grid;grid-template-columns:minmax(220px,270px) minmax(0,1fr);gap:13px;align-items:start;min-width:0}
+.office-module-nav{display:grid;gap:6px;padding:9px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--ui-radius-card);min-width:0}
+.office-module-link{display:grid;grid-template-columns:37px minmax(0,1fr) 10px;align-items:center;gap:9px;
+  width:100%;text-align:left;padding:10px;color:var(--text);background:transparent;
+  border:1px solid transparent;border-radius:10px;min-width:0}
+.office-module-link:hover{border-color:var(--line);background:var(--surface2)}
+.office-module-link.active{background:color-mix(in srgb,var(--blue) 10%,var(--surface));
+  border-color:color-mix(in srgb,var(--blue) 38%,var(--line))}
+.office-module-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;
+  background:color-mix(in srgb,var(--blue) 9%,var(--surface));color:var(--blue)}
+.office-module-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7}
+.office-module-label{display:grid;gap:5px;min-width:0}
+.office-module-label strong{font-size:13px;font-weight:850}
+.office-module-label small{font-size:11px;color:var(--muted);line-height:1.45}
+.office-module-arrow{font-size:17px;color:var(--muted)}
+.office-module-detail{min-width:0;padding:20px}
+.office-module-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding-bottom:17px;
+  border-bottom:1px solid var(--line)}
+.office-module-head>div{min-width:0}
+.office-module-head h2{margin:2px 0 7px;font-size:17px}
+.office-module-head p{font-size:13px;line-height:1.6;color:var(--muted);margin:0}
+.office-planning-status{color:#9b681e;background:#fff3da;border:1px solid #f3d8a8;
+  border-radius:8px;padding:7px 10px;white-space:nowrap;font-size:11px;font-weight:850}
+.office-module-subhead{display:grid;gap:5px;padding:18px 0 12px}
+.office-module-subhead strong{font-size:13px;color:var(--text)}
+.office-module-subhead small{font-size:12px;color:var(--muted)}
+.office-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.office-field-sample{display:flex;align-items:center;gap:9px;padding:11px 12px;
+  border:1px solid var(--line);border-radius:10px;background:var(--surface2);min-width:0}
+.office-field-sample>span:last-child{font-size:13px;color:var(--text);line-height:1.5}
+.office-field-number{font-size:11px;color:var(--blue);font-weight:850;font-variant-numeric:tabular-nums}
+.office-source-note{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:12px;
+  margin-top:18px;background:var(--surface2);border-radius:10px;color:var(--muted);font-size:12px}
+.office-source-note strong{color:var(--text);white-space:nowrap}
+.office-footnote{font-size:12px;color:var(--muted);line-height:1.7;margin:0;padding:0 2px}
+html[data-theme="dark"] .office-planning-status{
+  background:#382a18;color:#f4ca82;border-color:#765733
+}
+@media(max-width:1000px){.office-grid{grid-template-columns:1fr}
+  .office-module-nav{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .office-module-link{grid-template-columns:30px minmax(0,1fr);padding:9px;gap:7px}
+  .office-module-icon{width:30px;height:30px}.office-module-arrow{display:none}
+}
+@media(max-width:760px){.office-screen{gap:10px}
+  .office-intro{align-items:flex-start;flex-direction:column;padding:13px}
+  .office-module-nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .office-module-link{grid-template-columns:29px minmax(0,1fr)}
+  .office-module-label strong{font-size:12px}
+  .office-module-label small{font-size:11px}
+  .office-module-detail{padding:14px}
+  .office-module-head{flex-wrap:wrap;gap:9px}
+  .office-field-grid{grid-template-columns:1fr}
+  .office-planning-status{white-space:normal}
+}
+@media(max-width:390px){
+  .office-module-nav{grid-template-columns:1fr}
+  .office-module-link{grid-template-columns:35px minmax(0,1fr) 10px}
+  .office-module-arrow{display:block}
+}
+@media(prefers-reduced-motion:reduce){
+  .nav-button,.settings-tabs button,.admin-side-nav button,.request-quick-card,
+  .home-portal-shortcut,.office-module-link{transition:none}
+}
+</style>
