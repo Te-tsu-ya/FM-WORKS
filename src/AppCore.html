@@ -362,7 +362,8 @@ function flushHomeOverviewCallbacks_(payload){
 }
 function loadHomeOverview(options={}){
   if(!state.sessionToken||!state.data)return;
-  const key=[state.data.today,state.data.user&&state.data.user.employeeId||''].join('|');
+  const requestSession=state.sessionToken,requestData=state.data;
+  const key=[requestSession,requestData.today,requestData.user&&requestData.user.employeeId||''].join('|');
   if(typeof options.onDone==='function')state.homeOverview.callbacks.push(options.onDone);
   if(!options.force&&cacheFresh('homeOverview',key)){
     flushHomeOverviewCallbacks_(state.data);
@@ -378,6 +379,7 @@ function loadHomeOverview(options={}){
   if(!options.silent&&state.page==='home')renderPageIfActive('home');
   google.script.run.withSuccessHandler(data=>{
     endPageLoad(ticket);
+    if(requestSession!==state.sessionToken||requestData!==state.data)return;
     const rerun=state.homeOverview.reloadRequested;
     state.homeOverview.reloadRequested=false;
     state.homeOverview.loading=false;
@@ -399,6 +401,7 @@ function loadHomeOverview(options={}){
     flushHomeOverviewCallbacks_(data);
   }).withFailureHandler(err=>{
     endPageLoad(ticket);
+    if(requestSession!==state.sessionToken||requestData!==state.data)return;
     state.homeOverview.loading=false;
     state.homeOverview.reloadRequested=false;
     state.homeOverview.error='集計を読み込めませんでした。再読込してください。';

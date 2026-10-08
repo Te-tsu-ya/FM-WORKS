@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
@@ -15,7 +15,7 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
@@ -1346,6 +1346,39 @@ for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協�
     console.error('Labor configuration UI missing: ' + laborUiMarker);
     failed = true;
   }
+}
+
+
+const portalFile=fs.readFileSync(path.join(root,'src','AppHomePortal.html'),'utf8');
+for (const homePortalMarker of [
+  'function homePage()',
+  'function homePortalGreeting()',
+  'function homePortalStats()',
+  'function homePortalPunch(a)',
+  'function homePortalScheduleRows(events)',
+  'function homePortalTaskRows(tasks)',
+  'function homePortalPriorities(tasks)',
+  'function homePortalShortcuts()',
+  'home-portal-agenda-empty',
+  'home-portal-all-clear',
+  'state.schedule.selectedEventId=this.dataset.eventId||null',
+  "['worklog','工数入力'",
+  "['requests','休暇・申請'"
+]) {
+  if(!portalFile.includes(homePortalMarker)){console.error('v0.11.9 home portal missing: '+homePortalMarker);failed=true;}
+}
+if(!indexText.includes("include_('AppHomePortal')")||
+  !serverCode.includes('pendingRequests: pendingRequests')||
+  !app.includes("if(requestSession!==state.sessionToken||requestData!==state.data)return;")){
+  console.error('v0.11.9 home data, session guard or route integration missing.');failed=true;
+}
+for(const homePortalStyle of [
+  '.home-portal-header','.home-portal-stats','.home-portal-layout','.home-portal-agenda-empty',
+  '.home-portal-task-row','.home-portal-shortcut','.home-portal-stat:focus-visible',
+  '@media(max-width:1010px)','home-portal-priorities{grid-column:2;grid-row:1}',
+  'html[data-theme="dark"] .home-portal-header'
+]){
+  if(!styles.includes(homePortalStyle)){console.error('v0.11.9 home responsive style missing: '+homePortalStyle);failed=true;}
 }
 
 for (const marker of [

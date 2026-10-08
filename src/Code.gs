@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.11.8',
+  version: '0.11.9',
   locale: 'ja-JP'
 });
 
@@ -188,6 +188,7 @@ function getHomeOverview(sessionToken) {
       workHours: formatMinutes_(monthStats.totalMinutes),
       overtime: formatMinutes_(monthStats.overtimeMinutes),
       leaveBalance: currentLeave.configured ? currentLeave.balance + '日' : '未設定',
+      pendingRequests: pendingRequests,
       worklogMinutes: monthStats.worklogMinutes,
       worklogGapMinutes: worklogGap,
       missingPunchDays: monthStats.missingPunchDays

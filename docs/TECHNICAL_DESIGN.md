@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.8  
+**文書版:** 0.11.9  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.8`
+`APP.version = 0.11.9`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -468,6 +468,18 @@ home-screen
 
 共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
 
+
+
+## 10.4 ホーム個人ポータル再設計 v0.11.9
+
+- `src/AppHomePortal.html` を独立したクライアント表示モジュールとして追加し、`Index.html` で `AppCore` の直後に読み込む。`homePage()` を差し替えるが、既存の `punchButtons()`、`homeWorkLocationSelector()`、`homePunchHistory()` と予定のイベントID付き遷移を再利用する。
+- ヘッダーは現在の勤務状態と時間帯に応じた挨拶、次に4つの月次KPI。月次情報は従来の `getHomeOverview` 1回を再利用する。`Code.gs` は既存の `pendingRequests` 変数を `month.pendingRequests` の数値として返す。管理者は担当チームの承認待ち、一般社員は自分の承認待ちを表示する。
+- `homePortalTaskRows()` はサーバーから取得した `tasks` の `tone` を元に危険・注意・その他へ分類し、既存の `worklog`／`attendance`／`requests` のルートへ移動する。危険状態の処理を隠さず、その他をネイティブ `details` に畳む。データがない場合はローディング／再試行、要対応0件なら完了表示。
+- `homePortalScheduleRows()` は取得済み `todaySchedule` のみを表示し、0件は登録導線付きの小さい空状態、1件以上は最大4件＋残件数で表示。予定クリックでは `date` と `eventId` を既存 `state.schedule` に渡してから `navigate('schedule')`。
+- `Styles.html` の `.home-portal-*` にデザインをスコープ化。高さは自然高、2列の主領域、4列の指標、1010px以下では縦積みと指標2列。HTML上の読み上げ・Tab順も出退勤→要対応→予定→ショートカットとし、CSSだけで別順にしない。ダークテーマと視認性を保証する。
+- `loadHomeOverview()` は cache key にセッションを含め、応答時に要求元の `sessionToken` と `data` の同一性を照合。ログイン変更後の遅延した旧レスポンスが管理値を書き戻すことを禁止する。既存 `reloadRequested` と読み込み中の古い値の保持も維持する。
+- 打刻/工数/申請の権限判定、実データの保存API、Google Sheets のスキーマは変更しない。描画時の追加 GAS 通信0回を契約試験で確認する。
+- 入力・空状態・エラー・スマホのタップ/フォーカスをチェックし、既存 v0.8.4 固定3カラムは過去の構成として残すが本番レンダリングは `AppHomePortal` を正本にする。
 
 ## 10.1 予定表月・週・日ハイブリッド v0.11.3
 
