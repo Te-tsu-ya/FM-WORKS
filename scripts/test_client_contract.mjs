@@ -639,7 +639,7 @@ const result=vm.runInContext(`
   const wizardHtml=document.getElementById('modalRoot').innerHTML;
   expect('new employee wizard has four guided stages and a final save control',
     state.adminUi.wizard&&wizardHtml.includes('admin-wizard-progress')&&
-    wizardHtml.includes("data-admin-wizard-step='4'")&&wizardHtml.includes('id=\'empManagerId\'')&&
+    wizardHtml.includes("data-admin-wizard-step='4'")&&wizardHtml.includes("id='empManagerId'")&&
     wizardHtml.includes('adminEmployeeSaveButton')&&wizardHtml.includes('年休基準日'));
   document.getElementById('empId').value='BAD';
   document.getElementById('empName').value='';
