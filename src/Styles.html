@@ -1476,3 +1476,33 @@ html[data-theme="dark"] .admin-wizard-important{background:#312718;border-color:
   .admin-overview-card,.admin-employee-item{transition:none}
 }
 </style>
+
+<style>
+/* v0.11.7 - employee-controlled annual-leave schedule and five-day compliance reminders */
+.leave-auto-setup-note{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--blue);
+  border-radius:12px;background:var(--surface);margin-bottom:12px}
+.leave-auto-setup-note>div{display:grid;gap:5px}
+.leave-auto-setup-note strong{color:var(--text);font-size:12px}
+.leave-auto-setup-note span{color:var(--muted);font-size:11px;line-height:1.6}
+.leave-auto-setup-note button{flex:0 0 auto}
+.leave-auto-toggle{margin-top:7px}
+.leave-auto-toggle span{font-size:12px;font-weight:750;color:var(--text)}
+.leave-compliance-banner{display:flex;align-items:center;gap:12px;min-width:0;
+  border:1px solid #c9ddf2;border-radius:12px;background:#edf5ff;padding:13px 15px;color:#284d78}
+.leave-compliance-banner.needs-review{border-color:#efd2a0;background:#fff8ec;color:#8b591d}
+.leave-compliance-banner.is-complete{border-color:#b9e1ce;background:#ecf9f1;color:#207b55}
+.leave-compliance-icon{display:grid;place-items:center;flex:0 0 30px;height:30px;
+  border-radius:50%;font-size:16px;font-weight:900;background:rgba(75,140,230,.14)}
+.leave-compliance-banner>div{min-width:0;flex:1;display:grid;gap:4px}
+.leave-compliance-banner strong{font-size:13px}
+.leave-compliance-banner p,.leave-compliance-banner small{font-size:12px;line-height:1.45;margin:0;color:inherit}
+.leave-compliance-banner button{white-space:nowrap}
+html[data-theme="dark"] .leave-compliance-banner{background:#18314d;border-color:#355a83;color:#c5e0ff}
+html[data-theme="dark"] .leave-compliance-banner.needs-review{background:#392b19;border-color:#80613a;color:#f5cd8e}
+html[data-theme="dark"] .leave-compliance-banner.is-complete{background:#15372a;border-color:#356c52;color:#a8e7c7}
+@media(max-width:760px){
+  .leave-auto-setup-note,.leave-compliance-banner{flex-wrap:wrap;align-items:flex-start}
+  .leave-auto-setup-note button,.leave-compliance-banner button{width:100%}
+}
+</style>

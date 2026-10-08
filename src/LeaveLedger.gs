@@ -160,11 +160,27 @@ function getAnnualLeaveFiveDayStatus_(employee, asOfDate) {
     .filter(r=>r[0]&&['承認済','取消申請中'].includes(r[9])&&r[5]<=through&&r[6]>=periodStart)
     .map(r=>({type:r[4],startDate:r[5],endDate:r[6]}));
   const usage=annualLeaveQualifyingUsage_(requests,calendar,periodStart,through);
+  const prior=grants.length>1?grants[grants.length-2]:null;
+  let previousOverdue=null;
+  if(prior&&annualLeavePeriodEnd_(prior.transactionDate)<today){
+    const priorEnd=annualLeavePeriodEnd_(prior.transactionDate);
+    const oldDays=getCompanyCalendarRange_(prior.transactionDate,priorEnd);
+    if(oldDays.length===dateSpanDays_(prior.transactionDate,priorEnd)){
+      const oldRequests=rows.filter(r=>r[0]&&['承認済','取消申請中'].includes(r[9])&&
+        r[5]<=priorEnd&&r[6]>=prior.transactionDate)
+        .map(r=>({type:r[4],startDate:r[5],endDate:r[6]}));
+      const oldUsage=annualLeaveQualifyingUsage_(oldRequests,oldDays,prior.transactionDate,priorEnd);
+      if(oldUsage.qualifyingDays<5)previousOverdue={
+        periodStart:prior.transactionDate,periodEnd:priorEnd,
+        takenDays:oldUsage.qualifyingDays,remainingDays:Math.round((5-oldUsage.qualifyingDays)*2)/2
+      };
+    }
+  }
   const takenDays=usage.qualifyingDays,remainingDays=Math.max(0,Math.round((5-takenDays)*2)/2);
   const daysRemaining=today>periodEnd?0:Math.max(0,Math.ceil((parseYmd_(periodEnd)-parseYmd_(today))/86400000));
   const status=takenDays>=5?'COMPLETED':today>periodEnd?'OVERDUE':'TRACKING';
   return {
-    status,requiredDays:5,takenDays,remainingDays,periodStart,periodEnd,daysRemaining,
+    status,requiredDays:5,takenDays,remainingDays,periodStart,periodEnd,daysRemaining,previousOverdue,
     grantDays:Number(grant.days||0),excludedQuarterDays:usage.excludedQuarterDays,
     reason:usage.excludedQuarterDays>0?'1/4日有給は法的区分未確定のため年5日取得実績へ算入していません。':''
   };
@@ -172,9 +188,11 @@ function getAnnualLeaveFiveDayStatus_(employee, asOfDate) {
 
 function getLeaveLedger(sessionToken, employeeId) {
   requireAdminSession_(sessionToken);
+  maybeReconcileLeave_(employeeId);
   const employee=getEmployee_(employeeId);
   return {
     employee:{employeeId:employee.employeeId,name:employee.name},
+    automation:leaveAutoForecast_(employee,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd')),
     state:getLeaveLedgerState_(employee),
     rows:getLeaveLedgerRows_(employee.employeeId).slice().reverse().slice(0,100),
     fiveDay:getAnnualLeaveFiveDayStatus_(employee,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'))

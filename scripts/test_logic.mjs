@@ -9,6 +9,7 @@ const files = [
   'src/Monthly.gs',
   'src/MonthlySnapshot.gs',
   'src/LeaveLedger.gs',
+  'src/AnnualLeaveAutomation.gs',
   'src/Maintenance.gs',
   'src/Labor.gs',
   'src/Schema.gs',
@@ -67,6 +68,11 @@ globalThis.__fmTest = {
   monthlySnapshotPayload_,
   normalizeLeaveDays_,
   leaveBalanceAfterDelta_,
+  leaveDueAtIndex_,
+  leaveEntitlement_,
+  leaveAutoAlreadyGranted_,
+  leaveAutoEarlierMissing_,
+  leaveAttendanceEvidence_,
   annualLeavePeriodEnd_,
   annualLeaveQualifyingUsage_,
   normalizeScheduleVisibility_,
@@ -261,6 +267,110 @@ expect('date range includes both endpoints', JSON.stringify(Array.from(api.dateR
 expect('date range regex matches target date', new RegExp(api.dateRangeRegex_('2026-10-01','2026-10-03',10)).test('2026-10-02'));
 expect('row blocks group contiguous rows', JSON.stringify(api.contiguousRowBlocks_([2,3,5,6,7]))===JSON.stringify([{start:2,end:3},{start:5,end:7}]));
 expect('column letter handles AB', api.columnLetter_(28)==='AB');
+
+
+expect('yearly annual leave starts with ten after first six months',
+  api.leaveDueAtIndex_('2026-04-01',0)==='2026-10-01' &&
+  api.leaveEntitlement_('2026-04-01','2026-10-01').due.days===10);
+expect('second grant happens after another year with eleven days',
+  api.leaveDueAtIndex_('2026-04-01',1)==='2027-10-01' &&
+  api.leaveEntitlement_('2026-04-01','2027-10-01').due.days===11);
+expect('six years six months reaches twenty days',
+  api.leaveDueAtIndex_('2020-04-01',6)==='2026-10-01' &&
+  api.leaveEntitlement_('2020-04-01','2026-10-01').due.days===20);
+expect('first leave is not granted before six months',
+  api.leaveEntitlement_('2026-04-01','2026-09-30').due===null);
+expect('short February is handled for month-end hire',
+  api.leaveDueAtIndex_('2026-08-31',0)==='2027-02-28');
+expect('manual grant on the same entitlement date blocks automation',
+  api.leaveAutoAlreadyGranted_({employeeId:'FM0001',leaveBasisDate:''},{date:'2026-10-01'},
+  [{transactionDate:'2026-10-01',type:'GRANT'}])===true);
+expect('manual opening basis on the same date blocks automation',
+  api.leaveAutoAlreadyGranted_({employeeId:'FM0001',leaveBasisDate:'2026-10-01'},
+  {date:'2026-10-01'},[])===true);
+const leaveMockResult=vm.runInContext(`(()=>{
+  const originalCalendar=getCompanyCalendarRange_, originalPunches=getActivePunchRows_,
+    originalRequests=getRequestsForEmployee_;
+  const dates=['2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09'];
+  getCompanyCalendarRange_=()=>dates.map(date=>({date,working:true}));
+  getActivePunchRows_=()=>dates.slice(0,4).map(date=>['P1','FM0001','社員',date,'出勤']);
+  getRequestsForEmployee_=()=>[];
+  const eighty=leaveAttendanceEvidence_({employeeId:'FM0001'},{from:dates[0],through:dates[4]});
+  getActivePunchRows_=()=>dates.slice(0,3).map(date=>['P1','FM0001','社員',date,'出勤']);
+  const sixty=leaveAttendanceEvidence_({employeeId:'FM0001'},{from:dates[0],through:dates[4]});
+  getCompanyCalendarRange_=()=>[];
+  const absent=leaveAttendanceEvidence_({employeeId:'FM0001'},{from:dates[0],through:dates[4]});
+  getCompanyCalendarRange_=originalCalendar;
+  getActivePunchRows_=originalPunches;
+  getRequestsForEmployee_=originalRequests;
+  return {eighty,sixty,absent};
+})()`,context);
+expect('attendance evidence grants at exactly 80 percent',leaveMockResult.eighty.verified&&leaveMockResult.eighty.rate===80);
+expect('attendance evidence blocks a 60 percent record',!leaveMockResult.sixty.verified);
+expect('missing company calendar cannot be treated as qualifying',!leaveMockResult.absent.verified);
+
+
+const accrualRun=vm.runInContext(`(()=>{
+  const originals={
+    leaveAutoPolicy_,leaveAttendanceEvidence_,getLeaveLedgerRows_,getLeaveLedgerState_,
+    appendLeaveLedgerRow_,getDb_,invalidateEmployeeDirectoryCache_,appendAudit_
+  },oldSheet=globalThis.SpreadsheetApp;
+  const staff={employeeId:'FM0006',name:'社員',rowNumber:2,active:true,
+    hireDate:'2026-04-01',leaveBasisDate:''};
+  let balance=0,grantCount=0,auditCount=0,from='2026-09-01';
+  const rows=[];
+  try{
+    leaveAutoPolicy_=()=>({enabled:true,from});
+    leaveAttendanceEvidence_=()=>({verified:true,rate:80});
+    getLeaveLedgerRows_=()=>rows;
+    getLeaveLedgerState_=()=>({configured:rows.length>0,balance,source:rows.length?'LEDGER':'NONE'});
+    appendLeaveLedgerRow_=(e,basis,date,type,days,next)=>{
+      rows.push({basisDate:basis,transactionDate:date,type,days,balance:next});
+      if(type==='GRANT')grantCount++;
+    };
+    getDb_=()=>({getSheetByName:()=>({getRange:(row,col)=>({setValue:v=>{
+      if(col===11)balance=v;
+      if(col===25)staff.leaveBasisDate=v;
+    }})})});
+    invalidateEmployeeDirectoryCache_=()=>{};
+    appendAudit_=()=>{auditCount++};
+    globalThis.SpreadsheetApp={flush(){}};
+    const first=reconcileLeaveUnlocked_(staff,'2026-10-01');
+    const duplicate=reconcileLeaveUnlocked_(staff,'2026-10-01');
+    const nextYear=reconcileLeaveUnlocked_(staff,'2027-10-01');
+    const repeat=reconcileLeaveUnlocked_(staff,'2027-10-01');
+    const prior={...staff,employeeId:'FM0099',hireDate:'2026-04-01',leaveBasisDate:''};
+    from='2026-10-08';
+    const retro=reconcileLeaveUnlocked_(prior,'2026-10-08');
+    return {first,duplicate,nextYear,repeat,retro,grantCount,auditCount,balance};
+  }finally{
+    Object.assign(globalThis,originals);
+    if(oldSheet===undefined)delete globalThis.SpreadsheetApp;
+    else globalThis.SpreadsheetApp=oldSheet;
+  }
+})()`,context);
+expect('auto grant writes ten days to ledger, master and audit on due date',
+  accrualRun.first.granted&&accrualRun.first.balance===10);
+expect('auto grant is idempotent for first due date',
+  !accrualRun.duplicate.granted&&accrualRun.grantCount===2);
+expect('auto grant adds eleven days a year later only once',
+  accrualRun.nextYear.granted&&accrualRun.nextYear.days===11&&accrualRun.balance===21&&
+  !accrualRun.repeat.granted&&accrualRun.auditCount===2);
+expect('auto leave never backfills an entitlement before activation',
+  !accrualRun.retro.granted&&accrualRun.retro.reason==='NOT_APPLICABLE');
+
+
+const sampleEmployee={employeeId:'FM0001',hireDate:'2026-04-01',leaveBasisDate:''};
+const samplePeriod={due:{index:1,date:'2027-10-01'}};
+const policyBefore={enabled:true,from:'2026-09-01'};
+const missed=api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,policyBefore,[]);
+expect('missed older accrual remains visible after new annual due date',
+  missed.length===1&&missed[0].date==='2026-10-01'&&missed[0].days===10);
+expect('accrual older than automation activation is not flagged as past due',
+  api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,{enabled:true,from:'2026-10-08'},[]).length===0);
+expect('recorded initial accrual is not falsely marked missing',
+  api.leaveAutoEarlierMissing_(sampleEmployee,samplePeriod,policyBefore,
+    [{transactionDate:'2026-10-01',type:'GRANT'}]).length===0);
 
 if (failures) {
   console.error(`Logic test failures: ${failures}`);

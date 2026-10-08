@@ -48,6 +48,7 @@ function getRequestsBundle(sessionToken) {
   const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const employee = session.employee;
+  maybeReconcileLeave_(employee.employeeId);
   const permissions = getPermissions_(employee);
   const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
   const sheet = getDb_().getSheetByName('申請');
@@ -59,7 +60,11 @@ function getRequestsBundle(sessionToken) {
     .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const own = items.filter(r => r.employeeId === employee.employeeId);
   const team = items.filter(r => managedIds.has(r.employeeId));
-  const result={ own: own, team: team, context: getLeaveRequestContext_(employee.employeeId, own) };
+  const context=getLeaveRequestContext_(employee.employeeId,own);
+  const fresh=getEmployee_(employee.employeeId),today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
+  context.fiveDay=getAnnualLeaveFiveDayStatus_(fresh,today);
+  context.autoLeave=leaveAutoForecast_(fresh,today);
+  const result={ own: own, team: team, context };
   logPerformance_('getRequestsBundle',perfStarted,PERFORMANCE_BUDGETS.requestsBundle,{own:own.length,team:team.length});
   return result;
 }
@@ -104,6 +109,7 @@ function getRequestsForEmployee_(employeeId) {
 }
 function previewRequest(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
+  maybeReconcileLeave_(employee.employeeId);
   payload = payload || {};
   const type = String(payload.type || '');
   if (!REQUEST_TYPES.includes(type)) throw new Error('申請種別を確認してください。');
@@ -153,6 +159,7 @@ function submitRequest(sessionToken, payload) {
       assertNoLeaveConflict_(employee.employeeId, type, startDate, endDate, '', false);
     }
     if (['有給','午前半休','午後半休','1/4日有給'].includes(type)) {
+      reconcileLeaveUnlocked_(getEmployee_(employee.employeeId),Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'));
       const leaveContext = getLeaveRequestContext_(employee.employeeId);
       if (!leaveContext.leaveBalanceConfigured) {
         throw new Error('有給残日数が未設定です。管理者に社員情報の有給残日数を設定してもらってください。');
@@ -254,6 +261,8 @@ function approveRequest(sessionToken, requestId, decision, comment) {
     if (approve && ['有給','午前半休','午後半休','1/4日有給','欠勤'].includes(r[4])) {
       assertNoLeaveConflict_(r[2], r[4], r[5], r[6], r[0], true);
       if (r[4] !== '欠勤') {
+        leaveEmployee = getEmployee_(r[2]);
+        reconcileLeaveUnlocked_(leaveEmployee,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'));
         leaveEmployee = getEmployee_(r[2]);
         const leaveState = getLeaveLedgerState_(leaveEmployee);
         if (!leaveState.configured) throw new Error('有給残日数が未設定です。社員設定で残日数と年休基準日を設定してください。');

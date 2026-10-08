@@ -46,7 +46,7 @@ function adminOverviewStats(){
   const rows=[
     ['在籍社員',count(e=>e.active!==false),'employees','staff'],
     ['管理者',count(e=>e.active!==false&&e.role==='ADMIN'),'admins','manager'],
-    ['年休未設定',count(e=>e.active!==false&&!e.leaveBalanceConfigured),'leave','leave'],
+    ['年休未設定',count(e=>e.active!==false&&!e.leaveBalanceConfigured&&!(e.autoLeaveForecast&&e.autoLeaveForecast.status==='SCHEDULED')),'leave','leave'],
     ['PIN要確認',count(e=>e.active!==false&&(!e.pinConfigured||!!e.lockedUntil)),'pin','pin']
   ];
   return `<section class='admin-overview' aria-label='管理状況'>

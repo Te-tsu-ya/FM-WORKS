@@ -1665,6 +1665,42 @@ function requestCompactLeaveAlert(){
     <span>有給・半休の申請には残日数の設定が必要です。その他の申請は利用できます。</span></div>
     ${editor?`<button type='button' class='secondary-button compact' onclick="navigate('people')">社員設定を開く</button>`:''}</div>`;
 }
+function requestAnnualLeaveNotice(){
+  const context=state.requests.context||{},five=context.fiveDay||{},auto=context.autoLeave||{};
+  if(five.previousOverdue){
+    const prev=five.previousOverdue;
+    var previousBanner=`<div class='leave-compliance-banner needs-review' role='alert'>
+      <span class='leave-compliance-icon'>!</span><div>
+      <strong>前年度の有給5日取得を確認してください</strong>
+      <p>${escapeHtml(prev.periodStart)}〜${escapeHtml(prev.periodEnd)} / 取得${escapeHtml(String(prev.takenDays))}日・不足${escapeHtml(String(prev.remainingDays))}日</p>
+      <small>過去の勤務・休暇実績に不足がないか管理者へ確認してください。</small>
+      </div></div>`;
+  }
+  let notices=typeof previousBanner==='string'?previousBanner:'';
+  if(auto.status==='REVIEW')notices+=`<div class='leave-compliance-banner needs-review' role='status'>
+    <span class='leave-compliance-icon'>!</span><div><strong>有給の付与条件を確認してください</strong>
+    <p>${escapeHtml(auto.dueDate||'')}の付与（${escapeHtml(String(auto.dueDays||0))}日）を確認中です。付与履歴・出勤率・会社カレンダーを管理者に確認してください。</p></div></div>`;
+  if(five.status==='DATA_INCOMPLETE'||(five.status==='UNKNOWN'&&context.leaveBalanceConfigured)){
+    notices+=`<div class='leave-compliance-banner needs-review' role='status'>
+      <span class='leave-compliance-icon'>!</span><div><strong>年5日取得の判定に必要な記録が不足しています</strong>
+      <p>${escapeHtml(five.reason||'年休の付与履歴や会社カレンダーを管理者に確認してください。')}</p>
+      </div></div>`;
+  }
+  if(five.status!=='TRACKING'&&five.status!=='OVERDUE'&&five.status!=='COMPLETED')return notices;
+  const remaining=Number(five.remainingDays||0),isOverdue=five.status==='OVERDUE',
+    alert=isOverdue||(remaining>0&&Number(five.daysRemaining)<=180),
+    complete=five.status==='COMPLETED';
+  return notices+`<div class='leave-compliance-banner ${complete?'is-complete':alert?'needs-review':''}' role='status'>
+    <span class='leave-compliance-icon'>${complete?'✓':alert?'!':'5'}</span>
+    <div><strong>${complete?'今年の年5日取得を達成しました':isOverdue?'年5日の取得期限を過ぎています':'年5日の有給取得状況'}</strong>
+      <p>取得 ${escapeHtml(String(five.takenDays||0))}日 / 目標5日${!complete?'・あと'+escapeHtml(String(remaining))+'日':''}
+      ${five.periodEnd?' / 期限 '+escapeHtml(five.periodEnd):''}</p>
+      ${alert&&!isOverdue?'<small>期限までに計画的に取得してください。</small>':''}
+      ${five.reason?'<small>'+escapeHtml(five.reason)+'</small>':''}
+    </div>
+    ${!complete?`<button type='button' class='secondary-button compact' onclick="openRequestModal('有給')">有給を申請</button>`:''}
+  </div>`;
+}
 function requestOverview(){
   const r=state.requests,own=r.own||[],ctx=r.context||{},
     canApprove=!!(state.data&&state.data.permissions&&state.data.permissions.requestApprove);
@@ -1744,6 +1780,7 @@ function requestsPage(){
   return `<div class='request-dashboard'>
     ${pageHead('申請','申請の作成・状況確認・承認を、ひとつの画面で。')}
     ${requestCompactLeaveAlert()}
+    ${requestAnnualLeaveNotice()}
     ${requestOverview()}
     ${r.refreshing?`<div class='request-refresh-hint' role='status'>最新の申請情報を確認中です。表示中の内容はそのまま操作できます。</div>`:''}
     <div class='request-action-layout'>
@@ -1942,7 +1979,7 @@ function requestApprovedCancel(id){openReasonDialog('承認済み申請の取消
 function approveCancellationRequest(id){openConfirmDialog('取消を承認','承認済み申請を取り消しますか？ 有給の場合は残日数を戻します。','取消を承認',function(){google.script.run.withSuccessHandler(function(){showToast('取消を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'取消承認できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'APPROVE','');},true);}
 function rejectCancellationRequest(id){openReasonDialog('取消を却下','申請者に表示する理由を入力してください。','取消を却下',function(reason){google.script.run.withSuccessHandler(function(){showToast('取消を却下しました');invalidatePageCache('requests');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'取消却下できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'REJECT',reason);});}
 function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){google.script.run.withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
-function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
+function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){google.script.run.withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
 function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){google.script.run.withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
 
 
