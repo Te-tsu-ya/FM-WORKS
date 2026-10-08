@@ -229,7 +229,7 @@ const result=vm.runInContext(`
     OFFICE_MODULES.every(m=>moduleHtml.includes("data-office-module='"+m.id+"'")));
   expect('office scaffold clearly states that saving and PDF export are not available',
     moduleHtml.includes('入力・保存機能は未実装')&&
-    moduleHtml.includes('PDF発行はできません')&&moduleHtml.includes('金額・取引先・社員の実データ'));
+    moduleHtml.includes('PDF発行はできません')&&moduleHtml.includes('元Excelの実データは移行していません'));
   selectOfficeModule('expenses');
   const expenseScaffold=officePage();
   expect('expense scaffold shows source columns without uploading any real business data',
