@@ -171,8 +171,9 @@ const result=vm.runInContext(`
   document.documentElement.dataset.theme='light';
   toggleTheme();
   expect('theme toggle changes theme without server call',document.documentElement.dataset.theme==='dark');
-  const topNav=visibleNav().map(x=>x[0]);
-  expect('top navigation is limited to five daily jobs plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','admin']));
+  const topNav=NAV.map(x=>x[0]);
+  expect('top navigation definition is limited to five daily jobs plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','admin']));
+  expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
   expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
