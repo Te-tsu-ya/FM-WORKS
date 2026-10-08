@@ -307,6 +307,8 @@ const result=vm.runInContext(`
     receiptMatches:{'EXP-FAKE-1':{status:'AMOUNT_MISMATCH',label:'金額差異',recordedAmount:2000,claimAmount:2500}},
     totals:{expensePending:1,travelPending:0,expenseToSettle:0}};
   const overviewOffice=officePage();
+  expect('priority action center precedes the module menu in keyboard and reading order',
+    overviewOffice.indexOf('office-home-work')<overviewOffice.indexOf('office-home-menu'));
   expect('hybrid office top provides six business shortcuts, quick entry and actionable queue',
     overviewOffice.includes('office-command')&&overviewOffice.includes('office-home-body')&&
     overviewOffice.includes('office-tile-grid')&&overviewOffice.includes('office-queue-row')&&

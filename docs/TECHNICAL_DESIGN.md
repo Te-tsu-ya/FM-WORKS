@@ -1661,3 +1661,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - UI参考: Shopify Polaris Index table、Atlassian Design System Empty state。いずれも設計原則の参照であり、FM WORKSの独自画面として再構成する。
 
 - UI補足：officeRecentActivity_ は経費・出張の申請者または記録者を、許可された利用者に限り escapeHtml を通じて表示する。テストDOM取得も document.getElementById を使用する。
+
+- レイアウト追補: officeOverviewPage_ のDOMは対応待ち→業務メニュー→右側補助情報の順。CSSのgrid-areaは大画面でメニュー／対応待ち／補助情報の順、960px以下でDOM順に表示する。CIのChromeにはfonts-noto-cjkをインストールし、日本語の実字幅で検証する。

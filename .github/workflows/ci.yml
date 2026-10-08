@@ -28,6 +28,11 @@ jobs:
         run: node scripts/test_client_contract.mjs
       - name: Test finance authorization and workflows
         run: node scripts/test_finance_integration.mjs
+      - name: Install Japanese fonts for layout verification
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          fc-cache -f
       - name: Verify home viewports in headless Chrome
         run: node scripts/test_home_viewport.mjs
       - name: Verify office hybrid layouts in Chromium

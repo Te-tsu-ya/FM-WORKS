@@ -2152,9 +2152,10 @@ html[data-theme="dark"] .office-planning-status{
 .office-command-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .office-command-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:12px;white-space:nowrap}
 .office-command-actions svg{width:15px;height:15px;stroke:currentColor;fill:none}
-.office-home-body{display:grid;grid-template-columns:minmax(265px,.95fr) minmax(370px,1.5fr) minmax(245px,.95fr);
+.office-home-body{display:grid;grid-template-columns:minmax(265px,.95fr) minmax(370px,1.5fr) minmax(245px,.95fr);grid-template-areas:'menu work aside';
   align-items:start;gap:12px;min-width:0}
 .office-home-menu,.office-work-panel,.office-side-panel{padding:13px;min-width:0}
+.office-home-menu{grid-area:menu}.office-home-work{grid-area:work}.office-home-aside{grid-area:aside}
 .office-home-work,.office-home-aside{display:grid;gap:12px;min-width:0}
 .office-section-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .office-section-heading h2{font-size:15px;font-weight:850;line-height:1.4;margin:0}
@@ -2277,7 +2278,7 @@ html[data-theme="dark"] .office-status-done{color:#8ce2b4;background:#1b4133;bor
 .office-record-placeholder .office-empty{border:0}
 .office-plan-detail{min-height:250px}
 @media(max-width:1520px){
- .office-home-body{grid-template-columns:minmax(220px,250px) minmax(0,1fr)}
+ .office-home-body{grid-template-columns:minmax(220px,250px) minmax(0,1fr);grid-template-areas:'menu work' 'aside aside'}
  .office-home-aside{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}
  .office-overview .office-tile-grid{grid-template-columns:1fr}
  .office-overview .office-shortcut-tile{min-height:55px;display:grid;
@@ -2297,7 +2298,7 @@ html[data-theme="dark"] .office-status-done{color:#8ce2b4;background:#1b4133;bor
  .office-record-columns{grid-template-columns:minmax(265px,.9fr) minmax(0,1.1fr)}
 }
 @media(max-width:960px){
- .office-home-body{grid-template-columns:1fr}
+ .office-home-body{grid-template-columns:1fr;grid-template-areas:'work' 'menu' 'aside'}
  .office-home-aside{grid-column:auto}
  .office-overview .office-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
  .office-overview .office-shortcut-tile{grid-template-columns:30px minmax(0,1fr) auto}

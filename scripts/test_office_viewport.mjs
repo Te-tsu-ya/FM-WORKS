@@ -91,6 +91,9 @@ for(const test of cases){
   if(!test.privileged&&page.includes('架空経理対象')){
     failures++;console.error('FAIL '+id+' protected financial data leaked');continue;
   }
+  if(test.kind==='overview'&&page.indexOf("office-home-work")>page.indexOf("office-home-menu")){
+    failures++;console.error('FAIL '+id+' priority work should precede module list in DOM for mobile reading order');continue;
+  }
   if(test.kind==='overview'&&!page.includes('office-command')){
     failures++;console.error('FAIL '+id+' hybrid dashboard missing');continue;
   }
