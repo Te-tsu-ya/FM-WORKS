@@ -1976,6 +1976,35 @@ html[data-font-size="large"] .office-module-head h2{font-size:18px}
   .page-head h1{font-size:23px}
   .nav-button{font-size:14px}
 }
+/* Compact notebook-height dashboards: preserve important content through
+   internal scrolling rather than clipping it or shrinking action targets. */
+@media (min-width:1200px) and (max-width:1439px) and (min-height:690px) and (max-height:820px){
+  .content.one-screen:has(>.home-portal-screen){padding-top:8px;padding-bottom:8px}
+  .home-portal-screen{gap:7px}
+  .home-portal-header{padding:7px 12px;min-height:58px}
+  .home-portal-intro p{display:none}
+  .home-portal-intro h1{font-size:18px;margin:2px 0}
+  .home-portal-current{gap:2px}
+  .home-portal-stats{gap:7px}
+  .home-portal-stat{min-height:55px;padding:5px 10px;gap:2px}
+  .home-portal-stat>strong{font-size:19px}
+  .home-portal-stat>small{display:none}
+  .home-portal-layout{gap:7px}
+  .home-portal-panel{padding:9px 11px}
+  .home-portal-panel-head{margin-bottom:5px}
+  .home-portal-punch-facts{margin-bottom:5px}
+  .home-portal-punch-facts>div{padding:5px 7px}
+  .home-portal-punch-actions{margin-bottom:5px}
+  .home-portal-attendance .home-location{margin-bottom:3px}
+  .home-portal-inline-head{margin:3px 1px}
+  .home-portal-punch-history{max-height:55px;overflow-y:auto;overscroll-behavior:contain}
+  .home-portal-agenda-rows{max-height:126px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  .home-portal-agenda-row{padding:7px 9px}
+  .home-portal-panel-footer{margin-top:5px;padding-top:5px}
+  .home-portal-task-row{padding:6px 8px}
+  .home-portal-task-list{max-height:125px;overflow-y:auto;overscroll-behavior:contain}
+  .home-portal-shortcut{padding:6px 9px;min-height:42px}
+}
 /* Office / administration scaffolding: information architecture only. */
 .office-screen{display:grid;gap:14px;align-content:start;min-width:0}
 .office-screen .page-head{margin-bottom:0}

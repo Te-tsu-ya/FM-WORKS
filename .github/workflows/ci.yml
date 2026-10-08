@@ -26,3 +26,13 @@ jobs:
         run: node scripts/test_logic.mjs
       - name: Run client contract tests
         run: node scripts/test_client_contract.mjs
+      - name: Verify home viewports in headless Chrome
+        run: node scripts/test_home_viewport.mjs
+      - name: Upload synthetic home QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-home-layout-qa
+          path: artifacts/home-layout/*.png
+          if-no-files-found: warn
+          retention-days: 14
