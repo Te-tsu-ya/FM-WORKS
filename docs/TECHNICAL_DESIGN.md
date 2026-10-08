@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.1  
+**文書版:** 0.11.2  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.1`
+`APP.version = 0.11.2`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -369,6 +369,16 @@ QAサンプルはADMINかつ当日工数0件の場合だけクライアントメ
 - 遅れて戻るレスポンスで最新選択日を描画
 - 作成/修正/削除後のキャッシュ破棄
 - UI再試行とクイック登録の回帰
+
+## 9.6 工数フォーム・日付操作の改善 v0.11.2
+
+- `jumpWorklogDate(date)` を経由して今日/前日/翌日/日付ピッカーの移動を統合。日付変更は既存の14日ウィンドウキャッシュへ接続し、キャッシュ内ではリクエストを発行しない。
+- `WORKLOG_QUICK_FIELDS` と `worklogQuickDrafts` (`Map`) を用い、`renderPage` がDOMを差し替える前に `rememberWorklogQuickDraft()`、差し替え後に `restoreWorklogQuickDraft()` を呼ぶ。描画済みの日付は `state.worklog.renderedDate` で保持し、選択日が変更されても元の日付へ紐付ける。
+- 一時入力キーは既存の `worklogWindowIdentity()` + 日付。保持数は最大20。localStorage・Apps Script・Sheetsには保存しない。`clearLocalSession()` で一時入力と工数キャッシュを破棄し、進行中取得の参照も解除する。
+- `saveQuickWorklog()` は `state.busy` で同時送信を拒否し、保存ボタンを一時無効化する。失敗時は解除、成功時は保存済み日付の一時入力を削除し再取得する。
+- `AppShell.renderPage()` は日付ナビゲーションとクイック入力のフォーカスを再描画後も復元する。存在しない選択肢へ古いプロジェクト値を戻さない。
+- UI契約試験で日付ジャンプ・一時入力の日付分離/セッション分離・二重送信防止を検証する。ブラウザ実測と多端末目視は別途確認が必要。
+
 
 ## 10. 月次UI
 
