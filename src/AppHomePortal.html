@@ -1,0 +1,152 @@
+<script>
+/* FM WORKS v0.11.9 — action-first, role-aware, no extra page-render requests. */
+function homePortalGreeting(){
+  const hour=new Date().getHours();
+  return hour<11?'おはようございます':hour<18?'こんにちは':'こんばんは';
+}
+function homePortalTaskRoute(label){
+  const routes={'工数入力':'worklog','勤怠の確認':'attendance','申請の承認':'requests','申請の確認':'requests'};
+  return Object.prototype.hasOwnProperty.call(routes,label)?routes[label]:null;
+}
+function homePortalPriority(task){return task&&task.tone==='danger'?0:task&&task.tone==='warning'?1:2;}
+function homePortalStats(){
+  const d=state.data||{},m=d.month||null,manager=!!(d.permissions&&d.permissions.requestApprove);
+  const pending=m&&typeof m.pendingRequests==='number'?m.pendingRequests+'件':null;
+  const metrics=[
+    ['今月の勤務',m&&m.workHours,'monthly','work'],
+    ['今月の残業',m&&m.overtime,'monthly','overtime'],
+    ['有給残日数',m&&m.leaveBalance,'requests','leave'],
+    [manager?'チーム承認待ち':'自分の申請待ち',pending,'requests','requests']
+  ];
+  return metrics.map(([label,value,route,tone])=>{
+    const known=value!==null&&value!==undefined,textValue=known?String(value):'読み込み中';
+    const detail=known?`<strong>${escapeHtml(textValue)}</strong>`:
+      state.homeOverview.error?'<strong>取得できません</strong>':'<span class="home-portal-skeleton" aria-hidden="true"></span>';
+    return `<button type='button' class='home-portal-stat ${tone}' onclick="navigate('${route}')"
+      aria-label='${escapeHtml(label)}：${escapeHtml(textValue)}。詳細を開く'>
+      <span>${escapeHtml(label)}</span>${detail}<small>${tone==='leave'&&textValue==='未設定'?'設定が必要':'詳細を見る'} ›</small>
+    </button>`;
+  }).join('');
+}
+function homePortalPunch(a){
+  const attendance=a||{};
+  return `<section class='card home-portal-panel home-portal-attendance'>
+    <header class='home-portal-panel-head'><div><span class='eyebrow'>ATTENDANCE</span><h2>現在の勤怠</h2></div>
+      <span class='home-state-pill ${escapeHtml(attendance.state||'')}'><i aria-hidden='true'></i>${escapeHtml(attendance.stateLabel||'未打刻')}</span></header>
+    <div class='home-portal-punch-facts'><div><span>出勤</span><strong>${escapeHtml(attendance.clockIn||'--:--')}</strong></div>
+      <div><span>実働</span><strong data-live-worked>${escapeHtml(liveWorkedText(attendance))}</strong></div>
+      <div><span>退勤</span><strong>${escapeHtml(attendance.clockOut||'--:--')}</strong></div></div>
+    <div class='home-portal-punch-actions'>${punchButtons(attendance)}</div>
+    ${homeWorkLocationSelector()}
+    <div class='home-portal-inline-head'><strong>本日の打刻</strong>
+      <button type='button' onclick="navigate('attendance')">勤怠詳細 ›</button></div>
+    <div class='home-portal-punch-history'>${homePunchHistory(attendance)}</div>
+  </section>`;
+}
+function homePortalScheduleRows(events){
+  const list=Array.isArray(events)?events:[];
+  if(!list.length)return `<div class='home-portal-agenda-empty'>
+    <span class='home-portal-empty-icon' aria-hidden='true'>${svg('i-calendar')}</span>
+    <div><strong>今日の予定はありません</strong><small>必要な予定は予定表から登録できます。</small></div>
+    <button type='button' class='secondary-button compact' onclick="navigate('schedule')">予定を登録</button>
+  </div>`;
+  return `<div class='home-portal-agenda-rows'>${list.slice(0,4).map(e=>`<button type='button' class='home-portal-agenda-row'
+      data-date='${escapeHtml(e.date||state.data.today)}' data-event-id='${escapeHtml(e.id||'')}'
+      onclick="state.schedule.date=this.dataset.date;state.schedule.selectedDate=this.dataset.date;state.schedule.selectedEventId=this.dataset.eventId||null;navigate('schedule')">
+      <span class='home-portal-agenda-time'>${e.allDay?'終日':escapeHtml(e.start||'--:--')}</span>
+      <span class='home-portal-agenda-copy'><strong>${escapeHtml(e.title||'予定')}</strong>
+        <small>${escapeHtml((e.employeeNames||[]).join('、')||'参加者未設定')}${e.location?' / '+escapeHtml(e.location):''}</small></span>
+      <i aria-hidden='true' style='background:${categoryColor(e.category)}'></i>
+    </button>`).join('')}
+    ${list.length>4?`<button type='button' class='home-portal-more' onclick="navigate('schedule')">ほか${list.length-4}件を予定表で見る ›</button>`:''}
+  </div>`;
+}
+function homePortalSchedule(events){
+  const list=Array.isArray(events)?events:[];
+  return `<section class='card home-portal-panel home-portal-agenda ${list.length?'':'is-empty'}'>
+    <header class='home-portal-panel-head'><div><span class='eyebrow'>SCHEDULE</span><h2>今日の予定</h2></div>
+      <span class='home-portal-count'>${list.length}件</span></header>
+    ${homePortalScheduleRows(list)}
+    ${list.length?`<div class='home-portal-panel-footer'>
+      <button type='button' class='secondary-button compact' onclick="navigate('schedule')">予定表を開く</button></div>`:''}
+  </section>`;
+}
+function homePortalTaskRow(t){
+  const route=homePortalTaskRoute(t.label),risk=homePortalPriority(t)<2;
+  const summary=t.label==='工数入力'?'勤務時間と入力工数を確認':
+    t.label==='勤怠の確認'?'打刻漏れ・勤怠記録を確認':
+    t.label==='申請の承認'?'担当チームの承認待ち申請':'自分の申請の状態を確認';
+  const children=`<span class='home-portal-task-icon ${escapeHtml(t.tone||'info')}' aria-hidden='true'>${risk?'!':'✓'}</span>
+    <span class='home-portal-task-copy'><strong>${escapeHtml(t.label||'確認事項')}</strong><small>${summary}</small></span>
+    <span class='home-portal-task-status ${escapeHtml(t.tone||'info')}'>${escapeHtml(t.status||'—')}</span>
+    ${route?'<i aria-hidden="true">›</i>':''}`;
+  return route?`<button type='button' class='home-portal-task-row' onclick="navigate('${route}')">${children}</button>`:
+    `<div class='home-portal-task-row'>${children}</div>`;
+}
+function homePortalTaskRows(tasks){
+  if(!tasks)return state.homeOverview.error?'<p class="home-portal-task-load-message" role="status">集計を取得できませんでした。上の再読込から再試行してください。</p>':homeOverviewLoading();
+  const items=Array.isArray(tasks)?tasks:[],
+    urgent=items.filter(t=>homePortalPriority(t)<2).sort((a,b)=>homePortalPriority(a)-homePortalPriority(b)),
+    rest=items.filter(t=>homePortalPriority(t)===2);
+  const primary=urgent.length?`<div class='home-portal-task-list'>${urgent.map(homePortalTaskRow).join('')}</div>`:
+    `<div class='home-portal-all-clear'><span aria-hidden='true'>✓</span><div>
+    <strong>今すぐ対応が必要な項目はありません</strong><small>必要なときに詳細を確認できます。</small></div></div>`;
+  return primary+(rest.length?`<details class='home-portal-other-tasks'>
+    <summary>${urgent.length?'その他の状況':'確認済みの項目'}（${rest.length}件）</summary>
+    <div class='home-portal-task-list'>${rest.map(homePortalTaskRow).join('')}</div></details>`:'');
+}
+function homePortalPriorities(tasks){
+  const manager=!!(state.data&&state.data.permissions&&state.data.permissions.requestApprove);
+  const count=Array.isArray(tasks)?tasks.filter(t=>homePortalPriority(t)<2).length:null;
+  return `<section class='card home-portal-panel home-portal-priorities'>
+    <header class='home-portal-panel-head'><div><span class='eyebrow'>TO DO</span>
+      <h2>${manager?'自分とチームの要対応':'優先して確認すること'}</h2></div>
+      ${count!==null?`<span class='home-portal-count ${count?'is-urgent':''}'>要対応 ${count}件</span>`:''}</header>
+    ${homePortalTaskRows(tasks)}
+  </section>`;
+}
+function homePortalShortcuts(){
+  const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
+  const routes=[
+    ['worklog','工数入力','業務時間を記録','i-chart'],
+    ['requests','休暇・申請','有給・打刻修正','i-file'],
+    ['monthly','月次勤怠','勤怠を確認','i-clock'],
+    ['schedule','予定表','スケジュール','i-calendar']
+  ];
+  if(admin)routes.push(['people','社員・設定','権限と労務管理','i-gear']);
+  return `<section class='card home-portal-panel home-portal-shortcuts'>
+    <header class='home-portal-panel-head'><div><span class='eyebrow'>QUICK ACCESS</span><h2>よく使う機能</h2></div></header>
+    <div class='home-portal-shortcut-grid'>${routes.map(([page,label,detail,icon])=>`
+      <button type='button' class='home-portal-shortcut' onclick="navigate('${page}')">
+        ${svg(icon)}<span><strong>${label}</strong><small>${detail}</small></span><i aria-hidden='true'>›</i>
+      </button>`).join('')}</div>
+  </section>`;
+}
+function homePage(){
+  const d=state.data||{},a=d.attendance||{},schedule=Array.isArray(d.todaySchedule)?d.todaySchedule:[],
+    tasks=Array.isArray(d.tasks)?d.tasks:null,company=d.companyToday,
+    manager=!!(d.permissions&&d.permissions.requestApprove);
+  return `<div class='single-screen-layout home-screen home-portal-screen'>
+    <header class='home-portal-header'>
+      <div class='home-portal-intro'><div class='home-portal-meta'>
+        <span class='home-portal-today'><i aria-hidden='true'></i>TODAY</span>
+        <span>${escapeHtml(fmtDate(d.today||''))}</span>
+        <span>${company?escapeHtml(company.name||company.type||'会社カレンダー'):'会社カレンダー未登録'}</span></div>
+        <h1>${homePortalGreeting()}、${escapeHtml(d.user&&d.user.displayName||'')}</h1>
+        <p>${manager?'自分の勤務とチームの確認事項を、ここで確認できます。':'今日の勤務・予定・対応事項を、ここから確認できます。'}</p>
+      </div>
+      <div class='home-portal-current'><span>${manager?'承認担当者':'個人ポータル'}</span>
+        <strong>${escapeHtml(a.stateLabel||'未打刻')}</strong>
+        <button type='button' onclick="navigate('attendance')">勤務状況を確認 ›</button></div>
+    </header>
+    <div class='home-portal-stats' aria-label='今月の状況'>${homePortalStats()}</div>
+    ${state.homeOverview.error?`<div class='home-portal-load-error'>${homeOverviewError()}</div>`:''}
+    <div class='home-portal-layout'>
+      ${homePortalPunch(a)}
+      ${homePortalPriorities(tasks)}
+      ${homePortalSchedule(schedule)}
+      ${homePortalShortcuts()}
+    </div>
+  </div>`;
+}
+</script>

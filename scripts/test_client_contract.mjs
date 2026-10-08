@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -846,6 +846,105 @@ const result=vm.runInContext(`
   expect('logged out visitor cannot access the demo',leaveDemoOpen()===false);
   state.sessionToken='SESSION_TOKEN';
   expect('no simulated application, approval or cancellation called the backend',apiCalls.length===0);
+
+
+  // v0.11.9 home portal: data truthfulness, role-aware priorities, compact empty states and session safety.
+  state.page='home';
+  state.sessionToken='HOME_STAFF';
+  state.homeOverview={loading:false,loaded:true,reloadRequested:false,callbacks:[],error:''};
+  state.data={
+    today:'2026-10-08',
+    user:{employeeId:'FM0003',displayName:'サンプル社員'},
+    permissions:{requestApprove:false,adminConsole:false},
+    attendance:{state:'off',stateLabel:'勤務外',clockIn:'',clockOut:'',workedMinutes:0,history:[]},
+    companyToday:{date:'2026-10-08',type:'通常勤務',name:''},
+    todaySchedule:[],
+    month:{workHours:'32時間00分',overtime:'1時間00分',leaveBalance:'11日',pendingRequests:1},
+    tasks:[
+      {label:'工数入力',status:'120分不足',tone:'danger'},
+      {label:'勤怠の確認',status:'0件',tone:'info'},
+      {label:'申請の確認',status:'1件',tone:'warning'}
+    ]
+  };
+  resetCalls();
+  const portalStaff=homePage();
+  expect('personal home shows four real-data metrics and the own-pending label',
+    portalStaff.includes('home-portal-screen')&&portalStaff.includes('home-portal-stats')&&
+    portalStaff.includes('32時間00分')&&portalStaff.includes('11日')&&
+    portalStaff.includes('自分の申請待ち')&&!portalStaff.includes('チーム承認待ち'));
+  expect('home first priority is attendance and punch control remains available',
+    portalStaff.includes('現在の勤怠')&&portalStaff.includes('home-portal-punch-actions')&&
+    portalStaff.includes('homeWorkLocationSelector')===false&&portalStaff.includes('本日の打刻'));
+  expect('empty schedule is compact and offers a direct add action',
+    homePortalScheduleRows([]).includes('home-portal-agenda-empty')&&
+    homePortalScheduleRows([]).includes('予定を登録')&&
+    !homePortalScheduleRows([]).includes('height:100%'));
+  expect('home prioritizes danger then warning and collapses completed tasks',
+    homePortalTaskRows(state.data.tasks).indexOf('工数入力')<
+    homePortalTaskRows(state.data.tasks).indexOf('申請の確認')&&
+    homePortalTaskRows(state.data.tasks).includes('<details')&&
+    homePortalTaskRows(state.data.tasks).includes("navigate('worklog')"));
+  expect('home task destinations are allowlisted and unknown task labels cannot inject routes',
+    homePortalTaskRoute('工数入力')==='worklog'&&
+    homePortalTaskRoute('勤怠の確認')==='attendance'&&
+    homePortalTaskRoute('申請の承認')==='requests'&&
+    homePortalTaskRoute('constructor')===null);
+  expect('staff shortcuts do not expose administrator-only settings',
+    homePortalShortcuts().includes("navigate('worklog')")&&
+    homePortalShortcuts().includes("navigate('monthly')")&&
+    !homePortalShortcuts().includes("navigate('people')"));
+  expect('rendering home does not issue additional server calls',apiCalls.length===0);
+  const noTasks=homePortalTaskRows([
+    {label:'工数入力',status:'完了',tone:'info'},
+    {label:'勤怠の確認',status:'0件',tone:'info'}]);
+  expect('completed work is not mistakenly marked pending',
+    noTasks.includes('今すぐ対応が必要な項目はありません')&&
+    noTasks.includes('確認済みの項目'));
+  const hostile=homePortalTaskRow({label:'<img src=x onerror=alert(1)>',status:'<script>alert(1)</script>',tone:'warning'});
+  expect('untrusted task labels and status cannot inject markup',
+    !hostile.includes('<img src=x')&&!hostile.includes('<script>')&&hostile.includes('&lt;img'));
+  const upcoming=homePortalScheduleRows([
+    {id:'E1',date:'2026-10-08',start:'09:30',title:'共同会議',employeeNames:['担当者A'],category:'業務'}
+  ]);
+  expect('home schedule keeps event date and ID for deep linking',
+    upcoming.includes('data-event-id=')&&upcoming.includes('state.schedule.selectedEventId=this.dataset.eventId||null'));
+  state.data.permissions={requestApprove:true,adminConsole:true};
+  state.data.month.pendingRequests=3;
+  state.data.tasks[2]={label:'申請の承認',status:'3件',tone:'warning'};
+  const managerPortal=homePage();
+  expect('manager sees team pending count and role-specific administration links',
+    managerPortal.includes('チーム承認待ち')&&managerPortal.includes('3件')&&
+    managerPortal.includes('担当チームの承認待ち申請')&&
+    managerPortal.includes("navigate('people')"));
+  state.data.todaySchedule=[{id:'EVENT-X',date:'2026-10-08',title:'<img src=x onerror=alert(1)>',start:'14:00'}];
+  const malicious=homePortalScheduleRows(state.data.todaySchedule);
+  expect('home calendar event titles are escaped',malicious.includes('&lt;img')&&!malicious.includes('<img src=x'));
+  state.data.month=null;state.data.tasks=null;
+  state.homeOverview.error='ネットワーク障害';
+  const failedPortal=homePage();
+  expect('home overview failure keeps retry affordance instead of endless skeleton',
+    failedPortal.includes('再読込')&&failedPortal.includes('取得できません')&&
+    failedPortal.includes('集計を読み込めませんでした')&&
+    failedPortal.split('onclick="loadHomeOverview({force:true})"').length===2);
+  state.homeOverview.error='';
+  const skeletonPortal=homePage();
+  expect('home pending overview has compact skeleton without invented numbers',
+    skeletonPortal.includes('home-portal-skeleton')&&!skeletonPortal.includes('32時間00分'));
+  resetCalls();
+  const oldHomeData=state.data;
+  const oldHomeSession=state.sessionToken;
+  loadHomeOverview({force:true,silent:true});
+  const homeRequest=lastCall();
+  state.sessionToken='HOME_NEW_LOGIN';
+  state.data={...oldHomeData,user:{employeeId:'FM0009',displayName:'別アカウント'},month:null,tasks:null};
+  invokeServerSuccess({month:{workHours:'999時間00分'},tasks:[{label:'工数入力',status:'異常',tone:'danger'}]});
+  expect('old login overview response cannot populate a newly authenticated user',
+    homeRequest&&homeRequest.method==='getHomeOverview'&&oldHomeSession!=='HOME_NEW_LOGIN'&&
+    state.data.month===null&&state.data.tasks===null);
+  state.sessionToken='HOME_STAFF';
+  state.data=oldHomeData;
+  state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''};
+  resetCalls();
 
   state.adminUi=createAdminUiState();
   state.authAdmin=null;
