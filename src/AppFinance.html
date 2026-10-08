@@ -28,12 +28,14 @@ function loadFinanceOverview(options={}){
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM PERF] finance API '+(Date.now()-started)+'ms');
     if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
     renderPageIfActive('finance');
+    renderPageIfActive('office');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.error=cleanApiErrorMessage(error,'経理情報を取得できませんでした。');
     financeUi.loading=false;
     if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
     renderPageIfActive('finance');
+    renderPageIfActive('office');
   }).getFinanceOverview(state.sessionToken,{limit:financeUi.limit||160});
 }
 function loadMyFinanceItems(options={}){

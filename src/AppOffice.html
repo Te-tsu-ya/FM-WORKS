@@ -26,59 +26,384 @@ const OFFICE_MODULES=[
     fields:['社名','ベンダーコード','業種','コード接頭辞','適格請求書発行事業者登録番号','所在地','備考'],
     sheets:'ベンダーコード、経費、帳票テンプレート'}
 ];
+
+/* v0.13.3: Office overview = hybrid operations dashboard.
+   Module view = list + inline detail. No new finance API or data store. */
+const OFFICE_FINANCE_KINDS={receipts:'receipt',expenses:'expense',travel:'travel'};
 function officeWorkspaceAllowed(){
   return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace);
 }
-function selectOfficeModule(id){
-  if(!officeWorkspaceAllowed()||!OFFICE_MODULES.some(item=>item.id===id))return;
-  if(!state.officeUi)state.officeUi={selected:'documents'};
-  state.officeUi.selected=id;
-  renderPageIfActive('office');
+function officeUiState_(){
+  if(!state.officeUi)state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
+  return state.officeUi;
+}
+function officeFinanceAllowed_(){
+  return !!(state.data&&state.data.permissions&&state.data.permissions.financeWorkspace)&&financeAccessAllowed();
 }
 function officeModuleCurrent(){
-  const selected=state.officeUi&&state.officeUi.selected;
+  const selected=officeUiState_().selected;
   return OFFICE_MODULES.find(item=>item.id===selected)||OFFICE_MODULES[0];
 }
+function officeModuleKind_(id){
+  return OFFICE_FINANCE_KINDS[id]||null;
+}
+function officeModuleReady_(item){
+  return !!(item&&officeModuleKind_(item.id)&&officeFinanceAllowed_());
+}
+function selectOfficeModule(id){
+  if(!officeWorkspaceAllowed()||(id!=='overview'&&!OFFICE_MODULES.some(item=>item.id===id)))return;
+  const ui=officeUiState_();
+  ui.selected=id;
+  ui.recordId='';
+  ui.query='';
+  ui.status='all';
+  renderPageIfActive('office');
+}
+function officeOpenFinanceRecord(kind,id){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  const moduleId=Object.keys(OFFICE_FINANCE_KINDS).find(key=>OFFICE_FINANCE_KINDS[key]===kind);
+  if(!moduleId||!financeOverviewItem_(kind,id))return;
+  const ui=officeUiState_();
+  ui.selected=moduleId;
+  ui.recordId=String(id);
+  ui.query='';
+  ui.status='all';
+  renderPageIfActive('office');
+}
+function officeRecordData_(kind){
+  if(!officeFinanceAllowed_()||!financeUi.overview||financeUi.overview.setupRequired)return [];
+  const key=kind==='expense'?'expenses':kind==='travel'?'travels':'receipts';
+  return financeUi.overview[key]||[];
+}
+function officeRecordStatus_(kind,item){
+  return kind==='receipt'?(item.paid==='済'?'支払済':'未払'):String(item.status||'未処理');
+}
+function officeRecordTitle_(kind,item){
+  if(kind==='travel')return String(item.destination||'出張先未設定');
+  if(kind==='expense')return String(item.vendor||item.item||'経費申請');
+  return String(item.vendor||item.item||'経費記録');
+}
+function officeRecordSubtitle_(kind,item){
+  if(kind==='travel')return String(item.employeeName||'');
+  if(kind==='expense')return String(item.employeeName||'')+' ・ '+String(item.item||'');
+  return String(item.payer||item.creatorName||'')+' ・ '+String(item.item||'');
+}
+function officeRecordDate_(kind,item){
+  return String(kind==='travel'?item.startsOn:(item.usedOn||item.createdAt||''));
+}
+function officeRecordAmount_(kind,item){
+  return kind==='travel'?item.spentAmount:item.amount;
+}
+function officeFilteredRecords_(kind){
+  const ui=officeUiState_();
+  const needle=String(ui.query||'').trim().toLocaleLowerCase('ja-JP');
+  return officeRecordData_(kind).filter(item=>{
+    if(ui.status!=='all'&&officeRecordStatus_(kind,item)!==ui.status)return false;
+    if(!needle)return true;
+    const corpus=[item.id,item.employeeName,item.creatorName,item.payer,item.vendor,
+      item.item,item.destination,item.purpose,item.outcome,item.receiptRef,
+      item.category,item.status].join(' ').toLocaleLowerCase('ja-JP');
+    return corpus.includes(needle);
+  });
+}
+function officeSelectedRecord_(kind){
+  const rows=officeFilteredRecords_(kind);
+  const recordId=officeUiState_().recordId;
+  return rows.find(x=>String(x.id)===String(recordId))||rows[0]||null;
+}
+function officeStatusPill_(value){
+  const status=String(value||'未処理');
+  const tone=status==='承認待ち'?'waiting':status==='承認済'?'approved':
+    status==='差戻し'?'returned':status==='精算済'||status==='支払済'?'done':'neutral';
+  return "<span class='office-status office-status-"+tone+"'>"+escapeHtml(status)+"</span>";
+}
+function officeRecordList_(kind){
+  const rows=officeFilteredRecords_(kind);
+  const chosen=officeSelectedRecord_(kind);
+  if(!rows.length)return "<div class='office-empty' role='status'><strong>該当する記録はありません</strong><p>検索条件を変更するか、データを更新してください。</p></div>";
+  return rows.map(item=>{
+    const active=chosen&&String(item.id)===String(chosen.id);
+    return "<button type='button' class='office-record-row"+(active?" active":"")+
+      "' data-office-record='"+escapeHtml(String(item.id))+
+      "' aria-pressed='"+(active?'true':'false')+
+      "' onclick='officeChooseRecord(this.dataset.officeRecord)'>"+
+      "<span class='office-record-heading'>"+escapeHtml(officeRecordTitle_(kind,item))+"</span>"+
+      officeStatusPill_(officeRecordStatus_(kind,item))+
+      "<span class='office-record-meta'>"+escapeHtml(officeRecordSubtitle_(kind,item))+"</span>"+
+      "<span class='office-record-foot'><small>"+escapeHtml(officeRecordDate_(kind,item))+"</small>"+
+      "<strong>"+escapeHtml(financeYen(officeRecordAmount_(kind,item)))+"</strong></span></button>";
+  }).join('');
+}
+function officeRecordDetails_(kind){
+  const item=officeSelectedRecord_(kind);
+  if(!item)return "<div class='office-empty' role='status'><strong>記録を選択してください</strong><p>左側の一覧から確認する記録を選べます。</p></div>";
+  const id=escapeHtml(String(item.id));
+  const self=String(item.employeeId||'')===String(state.data&&state.data.user&&state.data.user.employeeId||'');
+  const actions=[];
+  if(kind!=='receipt'&&!self&&item.status==='承認待ち'){
+    actions.push("<button type='button' class='primary-button' data-kind='"+kind+"' data-id='"+id+
+      "' data-decision='APPROVE' onclick='financeApprovalDialog(this.dataset.kind,this.dataset.id,this.dataset.decision)'>承認する</button>");
+    actions.push("<button type='button' class='secondary-button' data-kind='"+kind+"' data-id='"+id+
+      "' data-decision='RETURN' onclick='financeApprovalDialog(this.dataset.kind,this.dataset.id,this.dataset.decision)'>差戻す</button>");
+  }
+  if(kind!=='receipt'&&!self&&item.status==='承認済'){
+    actions.push("<button type='button' class='primary-button' data-kind='"+kind+"' data-id='"+id+
+      "' onclick='financeSettlementDialog(this.dataset.kind,this.dataset.id)'>精算を確認</button>");
+  }
+  return ["<div class='office-detail-title'><div>",
+    "<span class='eyebrow'>RECORD / 記録詳細</span>",
+    "<h3>"+escapeHtml(officeRecordTitle_(kind,item))+"</h3>",
+    "<p>"+escapeHtml(String(item.id))+"</p></div>",
+    officeStatusPill_(officeRecordStatus_(kind,item)),"</div>",
+    "<div class='office-detail-scroll'>",financeDetailRows_(kind,item),"</div>",
+    actions.length?"<div class='office-detail-actions'>"+actions.join('')+"</div>":"",
+    "<p class='office-detail-caution'>承認・精算操作ではサーバー側で権限と申請状態を再確認します。</p>"
+  ].join('');
+}
+function officeChooseRecord(id){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  const kind=officeModuleKind_(officeUiState_().selected);
+  if(!kind||!officeFilteredRecords_(kind).some(x=>String(x.id)===String(id)))return;
+  officeUiState_().recordId=String(id);
+  const list=document.getElementById('officeRecordsList');
+  const detail=document.getElementById('officeRecordsDetail');
+  if(list)list.innerHTML=officeRecordList_(kind);
+  if(detail)detail.innerHTML=officeRecordDetails_(kind);
+}
+function officeFilterRecords(value){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  officeUiState_().query=String(value||'').slice(0,160);
+  officeUpdateRecordPanels_();
+}
+function officeSetStatus(value){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  const kind=officeModuleKind_(officeUiState_().selected);
+  if(!kind||!['all',...officeStatusOptions_(kind)].includes(value))return;
+  officeUiState_().status=value;
+  officeUpdateRecordPanels_();
+}
+function officeStatusOptions_(kind){
+  return kind==='receipt'?['未払','支払済']:['承認待ち','承認済','差戻し','精算済'];
+}
+function officeUpdateRecordPanels_(){
+  const kind=officeModuleKind_(officeUiState_().selected);
+  if(!kind)return;
+  const list=document.getElementById('officeRecordsList');
+  const detail=document.getElementById('officeRecordsDetail');
+  const count=document.getElementById('officeRecordCount');
+  const rows=officeFilteredRecords_(kind);
+  if(count)count.textContent=rows.length+'件表示';
+  if(list)list.innerHTML=officeRecordList_(kind);
+  if(detail)detail.innerHTML=officeRecordDetails_(kind);
+}
+function officeRefreshFinance(){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  loadFinanceOverview({force:true,silent:true});
+}
+function officeFinanceState_(){
+  if(!officeFinanceAllowed_())return 'restricted';
+  if(financeUi.error&&!financeUi.overview)return 'error';
+  if(!financeUi.overview)return 'loading';
+  if(financeUi.overview.setupRequired)return 'setup';
+  return 'ready';
+}
+function officeFinanceNotice_(compact){
+  const status=officeFinanceState_();
+  const wrapper=compact?'office-inline-note':'office-empty';
+  if(status==='restricted')return "<div class='"+wrapper+"'><strong>経理の管理情報は担当者のみ</strong><p>経費精算・出張報告の申請は「申請」画面から行えます。</p>"+
+    "<button type='button' class='secondary-button' onclick='navigate(&quot;requests&quot;)'>申請を開く</button></div>";
+  if(status==='loading')return "<div class='"+wrapper+"' role='status'><strong>経理データを読み込み中</strong><p>メニューの操作は先に行えます。</p></div>";
+  if(status==='setup')return "<div class='"+wrapper+"' role='status'><strong>経理用DBの初期設定が必要です</strong><p>管理者がバックアップを取得したうえでDB更新を実施してください。</p></div>";
+  if(status==='error')return "<div class='"+wrapper+"' role='alert'><strong>経理データを取得できませんでした</strong><p>"+escapeHtml(financeUi.error)+
+    "</p><button type='button' class='secondary-button' onclick='officeRefreshFinance()'>再試行</button></div>";
+  return '';
+}
+function officeMetric_(label,value,subtitle,icon,selected){
+  return "<div class='office-metric'><span class='office-metric-icon'>"+svg(icon)+"</span>"+
+    "<div><small>"+escapeHtml(label)+"</small><strong>"+escapeHtml(String(value))+
+    "</strong><span>"+escapeHtml(subtitle)+"</span></div></div>";
+}
+function officeMetricStrip_(){
+  const status=officeFinanceState_();
+  if(status!=='ready')return officeFinanceNotice_(true);
+  const totals=status==='ready'?financeUi.overview.totals||{}:{};
+  const values=status==='ready'?[
+    String(totals.expensePending!=null?totals.expensePending:officeRecordData_('expense').filter(x=>x.status==='承認待ち').length),
+    String(totals.travelPending!=null?totals.travelPending:officeRecordData_('travel').filter(x=>x.status==='承認待ち').length),
+    String(totals.expenseToSettle!=null?totals.expenseToSettle:officeRecordData_('expense').filter(x=>x.status==='承認済').length)
+  ]:['—','—','—'];
+  const hint=status==='ready'?'実データから集計':status==='restricted'?'担当者のみ':'取得後に表示';
+  return "<div class='office-metrics' aria-label='経理の対応状況'>"+
+    officeMetric_('経費の承認待ち',values[0],hint,'i-file')+
+    officeMetric_('出張の承認待ち',values[1],hint,'i-calendar')+
+    officeMetric_('経費の精算待ち',values[2],hint,'i-clock')+"</div>";
+}
+function officeDashboardQueue_(){
+  const items=[];
+  if(officeFinanceState_()==='ready'){
+    const d=financeUi.overview;
+    ['expense','travel'].forEach(kind=>{
+      officeRecordData_(kind).filter(x=>x.status==='承認待ち'||x.status==='承認済').forEach(item=>{
+        items.push({kind:kind,item:item,priority:item.status==='承認待ち'?0:1});
+      });
+    });
+    items.sort((a,b)=>a.priority-b.priority||
+      String(b.item.createdAt||'').localeCompare(String(a.item.createdAt||'')));
+  }
+  if(officeFinanceState_()!=='ready')return officeFinanceNotice_(true);
+  if(!items.length)return "<div class='office-inline-note'><strong>現在の対応待ちはありません</strong><p>新しい経費・出張申請が届くとここに表示されます。</p></div>";
+  const current=String(state.data&&state.data.user&&state.data.user.employeeId||'');
+  return items.slice(0,5).map(({kind,item})=>{
+    const own=String(item.employeeId||'')===current;
+    const title=(kind==='expense'?'経費精算':'出張報告')+' ・ '+officeRecordTitle_(kind,item);
+    return "<button type='button' class='office-queue-row' data-kind='"+kind+"' data-id='"+escapeHtml(String(item.id))+
+      "' onclick='officeOpenFinanceRecord(this.dataset.kind,this.dataset.id)'>"+
+      "<span class='office-queue-icon'>"+svg(kind==='expense'?'i-file':'i-calendar')+"</span>"+
+      "<span class='office-queue-text'><strong>"+escapeHtml(title)+"</strong><small>"+
+      escapeHtml(item.employeeName||'')+" ・ "+escapeHtml(financeYen(officeRecordAmount_(kind,item)))+
+      (own?' ・ 本人申請':'')+"</small></span>"+officeStatusPill_(item.status)+"</button>";
+  }).join('')+(items.length>5?"<p class='office-queue-extra'>ほか"+(items.length-5)+"件。各業務一覧で確認できます。</p>":"");
+}
+function officeRecentActivity_(){
+  if(officeFinanceState_()!=='ready')return officeFinanceNotice_(true);
+  const recent=[];
+  ['expense','travel','receipt'].forEach(kind=>{
+    officeRecordData_(kind).forEach(item=>recent.push({kind:kind,item:item}));
+  });
+  recent.sort((a,b)=>String(b.item.updatedAt||b.item.createdAt||'').localeCompare(String(a.item.updatedAt||a.item.createdAt||'')));
+  if(!recent.length)return "<div class='office-inline-note'><strong>登録された記録はありません</strong><p>初回登録後に最近の記録を表示します。</p></div>";
+  return recent.slice(0,5).map(({kind,item})=>
+    "<button type='button' class='office-activity-row' data-kind='"+kind+"' data-id='"+escapeHtml(String(item.id))+
+    "' onclick='officeOpenFinanceRecord(this.dataset.kind,this.dataset.id)'><span class='office-activity-icon'>"+
+    svg(kind==='receipt'?'i-doc':kind==='travel'?'i-calendar':'i-file')+
+    "</span><span><strong>"+escapeHtml(officeRecordTitle_(kind,item))+"</strong><small>"+
+    escapeHtml(officeRecordDate_(kind,item))+" ・ "+
+    escapeHtml(kind==='receipt'?'経費記録':kind==='travel'?'出張報告':'経費申請')+
+    "</small></span>"+officeStatusPill_(officeRecordStatus_(kind,item))+"</button>").join('');
+}
+function officeModuleCard_(item){
+  const active=officeModuleReady_(item);
+  const stateLabel=active?'一覧・詳細を開く':officeModuleKind_(item.id)?'担当者向け':'準備中';
+  return "<button type='button' class='office-shortcut-tile' data-office-module='"+escapeHtml(item.id)+
+    "' onclick='selectOfficeModule(this.dataset.officeModule)'>"+
+    "<span class='office-tile-icon'>"+svg(item.icon)+"</span>"+
+    "<strong>"+escapeHtml(item.title)+"</strong><small>"+escapeHtml(item.caption)+"</small>"+
+    "<span class='office-tile-state'>"+escapeHtml(stateLabel)+" <span aria-hidden='true'>›</span></span></button>";
+}
+function officeOverviewPage_(){
+  const canFinance=officeFinanceAllowed_();
+  return ["<div class='office-screen office-v2 office-overview'>",
+    pageHead('事務・経理','申請・承認・記録を、ここから素早く進められます。'),
+    "<section class='office-command card'><div><span class='eyebrow'>WORKSPACE / 総務・経理</span>",
+    "<h2>今日の事務作業を、ひとつの場所で。</h2>",
+    "<p>よく使う機能と対応が必要な申請を確認できます。帳票・備品など一部の機能は設計中です。</p></div>",
+    "<div class='office-command-actions'>",
+    "<button type='button' class='primary-button' onclick='openFinanceForm(&quot;expense&quot;)'>"+svg('i-file')+" 経費を申請</button>",
+    "<button type='button' class='secondary-button' onclick='openFinanceForm(&quot;travel&quot;)'>"+svg('i-calendar')+" 出張を報告</button>",
+    canFinance?"<button type='button' class='secondary-button' onclick='openFinanceForm(&quot;receipt&quot;)'>"+svg('i-doc')+" 経費を記録</button>":"",
+    "</div></section>",
+    "<div class='office-home-body'>",
+    "<section class='office-home-menu card' aria-labelledby='officeMenuTitle'><div class='office-section-heading'>",
+    "<h2 id='officeMenuTitle'>事務メニュー</h2><small>業務を選択して確認</small></div>",
+    "<div class='office-tile-grid'>",OFFICE_MODULES.map(officeModuleCard_).join(''),"</div></section>",
+    "<div class='office-home-work'><section class='card office-work-panel' aria-labelledby='officeTasksTitle'>",
+    "<div class='office-section-heading'><div><span class='eyebrow'>ACTION CENTER</span><h2 id='officeTasksTitle'>対応が必要な業務</h2></div>",
+    canFinance?"<button type='button' class='office-link' onclick='officeRefreshFinance()'>更新 ↻</button>":"",
+    "</div>",officeDashboardQueue_(),"</section>",
+    "<section class='card office-work-panel'><div class='office-section-heading'><h2>経理の処理状況</h2><small>未処理を優先</small></div>",
+    officeMetricStrip_(),"</section></div>",
+    "<aside class='office-home-aside'><section class='card office-side-panel'>",
+    "<div class='office-section-heading'><h2>最近の記録</h2>",
+    canFinance?"<button type='button' class='office-link' onclick='officeRefreshFinance()'>更新 ↻</button>":"",
+    "</div>",officeRecentActivity_(),"</section>",
+    "<section class='card office-side-panel'><div class='office-section-heading'><h2>ショートカット</h2></div>",
+    "<button type='button' class='office-side-action' onclick='navigate(&quot;requests&quot;)'>"+svg('i-file')+" 自分の申請を見る <span>›</span></button>",
+    canFinance?"<button type='button' class='office-side-action' onclick='navigate(&quot;finance&quot;)'>"+svg('i-trend')+" 経理管理を開く <span>›</span></button>":"",
+    "<p class='office-side-help'>数値は保存済みのデータだけを表示します。レシート画像の保存や帳簿出力は未対応です。</p>",
+    "</section></aside></div></div>"].join('');
+}
 function officeModuleDetail(item){
-  const isFinanceFeature=['expenses','travel','receipts'].includes(item.id);
-  const available=isFinanceFeature&&financeAccessAllowed();
-  const handoff=available?`<div class='office-module-handoff'><strong>この機能は利用できます</strong><p>経費・出張の登録と承認は「経理」で行います。自分の申請・報告は「申請」から入力できます。</p><div class='button-row'><button type='button' class='primary-button' onclick="navigate('finance')">経理を開く</button><button type='button' class='secondary-button' onclick="navigate('requests')">自分の申請を開く</button></div></div>`:'';
-  return `<section class='card office-module-detail' aria-labelledby='officeDetailTitle'>
-    <header class='office-module-head'>
-      <div><span class='eyebrow'>PLANNING / 基本設計</span><h2 id='officeDetailTitle'>${escapeHtml(item.title)}</h2>
-        <p>${escapeHtml(item.explanation)}</p></div>
-      <span class='office-planning-status' role='status'>${available?'経理メニューで利用可能':'入力・保存機能は未実装'}</span>
-    </header>
-    ${handoff}
-    <div class='office-module-subhead'><strong>想定する入力項目</strong><small>参考のExcelから抽出した仮項目です。内容とデザインは後から変更できます。</small></div>
-    <div class='office-field-grid'>${item.fields.map((name,i)=>`<div class='office-field-sample'>
-      <span class='office-field-number'>${String(i+1).padStart(2,'0')}</span><span>${escapeHtml(name)}</span></div>`).join('')}</div>
-    <div class='office-source-note'><strong>参考資料</strong><span>${escapeHtml(item.sheets)}</span></div>
-  </section>`;
+  // Planning modules are visible as scope previews, never as editable or saved records.
+  const kind=officeModuleKind_(item.id);
+  const blocked=!!kind&&!officeFinanceAllowed_();
+  const intro=blocked?"この管理機能は経理・総務・管理者のみ閲覧できます。自分の経費精算と出張報告は「申請」画面で入力できます。":item.explanation;
+  return ["<section class='card office-module-detail office-plan-detail' aria-labelledby='officeDetailTitle'>",
+    "<header class='office-module-head'><div><span class='eyebrow'>",blocked?'ACCESS / 権限':'PLANNING / 基本設計',
+    "</span><h2 id='officeDetailTitle'>",escapeHtml(item.title),"</h2>",
+    "<p>",escapeHtml(intro),"</p></div>",
+    "<span class='office-planning-status' role='status'>",blocked?'担当者向け':'入力・保存機能は未実装',"</span></header>",
+    blocked?"<div class='office-inline-note'><button type='button' class='secondary-button' onclick='navigate(&quot;requests&quot;)'>自分の申請を開く</button></div>":"",
+    "<div class='office-module-subhead'><strong>想定する入力項目</strong>",
+    "<small>参考のExcelから抽出した項目です。実際の入力機能は順次整備します。</small></div>",
+    "<div class='office-field-grid'>",item.fields.map((name,i)=>"<div class='office-field-sample'><span class='office-field-number'>"+
+      String(i+1).padStart(2,'0')+"</span><span>"+escapeHtml(name)+"</span></div>").join(''),"</div>",
+    "<div class='office-source-note'><strong>参考資料</strong><span>",escapeHtml(item.sheets),"</span></div>",
+    "<p class='office-footnote'>この画面では申請・承認・保存・PDF発行はできません。帳票などの機能は設計中です。元Excelの実データは移行していません。</p>",
+    "</section>"].join('');
+}
+function officeRecordWorkspace_(item){
+  const kind=officeModuleKind_(item.id);
+  const status=officeFinanceState_();
+  if(status!=='ready')return "<section class='card office-record-placeholder'>"+officeFinanceNotice_(false)+"</section>";
+  const rows=officeFilteredRecords_(kind);
+  const ui=officeUiState_();
+  const statusOptions=officeStatusOptions_(kind);
+  const opts=["<option value='all'>すべての状態</option>"].concat(statusOptions.map(s=>
+    "<option value='"+escapeHtml(s)+"'"+(ui.status===s?" selected":"")+">"+escapeHtml(s)+"</option>")).join('');
+  return ["<div class='office-record-columns'>",
+    "<section class='card office-workspace-list' aria-label='記録一覧'>",
+    "<header class='office-record-head'><div><span class='eyebrow'>INDEX / 一覧</span><h2>",
+    escapeHtml(item.title),"</h2><small id='officeRecordCount'>",rows.length,"件表示</small></div>",
+    "<button type='button' class='office-link' onclick='officeRefreshFinance()'>更新 ↻</button></header>",
+    "<div class='office-list-filters'><label class='office-search-label'>",
+    "<span class='visually-hidden'>記録を検索</span>",
+    "<input id='officeRecordSearch' type='search' placeholder='取引先・担当者・番号で検索' maxlength='160' value='",
+    escapeHtml(ui.query||''),"' oninput='officeFilterRecords(this.value)'></label>",
+    "<label><span class='visually-hidden'>状態で絞り込む</span>",
+    "<select id='officeStatusFilter' onchange='officeSetStatus(this.value)'>",opts,"</select></label></div>",
+    "<div id='officeRecordsList' class='office-record-list' aria-live='polite'>",officeRecordList_(kind),"</div>",
+    financeUi.overview&&financeUi.overview.totals&&
+      Number(financeUi.overview.totals[kind==='expense'?'expenseHidden':kind==='travel'?'travelHidden':'receiptHidden'])>0?
+      "<div class='office-list-more'><p>追加の記録があります。</p>"+
+      (financeUi.limit<1000?"<button type='button' class='secondary-button' onclick='financeShowMore()'>さらに表示</button>":
+        "<span>1000件より古い記録はDBで確認できます。</span>")+"</div>":"",
+    "</section>",
+    "<section class='card office-workspace-detail' aria-label='記録詳細'>",
+    "<div id='officeRecordsDetail'>",officeRecordDetails_(kind),"</div></section></div>"].join('');
+}
+function officeModulePage_(){
+  const item=officeModuleCurrent();
+  const usable=officeModuleReady_(item);
+  return ["<div class='office-screen office-v2 office-module-page'>",
+    "<div class='office-module-top'><button type='button' class='office-back' onclick='selectOfficeModule(&quot;overview&quot;)'>← 事務トップへ</button>",
+    "<div><span class='eyebrow'>FM WORKS / 事務・経理</span><h1>",escapeHtml(item.title),"</h1>",
+    "<p>",escapeHtml(item.explanation),"</p></div>",
+    usable?"<button type='button' class='primary-button' onclick='officeQuickCreate()'>+ 新規登録</button>":"",
+    "</div>",
+    "<div class='office-grid office-detail-grid'><nav class='office-module-nav' aria-label='事務機能のメニュー'>",
+    OFFICE_MODULES.map(m=>{
+      const current=m.id===item.id;
+      return "<button type='button' class='office-module-link"+(current?" active":"")+
+        "' data-office-module='"+escapeHtml(m.id)+"' aria-current='"+(current?'page':'false')+
+        "' onclick='selectOfficeModule(this.dataset.officeModule)'>"+
+        "<span class='office-module-icon'>"+svg(m.icon)+"</span>"+
+        "<span class='office-module-label'><strong>"+escapeHtml(m.title)+"</strong>"+
+        "<small>"+escapeHtml(m.caption)+"</small></span>"+
+        "<span class='office-module-arrow' aria-hidden='true'>›</span></button>";
+    }).join(''),"</nav>",
+    usable?officeRecordWorkspace_(item):officeModuleDetail(item),"</div></div>"].join('');
+}
+function officeQuickCreate(){
+  if(!officeWorkspaceAllowed()||!officeFinanceAllowed_())return;
+  const kind=officeModuleKind_(officeUiState_().selected);
+  if(!kind)return;
+  if(officeFinanceState_()==='setup'){showToast('経理用DBの初期設定が必要です');return;}
+  if(kind==='receipt')openFinanceForm('receipt');
+  else openFinanceForm(kind);
 }
 function officePage(){
-  if(!officeWorkspaceAllowed())return pageHead('事務・経理','この画面を表示する権限がありません。管理者または総務担当者にご確認ください。');
-  const selected=officeModuleCurrent();
-  return `<div class='office-screen'>
-    ${pageHead('事務・経理','見積・帳票、経費申請、出張履歴、備品管理などの入口をまとめています。')}
-    <section class='office-intro'><div>
-      <span class='eyebrow'>WORKSPACE / 総務・経理</span>
-      <strong>事務作業をひとつの場所に。</strong>
-      <p>経費精算・出張報告・レシート記録は「経理」で操作できます。その他の帳票・備品・取引先は引き続き設計中です。元Excelの実データは移行していません。</p>
-    </div><span class='office-intro-chip'>設計準備中</span></section>
-    <div class='office-grid'>
-      <nav class='office-module-nav' aria-label='事務機能のメニュー'>
-        ${OFFICE_MODULES.map(item=>`<button type='button' class='office-module-link ${item.id===selected.id?'active':''}'
-          data-office-module='${item.id}' aria-current='${item.id===selected.id?'page':'false'}'
-          onclick='selectOfficeModule(this.dataset.officeModule)'>
-          <span class='office-module-icon'>${svg(item.icon)}</span>
-          <span class='office-module-label'><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.caption)}</small></span>
-          <span class='office-module-arrow' aria-hidden='true'>›</span>
-        </button>`).join('')}
-      </nav>
-      ${officeModuleDetail(selected)}
-    </div>
-    <p class='office-footnote'>この画面では申請・承認・保存・PDF発行はできません。経費・出張は経理メニューから操作し、証憑画像と会計帳簿は別途管理してください。</p>
-  </div>`;
+  if(!officeWorkspaceAllowed())
+    return pageHead('事務・経理','この画面を表示する権限がありません。管理者または総務担当者にご確認ください。');
+  return officeUiState_().selected==='overview'?officeOverviewPage_():officeModulePage_();
 }
 </script>

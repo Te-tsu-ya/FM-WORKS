@@ -297,6 +297,72 @@ const result=vm.runInContext(`
     call&&call.method==='resubmitFinanceRequest'&&call.args[0]==='SESSION_TOKEN'&&
     call.args[1]==='expense'&&call.args[2]==='EXP-FAKE-1');
   resetFinanceUi();
+  // v0.13.3 Office Hybrid: actual finance data in actionable dashboard and list/detail,
+  // but no financial data rendered for office-only managers.
+  state.data.permissions.officeWorkspace=true;
+  state.data.permissions.financeWorkspace=true;
+  state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
+  const financePending={...financeFakeExpense,id:'EXP-FAKE-PENDING',status:'承認待ち',employeeName:'架空別社員'};
+  financeUi.overview={setupRequired:false,expenses:[financeFakeExpense,financePending],travels:[],receipts:[],
+    receiptMatches:{'EXP-FAKE-1':{status:'AMOUNT_MISMATCH',label:'金額差異',recordedAmount:2000,claimAmount:2500}},
+    totals:{expensePending:1,travelPending:0,expenseToSettle:0}};
+  const overviewOffice=officePage();
+  expect('hybrid office top provides six business shortcuts, quick entry and actionable queue',
+    overviewOffice.includes('office-command')&&overviewOffice.includes('office-home-body')&&
+    overviewOffice.includes('office-tile-grid')&&overviewOffice.includes('office-queue-row')&&
+    (overviewOffice.match(/office-shortcut-tile/g)||[]).length===6);
+  expect('overview uses financial records, never invented placeholder totals',
+    overviewOffice.includes('EXP-FAKE-1')&&overviewOffice.includes('架空社員')&&
+    !overviewOffice.includes('dummy-count'));
+  resetCalls();
+  selectOfficeModule('expenses');
+  const officeWorklist=officePage();
+  expect('finance office module renders real index with inline detail',
+    officeWorklist.includes('office-record-columns')&&officeWorklist.includes('officeRecordsList')&&
+    officeWorklist.includes('officeRecordsDetail')&&officeWorklist.includes('finance-detail-rows'));
+  expect('inline record details escape untrusted names',
+    officeWorklist.includes('&lt;img')&&!officeWorklist.includes('<img src=x'));
+  expect('switching to record/detail makes no extra GAS calls',
+    apiCalls.length===0);
+  officeFilterRecords('nomatch-xyz');
+  expect('client-side office search has explicit empty state without a GAS request',
+    officeFilteredRecords_('expense').length===0&&apiCalls.length===0&&
+    getElement('officeRecordsList').innerHTML.includes('該当する記録'));
+  officeFilterRecords('');
+  officeSetStatus('承認済');
+  expect('filter by status restores matching rows without network',
+    officeFilteredRecords_('expense').length===0&&apiCalls.length===0);
+  officeSetStatus('差戻し');
+  expect('status filter finds returned records',
+    officeFilteredRecords_('expense').length===1);
+  officeOpenFinanceRecord('expense','EXP-FAKE-1');
+  expect('summary opens exact record in list and detail',
+    state.officeUi.selected==='expenses'&&state.officeUi.recordId==='EXP-FAKE-1');
+  officeOpenFinanceRecord('expense','UNKNOWN');
+  expect('invalid record id does not move the selected document',
+    state.officeUi.recordId==='EXP-FAKE-1');
+  state.officeUi.selected='overview';
+  state.data.permissions.financeWorkspace=false;
+  const managerOverview=officePage();
+  expect('office-only manager cannot see personal accounting rows even if prior finance state exists',
+    managerOverview.includes('office-home-body')&&!managerOverview.includes('EXP-FAKE-1')&&
+    !managerOverview.includes('架空社員')&&!managerOverview.includes('2,500円'));
+  selectOfficeModule('expenses');
+  expect('office-only role gets self-service guidance but no accounting records',
+    officePage().includes('担当者向け')&&!officePage().includes('EXP-FAKE-1'));
+  state.data.permissions.financeWorkspace=true;
+  financeUi.overview={setupRequired:true,expenses:[],travels:[],receipts:[]};
+  expect('uninitialized accounting sheets are announced rather than showing invented records',
+    officePage().includes('初期設定が必要'));
+  financeUi.overview=null;
+  financeUi.error='権限確認のエラー';
+  expect('data-loading failure is visible and provides retry feedback',
+    officePage().includes('取得できませんでした')&&officePage().includes('再試行'));
+  financeUi.error='';
+  financeUi.overview=null;
+  state.officeUi.selected='overview';
+  expect('office never interprets an unloaded financial total as zero',
+    !officePage().includes('0件表示')&&officePage().includes('経理データを読み込み中'));
   resetFinanceUi();
   state.data=beforeOfficeData;
   state.page=beforeOfficePage;

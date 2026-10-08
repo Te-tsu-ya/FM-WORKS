@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/Finance.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs'
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_office_viewport.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -802,6 +802,25 @@ for(const marker of [
   "id:'expenses'","id:'travel'","id:'documents'","id:'receipts'","id:'assets'","id:'vendors'"
 ]){
   if(!officePreview.includes(marker)){console.error('v0.12.0 office scaffolding missing: '+marker);failed=true;}
+}
+/* v0.13.3 Hybrid Dashboard + Index/Detail acceptance gate. */
+for(const marker of [
+ 'officeOverviewPage_','officeRecordWorkspace_','officeRecordList_','officeRecordDetails_',
+ 'officeFilterRecords','officeSetStatus','officeQuickCreate','officeFinanceNotice_',
+ 'function officeOpenFinanceRecord(kind,id)','function officeFinanceAllowed_()',
+ 'office-workspace-list','office-workspace-detail','office-tile-grid','office-home-body'
+]){
+ if(!officePreview.includes(marker)){console.error('Office hybrid module missing: '+marker);failed=true;}
+}
+for(const marker of [
+ '.office-home-body','.office-tile-grid','.office-record-columns','.office-detail-scroll',
+ '.office-queue-row','.office-record-list','@media(max-width:640px)'
+]){
+ if(!styles.includes(marker)){console.error('Office responsive design missing: '+marker);failed=true;}
+}
+if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8')
+   .includes('node scripts/test_office_viewport.mjs')){
+ console.error('Office browser viewport QA must be an enforced CI step.');failed=true;
 }
 if(officePreview.includes('google.script.run')||officePreview.includes('SpreadsheetApp')||
    officePreview.includes('localStorage')||officePreview.includes('sessionStorage')){

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.13.2  
+**文書版:** 0.13.3  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.13.2`
+`APP.version = 0.13.3`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1645,3 +1645,17 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 表示中のデータの鮮度・権限は元のサーバー側の検証を維持する。キャッシュはlocalStorage・sessionStorage・GitHub・実DBへ書き込まない。
 - scripts/test_client_contract.mjsにRPC削減、同時呼び出しの集約、月の取り違え防止、キャッシュ失効、経理強制更新、工数の最大2並列の検証を追加する。
 - 認証済み実端末の表示所要時間・通信待ち時間はこのCIでは測定していない。運用環境で別途計測する。
+
+
+## 53. 事務ハイブリッドワークスペース（v0.13.3）
+
+- AppOffice.html: 現行6項目の OFFICE_MODULES を保持し、officeOverviewPage_ で案4（トップダッシュボード）、officeModulePage_ で案3（業務メニュー／一覧／詳細）を生成する。初期状態は state.officeUi={selected:'overview',recordId:'',query:'',status:'all'} とする。
+- 事務トップ: 既存financeUi.overviewの経費精算・出張報告・経費記録のみ使用。未処理優先で行表示し、件数はサーバーのtotalsから取得。未取得時は読込中／エラー／未初期化を表示する。
+- 情報の保護: financeWorkspaceがない利用者には金融レコードを渡さず描画もしない。MANAGER単独では経理閲覧不可。サーバーAPIの認可・自己承認禁止・監査は変更しない。
+- 内訳画面: officeRecordList_、officeRecordDetails_、officeFilteredRecords_は認可済みメモリ上のオブジェクトだけを使用。入力文字列をescapeHtmlで表示し、onclickは静的メソッド＋datasetを使う。検索・状態変更・行選択だけでサーバーに問い合わせない。
+- 保存済みの経費・出張では既存の openFinanceForm、financeDetailRows_、financeApprovalDialog、financeSettlementDialogを再利用し、新しいSheetや保存APIを作らない。
+- AppCore.html と AppShell.html は officeの初回遷移時に経理権限者にだけ loadFinanceOverview({silent:true}) を呼ぶ。AppFinance.html は成功・失敗時にofficeとfinanceの表示を更新する。経理キャッシュ／強制更新は従来と同一。
+- 未実装モジュール（帳票・見積、備品・購買、取引先マスタ）では説明／出典／項目プレビューのみ表示。保存や帳簿・原本PDFの処理を模擬しない。
+- Styles.htmlに.office-v2で範囲限定したCSSを追加。画面幅1520／1180／960／640pxに合わせて3列→2列→1列へ切替。状態は色だけでなく日本語文字も併記。
+- 検証: test_client_contract.mjs（認可・実データ・フィルター0通信・XSS防止）、test_office_viewport.mjs（実Chrome描画9ケースとスクリーンショット）、既存ロジック／経理統合／ホーム検証、GitHub ActionsとGASデプロイ。
+- UI参考: Shopify Polaris Index table、Atlassian Design System Empty state。いずれも設計原則の参照であり、FM WORKSの独自画面として再構成する。
