@@ -641,6 +641,7 @@ disabledは `cursor:not-allowed`。
 
 - `src/AppOperations.html` の `requestsPage()` は、役割別4指標→クイック申請＋承認/直近状況→本人履歴の順で描画する。APIは引き続き `getRequestsBundle(state.sessionToken)` の1回。
 - `requestOverview()` は本人の `own`、承認権限者は `requestPendingTeam()` を使用。取消申請中の部下を対応対象とし、自己承認はUI/サーバー双方で防止する。
+- `requestApprovalPanel()` は初期4件、表示数+8件のローカルページングを行い、100件以降も `requestPendingTeam().length` まで進める。APIの追加読込は行わない。
 - `requestHistoryPanel()`、`filteredOwnRequests()`、`setRequestHistoryFilter()`、`searchRequestHistory()` は取得済み `state.requests.own` のみをローカル処理し、DOMリストだけを再描画する。検索とステータス変更では通信せず、入力フォーカスも維持する。
 - ページの表示状態 `state.requests` は `createEmptyRequestsState()` で初期化。キャッシュキー `requestsIdentity()` はセッショントークン＋社員番号。ログアウト/認証マウントでキャッシュと申請データを消去。非同期応答ではキー/トークンが一致する時だけ代入する。
 - ステータス詳細は `openRequestDetail(id,teamMode)` がサーバーから認可済みの `own/team` から取得し、`escapeHtml` で文字列をサニタイズする。申請IDは inline JS引用文字列へ埋めず、data属性＋DOM datasetで渡す。

@@ -1649,7 +1649,7 @@ function requestPendingTeam(){
   return (state.requests.team||[]).filter(x=>String(x.employeeId)!==ownId&&['承認待ち','取消申請中'].includes(x.status));
 }
 function showMoreRequestApprovals(){
-  state.requests.approvalLimit=Math.min(100,Number(state.requests.approvalLimit||4)+8);
+  state.requests.approvalLimit=Math.min(requestPendingTeam().length,Number(state.requests.approvalLimit||4)+8);
   const node=document.getElementById('requestApprovalPanel');
   if(node)node.outerHTML=requestApprovalPanel();
 }

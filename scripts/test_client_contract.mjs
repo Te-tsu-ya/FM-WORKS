@@ -533,6 +533,15 @@ const result=vm.runInContext(`
   setRequestHistoryFilter('承認待ち');
   setRequestHistoryFilter('承認済');
   expect('manager request filters also stay local',apiCalls.length===0);
+  state.requests.team=Array.from({length:110},(_,i)=>({id:'TEAM-'+i,type:'欠勤',status:'承認待ち',employeeId:'STAFF-'+i,name:'社員'+i,startDate:'2026-10-10',endDate:'2026-10-10',reason:'私用'}));
+  state.requests.approvalLimit=100;
+  showMoreRequestApprovals();
+  expect('approval list remains navigable beyond 100 records without extra API calls',state.requests.approvalLimit===108&&apiCalls.length===0);
+  state.requests.team=[
+    {id:'T-1',type:'有給',status:'承認待ち',employeeId:'FM0002',name:'森川さん',startDate:'2026-10-09',endDate:'2026-10-09',reason:'私用'},
+    {id:'T-2',type:'在宅勤務',status:'取消申請中',employeeId:'FM0003',name:'神谷さん',startDate:'2026-10-07',endDate:'2026-10-07',reason:'変更'}
+  ];
+  state.requests.approvalLimit=4;
 
   const largeList=Array.from({length:25},(_,i)=>({id:'H-'+i,type:'欠勤',status:'承認済',startDate:'2026-10-01',endDate:'2026-10-01',reason:'私用'}));
   state.requests.own=largeList;
