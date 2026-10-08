@@ -1,6 +1,6 @@
 <script>
-const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['companyCalendar','会社カレンダー','i-calendar'],['requests','申請','i-file'],['people','社員','i-users'],['monthly','月次','i-trend'],['admin','設定','i-gear']];
-const MOBILE_NAV = ['home','attendance','schedule','worklog','admin'];
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']];
+const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
 let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,items:[],totalMinutes:0,loading:false},requests:{own:[],team:[],context:null,loading:false},monthly:{yearMonth:null,employeeId:null,data:null,view:'calendar',loading:false},adminTab:'auth',documents:{requirements:null,technical:null,loading:null},schedule:{date:null,view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
 const PAGE_CACHE_TTL={homeOverview:45000,worklog:90000,schedule:90000,company:300000,requests:90000,monthly:120000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:180000,maintenance:60000,documents:600000};
@@ -206,25 +206,25 @@ function startLiveAttendanceTicker(){
 function workLocationSelector(){return `<div class='section-gap'><small class='muted'>勤務場所</small><div class='button-row' style='margin-top:8px'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'primary-button':'secondary-button'}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`}
 function punchButtons(a){if(a.state==='off')return `<button class='primary-button' onclick="performPunch('出勤')">出勤する</button>`;if(a.state==='working')return `<button class='secondary-button' onclick="performPunch('休憩開始')">休憩する</button><button class='primary-button' onclick="performPunch('退勤')">退勤する</button>`;if(a.state==='break')return `<button class='primary-button' onclick="performPunch('休憩終了')">休憩終了</button>`;return `<button class='secondary-button' disabled>本日の勤務は終了しました</button>`}
 
+function primaryNavIdForPage(page){
+  if(page==='monthly')return 'attendance';
+  if(page==='companyCalendar')return 'schedule';
+  if(page==='people')return 'admin';
+  return page;
+}
 function visibleNav(){
   const p=state.data&&state.data.permissions||{};
   return NAV.filter(([id])=>id!=='admin'||p.adminConsole);
 }
 function renderNav(){
-  const nav=visibleNav();
-  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>{
-    const main=`<button class='nav-button ${state.page===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`;
-    if(id!=='admin')return main;
-    return `<div class='nav-group'>${main}<div class='nav-submenu'>
-      <button class='${state.page==='admin'&&state.adminTab==='operation'?'active':''}' data-admin-tab='operation'>運用設定</button>
-      <button class='${state.page==='admin'&&state.adminTab==='requirements'?'active':''}' data-admin-tab='requirements'>要件定義書</button>
-      <button class='${state.page==='admin'&&state.adminTab==='technical'?'active':''}' data-admin-tab='technical'>技術設計書</button>
-    </div></div>`;
-  }).join('');
+  const nav=visibleNav(),activeId=primaryNavIdForPage(state.page);
+  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>
+    `<button class='nav-button ${activeId===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`
+  ).join('');
   const allowedIds=new Set(nav.map(x=>x[0]));
   const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
   const mobile=document.getElementById('mobileNav');
-  mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${state.page===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${activeId===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
   mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
   document.querySelectorAll('[data-route]').forEach(b=>{
     b.onclick=()=>navigate(b.dataset.route);
@@ -232,7 +232,15 @@ function renderNav(){
     b.onfocus=()=>queueRoutePrefetch(b.dataset.route);
     b.onpointerleave=()=>clearTimeout(routePrefetchTimer);
   });
-  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.adminTab;navigate('admin')});
+}
+function workspaceTabs(items,activeId,label){
+  return `<nav class='workspace-tabs' aria-label='${escapeHtml(label||'表示切替')}'>${items.map(item=>`<button type='button' class='${item[0]===activeId?'active':''}' onclick="navigate('${item[0]}')">${escapeHtml(item[1])}</button>`).join('')}</nav>`;
+}
+function attendanceWorkspaceTabs(activeId){
+  return workspaceTabs([['attendance','本日'],['monthly','月間']],activeId,'勤怠の表示切替');
+}
+function scheduleWorkspaceTabs(activeId){
+  return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
 }
 function navigate(page){
   closeMobileDrawer();
@@ -244,15 +252,15 @@ function navigate(page){
   if(page==='worklog')loadWorklogs();
   if(page==='requests')loadRequests();
   if(page==='monthly')loadMonthly();
-  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin();
+  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
   if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
-    if(['auth','projects'].includes(state.adminTab))loadAuthAdmin();
-    if(state.adminTab==='operation'){loadAuthAdmin();loadMaintenance();}
+    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
+    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
+    if(state.adminTab==='operation')loadMaintenance();
     if(state.adminTab==='requirements')loadSystemDocument('requirements');
     if(state.adminTab==='technical')loadSystemDocument('technical');
   }
 }
-
 function syncGlobalActionBanner(){
   const slot=document.getElementById('globalActionBannerSlot');
   if(slot)slot.innerHTML=globalActionBanners();

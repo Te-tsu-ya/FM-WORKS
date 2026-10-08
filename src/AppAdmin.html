@@ -6,9 +6,10 @@ function authStateBadge(emp){
   return "<span class='auth-state'>利用可能</span>";
 }
 
-function settingsTabs(){
-  const tabs=[['auth','認証・サポート'],['projects','プロジェクト'],['operation','運用設定'],['requirements','要件定義書'],['technical','技術設計書']];
-  return `<div class='settings-tabs'>${tabs.map(([id,label])=>`<button class='${state.adminTab===id?'active':''}' onclick="setAdminTab('${id}')">${escapeHtml(label)}</button>`).join('')}</div>`;
+function settingsTabs(activeOverride){
+  const tabs=[['people','社員・権限'],['auth','認証・サポート'],['projects','プロジェクト'],['operation','運用・労務'],['requirements','要件定義書'],['technical','技術設計書']];
+  const active=activeOverride||state.adminTab;
+  return `<div class='settings-tabs admin-workspace-tabs'>${tabs.map(([id,label])=>`<button class='${active===id?'active':''}' onclick="${id==='people'?"navigate('people')":`setAdminTab('${id}')`}">${escapeHtml(label)}</button>`).join('')}</div>`;
 }
 function setAdminTab(tab){
   state.adminTab=tab;renderNav();renderPage(true);
@@ -104,7 +105,7 @@ function documentPane(type){
   return `<section class='document-shell'><header><div><span class='badge'>${escapeHtml(doc.version||state.data.app.version)}</span><strong>${escapeHtml(doc.title)}</strong><small>最終更新 ${escapeHtml(doc.updatedAt||'—')}</small></div><button class='secondary-button compact' onclick="loadSystemDocument('${type}',{force:true})">再読込</button></header><article class='document-reader'>${renderMarkdownDoc(doc.markdown)}</article></section>`;
 }
 function adminPage(){
-  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('設定','この画面を表示する権限がありません。');
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('管理','この画面を表示する権限がありません。');
   let content='';
   if(state.adminTab==='auth')content=authSettingsSection();
   else if(state.adminTab==='projects')content=projectAdminSection();
@@ -112,7 +113,7 @@ function adminPage(){
   else if(state.adminTab==='requirements')content=documentPane('requirements');
   else if(state.adminTab==='technical')content=documentPane('technical');
   else content=authSettingsSection();
-  return `<div class='single-screen-layout settings-screen'>${pageHead('設定','運用設定と設計文書を管理者だけが確認できます。')}${settingsTabs()}<div class='settings-content'>${content}</div></div>`;
+  return `<div class='single-screen-layout settings-screen'>${pageHead('管理','社員・権限、業務マスタ、労務・運用、システム情報を管理します。')}${settingsTabs()}<div class='settings-content'>${content}</div></div>`;
 }
 
 function saveLaborRulesFromAdmin(){

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.5  
+**文書版:** 0.10.6  
 **更新日:** 2026-10-07  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.4`
+`APP.version = 0.10.6`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -1291,3 +1291,20 @@ CIとDeployの双方で `test_logic.mjs` と `test_client_contract.mjs` を実�
 - projects: プロジェクトマスタ
 
 クライアントは `authAdminPeople / authAdminAuth / authAdminProjects` を別キャッシュとして管理する。運用設定タブは `loadAuthAdmin` を呼ばず `loadMaintenance` のみ実行する。
+
+
+## 49. Primary Navigation Architecture v0.10.6
+
+`NAV` はトップ階層を Home / Attendance / Worklog / Schedule / Requests / Admin に限定する。
+
+`primaryNavIdForPage` は互換ルートを親ナビゲーションへマッピングする。
+
+- monthly -> attendance
+- companyCalendar -> schedule
+- people -> admin
+
+`attendanceWorkspaceTabs` と `scheduleWorkspaceTabs` は、トップ階層を増やさず下位ビューを明示的に切り替える。
+
+ADMIN内は `settingsTabs` で、社員・権限 / 認証・サポート / プロジェクト / 運用・労務 / 要件定義 / 技術設計を切り替える。社員画面は互換ルートpeopleを維持するが、主ナビゲーションではAdminとして扱う。
+
+CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親ルートマッピングを回帰検査する。

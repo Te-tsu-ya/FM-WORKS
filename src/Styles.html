@@ -537,3 +537,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   width:100%;font:inherit;color:inherit;text-align:left;border-top:0;border-right:0;
 }
 </style>
+
+<style>
+/* v0.10.6 information architecture */
+.nav-button[data-route="admin"]{margin-top:14px;position:relative}
+.nav-button[data-route="admin"]:before{content:"";position:absolute;left:0;right:0;top:-10px;height:1px;background:var(--line)}
+.workspace-tabs{display:flex;align-items:center;gap:4px;width:max-content;max-width:100%;margin:-4px 0 16px;padding:4px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--bg));overflow-x:auto}
+.workspace-tabs button{min-height:36px;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:0 14px;font-weight:750;white-space:nowrap}
+.workspace-tabs button:hover{background:color-mix(in srgb,var(--blue) 7%,transparent);color:var(--text)}
+.workspace-tabs button.active{background:var(--surface);color:var(--blue);box-shadow:0 1px 4px rgba(24,54,92,.10);font-weight:850}
+.admin-workspace-tabs{width:100%;overflow-x:auto;scrollbar-width:thin}
+html[data-theme="dark"] .workspace-tabs{background:#111a27}
+html[data-theme="dark"] .workspace-tabs button.active{background:#1a2637}
+@media(max-width:760px){
+  .workspace-tabs{width:100%;margin-bottom:12px}
+  .workspace-tabs button{flex:1;min-width:max-content}
+  .nav-button[data-route="admin"]{margin-top:6px}
+}
+</style>

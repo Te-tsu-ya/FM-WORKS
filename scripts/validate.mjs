@@ -526,6 +526,37 @@ for (const forbidden of ['loadSchedule({silent:true})','loadWorklogs({silent:tru
   }
 }
 
+for (const iaMarker of [
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']]",
+  "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
+  "function primaryNavIdForPage(page)",
+  "if(page==='monthly')return 'attendance'",
+  "if(page==='companyCalendar')return 'schedule'",
+  "if(page==='people')return 'admin'",
+  "function attendanceWorkspaceTabs(activeId)",
+  "function scheduleWorkspaceTabs(activeId)"
+]) {
+  if (!app.includes(iaMarker)) {
+    console.error('Information architecture marker missing: ' + iaMarker);
+    failed = true;
+  }
+}
+const navDeclaration=(app.match(/const NAV = \[[^\n]+/)||[''])[0];
+for (const forbiddenTopRoute of ["['companyCalendar','会社カレンダー'","['people','社員'","['monthly','月次'","['admin','設定'"]) {
+  if (navDeclaration.includes(forbiddenTopRoute)) {
+    console.error('Legacy top-level navigation must stay removed: ' + forbiddenTopRoute);
+    failed = true;
+  }
+}
+if (!app.includes("settingsTabs('people')") || !app.includes("['people','社員・権限']")) {
+  console.error('Employee administration must live under the 管理 workspace.');
+  failed = true;
+}
+if (!styles.includes('.workspace-tabs') || !styles.includes('.nav-button[data-route="admin"]')) {
+  console.error('New workspace navigation styles are missing.');
+  failed = true;
+}
+
 if (!fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8').includes('function getRequestsBundle(sessionToken)')) {
   console.error('Request page must use a single bundled server read.');
   failed = true;

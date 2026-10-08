@@ -171,6 +171,14 @@ const result=vm.runInContext(`
   document.documentElement.dataset.theme='light';
   toggleTheme();
   expect('theme toggle changes theme without server call',document.documentElement.dataset.theme==='dark');
+  const topNav=visibleNav().map(x=>x[0]);
+  expect('top navigation is limited to five daily jobs plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','admin']));
+  expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
+  expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
+  expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
+  expect('attendance workspace exposes today and monthly views',attendanceWorkspaceTabs('monthly').includes('本日')&&attendanceWorkspaceTabs('monthly').includes('月間'));
+  expect('schedule workspace exposes plan and company calendar views',scheduleWorkspaceTabs('companyCalendar').includes('予定')&&scheduleWorkspaceTabs('companyCalendar').includes('会社カレンダー'));
+
 
   state.data={employees:[{employeeId:'FM0001',name:'青木 悠真'}]};
   state.schedule={
