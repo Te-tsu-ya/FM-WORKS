@@ -48,7 +48,7 @@ if(tinyFontMatches.length){
 for(const marker of [
   'function updateLiveWorkedNodes()',
   'data-live-worked',
-  "content.classList.toggle('one-screen',state.page==='home')",
+  "content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance')",
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
