@@ -1659,3 +1659,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - Styles.htmlに.office-v2で範囲限定したCSSを追加。画面幅1520／1180／960／640pxに合わせて3列→2列→1列へ切替。状態は色だけでなく日本語文字も併記。
 - 検証: test_client_contract.mjs（認可・実データ・フィルター0通信・XSS防止）、test_office_viewport.mjs（実Chrome描画9ケースとスクリーンショット）、既存ロジック／経理統合／ホーム検証、GitHub ActionsとGASデプロイ。
 - UI参考: Shopify Polaris Index table、Atlassian Design System Empty state。いずれも設計原則の参照であり、FM WORKSの独自画面として再構成する。
+
+- UI補足：officeRecentActivity_ は経費・出張の申請者または記録者を、許可された利用者に限り escapeHtml を通じて表示する。テストDOM取得も document.getElementById を使用する。

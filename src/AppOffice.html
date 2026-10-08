@@ -279,6 +279,7 @@ function officeRecentActivity_(){
     "</span><span><strong>"+escapeHtml(officeRecordTitle_(kind,item))+"</strong><small>"+
     escapeHtml(officeRecordDate_(kind,item))+" ・ "+
     escapeHtml(kind==='receipt'?'経費記録':kind==='travel'?'出張報告':'経費申請')+
+    " ・ "+escapeHtml(item.employeeName||item.payer||item.creatorName||'')+
     "</small></span>"+officeStatusPill_(officeRecordStatus_(kind,item))+"</button>").join('');
 }
 function officeModuleCard_(item){

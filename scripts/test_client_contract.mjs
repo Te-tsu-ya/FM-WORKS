@@ -327,7 +327,7 @@ const result=vm.runInContext(`
   officeFilterRecords('nomatch-xyz');
   expect('client-side office search has explicit empty state without a GAS request',
     officeFilteredRecords_('expense').length===0&&apiCalls.length===0&&
-    getElement('officeRecordsList').innerHTML.includes('該当する記録'));
+    document.getElementById('officeRecordsList').innerHTML.includes('該当する記録'));
   officeFilterRecords('');
   officeSetStatus('承認済');
   expect('filter by status restores matching rows without network',
