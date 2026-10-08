@@ -118,6 +118,7 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  resetLeaveDemoSession();
   state.authAdmin=null;
   state.adminUi=createAdminUiState();
   state.adminTab='people';

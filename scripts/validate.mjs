@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  'src/appsscript.json','src/Code.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
@@ -15,7 +15,7 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
@@ -728,6 +728,42 @@ for(const adminCssMarker of [
   if(!styles.includes(adminCssMarker)){console.error('v0.11.6 admin responsive style missing: '+adminCssMarker);failed=true;}
 }
 
+
+
+const demoScript=fs.readFileSync(path.join(root,'src','AppLeaveDemo.html'),'utf8');
+for(const marker of [
+  'const LEAVE_DEMO_PEOPLE=[',
+  'function leaveDemoGrants(hire,asOf=LEAVE_DEMO_AS_OF)',
+  'function leaveDemoCompute(d=leaveDemoState)',
+  'function leaveDemoOpen(id=',
+  'function leaveDemoEditHire()',
+  'function leaveDemoApplyRequest(days)',
+  'function leaveDemoDayReserved(d=leaveDemoState,date=LEAVE_DEMO_AS_OF)',
+  'function leaveDemoClose()',
+  'function leaveDemoApprove()',
+  'function leaveDemoWithdraw()',
+  'function leaveDemoCancel()',
+  'function resetLeaveDemoSession()',
+  'DEMO · 架空データ',
+  '実際の社員・申請・年休台帳には保存されません'
+]){
+  if(!demoScript.includes(marker)){console.error('v0.11.8 leave demo missing: '+marker);failed=true;}
+}
+if(demoScript.includes('google.script.run')||demoScript.includes('SpreadsheetApp')||
+  demoScript.includes('localStorage')||demoScript.includes('sessionStorage')){
+  console.error('Demo must not use GAS or persistent storage.');failed=true;
+}
+if(!indexText.includes("include_('AppLeaveDemo')")||
+  !app.includes('leaveDemoOpen()')||!app.includes('resetLeaveDemoSession();')){
+  console.error('v0.11.8 isolated demo integration missing.');failed=true;
+}
+for(const marker of [
+  '.leave-demo-invite','.leave-demo-presets','.leave-demo-metrics',
+  '.modal-card.leave-demo-modal','.leave-demo-five.caution',
+  '@media(max-width:760px)'
+]){
+  if(!styles.includes(marker)){console.error('v0.11.8 responsive demo style missing: '+marker);failed=true;}
+}
 
 const annualAutomation=fs.readFileSync(path.join(root,'src','AnnualLeaveAutomation.gs'),'utf8');
 for(const marker of [

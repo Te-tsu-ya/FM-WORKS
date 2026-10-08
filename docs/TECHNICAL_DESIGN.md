@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.11.7  
+**文書版:** 0.11.8  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.11.7`
+`APP.version = 0.11.8`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -681,6 +681,20 @@ disabledは `cursor:not-allowed`。
 - Home概要の残数は、ログイン時の古い社員情報ではなく最新の年休台帳を参照する。社員マスタ変更時の競合検出はexpectedLeaveBalanceによって実施する。
 - 2年間の付与ロット別自動失効は実装せず、手動失効を維持する。標準勤務以外の比例付与や、アプリ外の出勤扱いの自動判定は今回対象外とする。
 - 受入試験に付与日数と2月末の補正、出勤率境界、基準日重複防止、取得5日通知、UI権限分離、既存回帰を追加する。
+
+
+## 16.4 架空社員の有給デモ（v0.11.8）
+
+- 新規のクライアントHTMLモジュール AppLeaveDemo.html を Index.html に追加し、管理・申請画面の「動作デモ」から leaveDemoOpen() を呼び出す。Apps Script の新しいサーバーAPIやDBスキーマ変更は行わない。
+- 固定基準日 LEAVE_DEMO_AS_OF=2026-10-08、架空4名の LEAVE_DEMO_PEOPLE、独立したブラウザ上の leaveDemoState を使い、本番の state.authAdmin / state.requests / 年休台帳に触れない。
+- leaveDemoGrants() は勤続6か月後以降の10/11/12/14/16/18/20日を計算し、説明用に直近の有効付与を可視化。leaveDemoCompute() は確定残、仮引き残、年5日の取得実績と期限を再計算する。
+- leaveDemoDayReserved() は対象日の承認済み/承認待ち合計が1日を超えないように入力制限する。デモの再描画では選択中の操作ボタンのフォーカスとモーダルのスクロール位置を保持する。
+- leaveDemoClose() はデモ状態を明示的に破棄してモーダルを閉じる。
+- leaveDemoApplyRequest()→leaveDemoApprove()／leaveDemoWithdraw()→leaveDemoCancel() は架空イベントのメモリ状態のみを変更する。leaveDemoEditHire() は付与日を再計算し架空の古い取得履歴を消去する。leaveDemoReset() は元の架空シナリオへ戻す。
+- resetLeaveDemoSession() はログアウト・認証マウント時にデモ状態を破棄する。新規HTML内に google.script.run / SpreadsheetApp / localStorage / sessionStorage を記述しないことをCI静的検査で強制する。
+- Styles.html に .leave-demo-* の専用スタイル、4シナリオボタン、確定残・申請可能の数字カード、5日進捗バー、ダミー台帳、モバイルでの縦積みを追加する。デモラベルを常時表示する。
+- scripts/test_client_contract.mjs に付与10/11/20、初期21日−7.5日=13.5日、承認待ち1日、承認・取消・半休・取下げ、期限間近と達成、付与前の申請防止、入社日入力検証、再オープン・ログアウト破棄、実サーバーAPI呼び出し0回の試験を追加する。
+- デモ表示は出勤率80％を確認済みと仮定した説明であり、実際の短時間勤務の比例付与、実出勤率、法定付与の確定や本番の2年間の自動失効を代行しない。
 
 ## 17. クライアントキャッシュ
 
