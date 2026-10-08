@@ -49,7 +49,7 @@ if(tinyFontMatches.length){
 for(const marker of [
   'function updateLiveWorkedNodes()',
   'data-live-worked',
-  "content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance')",
+  "content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance'||state.page==='worklog')",
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
@@ -577,6 +577,39 @@ if (!indexText.includes('id="fontSizeToggleButton"') ||
     !styles.includes('html[data-font-size="large"]') ||
     !styles.includes('.attendance-timeline-row.location')) {
   console.error('Readable font mode or location-transition styling is missing.');
+  failed = true;
+}
+for (const marker of [
+  'function worklogDisplayData()',
+  'function worklogTimelineSegments(display)',
+  'function worklogTimelineHtml(display)',
+  'function worklogQuickForm(display)',
+  'function saveQuickWorklog()',
+  'function worklogTableHtml(display)',
+  '本日のタイムライン',
+  'クイック入力',
+  '本日の工数一覧'
+]) {
+  if (!app.includes(marker)) {
+    console.error('v0.11.0 worklog hybrid marker missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  '.worklog-main-grid',
+  '.worklog-timeline-track',
+  '.worklog-quick-card',
+  '.worklog-table-wrap',
+  '.content.one-screen.worklog-one-screen'
+]) {
+  if (!styles.includes(marker)) {
+    console.error('v0.11.0 worklog hybrid style missing: ' + marker);
+    failed = true;
+  }
+}
+if (!app.includes("display.sample&&!realProjects.length") ||
+    !app.includes("admin&&date===state.data.today&&!realItems.length")) {
+  console.error('Worklog QA sample must remain ADMIN-only and non-persistable without real projects.');
   failed = true;
 }
 if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
@@ -1138,9 +1171,10 @@ if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了
   failed = true;
 }
 
-if (!app.includes("content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance')") ||
-    !app.includes("content.classList.toggle('attendance-one-screen',state.page==='attendance')")) {
-  console.error('Desktop one-screen mode must cover home and attendance with an attendance-specific host class.');
+if (!app.includes("content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance'||state.page==='worklog')") ||
+    !app.includes("content.classList.toggle('attendance-one-screen',state.page==='attendance')") ||
+    !app.includes("content.classList.toggle('worklog-one-screen',state.page==='worklog')")) {
+  console.error('Desktop one-screen mode must cover home, attendance, and worklog with page-specific host classes.');
   failed = true;
 }
 if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-screen){height:auto;overflow:visible}')) {

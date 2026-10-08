@@ -353,7 +353,218 @@ function loadWorklogs(options={}){
   }).getWorklogs(state.sessionToken,{start:state.worklog.date,end:state.worklog.date,includeProjects:true});
 }
 function moveWorklogDate(n){state.worklog.date=addDays(state.worklog.date||state.data.today,n);loadWorklogs();}
-function worklogPage(){var w=state.worklog,date=w.date||state.data.today,attendance=state.data.attendance,attendanceMinutes=date===state.data.today?Number(attendance.workedMinutes||0):0,unentered=Math.max(0,attendanceMinutes-Number(w.totalMinutes||0)),projects=[...new Set((w.items||[]).map(function(x){return x.project;}))].length;var rows=(w.items||[]).map(function(x){return '<div class="list-item"><span class="status-dot" style="background:#1478ff"></span><div><strong>'+escapeHtml(x.project)+'　'+formatMinutesClient(x.minutes)+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+escapeHtml(x.start)+'-'+escapeHtml(x.end)+' / '+escapeHtml(x.category||'未分類')+' / '+escapeHtml(x.description)+'</div></div><div class="admin-actions"><button class="small-button" onclick="openWorklogModal(\''+x.id+'\')">編集</button><button class="small-button" onclick="deleteWorklogItem(\''+x.id+'\')">削除</button></div></div>';}).join('');var action='<button class="primary-button" onclick="openWorklogModal()">＋ 工数追加</button>';var toolbar='<div class="schedule-toolbar"><div class="toolbar-group"><button class="secondary-button compact" onclick="moveWorklogDate(-1)">‹</button><button class="secondary-button compact" onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class="secondary-button compact" onclick="moveWorklogDate(1)">›</button><strong class="period-label">'+fmtDate(date)+'</strong></div></div>';if(w.loading&&!cacheHas('worklog',worklogCacheKey()))return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="loading-card"></div>';return pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)+toolbar+'<div class="grid cols-4">'+metric('入力済工数',formatMinutesClient(w.totalMinutes),'tone-green')+metric('本日の実働',date===state.data.today?attendance.worked:'—')+metric('未入力時間',date===state.data.today?formatMinutesClient(unentered):'—','tone-orange')+metric('プロジェクト数',projects+'件','tone-purple')+'</div><div class="grid cols-2 section-gap">'+card('工数一覧',rows||'<p class="muted">この日の工数はまだありません。</p>')+card('入力ルール','<p class="muted">プロジェクト・作業分類・開始/終了・作業内容を記録します。保存内容は「FM WORKS DB / 工数」に反映され、月次集計へ自動で利用されます。</p><div class="progress"><span style="width:'+(attendanceMinutes?Math.min(100,Math.round(w.totalMinutes/attendanceMinutes*100)):0)+'%"></span></div>')+'</div>';}
+function worklogTimeToMinutes(value){
+  const p=String(value||'').split(':').map(Number);
+  return p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])?p[0]*60+p[1]:0;
+}
+
+function worklogMinutesToTime(value){
+  const m=Math.max(0,Math.min(1439,Math.round(Number(value||0))));
+  return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+}
+
+function buildWorklogSampleData(date){
+  const rows=[
+    ['SAMPLE-W1','サンプル案件A','UI設計','画面改善案の検討','09:00','10:00',60],
+    ['SAMPLE-W2','サンプル案件B','資料作成','提案資料の修正','10:00','12:00',120],
+    ['SAMPLE-W3','社内MTG','打合せ','開発方針確認','13:00','15:00',120],
+    ['SAMPLE-W4','サンプル案件A','テスト','UI確認・動作確認','15:00','16:30',90]
+  ];
+  return {
+    sample:true,
+    items:rows.map(x=>({id:x[0],date:date,project:x[1],category:x[2],description:x[3],start:x[4],end:x[5],minutes:x[6],note:'',status:'表示例',_sample:true})),
+    totalMinutes:390,
+    attendanceMinutes:480,
+    projectCount:3
+  };
+}
+
+function worklogDisplayData(){
+  const w=state.worklog,date=w.date||state.data.today;
+  const realItems=(w.items||[]).slice();
+  const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
+  if(admin&&date===state.data.today&&!realItems.length)return buildWorklogSampleData(date);
+  const attendanceMinutes=date===state.data.today?liveWorkedMinutes(state.data.attendance):null;
+  return {
+    sample:false,
+    items:realItems,
+    totalMinutes:Number(w.totalMinutes||0),
+    attendanceMinutes:attendanceMinutes,
+    projectCount:[...new Set(realItems.map(x=>x.project).filter(Boolean))].length
+  };
+}
+
+function worklogProjectTone(project){
+  const tones=['blue','green','purple','orange','pink','slate'];
+  let hash=0;String(project||'').split('').forEach(ch=>{hash=(hash*31+ch.charCodeAt(0))>>>0});
+  return tones[hash%tones.length];
+}
+
+function worklogBreakRanges(display){
+  if(display.sample)return [{start:720,end:780}];
+  const date=state.worklog.date||state.data.today;
+  if(date!==state.data.today)return [];
+  const history=(state.data.attendance&&state.data.attendance.history||[]).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+  const ranges=[];let start=null;
+  history.forEach(x=>{
+    if(x.action==='休憩開始')start=worklogTimeToMinutes(x.time);
+    if(x.action==='休憩終了'&&start!==null){ranges.push({start:start,end:worklogTimeToMinutes(x.time)});start=null}
+  });
+  if(start!==null&&state.data.attendance.state==='break'){
+    const server=new Date(state.data.serverTime||Date.now());
+    ranges.push({start:start,end:server.getHours()*60+server.getMinutes()});
+  }
+  return ranges.filter(x=>x.end>x.start);
+}
+
+function worklogTimelineBounds(display){
+  if(display.sample)return {start:540,end:1080};
+  const date=state.worklog.date||state.data.today,items=display.items||[];
+  if(date===state.data.today&&state.data.attendance&&state.data.attendance.clockIn){
+    const start=worklogTimeToMinutes(state.data.attendance.clockIn);
+    const end=state.data.attendance.clockOut
+      ?worklogTimeToMinutes(state.data.attendance.clockOut)
+      :(()=>{const d=new Date(state.data.serverTime||Date.now());return d.getHours()*60+d.getMinutes()})();
+    return {start:start,end:Math.max(start+1,end)};
+  }
+  if(items.length){
+    return {
+      start:Math.min(...items.map(x=>worklogTimeToMinutes(x.start))),
+      end:Math.max(...items.map(x=>worklogTimeToMinutes(x.end)))
+    };
+  }
+  return {start:540,end:1080};
+}
+
+function worklogTimelineSegments(display){
+  const bounds=worklogTimelineBounds(display),items=(display.items||[]).slice(),breaks=worklogBreakRanges(display);
+  if(!display.sample&&!items.length&&(state.worklog.date||state.data.today)!==state.data.today)return [];
+  if(!display.sample&&!items.length&&!state.data.attendance.clockIn)return [];
+  const points=new Set([bounds.start,bounds.end]);
+  items.forEach(x=>{points.add(Math.max(bounds.start,worklogTimeToMinutes(x.start)));points.add(Math.min(bounds.end,worklogTimeToMinutes(x.end)))});
+  breaks.forEach(x=>{points.add(Math.max(bounds.start,x.start));points.add(Math.min(bounds.end,x.end))});
+  const sorted=[...points].filter(x=>x>=bounds.start&&x<=bounds.end).sort((a,b)=>a-b),segments=[];
+  for(let i=0;i<sorted.length-1;i++){
+    const start=sorted[i],end=sorted[i+1];if(end<=start)continue;
+    const br=breaks.find(x=>x.start<=start&&x.end>=end);
+    if(br){segments.push({type:'break',start,end,label:'休憩'});continue}
+    const item=items.find(x=>worklogTimeToMinutes(x.start)<=start&&worklogTimeToMinutes(x.end)>=end);
+    if(item){segments.push({type:'work',start,end,item:item,label:item.project});continue}
+    segments.push({type:'gap',start,end,label:(state.worklog.date||state.data.today)===state.data.today?'未入力':'未入力候補'});
+  }
+  return segments;
+}
+
+function worklogFirstGap(display){
+  const gap=worklogTimelineSegments(display).find(x=>x.type==='gap'&&x.end>x.start);
+  if(gap)return {start:worklogMinutesToTime(gap.start),end:worklogMinutesToTime(gap.end)};
+  const items=(display.items||[]).slice().sort((a,b)=>String(a.end).localeCompare(String(b.end)));
+  const start=items.length?worklogTimeToMinutes(items[items.length-1].end):540;
+  return {start:worklogMinutesToTime(start),end:worklogMinutesToTime(Math.min(start+60,1439))};
+}
+
+function setQuickWorklogRange(start,end){
+  const a=document.getElementById('wlQuickStart'),b=document.getElementById('wlQuickEnd');
+  if(a)a.value=start;if(b)b.value=end;
+  const panel=document.querySelector('.worklog-quick-card');if(panel)panel.classList.add('attention');
+  setTimeout(()=>panel&&panel.classList.remove('attention'),500);
+}
+
+function worklogTimelineHtml(display){
+  const segments=worklogTimelineSegments(display);
+  if(!segments.length)return `<div class='worklog-empty-state'><strong>タイムラインはまだありません</strong><span>出勤後、または工数を登録するとここに時間の流れが表示されます。</span></div>`;
+  return `<div class='worklog-timeline-track'>${segments.map(seg=>{
+    const start=worklogMinutesToTime(seg.start),end=worklogMinutesToTime(seg.end),duration=seg.end-seg.start;
+    if(seg.type==='work'){
+      const x=seg.item,tone=worklogProjectTone(x.project);
+      return `<button type='button' class='worklog-time-block ${tone}' style='--duration:${duration}' ${x._sample?'disabled':`onclick="openWorklogModal('${x.id}')"`}><span>${start} - ${end}</span><strong>${escapeHtml(x.project)}</strong><small>${escapeHtml(x.category||'未分類')}</small></button>`;
+    }
+    if(seg.type==='break')return `<div class='worklog-time-block break' style='--duration:${duration}'><span>${start} - ${end}</span><strong>休憩</strong></div>`;
+    return `<button type='button' class='worklog-time-block gap' style='--duration:${duration}' onclick="setQuickWorklogRange('${start}','${end}')"><span>${start} - ${end}</span><strong>未入力</strong><small>クリックして入力</small></button>`;
+  }).join('')}</div>`;
+}
+
+function worklogQuickForm(display){
+  const realProjects=(state.data.projects||[]).filter(p=>!p.status||p.status==='進行中');
+  const gap=worklogFirstGap(display);
+  const sampleFallback=display.sample&&!realProjects.length;
+  const options=(realProjects.length?realProjects.map(p=>p.name):['サンプル案件A','サンプル案件B','社内MTG']).map((name,i)=>`<option value='${sampleFallback?'':escapeHtml(name)}'>${escapeHtml(name)}${sampleFallback?'（表示例）':''}</option>`).join('');
+  return `<section class='worklog-panel worklog-quick-card'>
+    <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div>${display.sample?`<span class='worklog-sample-chip'>表示確認用</span>`:''}</header>
+    <div class='worklog-quick-grid'>
+      <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' ${sampleFallback?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label>
+      <label class='field full'><span>作業分類</span><input id='wlQuickCategory' list='wlCategorySuggestions' placeholder='設計 / 開発 / 会議 等'><datalist id='wlCategorySuggestions'><option value='設計'><option value='開発'><option value='テスト'><option value='資料作成'><option value='打合せ'><option value='顧客対応'></datalist></label>
+      <label class='field'><span>開始</span><input id='wlQuickStart' type='time' value='${gap.start}'></label>
+      <label class='field'><span>終了</span><input id='wlQuickEnd' type='time' value='${gap.end}'></label>
+      <label class='field full'><span>作業内容</span><textarea id='wlQuickDescription' rows='2' placeholder='実施した内容を入力'></textarea></label>
+    </div>
+    ${sampleFallback?`<div class='worklog-sample-note'>実プロジェクトを登録すると、このフォームからそのまま保存できます。</div>`:''}
+    <button class='primary-button worklog-quick-save' ${sampleFallback?'disabled':''} onclick='saveQuickWorklog()'>登録する</button>
+  </section>`;
+}
+
+function saveQuickWorklog(){
+  const get=id=>document.getElementById(id);
+  const payload={
+    id:'',
+    date:state.worklog.date||state.data.today,
+    project:get('wlQuickProject')?get('wlQuickProject').value:'',
+    category:get('wlQuickCategory')?get('wlQuickCategory').value:'',
+    start:get('wlQuickStart')?get('wlQuickStart').value:'',
+    end:get('wlQuickEnd')?get('wlQuickEnd').value:'',
+    description:get('wlQuickDescription')?get('wlQuickDescription').value:'',
+    note:''
+  };
+  if(!payload.project){showToast('プロジェクトを選択してください');return}
+  if(!payload.description){showToast('作業内容を入力してください');return}
+  if(!payload.start||!payload.end){showToast('開始・終了時刻を入力してください');return}
+  state.busy=true;
+  google.script.run.withSuccessHandler(function(){
+    state.busy=false;showToast('工数を登録しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
+  }).withFailureHandler(function(err){
+    state.busy=false;handleApiError(err,'工数を保存できませんでした');
+  }).saveWorklog(state.sessionToken,payload);
+}
+
+function worklogTableHtml(display){
+  const rows=(display.items||[]).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+  if(!rows.length)return `<div class='worklog-empty-state compact'><strong>この日の工数はまだありません</strong><span>右のクイック入力から追加できます。</span></div>`;
+  return `<div class='worklog-table-wrap'><div class='worklog-table-head'><span>時間</span><span>プロジェクト</span><span>作業分類</span><span>内容</span><span>工数</span><span>状態</span><span>操作</span></div>${rows.map(x=>{
+    const sample=!!x._sample,tone=worklogProjectTone(x.project);
+    return `<div class='worklog-table-row'><span>${escapeHtml(x.start)} - ${escapeHtml(x.end)}</span><span><i class='project-dot ${tone}'></i><strong>${escapeHtml(x.project)}</strong></span><span>${escapeHtml(x.category||'未分類')}</span><span class='truncate'>${escapeHtml(x.description||'')}</span><span><strong>${formatMinutesClient(x.minutes)}</strong></span><span><em class='${sample?'sample':'ok'}'>${sample?'表示例':'登録済み'}</em></span><span>${sample?`<span class='muted'>—</span>`:`<button class='text-button' onclick="openWorklogModal('${x.id}')">編集</button><button class='icon-text-button danger' onclick="deleteWorklogItem('${x.id}')">削除</button>`}</span></div>`;
+  }).join('')}</div>`;
+}
+
+function worklogPage(){
+  const w=state.worklog,date=w.date||state.data.today,display=worklogDisplayData();
+  const attendanceMinutes=display.attendanceMinutes;
+  const unentered=attendanceMinutes===null?null:Math.max(0,Number(attendanceMinutes||0)-Number(display.totalMinutes||0));
+  const action=`<div class='worklog-head-actions'>${display.sample?`<span class='worklog-sample-chip'>表示確認用サンプル</span>`:''}<button class='primary-button compact' onclick='openWorklogModal()'>＋ 工数追加</button></div>`;
+  const toolbar=`<div class='worklog-datebar'><div><button class='secondary-button compact' onclick='moveWorklogDate(-1)'>‹</button><button class='secondary-button compact' onclick="state.worklog.date=state.data.today;loadWorklogs()">今日</button><button class='secondary-button compact' onclick='moveWorklogDate(1)'>›</button><strong>${escapeHtml(fmtDate(date))}</strong></div>${display.sample?`<small>ダミーデータは保存されません</small>`:''}</div>`;
+  if(w.loading&&!cacheHas('worklog',worklogCacheKey()))return `<div class='worklog-dashboard'>${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}${toolbar}<div class='loading-card'></div></div>`;
+  return `<div class='worklog-dashboard'>
+    ${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}
+    ${toolbar}
+    <div class='worklog-metrics'>
+      <div><span>入力済工数</span><strong>${formatMinutesClient(display.totalMinutes)}</strong><small>${attendanceMinutes?`実働の ${Math.min(100,Math.round(display.totalMinutes/attendanceMinutes*100))}%`:display.sample?'目標 8時間00分':'入力時間の合計'}</small></div>
+      <div><span>本日の実働</span><strong>${attendanceMinutes===null?'—':formatMinutesClient(attendanceMinutes)}</strong><small>${date===state.data.today?'勤怠とリアルタイム連携':'当日は勤怠画面で確認'}</small></div>
+      <div class='warn'><span>未入力時間</span><strong>${unentered===null?'—':formatMinutesClient(unentered)}</strong><small>${unentered>0?'空き時間をタイムラインで確認':'入力差異なし'}</small></div>
+      <div><span>プロジェクト数</span><strong>${display.projectCount}件</strong><small>この日に作業した案件</small></div>
+    </div>
+    <div class='worklog-main-grid'>
+      <section class='worklog-panel worklog-timeline-card'>
+        <header><div><span class='eyebrow'>TODAY</span><h2>本日のタイムライン</h2></div>${unentered>0?`<span class='worklog-gap-badge'>未入力 ${formatMinutesClient(unentered)}</span>`:''}</header>
+        ${worklogTimelineHtml(display)}
+      </section>
+      ${worklogQuickForm(display)}
+    </div>
+    <section class='worklog-panel worklog-list-card'>
+      <header><div><span class='eyebrow'>WORKLOG</span><h2>本日の工数一覧</h2></div><span class='muted'>${display.items.length}件 / 合計 ${formatMinutesClient(display.totalMinutes)}</span></header>
+      ${worklogTableHtml(display)}
+    </section>
+  </div>`;
+}
+
 function openWorklogModal(id){
   id=id||'';
   var item=id?(state.worklog.items||[]).find(function(x){return x.id===id;}):null;
