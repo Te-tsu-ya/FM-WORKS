@@ -53,7 +53,7 @@ for(const marker of [
   'function trapModalFocus_(',
   "e.key==='Tab'&&trapModalFocus_(e)",
   "class='day-open'",
-  "class='schedule-timed-event'"
+  "class='schedule-timed-event ${scheduleHighlightClass(e)}'"
 ]){
   if(!app.includes(marker)){console.error('Usability/a11y hardening marker missing: '+marker);failed=true;}
 }
@@ -771,7 +771,7 @@ for(const name of [
   "employeeId:'ALL',category:'ALL',includeEmployees:false",
   'function toggleScheduleEmployeeHighlight(employeeId)',
   'function scheduleHighlightClass(e)',
-  "class='schedule-person-button",
+  "class='person-chip schedule-person-button",
   'schedule-sunday',
   'schedule-saturday',
   'schedule-holiday'

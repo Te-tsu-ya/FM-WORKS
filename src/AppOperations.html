@@ -1289,7 +1289,7 @@ function schedulePage(){
   const detail=unavailable?'':scheduleDetailPanel();
   const action=`<button type='button' id='scheduleOpenDetails' class='secondary-button compact schedule-mobile-open-detail' onclick='selectScheduleDay(scheduleSelectedDate())'>選択日の予定を見る</button>`;
   return `<div class='schedule-hybrid'>
-    ${pageHead('予定表','予定の表示切替と社員の強調を、通信待ちなしで操作できます。',action)}
+    ${pageHead('予定表','社員名を予定カードに直接表示。表示切替・社員の強調は通信待ちなしで操作できます。',action)}
     ${scheduleWorkspaceTabs('schedule')}
     ${scheduleToolbar()}
     ${s.refreshing?`<div class='schedule-refresh-status' role='status'>最新の予定を確認しています。操作はそのまま続けられます。</div>`:''}
