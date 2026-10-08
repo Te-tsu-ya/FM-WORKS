@@ -496,6 +496,7 @@ home-screen
 - `scheduleWindowRequests` は同じ期間の重複通信を抑止し、同時実行は最大2件。切替・日付ジャンプ・キャッシュ再訪時にキャンセル不能な遅延通信が上書きしないよう、セッション同一性・generation・現在キーを検証する。最新要求が待機中なら先行通信終了後に処理する。
 - 予定更新・削除、会社カレンダーの更新、セッション破棄時の `invalidatePageCache('schedule')` / `invalidateScheduleWindowCache()` で元データ・表示配列とキャッシュを失効させる。古い応答を無視する。
 - `validate.mjs` のUI契約マーカーは、強調状態のクラスを含んだ動的HTMLテンプレートと一致させる。
+- 強調状態のCSSでは `position:relative` を共通適用しない。時間軸の `.schedule-timed-event` は `position:absolute` を維持し、強調時も時間座標を守る。静的QAで再発を防ぐ。
 - `schedulePeopleLegend()` はネイティブボタンと `aria-pressed` / 操作状態テキストを持つ。 `toggleScheduleEmployeeHighlight()` はDOMクラスを更新するだけで描画処理・API呼び出しを発生させない。
 - 月/週/日/一覧の予定行に `data-schedule-employee-ids` を付け、共同参加者を含む参加IDで強調を判定する。
 - `Styles.html` の末尾で日セル境界、日曜・土曜・祝日・調整勤務日の背景を強調する。darkテーマと縮小画面にも適用する。

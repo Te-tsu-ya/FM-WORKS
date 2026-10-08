@@ -1104,7 +1104,9 @@ html[data-theme="dark"] .schedule-hybrid .month-day.schedule-holiday .day-type.o
 .schedule-hybrid .schedule-highlight-hint{font-size:11px;color:var(--muted);margin-left:4px}
 .schedule-hybrid .schedule-highlight-reset{background:var(--surface);color:var(--blue);border:1px solid var(--line);border-radius:8px;min-height:30px;padding:0 9px;font-size:11px;font-weight:800;cursor:pointer}
 .schedule-hybrid .schedule-highlight-reset[hidden]{display:none}
-.schedule-hybrid .schedule-is-emphasized{position:relative;z-index:2;outline:2px solid var(--person-color,#1478ff);outline-offset:0;box-shadow:0 3px 13px rgba(16,45,99,.12)}
+.schedule-hybrid .schedule-is-emphasized{z-index:2;outline:2px solid var(--person-color,#1478ff);outline-offset:0;box-shadow:0 3px 13px rgba(16,45,99,.12)}
+.schedule-hybrid .schedule-timed-event.schedule-is-emphasized{position:absolute}
+.schedule-hybrid .schedule-timed-event:hover,.schedule-hybrid .schedule-timed-event:focus-visible{z-index:4}
 .schedule-hybrid .schedule-is-dimmed{opacity:.30;filter:grayscale(.35)}
 .schedule-hybrid .schedule-event.schedule-is-dimmed,.schedule-hybrid .schedule-timed-event.schedule-is-dimmed{opacity:.29}
 .schedule-hybrid .schedule-person-button:focus-visible{outline:3px solid var(--person-color);outline-offset:2px}

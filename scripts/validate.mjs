@@ -778,6 +778,10 @@ for(const name of [
 ]){
   if(!app.includes(name)){console.error('v0.11.4 calendar performance/UX marker missing: '+name);failed=true;}
 }
+if(styles.includes('.schedule-hybrid .schedule-is-emphasized{position:relative')||
+   !styles.includes('.schedule-timed-event.schedule-is-emphasized{position:absolute')){
+  console.error('Employee emphasis must preserve absolute timeline card positioning.');failed=true;
+}
 if(!styles.includes('.schedule-hybrid .month-day.schedule-holiday')||
    !styles.includes('schedule-person-button.is-emphasized')||
    !styles.includes('.schedule-hybrid .schedule-is-emphasized')){
