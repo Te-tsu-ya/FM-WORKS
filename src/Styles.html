@@ -2082,3 +2082,37 @@ html[data-theme="dark"] .office-planning-status{
   .home-portal-shortcut,.office-module-link{transition:none}
 }
 </style>
+
+<style>
+/* v0.13.0 finance: shared FM WORKS controls; separate employee and operator roles. */
+.finance-dashboard{display:grid;gap:14px;align-content:start;min-width:0}
+.finance-self{margin-top:18px;display:grid;gap:12px}
+.finance-section-head h2,.finance-overview-panel h2{font-size:var(--ui-type-section);margin:3px 0 6px}
+.finance-section-head p,.finance-rule-note{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.finance-actions{display:flex;gap:9px;flex-wrap:wrap}
+.finance-actions>*{min-height:42px}
+.finance-note{display:block;font-size:12px;line-height:1.6;color:var(--muted)}
+.finance-own-list{display:grid;gap:7px}
+.finance-own-list h3{font-size:14px;margin:5px 0}
+.finance-record,.finance-overview-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:10px 3px;min-width:0}
+.finance-record>div,.finance-overview-main{display:grid;gap:6px;min-width:0}
+.finance-record strong,.finance-overview-main strong{font-size:13px;overflow-wrap:anywhere}
+.finance-record small,.finance-overview-main small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.finance-status{display:inline-flex;align-items:center;white-space:nowrap;padding:5px 9px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;color:var(--text);font-size:12px}
+.finance-overview-actions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+.finance-tabs{display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
+.finance-tabs button{font-size:13px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text)}
+.finance-tabs button.active{background:color-mix(in srgb,var(--blue) 9%,var(--surface));border-color:var(--blue);color:var(--blue);font-weight:800}
+.finance-overview-panel{display:grid;gap:5px}
+.finance-empty{padding:18px 6px;color:var(--muted)}
+.finance-form-modal{max-width:800px;max-height:90svh;overflow-y:auto}
+.finance-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:15px 0}
+.finance-field{display:grid;gap:6px;min-width:0}
+.finance-field span{font-size:12px;font-weight:750;color:var(--text)}
+.finance-field input,.finance-field select,.finance-field textarea{width:100%;min-width:0;min-height:42px;padding:9px 11px;border-radius:var(--ui-radius-control);border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;font-size:14px}
+.finance-field textarea{min-height:88px;resize:vertical}
+.finance-field input:focus-visible,.finance-field select:focus-visible,.finance-field textarea:focus-visible{outline:2px solid var(--ui-focus);outline-offset:2px}
+.finance-error{color:var(--red);font-size:12px;line-height:1.5;padding:9px 0}
+.finance-rule-note{padding:12px 14px;border:1px solid var(--line);background:var(--surface2);border-radius:var(--ui-radius-card)}
+@media(max-width:760px){.finance-actions{display:grid;grid-template-columns:1fr}.finance-form-grid{grid-template-columns:1fr}.finance-record,.finance-overview-row{align-items:flex-start;flex-direction:column}.finance-overview-actions{justify-content:flex-start}.finance-form-modal{max-height:88svh}}
+</style>

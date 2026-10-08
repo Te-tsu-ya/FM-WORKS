@@ -3,6 +3,7 @@ import vm from 'node:vm';
 
 const files = [
   'src/Code.gs',
+  'src/Finance.gs',
   'src/Auth.gs',
   'src/Worklog.gs',
   'src/Requests.gs',
@@ -66,6 +67,10 @@ globalThis.__fmTest = {
   yearMonthsBetween_,
   canManageEmployeeRecord_,
   getPermissions_,
+  financeOperatorAllowed_,
+  financeAmount_,
+  financeExpensePayload_,
+  financeTravelPayload_,
   monthlySnapshotPayload_,
   normalizeLeaveDays_,
   leaveBalanceAfterDelta_,
@@ -120,13 +125,43 @@ function expectThrows(name, fn) {
 expect('office access is offered to ADMIN but not implicitly to personnel editing',
   api.getPermissions_({role:'ADMIN',department:'開発'}).officeWorkspace===true);
 expect('office access is offered to MANAGER while employee admin remains false',
-  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===true&&
+  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===false&&
+  api.getPermissions_({role:'MANAGER',department:'開発'}).financeWorkspace===false&&
   api.getPermissions_({role:'MANAGER',department:'開発'}).employeeAdmin===false);
 expect('office access includes general affairs department without granting admin console',
   api.getPermissions_({role:'USER',department:'総務部'}).officeWorkspace===true&&
   api.getPermissions_({role:'USER',department:'総務部'}).adminConsole===false);
 expect('standard employees outside general affairs do not gain office access',
   api.getPermissions_({role:'USER',department:'開発'}).officeWorkspace===false);
+
+
+expect('finance privilege only for admin and accounting/general affairs departments',
+ api.financeOperatorAllowed_({role:'ADMIN',department:'開発'}) &&
+ api.financeOperatorAllowed_({role:'USER',department:'経理担当'}) &&
+ api.financeOperatorAllowed_({role:'USER',department:'総務部'}) &&
+ !api.financeOperatorAllowed_({role:'MANAGER',department:'開発'}) &&
+ !api.financeOperatorAllowed_({role:'USER',department:'開発'}));
+expect('finance access does not imply admin privilege',
+ api.getPermissions_({role:'USER',department:'経理'}).financeWorkspace===true &&
+ api.getPermissions_({role:'USER',department:'経理'}).adminConsole===false &&
+ api.getPermissions_({role:'USER',department:'経理'}).employeeAdmin===false);
+expect('integer Yen accepted',api.financeAmount_('1200','申請額',true)===1200);
+expectThrows('negative yen is rejected',()=>api.financeAmount_('-1','金額',true));
+expectThrows('decimal yen is rejected',()=>api.financeAmount_('1.5','金額',true));
+expectThrows('zero required yen is rejected',()=>api.financeAmount_('0','金額',true));
+expect('expense payload retains receipt metadata',(()=>{
+ const p=api.financeExpensePayload_({usedOn:'2026-10-08',vendor:'架空の取引先',item:'備品',category:'消耗品費',
+  amount:'2500',purpose:'試験用',requestKey:'FMSAMPLE123456'});
+ return p.amount===2500&&p.vendor==='架空の取引先'&&p.purpose==='試験用';
+})());
+expect('travel payload includes destination and actual costs',(()=>{
+ const p=api.financeTravelPayload_({startsOn:'2026-10-08',endsOn:'2026-10-09',destination:'架空の出張先',
+  purpose:'会議',outcome:'会議の結果',nights:'1',distanceCategory:'30km以上',spentAmount:'2400',
+  requestedAllowance:'5000',requestKey:'FMSAMPLE123457'},{title:'営業'});
+ return p.nights===1&&p.distanceCategory==='30km以上'&&p.spentAmount===2400&&p.requestedAllowance===5000;
+})());
+expectThrows('travel return date before departure rejected',()=>api.financeTravelPayload_({
+ startsOn:'2026-10-09',endsOn:'2026-10-08',destination:'架空',purpose:'会議',outcome:'成果'},{}));
 
 expect('09:00-18:00 is 540 minutes', api.timeRangeMinutes_('09:00','18:00') === 540);
 expect('08:30 is 510 minutes', api.timeToMinutes_('08:30') === 510);

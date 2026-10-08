@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.12.0  
+**文書版:** 0.13.0  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,9 +65,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.12.0`
+`APP.version = 0.13.0`
 
-DBスキーマ: 9。  
+DBスキーマ: 10。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -1331,7 +1331,7 @@ DB:
 
 ## 40. Schema Contract / Migration
 
-`Schema.gs` に `DB_SCHEMA_VERSION=9` と `DB_SCHEMA_SPECS` を保持する。
+`Schema.gs` に `DB_SCHEMA_VERSION=10` と `DB_SCHEMA_SPECS` を保持する。
 
 `getDatabaseSchemaStatus_` は設定のDB_VERSIONと、進化対象シートの1行目ヘッダを比較する。`schemaHeaderIssues_` は純粋関数としてロジックテストする。
 
@@ -1606,3 +1606,15 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 標準PC 1366×768、1440×900、1792×854、1920×1080、1366×768の予定4件・要対応3件、ダーク表示、1100px、スマホ、文字拡大を検証する。
 - 1200〜1439px幅・高さ690〜820pxのPCのみ、ホームのKPI・見出し・カード間隔を圧縮。長い予定・要対応・打刻一覧には内部スクロールを設け、打刻ボタン高さ40px以上を維持する。
 - `.github/workflows/ci.yml` のビューポート検証をゲートにし、架空画面のスクリーンショットをActions artifactsに保存する。実ユーザーの認証済み画面・実端末での検証は別途必要。
+
+
+## 50. Finance module v0.13.0
+
+- Backend: src/Finance.gs。公開GAS APIは getMyFinanceItems, getFinanceOverview, submitFinanceExpense, submitFinanceTravel, saveFinanceReceipt, reviewFinanceRequest, settleFinanceRequest。
+- Client: src/AppFinance.html。社員フォームは既存の申請画面に挿入し、経理担当用の finance route を新設。取得結果はブラウザメモリ内のみ保持し、セッション切替で破棄する。
+- DB: src/Schema.gs の DB_SCHEMA_VERSION=10で「経費記録」「経費精算申請」「出張報告」の列を定義。既存シートの列構成は変更せず、管理者のバックアップ付き migrateDatabaseToCurrent 実行で新設する。
+- Authorization: getPermissions_ が financeWorkspace をADMINまたは部署名に「経理」「総務」を含む社員にだけ提供する。getFinanceOverview / saveFinanceReceipt / reviewFinanceRequest / settleFinanceRequest は requireFinanceOperator_ で再認可する。
+- Privacy: getMyFinanceItems はセッションから取得した社員IDのレコードのみ返す。申請APIは社員ID・氏名をクライアントから信頼せず、requireSession_ の情報を用いる。
+- Integrity: withScriptLock_、Sheet契約確認、厳密な整数金額・日付チェック、再送信識別子重複判定。承認／差戻し／精算は対象IDをロック内で再取得し、自己承認・自己精算を拒否し、既存appendAudit_で監査を記録する。
+- Financial domain constraints: 自動日当・宿泊費算定、領収書PDFや画像の保存、会計仕訳、銀行連携は未実装であり、原本証憑保存を代替しない。支給希望額は承認者が確認する。
+- Test: scripts/validate.mjs、test_logic.mjs、test_client_contract.mjs、既存ホームChromium QA。実社員E2Eと本番環境確認は別工程。
