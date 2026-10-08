@@ -888,3 +888,17 @@ html[data-theme="dark"] .worklog-time-block.blue{--block-bg:#13273e}html[data-th
   .worklog-panel{padding:12px}.worklog-quick-grid{grid-template-columns:1fr}.worklog-quick-grid .field.full{grid-column:auto}.worklog-time-block{grid-template-columns:82px minmax(110px,1fr);grid-template-areas:"time title" "time meta";gap:3px 8px}.worklog-time-block span{grid-area:time}.worklog-time-block strong{grid-area:title}.worklog-time-block small{grid-area:meta}
 }
 </style>
+<style>
+/* v0.11.1: keep the quick-save action reachable in a one-screen workspace. */
+.worklog-load-error{min-height:180px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);font-size:14px}
+@media(min-width:1141px){
+  .worklog-one-screen .worklog-quick-card{overflow:hidden}
+  .worklog-one-screen .worklog-quick-grid{
+    flex:1 1 auto;min-height:0;overflow-y:auto;align-content:start;
+    overscroll-behavior:contain;padding-right:4px
+  }
+  .worklog-one-screen .worklog-quick-save{
+    flex:0 0 auto;min-height:40px;margin-top:8px
+  }
+}
+</style>
