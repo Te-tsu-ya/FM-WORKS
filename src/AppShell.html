@@ -3,7 +3,8 @@ function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
-    content.classList.toggle('one-screen',state.page==='home');
+    content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance');
+    content.classList.toggle('attendance-one-screen',state.page==='attendance');
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
   };
   if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();

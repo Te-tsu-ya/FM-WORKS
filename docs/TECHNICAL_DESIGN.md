@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.10.7  
+**文書版:** 0.10.8  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.10.7`
+`APP.version = 0.10.8`
 
 DBスキーマ: 9。  
 認証スキーマ: 3。  
@@ -258,6 +258,27 @@ attendance-dashboard
 ```
 
 幅1260px以下は2列、820px以下は1列へ落とし、横スクロールを主要レイアウトに要求しない。履歴表だけは列情報を保持するためパネル内横スクロールを許可する。
+## 9.2 勤怠1画面レイアウト / QAサンプル v0.10.8
+
+`renderPage` は `home / attendance` で `.content.one-screen` を付与し、勤怠では追加で `.attendance-one-screen` を付与する。
+
+PC幅1141px以上:
+- `.content.attendance-one-screen` をflex columnとし、グローバル警告は固定高、`.attendance-dashboard` が残り高を使用する。
+- `.attendance-dashboard` は page-head / workspace tabs / top grid / bottom grid の4段を `minmax(0,...)` で配分する。
+- 上段は3カラム、下段は2カラムを維持し、ページ全体のoverflowをhiddenにする。
+- 多件数のタイムラインと直近履歴だけカード内部スクロールを許可する。
+- 高さ760px以下はcompact ruleで余白、文字、操作高を縮小する。
+
+幅1140px以下:
+- `.attendance-one-screen` の固定高を解除し、通常スクロールへ戻す。
+
+表示確認用サンプル:
+- `attendanceDisplayPreview()` は実月次データに意味のある行があればそのまま返す。
+- 実データが空で `permissions.adminConsole=true` の場合だけ `buildAttendanceSamplePreview()` を返す。
+- サンプルはブラウザメモリ上だけで生成し、`google.script.run` やSheetsへの書込を行わない。
+- サンプルは正常出社 / 在宅 / 工数差異 / 有給 / 打刻不足を含み、`_sample=true` で識別する。
+- サンプル日クリックは `openAttendanceSampleDay` の読み取り専用モーダルへ限定する。月次締め・申請・Excel等へサンプルを渡さない。
+
 ## 10. 月次UI
 
 状態:
@@ -1171,7 +1192,7 @@ CIの `validate.mjs` はモジュールを読み込み順に連結して構文�
 
 CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査する。
 
-`content.one-screen` はホームのみへ適用する。管理・月次の外側スクロールを復活させ、設定コンテンツと年間カレンダーの固定高内部スクロールを解除する。ホーム内部の打刻履歴・予定など、明示的な長一覧は内部スクロールを許可する。
+`content.one-screen` はホームと勤怠「本日」へ適用する。管理・月次の外側スクロールを復活させ、設定コンテンツと年間カレンダーの固定高内部スクロールを解除する。ホーム内部の打刻履歴・予定など、明示的な長一覧は内部スクロールを許可する。
 
 ### 44.5 Session garbage collection
 
