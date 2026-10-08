@@ -1,3 +1,54 @@
+function managerAssignmentCreatesCycle_(employeeId, managerId, managerByEmployee) {
+  const employee=String(employeeId||'').trim().toUpperCase();
+  let current=String(managerId||'').trim().toUpperCase();
+  if(!employee||!current)return false;
+  const seen=new Set();
+  while(current){
+    if(current===employee)return true;
+    if(seen.has(current))return true;
+    seen.add(current);
+    current=String((managerByEmployee&&managerByEmployee[current])||'').trim().toUpperCase();
+  }
+  return false;
+}
+
+function getEmployeeManagerMap_() {
+  const sheet=getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return {};
+  const map={};
+  sheet.getRange(2,1,lastRow-1,24).getDisplayValues().forEach(r=>{if(r[0])map[r[0]]=r[23]||'';});
+  return map;
+}
+
+function assertManagerAssignmentAcyclic_(employeeId, managerId) {
+  if(!managerId)return;
+  const map=getEmployeeManagerMap_();
+  map[String(employeeId||'').trim().toUpperCase()]=String(managerId||'').trim().toUpperCase();
+  if(managerAssignmentCreatesCycle_(employeeId,managerId,map)){
+    throw new Error('直属承認者の設定が循環しています。承認経路を確認してください。');
+  }
+}
+
+function getActiveDirectReports_(managerId) {
+  const id=String(managerId||'').trim().toUpperCase();
+  if(!id)return [];
+  const sheet=getDb_().getSheetByName(DB.sheets.employees);
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return [];
+  return sheet.getRange(2,1,lastRow-1,24).getDisplayValues()
+    .filter(r=>r[0]&&r[6]==='在籍'&&String(r[23]||'').toUpperCase()===id)
+    .map(r=>({employeeId:r[0],name:r[1]||r[0]}));
+}
+
+function assertManagerRoleChangeSafe_(employeeId, nextRole, nextActive) {
+  if(nextActive&&['MANAGER','ADMIN'].includes(String(nextRole||'').toUpperCase()))return;
+  const reports=getActiveDirectReports_(employeeId);
+  if(reports.length){
+    throw new Error('この社員には直属部下がいます。先に直属承認者を変更してください: '+reports.slice(0,8).map(r=>r.name).join('、')+(reports.length>8?' ほか'+(reports.length-8)+'名':''));
+  }
+}
+
 function saveEmployee(sessionToken, payload) {
   const admin = requireAdminSession_(sessionToken).employee;
   payload = payload || {};
@@ -11,7 +62,7 @@ function saveEmployee(sessionToken, payload) {
     const displayName = safeSheetText_(payload.displayName || name, 80);
     const department = safeSheetText_(payload.department, 80);
     const title = safeSheetText_(payload.title, 80);
-    const allowedRoles = ['USER','CALENDAR_EDITOR','ADMIN'];
+    const allowedRoles = ['USER','CALENDAR_EDITOR','MANAGER','ADMIN'];
     const role = allowedRoles.includes(payload.role) ? payload.role : 'USER';
     const status = payload.active === false ? '退職' : '在籍';
 
@@ -36,8 +87,23 @@ function saveEmployee(sessionToken, payload) {
     }
     const note = safeSheetText_(payload.note, 500);
     const payrollIncluded = !!payload.payrollIncluded;
+    const managerId = String(payload.managerId || '').trim().toUpperCase();
+    const leaveBasisDate = payload.leaveBasisDate ? normalizeDate_(payload.leaveBasisDate) : '';
+    const hireDate = payload.hireDate ? normalizeDate_(payload.hireDate) : '';
+    if (managerId === employeeId) throw new Error('自分自身を直属承認者には設定できません。');
+    if (managerId) {
+      const manager = getEmployeeAuthRecord_(managerId);
+      if (!manager || !manager.active) throw new Error('直属承認者が在籍社員として見つかりません。');
+      if (!['MANAGER','ADMIN'].includes(String(manager.role || '').toUpperCase())) throw new Error('直属承認者にはマネージャーまたは管理者を指定してください。');
+      assertManagerAssignmentAcyclic_(employeeId,managerId);
+    }
 
     const existingBefore = getEmployeeAuthRecord_(employeeId);
+    if (leaveText !== '' && !leaveBasisDate) throw new Error('有給残日数を設定する場合は年休基準日も設定してください。');
+    if (existingBefore && existingBefore.leaveBalanceConfigured && leaveText === '') {
+      throw new Error('有給台帳運用開始後は残日数を未設定へ戻せません。調整値を入力してください。');
+    }
+    if (existingBefore) assertManagerRoleChangeSafe_(employeeId,role,status==='在籍');
     if (existingBefore && existingBefore.employeeId === admin.employeeId && (role !== 'ADMIN' || status !== '在籍')) {
       throw new Error('自分自身の管理者権限解除・無効化はできません。別の管理者から変更してください。');
     }
@@ -61,10 +127,18 @@ function saveEmployee(sessionToken, payload) {
       ? (String(existingAuth[7] || '').toUpperCase() === 'DISABLED' ? 'ACTIVE' : (existingAuth[7] || 'ACTIVE'))
       : 'DISABLED';
 
-    sheet.getRange(rowNumber,1,1,23).setValues([[
+    sheet.getRange(rowNumber,1,1,26).setValues([[
       employeeId,name,displayName,department,title,role,status,workStart,workEnd,
-      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded
+      breakMinutes,leaveBalance,email,note,...existingAuth,payrollIncluded,managerId,leaveBasisDate,hireDate
     ]]);
+    invalidateEmployeeDirectoryCache_();
+
+    recordLeaveBalanceAdminChange_(
+      employeeId,name,leaveBasisDate,
+      !!(existingBefore&&existingBefore.leaveBalanceConfigured),
+      existingBefore?existingBefore.leaveBalance:0,
+      leaveText!=='',leaveBalance,admin
+    );
 
     if (existingEmployee && existingEmployee.active && status !== '在籍') {
       invalidateEmployeeSessions_(employeeId, 0);
@@ -73,8 +147,16 @@ function saveEmployee(sessionToken, payload) {
     appendAudit_({
       employeeId:admin.employeeId,employeeName:admin.name,operation:isNew?'社員追加':'社員更新',
       target:'社員マスタ',targetId:employeeId,
-      before:existingEmployee ? [existingEmployee.name,existingEmployee.role,existingEmployee.active?'在籍':'退職'].join(' / ') : '',
-      after:name+' / '+role+' / '+status,
+      before:existingEmployee ? auditJson_({
+        name:existingEmployee.name,displayName:existingEmployee.displayName,department:existingEmployee.department,title:existingEmployee.title,
+        role:existingEmployee.role,status:existingEmployee.active?'在籍':'退職',workStart:existingEmployee.workStart,workEnd:existingEmployee.workEnd,
+        breakMinutes:existingEmployee.breakMinutes,leaveBalance:existingEmployee.leaveBalanceConfigured?existingEmployee.leaveBalance:null,
+        email:existingEmployee.email,payrollIncluded:!!existingEmployee.payrollIncluded,managerId:existingEmployee.managerId||'',
+        leaveBasisDate:existingEmployee.leaveBasisDate||'',hireDate:existingEmployee.hireDate||''
+      }) : '',
+      after:auditJson_({name:name,displayName:displayName,department:department,title:title,role:role,status:status,workStart:workStart,workEnd:workEnd,
+        breakMinutes:breakMinutes,leaveBalance:leaveText!==''?leaveBalance:null,email:email,payrollIncluded:payrollIncluded,managerId:managerId,
+        leaveBasisDate:leaveBasisDate,hireDate:hireDate}),
       source:'WEB',result:'SUCCESS',note:''
     });
     SpreadsheetApp.flush();
@@ -88,11 +170,13 @@ function setEmployeeActiveState(sessionToken, employeeId, active) {
     const target = getEmployeeAuthRecord_(employeeId);
     if (!target) throw new Error('社員が見つかりません。');
     if (target.employeeId === admin.employeeId && !active) throw new Error('自分自身を無効化することはできません。');
+    if(!active)assertManagerRoleChangeSafe_(target.employeeId,target.role,false);
     if (target.role === 'ADMIN' && target.active && !active) assertAnotherActiveAdmin_(target.employeeId);
 
     const sheet=getDb_().getSheetByName(DB.sheets.employees);
     sheet.getRange(target.rowNumber,7).setValue(active?'在籍':'退職');
     sheet.getRange(target.rowNumber,21).setValue(active?'ACTIVE':'DISABLED');
+    invalidateEmployeeDirectoryCache_();
     if(!active) invalidateEmployeeSessions_(target.employeeId,0);
 
     appendAudit_({

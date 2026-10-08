@@ -1,7 +1,7 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.8.4  
-**更新日:** 2026-10-07  
+**文書版:** 0.10.7  
+**更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -12,7 +12,11 @@ FM WORKSはGoogle Apps Script HTML Serviceを実行基盤とするSPAである�
 Browser
   ├─ Index.html
   ├─ Styles.html
-  └─ App.html
+  ├─ AppCore.html
+  ├─ AppOperations.html
+  ├─ AppPeopleMonthly.html
+  ├─ AppAdmin.html
+  └─ AppShell.html
        │ google.script.run
        ▼
 Google Apps Script (V8)
@@ -20,12 +24,11 @@ Google Apps Script (V8)
   ├─ Auth.gs
   ├─ Worklog.gs
   ├─ Requests.gs
-  ├─ Monthly.gs
-  ├─ Employees.gs
-  ├─ Projects.gs
-  ├─ Notifications.gs
-  ├─ Maintenance.gs
-  ├─ Holidays.gs
+  ├─ Monthly.gs / MonthlySnapshot.gs
+  ├─ Labor.gs / LeaveLedger.gs
+  ├─ Employees.gs / Projects.gs
+  ├─ Notifications.gs / Maintenance.gs
+  ├─ Holidays.gs / Schema.gs / DataAccess.gs
   └─ Docs.gs
        │
        ▼
@@ -40,7 +43,12 @@ Google Sheets: FM WORKS DB
 | --- | --- |
 | `src/Index.html` | HTMLシェル、SVG、トップバー |
 | `src/Styles.html` | CSS、テーマ、レスポンシブ |
-| `src/App.html` | SPA状態、描画、イベント、キャッシュ |
+| `src/AppCore.html` | SPA状態、キャッシュ、共通UI、ナビ、ホーム |
+| `src/AppOperations.html` | 勤怠、工数、予定、会社カレンダー、申請 |
+| `src/AppPeopleMonthly.html` | 社員、月次 |
+| `src/AppAdmin.html` | 設定、認証管理、バックアップ、設計文書 |
+| `src/AppShell.html` | ページ描画、ログイン、検索、通知、プロフィール、起動 |
+| `src/App.html` | 旧モノリス廃止を示す互換スタブ |
 | `src/Code.gs` | 定数、初期データ、打刻、予定、会社カレンダー |
 | `src/Auth.gs` | PIN、セッション、権限 |
 | `src/Worklog.gs` | 工数 |
@@ -57,9 +65,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.8.4`
+`APP.version = 0.10.7`
 
-DBスキーマ目安: 4。  
+DBスキーマ: 9。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -215,6 +223,41 @@ DBスキーマ目安: 4。
 
 クライアント `openNotificationItem` は `yearMonth` をstateへ入れて月次へ遷移する。
 
+## 9.1 勤怠ワークスペース v0.10.7
+
+トップナビの勤怠は、内部的に以下の既存ルートを束ねる。
+
+- 本日: `attendance`
+- 月間: `monthly` + `state.monthly.view='calendar'`
+- 履歴: `monthly` + `state.monthly.view='list'`
+
+`attendanceWorkspaceTabs(activeId)` が3タブを描画する。月次・履歴は既存の `getMonthlySummary` と月次UIを再利用し、別系統の集計ロジックを作らない。
+
+本日画面は初期データの `attendance` と `companyToday` だけで主要操作を即時描画する。二次情報は `state.attendancePreview` に保持し、`loadAttendancePreview()` が当月本人の `getMonthlySummary` を描画後に取得する。
+
+`attendancePreview`:
+- key: `YYYY-MM|employeeId`
+- TTL: 120秒
+- 初回失敗時は本日打刻を止めず、月間領域だけ再読込可能にする
+- 打刻成功時はpreviewをstale化し、勤怠画面を表示中なら遅延再取得する
+
+本日画面のDOM構成:
+
+```
+attendance-dashboard
+├─ attendance-workspace-tabs
+├─ attendance-top-grid
+│  ├─ attendance-focus-card
+│  ├─ attendance-timeline-card
+│  └─ attendance-side-stack
+│     ├─ attendance-alert-card
+│     └─ attendance-today-card
+└─ attendance-bottom-grid
+   ├─ attendance-calendar-card
+   └─ attendance-history-card
+```
+
+幅1260px以下は2列、820px以下は1列へ落とし、横スクロールを主要レイアウトに要求しない。履歴表だけは列情報を保持するためパネル内横スクロールを許可する。
 ## 10. 月次UI
 
 状態:
@@ -303,7 +346,7 @@ home-screen
 
 共有予定表の独立カードは「今日の予定」パネルへ、打刻履歴は「現在の勤怠」パネルへ統合し、機能や導線は失わない。
 
-## 11. 設定画面
+## 11. 管理画面
 
 `state.adminTab`:
 
@@ -515,7 +558,8 @@ Apps Scriptの原則:
 - 今日の予定取得と社員マスタ取得の重複を避ける。
 - ホームの承認待ち件数は専用の軽量カウントを使う。
 - 管理画面は表示中タブに不要な保守APIを呼ばない。
-- 通知・バックアップ確認・先読みは初回描画後に段階実行する。
+- 通知・バックアップ確認は初回描画後に段階実行する。
+- 全画面の一括先読みは行わず、予定表・工数・申請は利用意図ベース、勤怠の月間プレビューは本日画面描画後のアイドル時間に取得する。
 - Sheets呼び出しを減らす。
 - 範囲を一括read。
 - JS配列で加工。
@@ -787,12 +831,14 @@ Apps Scriptの原則:
 | `saveWorklog(token,payload)` | Session | 工数 | ok,id |
 | `getRequestsBundle(token)` | Session | なし | own,team,context |
 | `submitRequest(token,payload)` | Session | 申請 | ok,id |
-| `approveRequest(token,id,decision,comment)` | ADMIN | 申請ID | ok |
+| `approveRequest(token,id,decision,comment)` | Session + 承認範囲 | 申請ID | ok |
 | `getMonthlySummary(token,ym,employeeId)` | Session | 年月,社員 | daily,totals,reviewStatus,closeStatus |
 | `confirmMonthlyReview(token,ym,note)` | Session | 年月 | reviewStatus |
 | `closeMonthlyPeriod(token,ym)` | ADMIN | 年月 | closeStatus |
 | `getAuthAdminData(token)` | ADMIN | なし | employees,resetRequests,support |
 | `getSystemStatus(token)` | ADMIN | なし | readiness,backup,sheets |
+| `getLeaveLedger(token,employeeId)` | ADMIN | 社員ID | state,rows,fiveDay |
+| `postLeaveLedgerEntry(token,employeeId,type,days,date,note)` | ADMIN | 年休台帳更新 | ok,balance |
 | `getSystemDocument(token,type)` | ADMIN | requirements/technical | markdown,version |
 
 新しい公開関数を追加する場合、`scripts/validate.mjs` の認証境界検査を通すこと。
@@ -880,3 +926,421 @@ ADMIN closeMonthlyPeriod
 6. DB列を追加する場合は末尾追加を優先。
 7. UI変更はPC/モバイル、ライト/ダーク、エラー/空/読込状態を確認。
 8. GitHub ActionsのCIとDeployが両方成功してから完了扱いとする。
+
+
+## 32. 承認認可モデル
+
+社員マスタの追加列:
+
+| 列 | 項目 | 内容 |
+| --- | --- | --- |
+| X | 直属承認者ID | MANAGER / ADMINの社員ID。空欄可 |
+
+`canManageEmployeeRecord_(viewer, target)` を認可の単一ルールとする。
+
+- 同一社員ID: false
+- ADMIN: true（他社員）
+- MANAGER: `target.managerId === viewer.employeeId`
+- その他: false
+
+`approveRequest` は `requireAdminSession_` ではなく `requireSession_` + `assertCanApproveRequest_` で申請単位の認可を行う。
+
+`getRequestsBundle` / `getRequests` は `getManagedEmployeeIds_` で可視範囲を限定する。
+
+`getMonthlySummary` / `getMonthlyReviewStatus` も同じ管理範囲をサーバー側で検証する。
+
+UIでは `monthlyTeamView` と `adminConsole` を分離する。MANAGERは直属部下の月次閲覧のみ、締め・給与一括出力・社員設定はADMINのみ。
+
+
+## 33. 月次確定スナップショット
+
+DB:
+
+- `月次確定`: 1 snapshot × 1 employee = 1 row、19列
+- `月次確定日次`: 1 snapshot × 1 employee × 1 date = 1 row、19列
+- `月次締め.I`: スナップショットID
+
+`closeMonthlyPeriod` は全blocker確認後に `persistMonthlyCloseSnapshots_` を実行し、そのIDを月次締めへ保存してからCLOSEDにする。
+
+`monthlySnapshotHash_` は、月次合計と日次事実を正規化した `monthlySnapshotPayload_` のJSONへSHA-256を適用する。
+
+`getMonthlySummaryForExport_` は締め済みなら再集計せず、月次確定/日次確定から復元する。
+
+`createTeamMonthlyExport` は月次締め済み + snapshotId必須。現在のSheets値を再計算して給与提出データに使用しない。
+
+締め解除は過去スナップショットを削除しない。再締め時は新しいIDを発行するため、履歴比較と監査が可能。
+
+
+## 34. 有給台帳
+
+`有給台帳` 13列を追加する。
+
+`getLeaveLedgerState_` は台帳があれば最終残高を正本として返し、未移行社員だけ社員マスタの既存残数へフォールバックする。
+
+初回のUSE/RESTORE/ADJUST前に `ensureLeaveLedgerOpening_` がOPENING行を作る。
+
+`consumeLeaveBalance_` / `restoreLeaveBalance_` はScript Lock内で台帳追記と社員マスタK列キャッシュ更新を行う。
+
+社員マスタ追加列:
+
+- X: 直属承認者ID
+- Y: 年休基準日
+- Z: 雇入日
+
+申請追加列:
+
+- O: 取消理由
+- P: 取消申請日時
+- Q: 取消判断理由
+- R: 取消判断者
+- S: 取消判断日時
+
+取消フロー:
+
+```
+承認済
+  -> requestApprovedCancellation
+  -> 取消申請中
+  -> decideApprovedCancellation(APPROVE) -> 取消済
+  -> decideApprovedCancellation(REJECT)  -> 承認済
+```
+
+有給系の取消承認ではRESTOREを台帳へ記録する。打刻修正は補償処理の複雑性から直接取消対象外とし、新規打刻修正で訂正する。
+
+
+### 34.1 Export entrypoint authentication
+
+`createMonthlyExport` は公開API入口で `requireSession_` を実行し、その後 `getMonthlySummaryForExport_` へ委譲する。
+
+
+## 35. Schedule Visibility Authorization
+
+`canViewScheduleRow_` を共通認可関数とし、L列visibilityを `社内 / 参加者のみ / 管理者のみ` として解釈する。`getScheduleBundle` と `searchApp` は非公開予定をレスポンスから除外する。`normalizeScheduleVisibility_` は非ADMINによる管理者限定予定の作成を拒否する。
+
+
+## 36. Runtime Environment Boundary
+
+`normalizeRuntimeEnvironment_` は許可値を DEVELOPMENT / STAGING / PRODUCTION に限定する。
+
+`getRuntimeEnvironment_` はScript Propertiesの `FM_WORKS_ENVIRONMENT` を読む。
+
+`getDatabaseSpreadsheetId_`:
+- DEVELOPMENT/STAGING: `FM_WORKS_DB_ID` があれば使用し、なければ既定STAGING DBへフォールバック。
+- PRODUCTION: `FM_WORKS_DB_ID` 必須。
+- PRODUCTION: 既定STAGING DBと同一IDを拒否。
+
+`getRuntimeInfo_` をSystem Statusへ返し、管理者が環境を常時確認できる。Production ReadinessはPRODUCTION以外をblockerとする。
+
+
+## 37. Scheduled Backup Trigger
+
+`MAINTENANCE.backupTriggerHandler = scheduledDailyMaintenance_`。
+
+`installDailyBackupTrigger_` は同名Triggerを削除して1件だけ作成し、Asia/Tokyoの03時台に日次実行する。
+
+`scheduledDailyMaintenance_`:
+1. AUTO_BACKUP設定確認
+2. 当日バックアップ済み判定
+3. Script Lock取得
+4. 再判定
+5. 原本Spreadsheetのシート形状を取得
+6. DriveへDB copy
+7. コピーを再オープンし、全シート名・最終行・最終列を原本と照合
+8. 検証成功後のみ最終成功時刻/verified=trueを保存
+9. 監査ログ
+10. 90日超Backup cleanup
+
+公開UIから呼べる `installDailyBackupTrigger(sessionToken)` はADMIN認証必須。Trigger handler自体は末尾underscoreのprivate functionとし、client APIとして公開しない。
+
+
+## 38. 労務ルールエンジン
+
+`Labor.gs` に法定区分計算を分離する。純粋関数 `dailyStatutoryOvertimeMinutes_`、`lateNightOverlapMinutes_`、`laborWeekKey_`、`applyWeeklyStatutoryOvertimeToFacts_` をロジックテスト対象とする。
+
+設定は `LABOR_RULE_PROFILE`、`LABOR_WEEK_START_DAY`、`LABOR_STATUTORY_HOLIDAY_SOURCE`、確認者・確認日時・メモを保持する。
+
+`getMonthlySummary` は各日の深夜実働を算出後、`applyLaborModelToMonthlyDaily_` で法定日次/週次時間外、法定休日労働を付与する。週次計算は月初・月末の週について `laborBoundaryFacts_` で月外日を補う。
+
+月次確定/日次確定は24列へ拡張し、法定時間外、深夜、法定休日、労務ルール状態を締め時点で固定する。
+
+`getProductionReadiness_` と `closeMonthlyPeriod` は労務ルール未確定をブロッカーとする。加えて今後90日の会社カレンダーに明示的な `法定休日` が1日もない場合は本番READYを拒否する。標準カレンダー生成は法定休日を推測しない。給与額や割増賃金額は本エンジンで算出しない。
+
+
+## 39. 構造化監査ログ
+
+`auditJson_` は監査対象の業務状態をJSON化し、Spreadsheet式注入を防止した上で最大4000文字へ正規化する。
+
+予定・工数・プロジェクト・社員の更新では、更新前の行から業務フィールドを抽出して `before` に保存し、書込後の業務状態を `after` に保存する。
+
+社員のPINソルト、PINハッシュ、セッショントークン等は監査状態JSONへ含めない。申請承認/取消、月次締め等の状態遷移は既存の明示的before/afterを継続する。
+
+
+## 40. Schema Contract / Migration
+
+`Schema.gs` に `DB_SCHEMA_VERSION=9` と `DB_SCHEMA_SPECS` を保持する。
+
+`getDatabaseSchemaStatus_` は設定のDB_VERSIONと、進化対象シートの1行目ヘッダを比較する。`schemaHeaderIssues_` は純粋関数としてロジックテストする。
+
+`migrateDatabaseToCurrent` はADMIN専用、Script Lock内で実行し、変更前に `createDatabaseBackup_` を実行する。`ensureSchemaSheet_` は欠けた列/シートを追加するが、既存の非空欄ヘッダが契約と異なる場合は破壊的上書きを行わず例外停止する。
+
+`getProductionReadiness_` はSchema Contract不一致をblockerにする。
+
+
+### 40.1 Validation hardening
+
+`validate.mjs` は新設した `Labor.gs` / `Schema.gs` / `LeaveLedger.gs` / `MonthlySnapshot.gs` をrequired fileおよびJavaScript構文検査対象に含める。管理画面のSchema状態検査は `Maintenance.gs` の実ソースを明示的に読み込んで検証する。
+
+
+## 41. Date-scoped Data Access
+
+`DataAccess.gs` に `dateRangeStrings_`、`dateRangeRegex_`、`contiguousRowBlocks_`、`readRowsByDateRange_`、`logPerformance_` を配置する。
+
+補正データは古い日付でも末尾へ追記され得るため、単純な先頭/末尾行推定ではなく日付列TextFinderを使う。該当行が48ブロック以下ならRangeListで必要行だけ取得し、それ以上はfull-scan fallbackとする。
+
+適用先:
+- `getActivePunchRows_`
+- `getCompanyCalendarRange_`
+- `getWorklogs`
+- `getLatestMonthlyDataUpdateMap_` の打刻/工数/会社カレンダー
+- `getMonthlySummary` の工数
+
+Performance Budget超過は処理失敗にせずJSON logで観測する。
+
+
+## 42. Production Authentication Fail-Closed
+
+`Auth.gs` は試作モードを「設定状態」と「実効状態」に分離する。
+
+- `prototypeSettingEnabled_`: 設定値 TRUE/FALSE/ON/OFF を正規化する。
+- `isPrototypeConfigured_`: DB上で試作モードが設定されているかを返す。
+- `prototypeModeEnabledForEnvironment_`: PRODUCTIONなら必ずfalseを返す。
+- `isPrototypeMode_`: 実際に共通PIN認証を許可してよいかを返す。
+
+`getPublicAuthConfig` は共通PIN値を返さない。クライアントもPIN値を表示しない。ログイン入力欄にも共通PINを自動入力しない。
+
+`Maintenance.getProductionReadiness_` は `isPrototypeConfigured_` を使うため、PRODUCTIONで共通PINが実効無効になっていても、設定 `PROTOTYPE_MODE=TRUE` が残る限りREADYを拒否する。これにより「安全にログインできること」と「本番設定が正しいこと」を別々に保証する。
+
+CIでは `validate.mjs` が以下を検査する。
+
+1. 試作モード既定値がfalse。
+2. PRODUCTION強制無効化ロジックが存在する。
+3. 共通PINを公開設定APIや画面へ流していない。
+4. Readinessが設定状態と実効状態を分離している。
+
+`test_logic.mjs` は STAGING / PRODUCTION / OFF の境界条件を純粋関数で検証する。
+
+
+## 43. Client Module Boundaries v0.10.1
+
+旧 `App.html` 1700行超のクライアント実装を、機能境界に沿った5つのHTML Scriptモジュールへ分割した。
+
+読み込み順:
+1. AppCore
+2. AppOperations
+3. AppPeopleMonthly
+4. AppAdmin
+5. AppShell
+
+関数宣言は同一ブラウザGlobal Environment上で相互参照する。起動イベント `DOMContentLoaded -> bootstrap` は最後の `AppShell` のみに置き、全モジュールが読み込まれてから実行される。
+
+CIの `validate.mjs` はモジュールを読み込み順に連結して構文検査し、従来のUI契約マーカーも連結ソースへ対して検査する。これによりファイル分割そのものによる機能欠落を検知する。
+
+
+## 44. Usability / Accessibility Hardening v0.10.2
+
+### 44.1 Live attendance DOM update
+
+`AppCore.updateLiveWorkedNodes` は `[data-live-worked]` のtextContentだけを更新する。30秒タイマーは`renderPage`を呼ばず、DOM全置換によるスクロール・フォーカス喪失を防ぐ。
+
+### 44.2 Modal focus boundary
+
+`AppOperations` に以下を配置する。
+
+- `modalFocusables_`
+- `activateModalA11y_`
+- `trapModalFocus_`
+- focus restore付き `ensureModal / closeModal`
+
+`AppShell.initGlobalKeyboardShortcuts` はTabキーを`trapModalFocus_`へ渡す。Escapeの既存クローズ動作は維持する。
+
+### 44.3 Schedule keyboard semantics
+
+月表示の各セルは背景クリックを維持しつつ、日番号をネイティブbutton `.day-open` として提供する。日表示の予定詳細行 `.agenda-item` はarticle+onclickからbuttonへ変更する。
+
+### 44.4 Readable density / scroll planes
+
+CSSのpx指定font-sizeは11px未満を禁止する。CIが正規表現で検査する。
+
+`content.one-screen` はホームのみへ適用する。管理・月次の外側スクロールを復活させ、設定コンテンツと年間カレンダーの固定高内部スクロールを解除する。ホーム内部の打刻履歴・予定など、明示的な長一覧は内部スクロールを許可する。
+
+### 44.5 Session garbage collection
+
+`createSession_` からGCを除去する。
+
+`sessionRowsToDelete_` が削除対象のシート行番号を計算し、`cleanupExpiredSessions_` は `contiguousRowBlocks_` で連続行を束ね、下側ブロックから `deleteRows(start,count)` を実行する。
+
+`scheduledDailyMaintenance_` がバックアップ判定より先にセッションGCを実行するため、バックアップ無効時でもGCは継続する。
+
+### 44.6 Regression gate
+
+`validate.mjs` は以下を検査する。
+
+- 11px未満のfont-size禁止
+- live timerの部分DOM更新
+- one-screen対象がhomeのみ
+- modal focus trap
+- schedule keyboard control
+- login pathからGC除去
+- scheduled maintenanceへのGC移行
+
+`test_logic.mjs` は期限切れ/無効セッション行の抽出を純粋ロジックで検証する。
+
+
+## 45. General-JP Labor Period Monitoring v0.10.3
+
+`Labor.gs` の `LABOR_GENERAL_JP` に以下の一般則監視定数を保持する。
+
+- annualOvertimePrincipleMinutes = 21,600（360h）
+- specialAnnualOvertimeLimitMinutes = 43,200（720h）
+- specialSingleMonthOvertimeHolidayLimitMinutes = 6,000（100h）
+- specialMultiMonthAverageLimitMinutes = 4,800（80h）
+- specialExcessMonthLimit = 6
+
+設定には `LABOR_36_PERIOD_START_MONTH` と `LABOR_SPECIAL_CLAUSE` を追加する。`GENERAL_JP` は週開始曜日、起算月、特別条項の状態がすべて確定して初めて `configured=true` とする。
+
+`getClosedLaborHistory_` は `月次確定` 24列から社員・対象月の最新スナップショットを取得する。再締めがある場合は作成日時/締め日時が新しい行を採用する。
+
+`evaluateGeneralLaborHistory_` は純粋ロジックとして、36協定対象期間内の法定時間外合計、45時間超月数、対象月を末尾とする2〜6か月の時間外＋法定休日平均の最大値を計算する。
+
+対象月そのものは最新のライブ集計でスナップショット値を上書きする。過去確定月が欠ける場合は年次判定の完全性をfalseにし、警告を返す。
+
+本モデルは一般則の早期警告であり、会社の個別36協定や変形/フレックス/業種特例の法令適合判定を代替しない。
+
+
+## 46. Headless Client Contract Test
+
+`scripts/test_client_contract.mjs` は外部依存を追加せず、Node.js `vm` 上へ5つのクライアントモジュールを実際の読み込み順でロードする。
+
+最小DOM、Storage、`google.script.run` チェーンをテストダブルとして与え、以下のユーザーフローが期待するGAS API契約へ到達することをCIで検査する。
+
+- 社員ID + PINログイン → `login`
+- 打刻 → `recordPunch`
+- 有給申請 → `submitRequest`
+- 承認 → `approveRequest`
+- 月次本人確認 → `confirmMonthlyReview`
+- ライト/ダーク切替
+- 予定表の日付/予定のキーボード操作用HTML
+
+これは実ブラウザのレイアウト・axe・視覚差分を代替しない。Webアプリ公開範囲が `MYSELF` の現在は、デプロイ済み環境のBrowser E2Eを別Gateとして残す。
+
+## 47. Operational Integrity Hardening v0.10.4
+
+### 47.1 Approval graph integrity
+
+`Employees.gs`:
+- `managerAssignmentCreatesCycle_` は社員→直属承認者の連鎖を純粋ロジックで検査する。
+- `assertManagerAssignmentAcyclic_` は循環する直属承認者設定を拒否する。
+- `getActiveDirectReports_` と `assertManagerRoleChangeSafe_` は直属部下を残したまま承認権限を失う降格/無効化を拒否する。
+
+`Notifications.gs` はロール名ではなく `getPermissions_(employee).requestApprove` を使い、ADMINとMANAGERの両方へ管理対象の承認待ちを通知する。
+
+### 47.2 Verified backup
+
+`spreadsheetShape_` は各シートの name / lastRow / lastColumn を取得する。`compareBackupShape_` で原本とコピーを比較し、`verifyDatabaseBackupCopy_` が3回までコピーを再オープンして検査する。
+
+検証失敗したコピーはゴミ箱へ移し、`FM_WORKS_LAST_BACKUP_VERIFIED=false` のままにする。成功後だけ `FM_WORKS_LAST_BACKUP_AT` とverifiedを更新する。
+
+### 47.3 Annual leave five-day evidence monitor
+
+`getAnnualLeaveFiveDayStatus_` は有給台帳のGRANT >= 10日の最新記録を根拠に対象期間を決める。承認済/取消申請中の全日有給を1日、午前/午後半休を0.5日として集計する。
+
+`1/4日有給` はQ-026が解消するまで法定5日取得実績から除外する。付与根拠・会社カレンダーが不足する場合はUNKNOWN / DATA_INCOMPLETEとして「達成済み」と判定しない。
+
+ADMINは社員一覧の「年休」からGRANT / EXPIRE / ADJUSTを登録し、最新100件と年5日状況を確認できる。
+
+### 47.4 Apps Script batching
+
+`updateEmployeeAuthCells_` は認証9列を1 Rangeでread-modify-writeする。`invalidateEmployeeSessions_` は対象H列をRangeListでまとめてREVOKEDへ変更する。
+
+### 47.5 CI / deployment parity
+
+CIとDeployの双方で `test_logic.mjs` と `test_client_contract.mjs` を実行する。workflowは `actions/checkout@v5`、`actions/setup-node@v6`、Node 24を使用する。
+
+静的Gateは、承認通知スコープ、承認経路整合性、年休5日監視、バックアップ整合性、法定休日READY、モーダル閉じるボタンのアクセシブルネームを検査する。
+
+## 48. Response-First Architecture v0.10.5
+
+### 48.1 Auth bootstrap fast path
+
+`login` と `resumeSession` は認証完了後、ロック外で `buildInitialDataForEmployee_` を実行して `initialData` を同じレスポンスに同梱する。クライアントは `mountAuthenticatedApp` へ直接渡し、追加の `getInitialData` 往復を避ける。
+
+保存セッション起動時は公開ログイン設定を先に取得しない。`resumeSession` が失敗した場合だけ `getPublicAuthConfig` を取得してログイン画面へフォールバックする。
+
+### 48.2 User-intent scheduling
+
+`startMenuPrefetch` の全画面先読みは無効化する。`queueRoutePrefetch` は schedule / worklog / requests のナビゲーションへ pointerenter または focus が220ms継続した場合のみ先読みする。
+
+`scheduleBackgroundTask` は `state.busy`、`pendingLoads`、`document.hidden` を確認し、ユーザー操作中または前景通信中なら後ろへ送る。通知は初期表示後2.4秒を起点とするが、前景通信を優先する。
+
+### 48.3 Server caches and indexed reads
+
+`DataAccess.gs` に `cacheJsonGet_` / `cacheJsonPut_` / `cacheRemove_` と `readRowsByColumnValues_` を追加する。
+
+- Settings: 90秒
+- Employees: 120秒
+- Projects: 180秒
+- Company calendar per year: 600秒
+- Calendar available years: 600秒
+
+更新APIは対応キャッシュを明示的に削除する。社員IDや日付が既知の読込では TextFinder → contiguous row blocks → RangeList を優先し、分散が大きい場合だけ全件読込へフォールバックする。
+
+### 48.4 Lightweight home aggregation
+
+`getHomeOverview` は `getMonthlySummary` を呼ばず、`getHomeMonthStats_` で当月開始日〜今日の打刻・旧日次・会社カレンダー・承認済休暇・工数だけを集計する。年次36協定履歴、月次締め状態、詳細日次配列はホームでは計算しない。
+
+月次確認通知は `getNotifications` 側へ分離し、ホームの主要KPI表示を通知計算でブロックしない。
+
+### 48.5 Punch fast path
+
+`getAttendanceContext_` が打刻前の当日行と表示用stateを1回で返す。書込後は新規行をそのタイムラインへメモリ上で追加して `buildAttendanceStateFromRows_` で応答を生成する。書込後の当日シート再読込と `SpreadsheetApp.flush()` を廃止する。
+
+### 48.6 Performance observability
+
+`FM_WORKS_PERF` の警告予算を次へ更新する。
+
+- getInitialData: 900ms
+- getHomeOverview: 1000ms
+- getScheduleBundle: 1200ms
+- getRequestsBundle: 1200ms
+- getMonthlySummary: 2500ms
+- getWorklogs: 900ms
+- date/index read: 800ms
+
+これはネットワーク往復を含むUX時間ではなく、Apps Scriptサーバー実行の警告予算である。
+
+### 48.7 Scoped admin payloads
+
+`getAuthAdminData(sessionToken, scope)` は `people / auth / projects` の3スコープを受け取り、画面が必要とするデータだけを返す。
+
+- people: 社員編集に必要な社員26列
+- auth: 社員認証状態 + 直近50件のPIN再発行依頼 + サポート設定
+- projects: プロジェクトマスタ
+
+クライアントは `authAdminPeople / authAdminAuth / authAdminProjects` を別キャッシュとして管理する。運用設定タブは `loadAuthAdmin` を呼ばず `loadMaintenance` のみ実行する。
+
+
+## 49. Primary Navigation Architecture v0.10.6
+
+`NAV` はトップ階層を Home / Attendance / Worklog / Schedule / Requests / Admin に限定する。
+
+`primaryNavIdForPage` は互換ルートを親ナビゲーションへマッピングする。
+
+- monthly -> attendance
+- companyCalendar -> schedule
+- people -> admin
+
+`attendanceWorkspaceTabs` と `scheduleWorkspaceTabs` は、トップ階層を増やさず下位ビューを明示的に切り替える。
+
+ADMIN内は `settingsTabs` で、社員・権限 / 認証・サポート / プロジェクト / 運用・労務 / 要件定義 / 技術設計を切り替える。社員画面は互換ルートpeopleを維持するが、主ナビゲーションではAdminとして扱う。
+
+CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親ルートマッピングを回帰検査する。

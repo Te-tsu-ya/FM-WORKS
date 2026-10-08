@@ -1,0 +1,415 @@
+<script>
+function renderPage(transition=false){
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const content=document.getElementById('content');
+  const update=()=>{
+    content.classList.toggle('one-screen',state.page==='home');
+    content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
+  };
+  if(transition&&document.startViewTransition&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(update);else update();
+}
+
+function setLoading(){
+  document.getElementById('content').innerHTML="<div class='grid cols-3'><div class='loading-card'></div><div class='loading-card'></div><div class='loading-card'></div></div>";
+}
+
+function renderLogin(message=''){
+  const cfg=state.publicConfig||{needsSetup:false,pinLength:6,prototypeMode:false,support:{name:'FM WORKS管理者',email:'',phone:'',note:''}};
+  const support=cfg.support||{};
+  const storedEmployeeId=localStorage.getItem('fmworks.employeeId')||'';
+  const remembered=cfg.prototypeMode
+    ? (/^FM000[1-5]$/.test(storedEmployeeId)?storedEmployeeId:'FM0001')
+    : (storedEmployeeId||(cfg.needsSetup?'FM0001':''));
+  const heading=cfg.prototypeMode?'試作版ログイン':(cfg.needsSetup?'初期管理者設定':'FM WORKSへログイン');
+  const intro=cfg.prototypeMode?'試作環境です。ログイン用PINは開発管理者から案内されたものを入力してください。':(cfg.needsSetup?"初回のみ、管理者の社員番号と新しいPINを設定してください。設定後は通常のログイン画面になります。":"");
+  const shell=document.getElementById('loginShell');
+  document.body.classList.add('login-mode');
+  shell.hidden=false;
+  shell.innerHTML=`<div class='login-stage'>
+    <section class='login-visual'>
+      <div class='login-visual-copy'>
+        <div class='login-kicker'>FUSION MIND / FM WORKS</div>
+        <h1>はたらくを、<br>もっとシンプルに。</h1>
+        <div class='login-accent'></div>
+        <p>勤怠・工数・予定・申請を、ひとつの画面へ。毎日の「確認する・入力する」を減らし、仕事に集中できる状態をつくります。</p>
+        <div class='login-feature-grid' aria-label='FM WORKSの主な機能'>
+          <div class='login-feature'><span>01</span><div><b>勤怠</b><small>出退勤・休憩・勤務場所</small></div></div>
+          <div class='login-feature'><span>02</span><div><b>工数</b><small>案件ごとの作業時間を記録</small></div></div>
+          <div class='login-feature'><span>03</span><div><b>予定</b><small>チームの予定をまとめて確認</small></div></div>
+          <div class='login-feature'><span>04</span><div><b>申請</b><small>休暇・残業・修正をスムーズに</small></div></div>
+        </div>
+      </div>
+      <div class='login-visual-caption'><span>WORK PORTAL</span><span>ATTENDANCE · WORKLOG · SCHEDULE</span></div>
+    </section>
+    <section class='login-panel'>
+      <form class='login-card' onsubmit='submitLogin(event)'>
+        <div class='login-brand'>${svgLogo()}<h2>FM WORKS</h2><div class='brand-line'></div><p>人・時間・仕事をひとつに。</p></div>
+        <div class='login-divider'></div>
+        <h3>${heading}</h3>
+        ${intro?`<div class='${cfg.prototypeMode?'prototype-note':'setup-note'}'>${intro}</div>`:''}
+        <div id='loginError' class='login-error ${message?'show':''}'>${escapeHtml(message)}</div>
+        <label class='login-field'><span>社員番号</span><div class='login-input-wrap'>${svg('i-user')}<input id='loginEmployeeId' value='${escapeHtml(remembered)}' autocomplete='username' autocapitalize='characters' spellcheck='false' placeholder='FM0001' required></div></label>
+        <label class='login-field'><span>${cfg.needsSetup?'新しいPIN':'PIN'}</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPin' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='${cfg.needsSetup?'new-password':'current-password'}' required><button class='toggle-password' type='button' onclick="togglePassword('loginPin')" aria-label='PINを表示'>${svg('i-eye')}</button></div></label>
+        ${cfg.needsSetup?`<label class='login-field'><span>新しいPIN（確認）</span><div class='login-input-wrap'>${svg('i-lock')}<input id='loginPinConfirm' type='password' inputmode='numeric' maxlength='${cfg.pinLength||6}' autocomplete='new-password' required></div></label>
+        <div class='setup-note'>PINを忘れた社員が迷わないように、問い合わせ先を1つ以上登録してください。</div>
+        <label class='login-field'><span>管理者メール（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportEmail' type='email' autocomplete='email' placeholder='admin@example.jp'></div></label>
+        <label class='login-field'><span>管理者電話番号（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportPhone' inputmode='tel' autocomplete='tel' placeholder='0254-xx-xxxx'></div></label>`:''}
+        <label class='login-remember'><input id='rememberLogin' type='checkbox' checked><span>この端末でログイン状態を保持する（30日）</span></label>
+        <small class='login-device-note'>共有PCではチェックを外してください。</small>
+        <button id='loginSubmit' class='login-submit' type='submit'>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
+        <div class='login-help'>
+          <button type='button' onclick='openPinHelpModal()'>PINを忘れた場合</button>
+          <small>${escapeHtml(support.note||'社内のFM WORKS管理者へご連絡ください。')}</small>
+        </div>
+      </form>
+    </section>
+  </div>`;
+}
+
+function showLogin(message=''){
+  document.getElementById('app').hidden=true;
+  closeModal();
+  renderLogin(message);
+}
+
+function togglePassword(id){
+  const input=document.getElementById(id);if(!input)return;
+  input.type=input.type==='password'?'text':'password';
+}
+
+function setLoginBusy(busy){
+  const button=document.getElementById('loginSubmit');if(!button)return;
+  button.disabled=busy;button.textContent=busy?'確認しています...':((state.publicConfig&&state.publicConfig.needsSetup)?'初期設定を完了　→':'ログイン　→');
+}
+
+function submitLogin(event){
+  event.preventDefault();
+  const id=document.getElementById('loginEmployeeId').value.trim().toUpperCase();
+  const pin=document.getElementById('loginPin').value;
+  const remember=document.getElementById('rememberLogin').checked;
+  let initialSupport=null;
+  if(state.publicConfig&&state.publicConfig.needsSetup){
+    const confirmPin=document.getElementById('loginPinConfirm').value;
+    if(pin!==confirmPin){renderLogin('確認用PINが一致しません。');document.getElementById('loginEmployeeId').value=id;return}
+    const email=document.getElementById('setupSupportEmail').value.trim();
+    const phone=document.getElementById('setupSupportPhone').value.trim();
+    if(!email&&!phone){renderLogin('PINを忘れた場合の連絡先として、メールまたは電話番号を入力してください。');document.getElementById('loginEmployeeId').value=id;return}
+    initialSupport={name:'FM WORKS管理者',email:email,phone:phone};
+  }
+  if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
+  setLoginBusy(true);
+  const runner=google.script.run.withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
+  if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport,remember);
+  else runner.login(id,pin,clientInfo(),remember);
+}
+
+function acceptLogin(result){
+  setSessionToken(result.sessionToken,!!result.remembered);
+  loadAuthenticatedApp(!!result.mustChangePin,result&&result.initialData||null);
+}
+
+function mountAuthenticatedApp(data,mustChangePin){
+  state.data=data;
+  state.workLocation=data.attendance.workLocation||'出社';
+  state.schedule.date=data.today;
+  state.schedule.employees=data.employees||[];
+  state.company.year=parseIso(data.today).getFullYear();
+  const requested=(location.hash||'#home').slice(1);
+  const nestedRoutes=['monthly','companyCalendar','people'];
+  state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
+  if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
+  document.getElementById('loginShell').hidden=true;
+  document.body.classList.remove('login-mode');
+  document.getElementById('app').hidden=false;
+  setProfileUi();
+  initTopbarInteractions();
+  initGlobalKeyboardShortcuts();
+  initTheme();
+  const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
+  renderNav();
+  renderPage();
+  startLiveAttendanceTicker();
+
+  if(state.page==='home')loadHomeOverview();
+  if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
+  if(state.page==='schedule')loadSchedule();
+  if(state.page==='companyCalendar')loadCompanyCalendar();
+  if(state.page==='worklog')loadWorklogs();
+  if(state.page==='requests')loadRequests();
+  if(state.page==='monthly')loadMonthly();
+  if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
+  if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){
+    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
+    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
+    if(state.adminTab==='operation')loadMaintenance();
+    if(state.adminTab==='requirements')loadSystemDocument('requirements');
+    if(state.adminTab==='technical')loadSystemDocument('technical');
+  }
+
+  scheduleBackgroundTask(()=>loadNotifications(),2400);
+  if(data.permissions&&data.permissions.adminConsole&&state.page==='admin'&&state.adminTab==='operation'){
+    scheduleBackgroundTask(()=>{
+      google.script.run.withSuccessHandler(result=>{
+        if(result&&!result.skipped&&state.page==='admin'&&state.adminTab==='operation')loadMaintenance({force:true,silent:true});
+      }).withFailureHandler(()=>{}).ensureDailyBackup(state.sessionToken);
+    },6000);
+  }
+  if(mustChangePin)setTimeout(()=>openChangePinModal(true),0);
+}
+
+function loadAuthenticatedApp(mustChangePin,initialData){
+  if(initialData){
+    mountAuthenticatedApp(initialData,mustChangePin);
+    return;
+  }
+  setLoading();
+  google.script.run.withSuccessHandler(data=>{
+    mountAuthenticatedApp(data,mustChangePin);
+  }).withFailureHandler(err=>{
+    clearLocalSession();
+    loadPublicLoginConfig(sessionErrorMessage(err).includes('SESSION')?'セッションの有効期限が切れました。':'ログイン状態を確認できませんでした。');
+  }).getInitialData(state.sessionToken);
+}
+
+function setProfileUi(){
+  const u=state.data.user;
+  document.getElementById('profileAvatar').textContent=(u.displayName||u.fullName||'?').slice(0,1);
+  document.getElementById('profileName').textContent=u.displayName||u.fullName;
+  document.getElementById('profileRole').textContent=roleLabel(u.role);
+  document.getElementById('profileMenuName').textContent=u.fullName||u.displayName;
+  document.getElementById('profileMenuId').textContent=u.employeeId+' / '+roleLabel(u.role);
+}
+
+let searchTimer=null;
+function openMobileDrawer(){
+  const root=document.getElementById('mobileDrawerRoot');if(!root)return;
+  const nav=visibleNav();
+  root.innerHTML=`<div class='mobile-drawer-backdrop' onclick='closeMobileDrawer()'></div>
+    <aside class='mobile-drawer' aria-label='全メニュー'>
+      <div class='mobile-drawer-head'>${svgLogo()}<div><strong>FM WORKS</strong><small>${state.data?escapeHtml(state.data.user.displayName):''}</small></div><button class='icon-button' onclick='closeMobileDrawer()' aria-label='メニューを閉じる'>×</button></div>
+      <nav>${nav.map(([id,label,icon])=>`<button class='${state.page===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${label}</span></button>`).join('')}</nav>
+    </aside>`;
+  document.body.classList.add('drawer-open');
+}
+function closeMobileDrawer(){
+  const root=document.getElementById('mobileDrawerRoot');if(root)root.innerHTML='';
+  document.body.classList.remove('drawer-open');
+}
+
+function initGlobalKeyboardShortcuts(){
+  if(globalKeysBound)return;
+  globalKeysBound=true;
+  document.addEventListener('keydown',e=>{
+    const target=e.target;
+    const tag=String(target&&target.tagName||'').toLowerCase();
+    const typing=['input','textarea','select'].includes(tag)||!!(target&&target.isContentEditable);
+    if(e.key==='Tab'&&trapModalFocus_(e))return;
+    if(e.key==='Escape'){
+      const modal=document.getElementById('modalRoot');
+      if(modal&&modal.innerHTML.trim()){e.preventDefault();closeModal();return;}
+      hideSearchResults();closeNotificationMenu();closeProfileMenu();closeMobileDrawer();
+      return;
+    }
+    if(e.key==='/'&&!typing&&!e.metaKey&&!e.ctrlKey&&!e.altKey){
+      const input=document.getElementById('globalSearchInput');
+      if(input&&input.offsetParent!==null){e.preventDefault();input.focus();}
+    }
+  });
+}
+
+function initTopbarInteractions(){
+  const menuButton=document.getElementById('mobileMenuButton');
+  if(menuButton&&!menuButton.dataset.bound){menuButton.dataset.bound='1';menuButton.addEventListener('click',e=>{e.stopPropagation();openMobileDrawer()})}
+  const input=document.getElementById('globalSearchInput');
+  if(input&&!input.dataset.bound){
+    input.dataset.bound='1';
+    input.addEventListener('input',()=>{
+      clearTimeout(searchTimer);
+      const q=input.value.trim();
+      if(q.length<2){hideSearchResults();return}
+      searchTimer=setTimeout(()=>performGlobalSearch(q),220);
+    });
+    input.addEventListener('keydown',e=>{if(e.key==='Escape')hideSearchResults()});
+  }
+  const bell=document.getElementById('notificationButton');
+  if(bell&&!bell.dataset.bound){
+    bell.dataset.bound='1';
+    bell.addEventListener('click',e=>{e.stopPropagation();toggleNotificationMenu()});
+  }
+}
+
+function performGlobalSearch(query){
+  if(!state.sessionToken)return;
+  google.script.run
+    .withSuccessHandler(renderSearchResults)
+    .withFailureHandler(err=>handleApiError(err,'検索できませんでした'))
+    .searchApp(state.sessionToken,query);
+}
+
+function renderSearchResults(items){
+  const box=document.getElementById('globalSearchResults');
+  if(!box)return;
+  const rows=(items||[]);
+  box.innerHTML=rows.length?rows.map((r,i)=>`<button type='button' onclick="openSearchResult(${i})"><span class='search-type'>${escapeHtml(r.type)}</span><span><strong>${escapeHtml(r.title)}</strong><small>${escapeHtml(r.sub||'')}</small></span></button>`).join(''):`<div class='search-empty'>該当する情報はありません。</div>`;
+  box._items=rows;
+  box.hidden=false;
+}
+
+function hideSearchResults(){
+  const box=document.getElementById('globalSearchResults');
+  if(box)box.hidden=true;
+}
+
+function openSearchResult(index){
+  const box=document.getElementById('globalSearchResults');
+  const item=box&&box._items&&box._items[index];
+  if(!item)return;
+  hideSearchResults();
+  const input=document.getElementById('globalSearchInput');if(input)input.value='';
+  if(item.route==='schedule'&&item.date){
+    state.schedule.date=item.date;state.schedule.view='day';
+  }
+  navigate(item.route||'home');
+}
+
+function loadNotifications(){
+  if(!state.sessionToken)return;
+  google.script.run
+    .withSuccessHandler(data=>{
+      const dot=document.getElementById('notificationDot');
+      if(dot)dot.hidden=!(data&&data.count);
+      if(state.data&&data&&data.monthlyReview){
+        state.data.monthlyReview=data.monthlyReview;
+        syncGlobalActionBanner();
+        if(state.page==='home')renderPageIfActive('home');
+      }
+      renderNotificationMenu(data&&data.items||[]);
+    })
+    .withFailureHandler(()=>{})
+    .getNotifications(state.sessionToken);
+}
+
+function renderNotificationMenu(items){
+  const menu=document.getElementById('notificationMenu');
+  if(!menu)return;
+  menu._items=items||[];
+  menu.innerHTML=`<div class='notification-head'><strong>通知</strong><small>${menu._items.length}件</small></div>`+
+    (menu._items.length?menu._items.map((n,i)=>`<button type='button' onclick="openNotificationItem(${i})"><span class='notification-type'>${escapeHtml(n.type)}</span><span><strong>${escapeHtml(n.title)}</strong><small>${escapeHtml(n.subtitle||'')}</small></span></button>`).join(''):`<div class='notification-empty'>新しい通知はありません。</div>`);
+}
+
+function toggleNotificationMenu(){
+  const menu=document.getElementById('notificationMenu'),button=document.getElementById('notificationButton');
+  if(!menu||!button)return;
+  const next=menu.hidden;menu.hidden=!next;button.setAttribute('aria-expanded',String(next));
+  if(next)loadNotifications();
+}
+
+function closeNotificationMenu(){
+  const menu=document.getElementById('notificationMenu'),button=document.getElementById('notificationButton');
+  if(menu)menu.hidden=true;if(button)button.setAttribute('aria-expanded','false');
+}
+
+function openNotificationItem(index){
+  const menu=document.getElementById('notificationMenu');
+  const item=menu&&menu._items&&menu._items[index];
+  closeNotificationMenu();
+  if(item){
+    if(item.route==='monthly'&&item.yearMonth){
+      state.monthly.yearMonth=item.yearMonth;state.monthly.employeeId=state.data.user.employeeId;state.monthly.view='calendar';
+    }
+    navigate(item.route||'home');
+  }
+}
+
+function toggleProfileMenu(){
+  const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');
+  const next=menu.hidden;menu.hidden=!next;button.setAttribute('aria-expanded',String(next));
+}
+function closeProfileMenu(){const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');if(menu){menu.hidden=true}if(button)button.setAttribute('aria-expanded','false')}
+
+function performLogout(){
+  const token=state.sessionToken;
+  clearLocalSession();closeProfileMenu();document.getElementById('app').hidden=true;
+  google.script.run.withSuccessHandler(()=>showLogin('ログアウトしました。')).withFailureHandler(()=>showLogin('ログアウトしました。')).logout(token);
+}
+
+function openChangePinModal(force=false){
+  closeProfileMenu();
+  const r=ensureModal();
+  r.innerHTML=`<div class='modal-backdrop' ${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>${force?'':"<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button>"}</div>
+    ${force?"<div class='setup-note'>安全のため、管理者が発行した仮PINから新しいPINへ変更してください。</div>":''}
+    <div class='form-grid'>
+      <label class='field full'><span>現在のPIN</span><input id='currentPin' type='password' inputmode='numeric' maxlength='6' autocomplete='current-password'></label>
+      <label class='field full'><span>新しいPIN</span><input id='newPin' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
+      <label class='field full'><span>新しいPIN（確認）</span><input id='newPinConfirm' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
+    </div>
+    <div class='modal-actions'><span></span><div>${force?'':"<button class='secondary-button' onclick='closeModal()'>キャンセル</button>"}<button class='primary-button' onclick="submitOwnPinChange(${force})">変更</button></div></div>
+  </section>`;
+}
+
+function submitOwnPinChange(force){
+  const current=document.getElementById('currentPin').value,newPin=document.getElementById('newPin').value,confirmPin=document.getElementById('newPinConfirm').value;
+  if(newPin!==confirmPin){showToast('確認用PINが一致しません');return}
+  google.script.run.withSuccessHandler(()=>{closeModal();showToast('PINを変更しました')}).withFailureHandler(err=>{if(!handleApiError(err,'PINを変更できませんでした')&&force){} }).changeOwnPin(state.sessionToken,current,newPin);
+}
+
+function openPinHelpModal(){
+  const s=(state.publicConfig&&state.publicConfig.support)||{};
+  const employeeId=document.getElementById('loginEmployeeId')?document.getElementById('loginEmployeeId').value.trim().toUpperCase():'';
+  const contact=[s.email?`<a href='mailto:${escapeHtml(s.email)}'>${escapeHtml(s.email)}</a>`:'',s.phone?`<a href='tel:${escapeHtml(s.phone)}'>${escapeHtml(s.phone)}</a>`:''].filter(Boolean).join('<br>');
+  const r=ensureModal();
+  r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'>
+    <div class='modal-head'><div><small>ログインサポート</small><h2>PINを忘れた場合</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
+    <div class='support-card'><strong>${escapeHtml(s.name||'FM WORKS管理者')}</strong><small>${escapeHtml(s.note||'社内の管理者へご連絡ください。')}</small>${contact?`<div>${contact}</div>`:''}</div>
+    <div class='form-grid section-gap'>
+      <label class='field full'><span>社員番号</span><input id='helpEmployeeId' value='${escapeHtml(employeeId)}' placeholder='FM0001'></label>
+      <label class='field full'><span>補足（任意）</span><textarea id='helpNote' rows='3' placeholder='管理者へのメモ'></textarea></label>
+    </div>
+    <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>閉じる</button><button class='primary-button' onclick='submitPinHelp()'>再発行を依頼</button></div></div>
+  </section>`;
+}
+
+function submitPinHelp(){
+  const id=document.getElementById('helpEmployeeId').value.trim().toUpperCase();
+  const note=document.getElementById('helpNote').value;
+  google.script.run.withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
+    .withFailureHandler(()=>{closeModal();showToast('案内先の管理者へ直接ご連絡ください')})
+    .requestPinHelp(id,note,clientInfo());
+}
+
+function loadPublicLoginConfig(message=''){
+  google.script.run.withSuccessHandler(config=>{
+    state.publicConfig=config;
+    showLogin(message);
+  }).withFailureHandler(()=>showLogin(message||'FM WORKSの初期情報を読み込めませんでした。')).getPublicAuthConfig();
+}
+
+function bootstrap(){
+  initTheme();
+  const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
+  state.sessionToken=getStoredSessionToken();
+  const button=document.getElementById('profileButton');
+  if(button)button.addEventListener('click',e=>{e.stopPropagation();toggleProfileMenu()});
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.profile-wrap'))closeProfileMenu();
+    if(!e.target.closest('.search-wrap'))hideSearchResults();
+    if(!e.target.closest('.notification-wrap'))closeNotificationMenu();
+  });
+
+  if(state.sessionToken){
+    setLoading();
+    google.script.run.withSuccessHandler(result=>{
+      loadAuthenticatedApp(!!result.mustChangePin,result&&result.initialData||null);
+    }).withFailureHandler(()=>{
+      clearLocalSession();
+      loadPublicLoginConfig('セッションの有効期限が切れました。');
+    }).resumeSession(state.sessionToken);
+    return;
+  }
+  loadPublicLoginConfig();
+}
+
+document.addEventListener('DOMContentLoaded',bootstrap);
+
+</script>

@@ -11,7 +11,7 @@ const AUTH = Object.freeze({
   defaultLockMinutes: 15,
   defaultPinLength: 6,
   sessionTouchMinutes: 5,
-  prototypeMode: true,
+  prototypeMode: false,
   prototypePin: '000000',
   prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']
 });
@@ -23,7 +23,6 @@ function getPublicAuthConfig() {
     needsSetup: isPrototypeMode_() ? false : !hasAnyPinConfigured_(),
     pinLength: config.pinLength,
     prototypeMode: isPrototypeMode_(),
-    prototypePin: isPrototypeMode_() ? AUTH.prototypePin : '',
     support: getSupportConfig_()
   };
 }
@@ -83,6 +82,7 @@ function login(employeeId, pin, clientInfo, rememberSession) {
   lock.waitLock(10000);
 
   let record;
+  let result;
   try {
     record = getEmployeeAuthRecord_(id);
     if (!record || !record.active) {
@@ -152,7 +152,7 @@ function login(employeeId, pin, clientInfo, rememberSession) {
       result: 'SUCCESS',
       note: prototypeAccess ? '試作版共通PIN / ' + sanitizeClientInfo_(clientInfo) : sanitizeClientInfo_(clientInfo)
     });
-    return {
+    result = {
       ok: true,
       sessionToken: sessionToken,
       remembered: keepSignedIn,
@@ -162,14 +162,35 @@ function login(employeeId, pin, clientInfo, rememberSession) {
   } finally {
     lock.releaseLock();
   }
+
+  try {
+    result.initialData = buildInitialDataForEmployee_(record);
+  } catch (e) {
+    console.warn('login bootstrap preload failed', e);
+  }
+  return result;
 }
 
-function isPrototypeMode_() {
-  if(typeof SpreadsheetApp==='undefined')return !!AUTH.prototypeMode;
-  const raw=String(getSettingsMap_().PROTOTYPE_MODE||'').trim().toUpperCase();
+function prototypeSettingEnabled_(value) {
+  const raw=String(value==null?'':value).trim().toUpperCase();
   if(['FALSE','0','OFF'].includes(raw))return false;
   if(['TRUE','1','ON'].includes(raw))return true;
   return !!AUTH.prototypeMode;
+}
+
+function prototypeModeEnabledForEnvironment_(value, environment) {
+  return prototypeSettingEnabled_(value) && normalizeRuntimeEnvironment_(environment)!=='PRODUCTION';
+}
+
+function isPrototypeConfigured_() {
+  if(typeof SpreadsheetApp==='undefined')return !!AUTH.prototypeMode;
+  return prototypeSettingEnabled_(getSettingsMap_().PROTOTYPE_MODE);
+}
+
+function isPrototypeMode_() {
+  if(!isPrototypeConfigured_())return false;
+  if(typeof PropertiesService==='undefined')return false;
+  return prototypeModeEnabledForEnvironment_('TRUE',getRuntimeEnvironment_());
 }
 
 function isPrototypeLogin_(record, pin) {
@@ -181,11 +202,17 @@ function isPrototypeLogin_(record, pin) {
 
 function resumeSession(sessionToken) {
   const session = requireSession_(sessionToken);
-  return {
+  const result = {
     ok: true,
     mustChangePin: session.employee.mustChangePin,
     user: publicEmployee_(session.employee)
   };
+  try {
+    result.initialData = buildInitialDataForEmployee_(session.employee);
+  } catch (e) {
+    console.warn('resume bootstrap preload failed', e);
+  }
+  return result;
 }
 
 function logout(sessionToken) {
@@ -326,66 +353,52 @@ function requestPinHelp(employeeId, note, clientInfo) {
     };
   });
 }
-function getAuthAdminData(sessionToken) {
+function getAuthAdminData(sessionToken, scope) {
   const session = requireAdminSession_(sessionToken);
-  const sheet = getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow = sheet.getLastRow();
-  const employees = [];
-  if (lastRow >= 2) {
-    const rows = sheet.getRange(2, 1, lastRow - 1, 23).getDisplayValues();
-    rows.forEach((r, i) => {
-      if (!r[0]) return;
-      employees.push({
-        employeeId: r[0],
-        name: r[1],
-        displayName: r[2] || r[1],
-        department: r[3] || '',
-        title: r[4] || '',
-        role: r[5] || 'USER',
-        active: r[6] === '在籍',
-        workStart: r[7] || '09:00',
-        workEnd: r[8] || '18:00',
-        breakMinutes: Number(r[9] || 60),
-        leaveBalance: Number(r[10] || 0),
-        leaveBalanceConfigured: String(r[10] || '').trim() !== '',
-        email: r[11] || '',
-        note: r[12] || '',
-        pinConfigured: !!r[14],
-        mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
-        failures: Number(r[16] || 0),
-        lockedUntil: r[17] || '',
-        lastLogin: r[18] || '',
-        authState: r[20] || '',
-        payrollIncluded: String(r[22]).toUpperCase() === 'TRUE'
-      });
-    });
-  }
-  const resetSheet = getDb_().getSheetByName(AUTH.resetSheet);
-  const resetLastRow = resetSheet.getLastRow();
-  const resetRequests = resetLastRow < 2 ? [] : resetSheet.getRange(2, 1, resetLastRow - 1, 9).getDisplayValues()
-    .filter(r => r[0])
-    .slice(-50)
-    .reverse()
-    .map(r => ({
-      requestId: r[0],
-      requestedAt: r[1],
-      employeeId: r[2],
-      name: r[3],
-      status: r[4],
-      note: r[5],
-      handledBy: r[6],
-      handledAt: r[7]
-    }));
-  return {
-    employees: employees,
-    projects: getProjectsInternal_(true),
-    resetRequests: resetRequests,
-    support: getSupportConfig_(),
-    prototypeMode: isPrototypeMode_(),
-    currentUser: publicEmployee_(session.employee)
-  };
-}
+  const mode=['people','auth','projects'].includes(String(scope||''))?String(scope):'auth';
+  const result={scope:mode};
 
+  if(mode==='people'||mode==='auth'){
+    const sheet = getDb_().getSheetByName(DB.sheets.employees);
+    const lastRow = sheet.getLastRow();
+    const employees = [];
+    if (lastRow >= 2) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 26).getDisplayValues();
+      rows.forEach(r => {
+        if (!r[0]) return;
+        employees.push({
+          employeeId:r[0], name:r[1], displayName:r[2]||r[1], department:r[3]||'', title:r[4]||'',
+          role:r[5]||'USER', active:r[6]==='在籍', workStart:r[7]||'09:00', workEnd:r[8]||'18:00',
+          breakMinutes:Number(r[9]||60), leaveBalance:Number(r[10]||0), leaveBalanceConfigured:String(r[10]||'').trim()!=='',
+          email:r[11]||'', note:r[12]||'', pinConfigured:!!r[14], mustChangePin:String(r[15]).toUpperCase()==='TRUE',
+          failures:Number(r[16]||0), lockedUntil:r[17]||'', lastLogin:r[18]||'', authState:r[20]||'',
+          payrollIncluded:String(r[22]).toUpperCase()==='TRUE', managerId:r[23]||'', leaveBasisDate:r[24]||'', hireDate:r[25]||''
+        });
+      });
+    }
+    result.employees=employees;
+  }
+
+  if(mode==='projects'){
+    result.projects=getProjectsInternal_(true);
+  }
+
+  if(mode==='auth'){
+    const resetSheet = getDb_().getSheetByName(AUTH.resetSheet);
+    const resetLastRow = resetSheet.getLastRow();
+    result.resetRequests = resetLastRow < 2 ? [] : resetSheet.getRange(Math.max(2,resetLastRow-49),1,Math.min(50,resetLastRow-1),9).getDisplayValues()
+      .filter(r => r[0])
+      .reverse()
+      .map(r => ({
+        requestId:r[0], requestedAt:r[1], employeeId:r[2], name:r[3], status:r[4], note:r[5], handledBy:r[6], handledAt:r[7]
+      }));
+    result.support=getSupportConfig_();
+    result.prototypeMode=isPrototypeConfigured_();
+    result.prototypeAccessEffective=isPrototypeMode_();
+    result.currentUser=publicEmployee_(session.employee);
+  }
+  return result;
+}
 function adminSetTemporaryPin(sessionToken, targetEmployeeId, temporaryPin) {
   const admin = requireAdminSession_(sessionToken).employee;
   return withScriptLock_(function() {
@@ -553,7 +566,6 @@ function requireAdminSession_(sessionToken) {
 }
 
 function createSession_(employee, clientInfo, rememberSession) {
-  cleanupExpiredSessions_();
   const config = getAuthConfig_();
   const now = new Date();
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -579,19 +591,28 @@ function createSession_(employee, clientInfo, rememberSession) {
   return token;
 }
 
+function sessionRowsToDelete_(rows, now) {
+  const current=now instanceof Date?now:new Date(now);
+  return (rows||[]).map((r,i)=>{
+    const status=String(r[7]||'');
+    const absoluteExpiry=parseTimestamp_(r[4]);
+    const inactive=status!=='ACTIVE'||(absoluteExpiry&&absoluteExpiry<=current);
+    return inactive?i+2:0;
+  }).filter(Boolean);
+}
+
 function cleanupExpiredSessions_() {
-  const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
-  const now = new Date();
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i];
-    const status = r[7] || '';
-    const absoluteExpiry = parseTimestamp_(r[4]);
-    const inactive = status !== 'ACTIVE' || (absoluteExpiry && absoluteExpiry <= now);
-    if (inactive) sheet.deleteRow(i + 2);
+  const sheet=getDb_().getSheetByName(AUTH.sessionSheet);
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return 0;
+  const rows=sheet.getRange(2,1,lastRow-1,11).getValues();
+  const rowNumbers=sessionRowsToDelete_(rows,new Date());
+  const blocks=contiguousRowBlocks_(rowNumbers);
+  for(let i=blocks.length-1;i>=0;i--){
+    const block=blocks[i];
+    sheet.deleteRows(block.start,block.end-block.start+1);
   }
+  return rowNumbers.length;
 }
 
 function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
@@ -599,13 +620,13 @@ function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
   const rows = sheet.getRange(2, 1, lastRow - 1, 11).getDisplayValues();
-  rows.forEach((r, idx) => {
-    const rowNumber = idx + 2;
-    if (rowNumber === exceptRowNumber) return;
-    if (r[2] === employeeId && r[7] === 'ACTIVE') {
-      sheet.getRange(rowNumber, 8).setValue('REVOKED');
-    }
+  const targets=[];
+  rows.forEach((r,idx)=>{
+    const rowNumber=idx+2;
+    if(rowNumber===exceptRowNumber)return;
+    if(r[2]===employeeId&&r[7]==='ACTIVE')targets.push('H'+rowNumber);
   });
+  if(targets.length)sheet.getRangeList(targets).setValue('REVOKED');
 }
 
 function getEmployeeAuthRecord_(employeeId) {
@@ -613,36 +634,36 @@ function getEmployeeAuthRecord_(employeeId) {
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 23).getDisplayValues();
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (r[0] !== id) continue;
-    return {
-      rowNumber: i + 2,
-      employeeId: r[0],
-      name: r[1],
-      displayName: r[2] || r[1],
-      department: r[3] || '',
-      title: r[4] || '',
-      role: r[5] || 'USER',
-      active: r[6] === '在籍',
-      leaveBalance: Number(r[10] || 0),
-      leaveBalanceConfigured: String(r[10] || '').trim() !== '',
-      email: r[11] || '',
-      pinSalt: r[13] || '',
-      pinHash: r[14] || '',
-      mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
-      failures: Number(r[16] || 0),
-      lockUntil: r[17] || '',
-      lastLogin: r[18] || '',
-      pinUpdatedAt: r[19] || '',
-      authState: r[20] || '',
-      payrollIncluded: String(r[22]).toUpperCase() === 'TRUE'
-    };
-  }
-  return null;
+  const found=sheet.getRange(2,1,lastRow-1,1).createTextFinder(id).matchEntireCell(true).findNext();
+  if(!found)return null;
+  const rowNumber=found.getRow();
+  const r=sheet.getRange(rowNumber,1,1,26).getDisplayValues()[0];
+  return {
+    rowNumber: rowNumber,
+    employeeId: r[0],
+    name: r[1],
+    displayName: r[2] || r[1],
+    department: r[3] || '',
+    title: r[4] || '',
+    role: r[5] || 'USER',
+    active: r[6] === '在籍',
+    leaveBalance: Number(r[10] || 0),
+    leaveBalanceConfigured: String(r[10] || '').trim() !== '',
+    email: r[11] || '',
+    pinSalt: r[13] || '',
+    pinHash: r[14] || '',
+    mustChangePin: String(r[15]).toUpperCase() === 'TRUE',
+    failures: Number(r[16] || 0),
+    lockUntil: r[17] || '',
+    lastLogin: r[18] || '',
+    pinUpdatedAt: r[19] || '',
+    authState: r[20] || '',
+    payrollIncluded: String(r[22]).toUpperCase() === 'TRUE',
+    managerId: r[23] || '',
+    leaveBasisDate: r[24] || '',
+    hireDate: r[25] || ''
+  };
 }
-
 function setEmployeePin_(record, pin, mustChange) {
   const salt = Utilities.getUuid().replace(/-/g, '');
   const nowText = toTimestamp_(new Date());
@@ -677,10 +698,16 @@ function updateEmployeeAuthCells_(rowNumber, values) {
     authState: 21,
     permissionDetail: 22
   };
-  Object.keys(values).forEach(key => {
-    if (!mapping[key]) return;
-    sheet.getRange(rowNumber, mapping[key]).setValue(values[key]);
+  const range=sheet.getRange(rowNumber,14,1,9);
+  const row=range.getValues()[0];
+  let changed=false;
+  Object.keys(values).forEach(key=>{
+    const column=mapping[key];
+    if(!column)return;
+    row[column-14]=values[key];
+    changed=true;
   });
+  if(changed)range.setValues([row]);
 }
 
 function hasAnyPinConfigured_() {
@@ -714,17 +741,23 @@ function getSupportConfig_() {
 }
 
 function getSettingsMap_() {
+  const cacheKey='fm:settings:v2';
+  const cached=cacheJsonGet_(cacheKey);
+  if(cached)return cached;
   const sheet = getDb_().getSheetByName(AUTH.settingsSheet);
   const lastRow = sheet.getLastRow();
   const map = {};
-  if (lastRow < 2) return map;
-  sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues().forEach(r => {
-    if (r[0]) map[r[0]] = r[1];
-  });
+  if (lastRow >= 2) {
+    sheet.getRange(2, 1, lastRow - 1, 2).getDisplayValues().forEach(r => {
+      if (r[0]) map[r[0]] = r[1];
+    });
+  }
+  cacheJsonPut_(cacheKey,map,90);
   return map;
 }
 
 function saveSettings_(values) {
+  cacheRemove_('fm:settings:v2');
   const sheet = getDb_().getSheetByName(AUTH.settingsSheet);
   const lastRow = sheet.getLastRow();
   const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues() : [];

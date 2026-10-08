@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md'
+  'src/appsscript.json','src/Code.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -15,13 +15,14 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const app = fs.readFileSync(path.join(root,'src/App.html'),'utf8');
+const clientFiles=['AppCore.html','AppOperations.html','AppPeopleMonthly.html','AppAdmin.html','AppShell.html'];
+const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
 }
 try {
-  const js = app.replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+  const js = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
   const temp = path.join(os.tmpdir(), 'fmworks-app-check.js');
   fs.writeFileSync(temp, js);
   execFileSync(process.execPath, ['--check', temp], { stdio: 'pipe' });
@@ -30,7 +31,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -39,8 +40,49 @@ for (const serverFile of ['Code.gs','Auth.gs','Worklog.gs','Requests.gs','Monthl
     failed = true;
   }
 }
+const tinyFontMatches=[...styles.matchAll(/font-size\\s*:\\s*(\\d+(?:\\.\\d+)?)px/g)].filter(m=>Number(m[1])<11);
+if(tinyFontMatches.length){
+  console.error('Readable type gate failed: font-size below 11px remains: '+tinyFontMatches.slice(0,8).map(m=>m[0]).join(', '));
+  failed=true;
+}
+for(const marker of [
+  'function updateLiveWorkedNodes()',
+  'data-live-worked',
+  "content.classList.toggle('one-screen',state.page==='home')",
+  'function trapModalFocus_(',
+  "e.key==='Tab'&&trapModalFocus_(e)",
+  "class='day-open'",
+  "<button type='button' class='agenda-item'"
+]){
+  if(!app.includes(marker)){console.error('Usability/a11y hardening marker missing: '+marker);failed=true;}
+}
+const tickerStart=app.indexOf('function startLiveAttendanceTicker()');
+const tickerEnd=app.indexOf('\nfunction ',tickerStart+20);
+const tickerBlock=tickerStart>=0?(tickerEnd>tickerStart?app.slice(tickerStart,tickerEnd):app.slice(tickerStart)):'';
+if(!tickerBlock.includes('updateLiveWorkedNodes()')||tickerBlock.includes('renderPage()')){
+  console.error('Live attendance ticker must update only live-worked DOM nodes.');
+  failed=true;
+}
+
 const serverCode = fs.readFileSync(path.join(root,'src/Code.gs'),'utf8');
 const authCode = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
+const maintenanceCodeForUi = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
+const createSessionStart=authCode.indexOf('function createSession_(');
+const createSessionEnd=authCode.indexOf('\nfunction ',createSessionStart+10);
+const createSessionBlock=createSessionStart>=0?(createSessionEnd>createSessionStart?authCode.slice(createSessionStart,createSessionEnd):authCode.slice(createSessionStart)):'';
+if(createSessionBlock.includes('cleanupExpiredSessions_(')){
+  console.error('Login path must not run session garbage collection.');
+  failed=true;
+}
+if(!authCode.includes('function sessionRowsToDelete_(')||!authCode.includes('sheet.deleteRows(block.start,block.end-block.start+1)')){
+  console.error('Batched session garbage collection is missing.');
+  failed=true;
+}
+if(!maintenanceCodeForUi.includes('const cleanedSessions=cleanupExpiredSessions_();')){
+  console.error('Scheduled maintenance must run session garbage collection.');
+  failed=true;
+}
+
 for (const requiredPermissionMarker of [
   "assertPermission_(employee, 'companyCalendarEdit')",
   "COMPANY_CALENDAR_EDIT_ROLES"
@@ -56,6 +98,203 @@ for (const requiredUiMarker of ['canEditCompanyCalendar', '閲覧専用']) {
     failed = true;
   }
 }
+const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'),'utf8');
+const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
+const laborCodeText = fs.readFileSync(path.join(root,'src/Labor.gs'),'utf8');
+const schemaCodeText = fs.readFileSync(path.join(root,'src/Schema.gs'),'utf8');
+const dataAccessCodeText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
+const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
+const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
+const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
+const maintenanceCodeText = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
+const notificationCodeText = fs.readFileSync(path.join(root,'src/Notifications.gs'),'utf8');
+const deployWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/deploy.yml'),'utf8');
+const ciWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+
+for (const marker of [
+  'const canApproveRequests = !!getPermissions_(employee).requestApprove',
+  'const requestIds=canApproveRequests?',
+  'readRowsByColumnValues_(requestSheet,3,19,requestIds)'
+]) {
+  if (!notificationCodeText.includes(marker)) {
+    console.error('Manager approval notification scope missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'function annualLeavePeriodEnd_(',
+  'function annualLeaveQualifyingUsage_(',
+  'function getAnnualLeaveFiveDayStatus_(',
+  'function getLeaveLedger(sessionToken, employeeId)'
+]) {
+  if (!leaveLedgerCodeText.includes(marker)) {
+    console.error('Annual leave five-day monitor missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'openLeaveLedgerModal',
+  'postLeaveLedgerEntry',
+  '年次有給休暇管理簿'
+]) {
+  if (!app.includes(marker)) {
+    console.error('Annual leave ledger UI missing: ' + marker);
+    failed = true;
+  }
+}
+if (!notificationCodeText.includes("type:'年休5日'")) {
+  console.error('Annual leave five-day notification is missing.');
+  failed = true;
+}
+
+for (const marker of [
+  'function managerAssignmentCreatesCycle_(',
+  'function assertManagerRoleChangeSafe_(',
+  'function getActiveDirectReports_(',
+  'assertManagerAssignmentAcyclic_(employeeId,managerId)'
+]) {
+  if (!employeeCodeText.includes(marker)) {
+    console.error('Approval graph integrity guard missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  "calendar.some(d=>d.type==='法定休日')",
+  'function compareBackupShape_(',
+  'function verifyDatabaseBackupCopy_(',
+  "lastBackupVerifiedProperty: 'FM_WORKS_LAST_BACKUP_VERIFIED'"
+]) {
+  if (!maintenanceCodeText.includes(marker)) {
+    console.error('Production/backup integrity gate missing: ' + marker);
+    failed = true;
+  }
+}
+if (!deployWorkflowText.includes('node scripts/test_client_contract.mjs')) {
+  console.error('Deploy workflow must run client contract tests before deployment.');
+  failed = true;
+}
+for (const workflow of [deployWorkflowText,ciWorkflowText]) {
+  if (!workflow.includes('actions/checkout@v5') || !workflow.includes('actions/setup-node@v6') || !workflow.includes("node-version: '24'")) {
+    console.error('GitHub Actions workflow must use Node 24-compatible action/runtime versions.');
+    failed = true;
+  }
+}
+for (const unlabeledClose of [
+  "<button class='icon-button' onclick='closeModal()'>×</button>",
+  '<button class="icon-button" onclick="closeModal()">×</button>'
+]) {
+  if (app.includes(unlabeledClose)) {
+    console.error('Modal close icon button is missing an accessible label.');
+    failed = true;
+  }
+}
+
+for (const marker of [
+  "requestApprove: role === 'ADMIN' || role === 'MANAGER'",
+  'function canManageEmployeeRecord_(',
+  'managerId: r[23]',
+  "const allowedRoles = ['USER','CALENDAR_EDITOR','MANAGER','ADMIN']"
+]) {
+  if (!(serverCode + employeeCodeText + authCode).includes(marker)) {
+    console.error('Approval hierarchy marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!requestCodeText.includes('申請者本人は承認できません。別の承認者へ依頼してください。')) {
+  console.error('Self-approval guard is missing.');
+  failed = true;
+}
+const approveBlockStart=requestCodeText.indexOf('function approveRequest(');
+const approveBlockEnd=requestCodeText.indexOf('\nfunction ',approveBlockStart+10);
+const approveBlock=approveBlockStart>=0?(approveBlockEnd>approveBlockStart?requestCodeText.slice(approveBlockStart,approveBlockEnd):requestCodeText.slice(approveBlockStart)):'';
+if (!approveBlock.includes('requireSession_(sessionToken)') || approveBlock.includes('requireAdminSession_(sessionToken)') || !approveBlock.includes('assertCanApproveRequest_')) {
+  console.error('Approval API must use scoped approver authorization instead of ADMIN-only authorization.');
+  failed = true;
+}
+
+for (const marker of [
+  'monthlySnapshot',
+  'monthlySnapshotDaily'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('Monthly snapshot DB mapping missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  'function persistMonthlyCloseSnapshots_(',
+  'function getMonthlySnapshotSummaries_(',
+  'function getMonthlySummaryForExport_(',
+  'Utilities.DigestAlgorithm.SHA_256'
+]) {
+  if (!snapshotCodeText.includes(marker)) {
+    console.error('Monthly close snapshot marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!monthlySnapshotMainCode.includes('persistMonthlyCloseSnapshots_(ym,summaries,admin)') ||
+    !monthlySnapshotMainCode.includes('snapshotId') ||
+    !monthlySnapshotMainCode.includes('給与対象の一括出力は月次締め後に実行してください。')) {
+  console.error('Monthly close must persist immutable snapshots and exports must use closed data.');
+  failed = true;
+}
+
+for (const marker of [
+  'function getLeaveLedgerState_(',
+  'function consumeLeaveBalance_(',
+  'function restoreLeaveBalance_(',
+  'function postLeaveLedgerEntry('
+]) {
+  if (!leaveLedgerCodeText.includes(marker)) {
+    console.error('Leave ledger marker missing: ' + marker);
+    failed = true;
+  }
+}
+if (!requestCodeText.includes('function requestApprovedCancellation(') ||
+    !requestCodeText.includes('function decideApprovedCancellation(') ||
+    !requestCodeText.includes("status==='取消申請中'") && !app.includes("status==='取消申請中'")) {
+  console.error('Approved request cancellation workflow is incomplete.');
+  failed = true;
+}
+if (!authCode.includes('leaveBasisDate: r[24]') || !authCode.includes('hireDate: r[25]')) {
+  console.error('Employee leave basis/hire dates are not persisted.');
+  failed = true;
+}
+
+for (const marker of ['function getLaborRuleConfig_(','function saveLaborRuleConfig(','function applyLaborModelToMonthlyDaily_(','monthlyOvertimePrincipleMinutes:2700','nightStartMinutes:1320']) {
+  if (!laborCodeText.includes(marker)) { console.error('Labor model marker missing: '+marker); failed=true; }
+}
+if (!serverCode.includes("'法定休日'") || !app.includes("'法定休日'")) { console.error('Statutory holiday calendar type missing.'); failed=true; }
+if (!monthlySnapshotMainCode.includes('applyLaborModelToMonthlyDaily_') || !monthlySnapshotMainCode.includes('laborBlocked=summaries.filter')) { console.error('Monthly labor gate missing.'); failed=true; }
+if (!app.includes('function laborRulePanel(') || !app.includes('function saveLaborRulesFromAdmin(')) { console.error('Labor UI missing.'); failed=true; }
+
+if (!serverCode.includes('function auditJson_(') ||
+    !serverCode.includes('before: auditBefore') ||
+    !fs.readFileSync(path.join(root,'src/Worklog.gs'),'utf8').includes('before: auditBefore') ||
+    !fs.readFileSync(path.join(root,'src/Projects.gs'),'utf8').includes('before = auditJson_') ||
+    !fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8').includes('before:existingEmployee ? auditJson_')) {
+  console.error('Structured before/after audit evidence is incomplete for important update flows.');
+  failed = true;
+}
+
+for (const marker of ['const DB_SCHEMA_VERSION = 9','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+  if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
+}
+if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
+  console.error('Schema status must block production readiness and be repairable from admin UI.');
+  failed=true;
+}
+
+for (const marker of ['function readRowsByDateRange_(','function dateRangeRegex_(','function logPerformance_(','PERFORMANCE_BUDGETS']) {
+  if (!dataAccessCodeText.includes(marker)) { console.error('Data access marker missing: '+marker); failed=true; }
+}
+if (!serverCode.includes('readRowsByDateRange_(sheet,4,12,startDate,endDate)') ||
+    !serverCode.includes('readRowsByDateRange_(sheet,1,10,start,end)') ||
+    !monthlySnapshotMainCode.includes('readRowsByDateRange_(worklogSheet,2,15,start,end)')) {
+  console.error('Date-scoped reads are not wired into high-volume flows.');
+  failed=true;
+}
+
 for (const authMarker of [
   'function login(',
   'function requireSession_(',
@@ -130,6 +369,72 @@ if (!initialDataBlock) {
     failed = true;
   }
 }
+const dataAccessText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
+const authPerfText = fs.readFileSync(path.join(root,'src/Auth.gs'),'utf8');
+const worklogPerfText = fs.readFileSync(path.join(root,'src/Worklog.gs'),'utf8');
+const monthlyPerfText = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
+
+for (const marker of [
+  'function cacheJsonGet_(',
+  'function cacheJsonPut_(',
+  'CacheService.getScriptCache()',
+  'function readRowsByColumnValues_('
+]) {
+  if (!dataAccessText.includes(marker)) {
+    console.error('Server cache/index performance primitive missing: ' + marker);
+    failed = true;
+  }
+}
+const homeOverviewStart=serverCode.indexOf('function getHomeOverview(sessionToken)');
+const homeOverviewEnd=serverCode.indexOf('\nfunction ',homeOverviewStart+20);
+const homeOverviewBlock=homeOverviewStart>=0&&homeOverviewEnd>homeOverviewStart?serverCode.slice(homeOverviewStart,homeOverviewEnd):'';
+if(homeOverviewBlock.includes('getMonthlySummary(')){
+  console.error('Home overview must not invoke full monthly summary.');
+  failed=true;
+}
+for (const marker of [
+  'function buildInitialDataForEmployee_(',
+  'function getHomeMonthStats_(',
+  'function getScheduleBundleForViewer_(',
+  'readRowsByDateRange_(sheet,2,18,start,end)',
+  "cacheJsonPut_(cacheKey,employees,120)",
+  'function getAttendanceContext_(',
+  'buildAttendanceStateFromRows_(dateText,nextRows)'
+]) {
+  if (!serverCode.includes(marker)) {
+    console.error('v0.10.5 response optimization missing: ' + marker);
+    failed = true;
+  }
+}
+for (const marker of [
+  "const cacheKey='fm:settings:v2'",
+  'cacheJsonGet_(cacheKey)',
+  'createTextFinder(id).matchEntireCell(true).findNext()',
+  'result.initialData = buildInitialDataForEmployee_(session.employee)'
+]) {
+  if (!authPerfText.includes(marker)) {
+    console.error('Authentication fast-path missing: ' + marker);
+    failed = true;
+  }
+}
+if (!worklogPerfText.includes('projects:includeProjects?getProjectsInternal_(false):[]')) {
+  console.error('Worklog must lazy-load projects with its own page bundle.');
+  failed = true;
+}
+for (const marker of [
+  'readRowsByDateRange_(sheet,1,16,start,end)',
+  'readRowsByColumnValues_(sheet,3,19,[employeeId])'
+]) {
+  if (!monthlyPerfText.includes(marker)) {
+    console.error('Monthly indexed-read optimization missing: ' + marker);
+    failed = true;
+  }
+}
+if (!app.includes('includeEmployees:false') || !app.includes('includeProjects:true')) {
+  console.error('Client page bundles must avoid redundant master-data reads.');
+  failed = true;
+}
+
 for (const performanceServerMarker of [
   'function getHomeOverview(sessionToken)',
   'getPendingRequestCount_(employee)',
@@ -167,12 +472,106 @@ if (!app.includes("if(options.force)state.homeOverview.reloadRequested=true") ||
   console.error('Home overview refresh must survive overlapping force reloads without stale overwrite.');
   failed = true;
 }
-if (!app.includes("state.adminTab==='operation'))loadMaintenance")) {
-  console.error('Admin data load must not fetch maintenance outside the operation tab.');
+if (!app.includes("if(tab==='operation')loadMaintenance()")) {
+  console.error('Operation tab must load maintenance directly.');
   failed = true;
 }
-if (!app.includes("scheduleIdleTask(()=>loadNotifications(),900)") || !app.includes("scheduleIdleTask(()=>loadHomeOverview(),420)")) {
-  console.error('Authenticated startup must stage noncritical calls after first paint.');
+const adminTabStart=app.indexOf('function setAdminTab(tab)');
+const adminTabEnd=app.indexOf('\nfunction ',adminTabStart+20);
+const adminTabBlock=adminTabStart>=0&&adminTabEnd>adminTabStart?app.slice(adminTabStart,adminTabEnd):'';
+if(adminTabBlock.includes("if(tab==='operation'){loadAuthAdmin")){
+  console.error('Operation tab must not fetch unrelated authentication/admin master data.');
+  failed=true;
+}
+for (const marker of [
+  "function authAdminScope_(",
+  "function authAdminCacheName_(",
+  "getAuthAdminData(state.sessionToken,scope)",
+  "loadAuthAdmin({scope:'people'})",
+  "loadAuthAdmin({scope:'projects'})"
+]) {
+  if(!app.includes(marker)){
+    console.error('Scoped admin loading missing: '+marker);
+    failed=true;
+  }
+}
+if(!authCode.includes('function getAuthAdminData(sessionToken, scope)') ||
+   !authCode.includes("['people','auth','projects']") ||
+   !authCode.includes("if(mode==='projects')") ||
+   !authCode.includes("if(mode==='auth')")){
+  console.error('Server admin payload must be scoped to the active view.');
+  failed=true;
+}
+for (const marker of [
+  'function scheduleBackgroundTask(',
+  'function prefetchRouteOnIntent(',
+  'function queueRoutePrefetch(',
+  'User intent gets priority over background GAS calls',
+  'scheduleBackgroundTask(()=>loadNotifications(),2400)',
+  'function mountAuthenticatedApp(',
+  'result&&result.initialData||null'
+]) {
+  if (!app.includes(marker)) {
+    console.error('Perceived-performance startup guard missing: ' + marker);
+    failed = true;
+  }
+}
+const prefetchStart=app.indexOf('function startMenuPrefetch()');
+const prefetchEnd=app.indexOf('\nfunction ',prefetchStart+20);
+const prefetchBlock=prefetchStart>=0&&prefetchEnd>prefetchStart?app.slice(prefetchStart,prefetchEnd):'';
+for (const forbidden of ['loadSchedule({silent:true})','loadWorklogs({silent:true})','loadRequests({silent:true})','loadMonthly({silent:true})','loadCompanyCalendar(undefined,{silent:true})','loadAuthAdmin({silent:true})']) {
+  if(prefetchBlock.includes(forbidden)){
+    console.error('Eager multi-page prefetch must stay disabled: '+forbidden);
+    failed=true;
+  }
+}
+
+for (const attendanceMarker of [
+  "function loadAttendancePreview(",
+  "function attendanceTimeline(",
+  "function attendanceMonthCalendar(",
+  "function attendanceRecentHistory(",
+  "attendance-top-grid",
+  "attendance-bottom-grid"
+]) {
+  if (!(app + styles).includes(attendanceMarker)) {
+    console.error('Attendance workspace redesign marker missing: ' + attendanceMarker);
+    failed = true;
+  }
+}
+if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
+    !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
+  console.error('Nested workspace deep links must survive authenticated bootstrap.');
+  failed = true;
+}
+for (const iaMarker of [
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['admin','管理','i-gear']]",
+  "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
+  "function primaryNavIdForPage(page)",
+  "if(page==='monthly')return 'attendance'",
+  "if(page==='companyCalendar')return 'schedule'",
+  "if(page==='people')return 'admin'",
+  "function attendanceWorkspaceTabs(activeId)",
+  "function scheduleWorkspaceTabs(activeId)"
+]) {
+  if (!app.includes(iaMarker)) {
+    console.error('Information architecture marker missing: ' + iaMarker);
+    failed = true;
+  }
+}
+const navDeclaration=(app.match(/const NAV = \[[^\n]+/)||[''])[0];
+for (const forbiddenTopRoute of ["['companyCalendar','会社カレンダー'","['people','社員'","['monthly','月次'","['admin','設定'"]) {
+  if (navDeclaration.includes(forbiddenTopRoute)) {
+    console.error('Legacy top-level navigation must stay removed: ' + forbiddenTopRoute);
+    failed = true;
+  }
+}
+if (!app.includes("settingsTabs('people')") || !app.includes("['people','社員・権限']")) {
+  console.error('Employee administration must live under the 管理 workspace.');
+  failed = true;
+}
+if (!styles.includes('.workspace-tabs') || !styles.includes('.nav-button[data-route="admin"]')) {
+  console.error('New workspace navigation styles are missing.');
   failed = true;
 }
 
@@ -212,8 +611,35 @@ if (!styles.includes('.request-form-error.show{display:grid}')) {
   console.error('Request errors must render inside the request modal.');
   failed = true;
 }
+const punchStart=serverCode.indexOf('function recordPunch(sessionToken');
+const punchEnd=serverCode.indexOf('\nfunction ',punchStart+20);
+const punchBlock=punchStart>=0&&punchEnd>punchStart?serverCode.slice(punchStart,punchEnd):'';
+if(punchBlock.includes('SpreadsheetApp.flush()')){
+  console.error('Punch fast-path must not force SpreadsheetApp.flush().');
+  failed=true;
+}
+if((punchBlock.match(/getAttendanceState_\(/g)||[]).length>0){
+  console.error('Punch fast-path must not re-read attendance after writing.');
+  failed=true;
+}
+
 if (serverCode.includes('return getInitialData(sessionToken);')) {
   console.error('Punch writes must not block on a full application reload.');
+  failed = true;
+}
+for (const schedulePrivacyMarker of [
+  'function normalizeScheduleVisibility_(',
+  'function canViewScheduleRow_(',
+  "['社内','参加者のみ','管理者のみ']",
+  'canViewScheduleRow_(viewer,r)'
+]) {
+  if (!serverCode.includes(schedulePrivacyMarker)) {
+    console.error('Schedule privacy enforcement missing: ' + schedulePrivacyMarker);
+    failed = true;
+  }
+}
+if (!fs.readFileSync(path.join(root,'src/Search.gs'),'utf8').includes('canViewScheduleRow_(session.employee,r)')) {
+  console.error('Global search must respect schedule visibility.');
   failed = true;
 }
 for (const scheduleIdentityMarker of [
@@ -260,7 +686,7 @@ for (const compactLoginMarker of [
   "document.body.classList.add('login-mode')",
   "document.body.classList.remove('login-mode')",
   "prototypeMode?'試作版ログイン'",
-  "cfg.prototypeMode?escapeHtml(cfg.prototypePin||'000000')",
+  "試作環境です。ログイン用PINは開発管理者から案内されたものを入力してください。",
   "function getStoredSessionToken()",
   "localStorage.getItem('fmworks.session')",
   "この端末でログイン状態を保持する（30日）"
@@ -347,6 +773,7 @@ for (const requiredMaintenanceMarker of [
   'function getAuditLogs(sessionToken',
   'function createManualBackup(sessionToken)',
   'function setDailyBackupEnabled(sessionToken',
+  'function installDailyBackupTrigger(sessionToken)',
   "autoBackupProperty: 'FM_WORKS_AUTO_BACKUP'",
   'function ensureDailyBackup(sessionToken)',
   'function getProductionReadiness_()',
@@ -376,12 +803,37 @@ for (const holidayMarker of [
     failed = true;
   }
 }
-if (maintenanceCode.includes('ScriptApp.newTrigger') || maintenanceCode.includes('getProjectTriggers')) {
-  console.error('Maintenance must not require installable-trigger authorization in zero-touch deployment.');
-  failed = true;
+for (const backupTriggerMarker of [
+  "backupTriggerHandler: 'scheduledDailyMaintenance_'",
+  'function scheduledDailyMaintenance_()',
+  'function installDailyBackupTrigger(sessionToken)',
+  'ScriptApp.newTrigger(MAINTENANCE.backupTriggerHandler)',
+  '.atHour(3)',
+  'getProjectTriggers()'
+]) {
+  if (!maintenanceCode.includes(backupTriggerMarker)) {
+    console.error('Scheduled backup implementation missing: ' + backupTriggerMarker);
+    failed = true;
+  }
 }
 if (requestCode.includes('setValue(true)') && requestCode.includes('修正対象')) {
   console.error('Punch correction must not mutate the original punch row.');
+  failed = true;
+}
+for (const runtimeMarker of [
+  'function normalizeRuntimeEnvironment_(',
+  'function getRuntimeEnvironment_(',
+  'FM_WORKS_ENVIRONMENT',
+  'PRODUCTION環境では FM_WORKS_DB_ID',
+  'PRODUCTION環境ではSTAGING既定DBを使用できません'
+]) {
+  if (!serverCode.includes(runtimeMarker)) {
+    console.error('Runtime environment boundary missing: ' + runtimeMarker);
+    failed = true;
+  }
+}
+if (!maintenanceCode.includes("runtime.environment!=='PRODUCTION'")) {
+  console.error('Production readiness must reject non-production runtime.');
   failed = true;
 }
 if (!app.includes('generateCompanyCalendarYear')) {
@@ -451,7 +903,7 @@ for (const integrationMarker of [
   "projects: 'プロジェクト'",
   "monthlyClose: '月次締め'",
   "monthlyReview: '月次確認'",
-  'projects: getProjectsInternal_(false)'
+  'projects: []'
 ]) {
   if (!serverCode.includes(integrationMarker)) {
     console.error(`Project master integration missing: ${integrationMarker}`);
@@ -548,14 +1000,13 @@ for (const [label, doc] of [['要件定義書',requirementsDoc],['技術設計�
   }
 }
 
-for (const marker of [
-  "monthlyReview: '月次確認'",
-  'getMonthlyReviewPrompt_(employee.employeeId)'
-]) {
-  if (!serverCode.includes(marker)) {
-    console.error('Monthly review integration missing: ' + marker);
-    failed = true;
-  }
+if (!serverCode.includes("monthlyReview: '月次確認'")) {
+  console.error("Monthly review integration missing: monthlyReview sheet mapping");
+  failed = true;
+}
+if (!notificationCodeText.includes('getMonthlyReviewPrompt_(employee.employeeId)')) {
+  console.error('Monthly review notification integration missing.');
+  failed = true;
 }
 
 for (const marker of [
@@ -570,6 +1021,30 @@ for (const marker of [
 ]) {
   if (!monthlyCode.includes(marker)) {
     console.error('Monthly review implementation missing: ' + marker);
+    failed = true;
+  }
+}
+
+for (const laborHistoryMarker of [
+  'annualOvertimePrincipleMinutes:21600',
+  'specialAnnualOvertimeLimitMinutes:43200',
+  'specialMultiMonthAverageLimitMinutes:4800',
+  'specialExcessMonthLimit:6',
+  'function normalizeLaborAgreementStartMonth_(',
+  'function normalizeLaborSpecialClause_(',
+  'function getClosedLaborHistory_(',
+  'function evaluateGeneralLaborHistory_(',
+  'LABOR_36_PERIOD_START_MONTH',
+  'LABOR_SPECIAL_CLAUSE'
+]) {
+  if (!laborCodeText.includes(laborHistoryMarker)) {
+    console.error('Labor history/general-rule monitoring missing: ' + laborHistoryMarker);
+    failed = true;
+  }
+}
+for (const laborUiMarker of ['laborAgreementStart','laborSpecialClause','36協定の起算月','特別条項']) {
+  if (!app.includes(laborUiMarker)) {
+    console.error('Labor configuration UI missing: ' + laborUiMarker);
     failed = true;
   }
 }
@@ -623,8 +1098,8 @@ if (!app.includes("本人確認が${review.stale?'再度必要です':'未完了
   failed = true;
 }
 
-if (!app.includes("content.classList.toggle('one-screen',['home','monthly','admin'].includes(state.page))")) {
-  console.error('Desktop home must opt into the one-screen layout.');
+if (!app.includes("content.classList.toggle('one-screen',state.page==='home')")) {
+  console.error('Desktop one-screen mode must be limited to the home dashboard.');
   failed = true;
 }
 if (!styles.includes('@media(max-width:1140px){.content.one-screen:has(>.home-screen){height:auto;overflow:visible}')) {
@@ -659,7 +1134,7 @@ if (!requirementsDoc.includes('文書同期ルール') || !technicalDoc.includes
 }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root,'src/appsscript.json'),'utf8'));
-if (authCode.includes('prototypeMode: true')) {
+if (authCode.includes("prototypePin: '000000'")) {
   for (const prototypeAuthMarker of [
     "prototypePin: '000000'",
     "prototypeEmployeeIds: ['FM0001','FM0002','FM0003','FM0004','FM0005']",
@@ -681,6 +1156,29 @@ if (authCode.includes('prototypeMode: true')) {
     failed = true;
   }
 }
+
+for (const prototypeSafetyMarker of [
+  'prototypeMode: false',
+  'function prototypeSettingEnabled_(',
+  'function prototypeModeEnabledForEnvironment_(',
+  "normalizeRuntimeEnvironment_(environment)!=='PRODUCTION'",
+  'function isPrototypeConfigured_(',
+  "prototypeModeEnabledForEnvironment_('TRUE',getRuntimeEnvironment_())"
+]) {
+  if (!authCode.includes(prototypeSafetyMarker)) {
+    console.error('Production prototype-auth safety missing: ' + prototypeSafetyMarker);
+    failed = true;
+  }
+}
+if (authCode.includes("prototypePin: isPrototypeMode_() ? AUTH.prototypePin : ''") || app.includes('cfg.prototypePin')) {
+  console.error('Prototype PIN must not be returned to or rendered by the browser.');
+  failed = true;
+}
+if (!maintenanceCode.includes('const prototypeMode=isPrototypeConfigured_();') || !maintenanceCode.includes('prototypeAccessEffective:prototypeAccessEffective')) {
+  console.error('Production readiness must detect configured prototype mode separately from effective production access.');
+  failed = true;
+}
+
 for (const sessionMarker of [
   'getRange(rowNumber, 1, 1, 11).getValues()[0]',
   'value instanceof Date',
