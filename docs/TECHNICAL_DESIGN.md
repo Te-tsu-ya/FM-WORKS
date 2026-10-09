@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.16.2  
+**文書版:** 0.16.3  
 **更新日:** 2026-10-09  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1745,3 +1745,10 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 
 - StylesWorkflowV15.html末尾に .quote-detail .qb-issued-preview .qb-paper .qb-paper-title の高特異度上書きを追加し、旧 .quote-preview header のflex/border指定を無効化する。内部タイトル罫線 .qb-paper-title-rule を使う。
 - 既存 scripts/test_quote_viewport.mjs のデスクトップ/スマホ詳細画像で中央タイトル位置と罫線を目視検証する。金融計算/認証は変更しない。
+
+## v0.16.3 見積生成シートの書き込み最適化（2026-10-09）
+
+- `Quotes.gs:quotePaintSheet_` は `B17:I37` の21行×8列を `setValues` 1回で書き込む。B:Eの明細説明は行ごとに結合し、偶数行は白、奇数行は薄い灰色とする。ゼロ円を有効な数値として出力し、注記行のみ金額セルを空欄にする。
+- 明細ヘッダーをB16:I16、帳票件名をB12:E12、取引先住所をB7:E7へ配置。小計・消費税・合計は従来のB38:I40に続く行へ表示し、ユーザーに連動する帳票構成を維持。PDF・Excel変換は既存の `quoteCreateFiles_` の二段階発行処理を継続する。
+- `AppQuotes.html:quotePreviewDocument_` と `StylesWorkflowV15.html` には参考帳票に近い青い区切り・薄灰ストライプ・発行元詳細を反映。現行帳票の細部や原本比較は未検証。
+- `scripts/test_quote_integration.mjs` では21行一括setValues、マイナス値引き、注記、取引先住所と件名セル配置を検査する。既存の再送耐性と発行済み書換禁止テストも維持する。

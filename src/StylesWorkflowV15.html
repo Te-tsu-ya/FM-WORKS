@@ -510,4 +510,33 @@
 @media(max-width:690px){
  .quote-detail .qb-issued-preview .qb-paper .qb-paper-title h2{font-size:18px}
 }
+/* v0.16.1: issued-document-aligned quotation preview */
+.qb-paper-title{text-align:left;margin-bottom:7px}
+.qb-paper-title h2{font-size:21px;font-weight:500;letter-spacing:.03em;color:#8a8a8a}
+.qb-paper-title-rule{height:4px;width:100%;margin:9px 0 3px;background:#33369a}
+.qb-paper-meta{font-size:8px;gap:13px;margin-bottom:5px}
+.qb-paper-total{border:0;background:#efefef;padding:9px 11px}
+.qb-paper-total strong{font-size:18px}
+.qb-paper-recipient strong{border-bottom:0;font-size:13px}
+.qb-paper-recipient small{margin-top:13px}
+.qb-paper-issuer{text-align:right;gap:2px}
+.qb-paper th,.qb-paper td{border:2px solid #fff}
+.qb-paper th{background:#fff;color:#33369a;border-bottom:2px solid #33369a}
+.qb-paper tbody tr:nth-child(odd){background:#f2f2f2}
+.qb-paper tbody tr:nth-child(even){background:#fff}
+.qb-paper-totals .qb-paper-grand{background:#f1f1f1;color:#33369a}
+.qb-paper-footer{border-top:3px solid #33369a;padding-top:10px}
+
+/* A legacy detail-page CSS selector must not re-center the shared preview. */
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title{
+ display:block!important;text-align:left!important;border:0!important;padding:0!important;
+}
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title h2{
+ color:#8a8a8a!important;font-size:21px!important;letter-spacing:.03em!important;
+ font-weight:500!important;text-align:left!important;
+}
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title-rule{
+ background:#33369a!important;height:4px!important;width:100%!important;
+ margin:9px 0 3px!important;
+}
 </style>
