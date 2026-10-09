@@ -1710,3 +1710,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 発行待ち/出力失敗時はファイルが未完成のためダウンロードボタンを出さない。確認と再試行は既存の見積状態契約を再利用する。
 - 見た目の基準はユーザー承認済み9画面の構成、Shopify Polarisの検索可能な一覧と詳細、Atlassianの統一ナビゲーション。生成画像に含まれる2024年等の架空数字・架空社名・承認待ちの見積・存在しない添付操作は対象外。
 - 公式参照: https://polaris-react.shopify.com/components/tables/index-table / https://www.atlassian.com/blog/how-we-build/designing-atlassians-new-navigation
+
+- ブラウザ品質ゲート: scripts/test_business_viewport.mjs が経費・出張の全画面入力、経理の一覧詳細、取引先管理を架空データで8条件描画し、GitHub Actions artifacts/business-layoutにスクリーンショットを保存する。実データは取得しない。
