@@ -354,6 +354,20 @@ expect('first leave is not granted before six months',
   api.leaveEntitlement_('2026-04-01','2026-09-30').due===null);
 expect('short February is handled for month-end hire',
   api.leaveDueAtIndex_('2026-08-31',0)==='2027-02-28');
+expect('invalid employee hire dates cannot produce statutory leave grants',
+  api.leaveDueAtIndex_('2026-02-31',0)==='' &&
+  api.leaveDueAtIndex_('2026-13-01',0)==='' &&
+  api.leaveDueAtIndex_('2026-00-01',0)==='' &&
+  api.leaveDueAtIndex_('not-a-date',0)==='' &&
+  api.leaveEntitlement_('2026-02-31','2026-10-01')===null);
+expect('invalid as-of dates are rejected before leave balance calculation',
+  api.leaveEntitlement_('2026-04-01','2026-13-01')===null &&
+  api.leaveEntitlement_('2026-04-01','2026-02-30')===null &&
+  api.leaveEntitlement_('2026-04-01','2026-00-10')===null);
+expect('valid leap-year and trimmed hire dates preserve six-month entitlement',
+  api.leaveDueAtIndex_('2024-02-29',0)==='2024-08-29' &&
+  api.leaveEntitlement_(' 2026-04-01 ','2026-10-01').due.days===10 &&
+  api.leaveEntitlement_(' 2026-04-01 ','2026-10-01').due.from==='2026-04-01');
 expect('manual grant on the same entitlement date blocks automation',
   api.leaveAutoAlreadyGranted_({employeeId:'FM0001',leaveBasisDate:''},{date:'2026-10-01'},
   [{transactionDate:'2026-10-01',type:'GRANT'}])===true);

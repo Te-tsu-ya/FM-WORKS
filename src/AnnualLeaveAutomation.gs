@@ -2,20 +2,28 @@
 const AUTO_LEAVE_DAYS=Object.freeze([10,11,12,14,16,18,20]);
 const AUTO_LEAVE_PREFIX='FM_AUTO_LEAVE_V1_';
 function leaveDueAtIndex_(hire,index){
-  const [y,m,d]=String(hire||'').split('-').map(Number),i=Number(index);
-  if(!y||!m||!d||m>12||d>31||!Number.isInteger(i)||i<0||i>80)return '';
+  // Reject impossible hire dates instead of calculating an entitlement from corrupt data.
+  let validHire;
+  try{validHire=normalizeDate_(hire);}catch(_){return '';}
+  const [y,m,d]=validHire.split('-').map(Number),i=Number(index);
+  if(!Number.isInteger(i)||i<0||i>80)return '';
   const mon=m+5+12*i,Y=y+Math.floor(mon/12),M=((mon%12)+12)%12;
   const D=Math.min(d,new Date(Date.UTC(Y,M+1,0)).getUTCDate());
   return [Y,String(M+1).padStart(2,'0'),String(D).padStart(2,'0')].join('-');
 }
 function leaveEntitlement_(hire,asOf){
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(asOf||''))||!leaveDueAtIndex_(hire,0))return null;
+  let validHire,validAsOf;
+  try{
+    validHire=normalizeDate_(hire);
+    validAsOf=normalizeDate_(asOf);
+  }catch(_){return null;}
+  if(!leaveDueAtIndex_(validHire,0))return null;
   let due=null,next=null;
   for(let i=0;i<=80;i++){
-    const date=leaveDueAtIndex_(hire,i);
+    const date=leaveDueAtIndex_(validHire,i);
     const part={index:i,date,days:AUTO_LEAVE_DAYS[Math.min(i,6)],
-      from:i===0?hire:leaveDueAtIndex_(hire,i-1),through:addDateString_(date,-1)};
-    if(date<=asOf)due=part;else{next=part;break;}
+      from:i===0?validHire:leaveDueAtIndex_(validHire,i-1),through:addDateString_(date,-1)};
+    if(date<=validAsOf)due=part;else{next=part;break;}
   }
   return {due,next};
 }
