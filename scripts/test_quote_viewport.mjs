@@ -56,7 +56,8 @@ for(const [width,height,kind,theme] of cases){
   '<body><div class="app-shell"><aside class="sidebar"><div class="brand">FM WORKS</div></aside>'+
   '<div class="workspace"><header class="topbar">FM WORKS</header><main class="content">'+html+
   '</main></div></div>'+
-  '<script>const shell=document.querySelector(".quote-layout"),'+
+  '<script>window.addEventListener("error",e=>parent.postMessage({kind:"QUOTE_QA_ERROR",message:String(e.message)},"*"));'+
+  'const shell=document.querySelector(".quote-layout"),'+
   'toolbar=document.querySelector(".quote-toolbar"),buttons=[...document.querySelectorAll(".quote-layout button")],'+
   'all=[...document.querySelectorAll(".quote-layout .quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
@@ -65,7 +66,10 @@ for(const [width,height,kind,theme] of cases){
   'parent.postMessage({kind:"QUOTE_QA",info},"*");</script></body></html>';
  const frame=path.join(tmp,id+'-inner.html');fs.writeFileSync(frame,inner);
  const host='<html><head><meta charset="utf-8"><script>'+
-  'window.addEventListener("message",e=>{if(e.data&&e.data.kind==="QUOTE_QA")document.getElementById("metrics").setAttribute("data-metrics",encodeURIComponent(JSON.stringify(e.data.info)));});'+
+  'window.addEventListener("message",e=>{'+
+  'if(e.data&&e.data.kind==="QUOTE_QA")document.getElementById("metrics").setAttribute("data-metrics",encodeURIComponent(JSON.stringify(e.data.info)));'+
+  'if(e.data&&e.data.kind==="QUOTE_QA_ERROR")document.getElementById("metrics").setAttribute("data-error",e.data.message);'+
+  '});'+
   '</script></head><body style="margin:0"><iframe src="'+pathToFileURL(frame).href+
   '" style="border:0;display:block;width:'+width+'px;height:'+height+'px"></iframe><output id="metrics"></output></body></html>';
  const file=path.join(tmp,id+'-host.html');fs.writeFileSync(file,host);
@@ -73,10 +77,17 @@ for(const [width,height,kind,theme] of cases){
   '--hide-scrollbars','--window-size='+Math.max(width,600)+','+(height+110),'--virtual-time-budget=4000'];
  let metrics;
  try{
-  const response=execFileSync(chrome,[...args,'--dump-dom',pathToFileURL(file).href],
-   {encoding:'utf8',timeout:45000,maxBuffer:5*1024*1024,stdio:['ignore','pipe','ignore']});
-  const match=response.match(/id="metrics"[^>]*data-metrics="([^"]+)"/);
-  if(!match)throw Error('Viewport metrics not captured');
+  let response='',match=null;
+  for(let attempt=0;attempt<3;attempt++){
+    response=execFileSync(chrome,[...args,'--virtual-time-budget='+String(5000+attempt*2000),
+      '--dump-dom',pathToFileURL(file).href],
+      {encoding:'utf8',timeout:45000,maxBuffer:5*1024*1024,stdio:['ignore','pipe','ignore']});
+    match=response.match(/id="metrics"[^>]*data-metrics="([^"]+)"/);
+    if(match)break;
+    const error=response.match(/data-error="([^"]+)"/);
+    if(error)throw Error('Quote browser rendering error: '+error[1]);
+  }
+  if(!match)throw Error('Viewport metrics not captured after 3 attempts; host='+response.slice(-450));
   metrics=JSON.parse(decodeURIComponent(match[1]));
   const reasons=[];
   if(Math.abs(metrics.w-width)>2)reasons.push('width');
