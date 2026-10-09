@@ -1,7 +1,7 @@
 <script>
 /* v0.12.0: Information architecture only. No accounting writes, save APIs or spreadsheet reads. */
 const OFFICE_MODULES=[
-  {id:'documents',title:'帳票・見積',icon:'i-file',caption:'見積・請求・納品・注文・領収書',
+  {id:'documents',title:'見積書',icon:'i-file',caption:'全社員：作成・保存・正式発行',
     explanation:'既存のExcel帳票を整理し、共通の取引先・明細から帳票を作成するための入口です。',
     fields:['帳票種別','発行日','帳票番号','取引先','ベンダーコード','登録番号','品目・内容','数量','単価','税率・税額','合計金額'],
     sheets:'見積／納品／請求／注文／領収書のExcelテンプレート'},
@@ -52,6 +52,7 @@ function officeModuleReady_(item){
 }
 function selectOfficeModule(id){
   if(!officeWorkspaceAllowed()||(id!=='overview'&&!OFFICE_MODULES.some(item=>item.id===id)))return;
+  if(id==='documents'){navigate('quotes');return;}
   const ui=officeUiState_();
   ui.selected=id;
   ui.recordId='';
@@ -284,7 +285,7 @@ function officeRecentActivity_(){
 }
 function officeModuleCard_(item){
   const active=officeModuleReady_(item);
-  const stateLabel=active?'一覧・詳細を開く':officeModuleKind_(item.id)?'担当者向け':'準備中';
+  const stateLabel=item.id==='documents'?'全社員利用可':active?'一覧・詳細を開く':officeModuleKind_(item.id)?'担当者向け':'準備中';
   return "<button type='button' class='office-shortcut-tile' data-office-module='"+escapeHtml(item.id)+
     "' onclick='selectOfficeModule(this.dataset.officeModule)'>"+
     "<span class='office-tile-icon'>"+svg(item.icon)+"</span>"+
@@ -299,6 +300,7 @@ function officeOverviewPage_(){
     "<h2>今日の事務作業を、ひとつの場所で。</h2>",
     "<p>よく使う機能と対応が必要な申請を確認できます。帳票・備品など一部の機能は設計中です。</p></div>",
     "<div class='office-command-actions'>",
+    "<button type='button' class='primary-button' onclick='navigate(&quot;quotes&quot;)'>"+svg('i-doc')+" 見積を作る</button>",
     "<button type='button' class='primary-button' onclick='openFinanceForm(&quot;expense&quot;)'>"+svg('i-file')+" 経費を申請</button>",
     "<button type='button' class='secondary-button' onclick='openFinanceForm(&quot;travel&quot;)'>"+svg('i-calendar')+" 出張を報告</button>",
     canFinance?"<button type='button' class='secondary-button' onclick='openFinanceForm(&quot;receipt&quot;)'>"+svg('i-doc')+" 経費を記録</button>":"",
@@ -318,6 +320,7 @@ function officeOverviewPage_(){
     canFinance?"<button type='button' class='office-link' onclick='officeRefreshFinance()'>更新 ↻</button>":"",
     "</div>",officeRecentActivity_(),"</section>",
     "<section class='card office-side-panel'><div class='office-section-heading'><h2>ショートカット</h2></div>",
+    "<button type='button' class='office-side-action' onclick='navigate(&quot;quotes&quot;)'>"+svg('i-doc')+" 見積書を作成 <span>›</span></button>",
     "<button type='button' class='office-side-action' onclick='navigate(&quot;requests&quot;)'>"+svg('i-file')+" 自分の申請を見る <span>›</span></button>",
     canFinance?"<button type='button' class='office-side-action' onclick='navigate(&quot;finance&quot;)'>"+svg('i-trend')+" 経理管理を開く <span>›</span></button>":"",
     "<p class='office-side-help'>数値は保存済みのデータだけを表示します。レシート画像の保存や帳簿出力は未対応です。</p>",

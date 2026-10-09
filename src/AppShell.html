@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,quotes:quotePage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
@@ -120,6 +120,7 @@ function acceptLogin(result){
 function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
   resetFinanceUi();
+  resetQuoteUi();
   invalidateMonthlyResultCache();
   state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
@@ -165,6 +166,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs({silent:true});
   if(state.page==='requests')loadRequests();
+  if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
   if(state.page==='office'&&data.permissions&&data.permissions.financeWorkspace){
     scheduleBackgroundTask(()=>{if(state.page==='office')loadFinanceOverview({silent:true});},100);

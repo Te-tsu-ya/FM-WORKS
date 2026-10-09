@@ -28,6 +28,8 @@ jobs:
         run: node scripts/test_client_contract.mjs
       - name: Test finance authorization and workflows
         run: node scripts/test_finance_integration.mjs
+      - name: Test employee estimates and formal issuance
+        run: node scripts/test_quote_integration.mjs
       - name: Install Japanese fonts for layout verification
         run: |
           sudo apt-get update -qq

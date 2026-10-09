@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.13.4  
+**文書版:** 0.14.0  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.13.4`
+`APP.version = 0.14.0`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1669,3 +1669,16 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `.office-v2.office-overview > .page-head` に限定した640px以下のCSSで見出し・説明を縦配置にし、短いタイトルの不自然な折り返しを防ぐ。
 - `test_office_viewport.mjs` にタイトルの描画行数を追加し、390pxで必ず1行を要求する。
 - 初回のv0.13.3公開後にスクリーンショットで発見した差分修正。経理API・保存データ・権限・DOM順は変更しない。
+
+
+## 55. 見積の業務エンジンと文書出力（v0.14.0）
+
+- Code.gs getPermissions_ の quoteWorkspace は認証済み全員に許可。NAVに「見積」を追加し、AppShellとIndexにAppQuotes.htmlを接続。事務側「見積書」からも独立メニューに遷移。
+- Schema.gs の DB_SCHEMA_VERSION は11。追加DBシートは「見積取引先」「見積ヘッダー」「見積明細」「見積採番」。管理者のバックアップ付きDBマイグレーションで新設する。
+- Quotes.gs: getQuoteWorkspace/getQuote/saveQuoteDraft/issueQuote/getQuoteDocument を全認証済み社員が利用。vendor import/configure sequence は管理者だけが利用。クライアントではなくサーバーで所有者・状態・金額・明細行数・取引先コードを検証する。
+- 保存は UUID 見積IDと送信識別子で重複防止。既存更新は revision を一致確認。正式発行時にScript Lock下で見積番号を予約し、Google Sheets一時シートへ明細を組み立てる。
+- 原本の21行明細と10%税率・負単価による値引きを踏襲。SpreadsheetApp/UrlFetchApp/DriveAppでPDF・XLSXを生成し、バイナリ署名を検証。両方成功した場合だけ発行済みにし非公開Driveフォルダに保管する。途中失敗は「出力失敗」として同番号を保持する。
+- getQuoteDocument はログインと所有権を確認し、PDFまたはXLSXのbase64を返す。ブラウザ側でBlobダウンロード。Driveを匿名公開しない。
+- 取引先実データはGitHubへハードコードしない。ユーザー提供のベンダーコードExcel Sheet1を管理者が認証後に貼り付けて取り込む。既存の最大番号は別途確認済にする必要がある。
+- 公式のPDF作成手順参照: https://developers.google.com/apps-script/samples/automations/generate-pdfs
+- scripts/test_quote_integration.mjs に架空DB/Drive/URLFetchによる認可・採番・保存・金額・出力テストを追加。CIとデプロイで実行する。実際のGAS/OAuthでの出力・本番DB接続先は現時点では未検証。

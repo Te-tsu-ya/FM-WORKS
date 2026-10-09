@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_office_viewport.mjs'
+  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_office_viewport.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -15,7 +15,7 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['AppQuotes.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
@@ -32,7 +32,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Code.gs','Finance.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['Quotes.gs','Code.gs','Finance.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -103,6 +103,28 @@ const snapshotCodeText = fs.readFileSync(path.join(root,'src/MonthlySnapshot.gs'
 const leaveLedgerCodeText = fs.readFileSync(path.join(root,'src/LeaveLedger.gs'),'utf8');
 const laborCodeText = fs.readFileSync(path.join(root,'src/Labor.gs'),'utf8');
 const schemaCodeText = fs.readFileSync(path.join(root,'src/Schema.gs'),'utf8');
+
+const quoteSourceText=fs.readFileSync(path.join(root,'src/Quotes.gs'),'utf8');
+const quoteClientText=fs.readFileSync(path.join(root,'src/AppQuotes.html'),'utf8');
+for(const marker of ['getQuoteWorkspace(','getQuote(','saveQuoteDraft(','issueQuote(',
+  'getQuoteDocument(','importQuoteVendors(','configureQuoteSequence(','quoteCreateFiles_(']){
+ if(!quoteSourceText.includes(marker)){console.error('Missing quote server API: '+marker);failed=true;}
+}
+for(const marker of ['function quotePage()','function quoteNew()','function quoteSaveDraft()',
+  'function quoteIssue()','function quoteDownload(','function quoteAdminSetup_(']){
+ if(!quoteClientText.includes(marker)){console.error('Missing quote UI: '+marker);failed=true;}
+}
+for(const sheet of ['見積取引先','見積ヘッダー','見積明細','見積採番']){
+ if(!schemaCodeText.includes("'"+sheet+"':")){console.error('Missing estimate DB sheet '+sheet);failed=true;}
+}
+if(!app.includes("'quotes','見積'")||!app.includes('quotes:quotePage')||
+ !indexText.includes("include_('AppQuotes')")){
+ console.error('All-employee estimates must be a visible, routed application page.');failed=true;
+}
+if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8').includes('node scripts/test_quote_integration.mjs')){
+ console.error('Quote integration must run as an enforced CI step.');failed=true;
+}
+
 const dataAccessCodeText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
@@ -278,7 +300,7 @@ if (!serverCode.includes('function auditJson_(') ||
   failed = true;
 }
 
-for (const marker of ['const DB_SCHEMA_VERSION = 10','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+for (const marker of ['const DB_SCHEMA_VERSION = 11','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
   if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {

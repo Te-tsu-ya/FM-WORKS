@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.13.4',
+  version: '0.14.0',
   locale: 'ja-JP'
 });
 
@@ -585,6 +585,7 @@ function getPermissions_(employee) {
     companyCalendarEdit: PERMISSIONS.COMPANY_CALENDAR_EDIT_ROLES.includes(role),
     adminConsole: role === 'ADMIN',
     // The finance APIs independently enforce this permission on the server.
+    quoteWorkspace: true, // Every authenticated employee may create, save, and issue own estimates.
     officeWorkspace: role === 'ADMIN' || role === 'MANAGER' || financeDepartmentAllowed_(employee && employee.department),
     financeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     employeeAdmin: role === 'ADMIN',
