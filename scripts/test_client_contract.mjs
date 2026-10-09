@@ -219,6 +219,12 @@ const result=vm.runInContext(`
   quoteNew();
   expect('ordinary employee can open an editable quote without GAS roundtrip',
     quoteUi.mode==='edit'&&quotePage().includes('見積明細')&&apiCalls.length===0);
+  const newQuoteUi=quotePage();
+  expect('quote builder has live A4 preview and Excel-like item grid',
+    newQuoteUi.includes("id='quoteLivePreview'")&&newQuoteUi.includes('qb-grid-head')&&
+    newQuoteUi.includes('qb-preview-column')&&newQuoteUi.includes('正式発行'));
+  expect('quote builder preview includes issuer and bank instructions',
+    newQuoteUi.includes('Fusion Mind株式会社')&&newQuoteUi.includes('振込先'));
   quoteUi.editor.vendorCode='FI-0001';
   quoteUi.editor.lines=[{description:'開発支援',quantity:'2',unit:'ヶ月',price:'300000'},
     {description:'値引き',quantity:'2',unit:'式',price:'-50000'}];
@@ -234,6 +240,23 @@ const result=vm.runInContext(`
   invokeServerSuccess({ok:true,id:'QUOTE-DRAFT',revision:1,status:'下書き'});
   expect('newly saved draft holds persisted ID and is eligible for issuance',
     quoteUi.editor.id==='QUOTE-DRAFT'&&!quoteUi.dirty&&quoteUi.editor.revision===1);
+  quoteUpdateField('subject','導入支援の見積');
+  expect('editing subject updates live preview without additional GAS calls',
+    quoteUi.dirty&&quotePreviewDocument_(quoteUi.editor).includes('導入支援の見積')&&apiCalls.filter(x=>x.method==='saveQuoteDraft').length===1);
+  quoteUpdateLine(0,'quantity','3');
+  expect('editing quantity recalculates preview instantly',
+    quotePreviewDocument_(quoteUi.editor).includes('900,000円')&&quoteTotals_(quoteUi.editor.lines).subtotal===800000);
+  quoteUi.editor.note='<img src=x onerror=alert(1)>';
+  expect('live estimate preview escapes spreadsheet-sourced HTML',
+    quotePreviewDocument_(quoteUi.editor).includes('&lt;img')&&!quotePreviewDocument_(quoteUi.editor).includes('<img src=x'));
+  const lineCountBefore=quoteUi.editor.lines.length;
+  quoteDuplicateLine(0);
+  expect('Excel-like duplicate row copies editable values',quoteUi.editor.lines.length===lineCountBefore+1&&
+    quoteUi.editor.lines[1].description===quoteUi.editor.lines[0].description);
+  quoteMoveLine(1,-1);
+  expect('Excel-like row reorder preserves line items',quoteUi.editor.lines.length===lineCountBefore+1);
+  quoteRemoveLine(0);
+  expect('row deletion restores original line count',quoteUi.editor.lines.length===lineCountBefore);
   quoteUi.details={header:{...quoteUi.editor,status:'出力失敗',number:'FI-0001-0002',ownerName:'架空社員',
     vendorName:'架空法人A',subtotal:500000,taxAmount:50000,total:550000},lines:quoteUi.editor.lines};
   quoteUi.mode='detail';

@@ -325,7 +325,9 @@ function quotePaintSheet_(sh,h,lines){
   sh.getRange('G5:I5').merge().setValue('Fusion Mind 株式会社').setFontWeight('bold');
   sh.getRange('G6:I6').merge().setValue('〒958-0854 新潟県村上市田端町14-7').setFontSize(9);
   sh.getRange('G7:I7').merge().setValue('TEL：0254-62-7852').setFontSize(9);
+  sh.getRange('B7:F7').merge().setValue(h.vendorAddress||'').setFontSize(9).setWrap(true);
   sh.getRange('B8:F8').merge().setValue('下記の通りお見積もり申し上げます。');
+  sh.getRange('B9:I9').merge().setValue('件名：'+(h.subject||'')).setFontWeight('bold').setWrap(true);
   sh.getRange('G8:I8').merge().setValue('登録番号：T2110001038035').setFontSize(9);
   sh.getRange('B10').setValue('納期');sh.getRange('C10:F10').merge().setValue(h.delivery);
   sh.getRange('G10').setValue('支払条件');sh.getRange('H10:I10').merge().setValue(h.payment);
@@ -333,7 +335,7 @@ function quotePaintSheet_(sh,h,lines){
   sh.getRange('G11').setValue('担当');sh.getRange('H11:I11').merge().setValue(h.contact||h.ownerName);
   sh.getRange('B13:F13').merge().setValue('お見積金額（税込）').setFontSize(13).setFontWeight('bold');
   sh.getRange('G13:I13').merge().setValue(h.total).setNumberFormat('¥#,##0').setFontSize(17).setFontWeight('bold').setHorizontalAlignment('right');
-  sh.getRange('B15:I15').setValues([['品番・品名','','','','数量','単位','単価','金額']]).setBackground('#dcebf9').setFontWeight('bold');
+  sh.getRange('B15:I15').setValues([['品名・内容','','','','数量','単位','単価','金額']]).setBackground('#dcebf9').setFontWeight('bold');
   sh.getRange('B15:E15').merge();
   const start=16,end=36,max=QUOTE_MAX_LINES;
   for(let i=0;i<max;i++){
@@ -357,7 +359,7 @@ function quotePaintSheet_(sh,h,lines){
   sh.getRange('B45:I45').merge().setValue('お振込み手数料は御社ご負担にてお願いいたします。').setFontSize(9);
   sh.getRange('B5:I45').setVerticalAlignment('middle');
   sh.getRange('B15:I40').setBorder(true,true,true,true,false,false,'#d9e0e8',SpreadsheetApp.BorderStyle.SOLID);
-  sh.setRowHeights(16,21,23);sh.setRowHeight(43,52);
+  sh.setRowHeights(16,21,23);sh.setRowHeight(9,28);sh.setRowHeight(43,52);
   sh.getRange('B1:I45').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
   sh.getRange('B43:I43').setWrap(true);
 }

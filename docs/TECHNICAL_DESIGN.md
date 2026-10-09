@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.15.1  
+**文書版:** 0.16.0  
 **更新日:** 2026-10-09  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1723,3 +1723,14 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `AppOperations.html:worklogWindowRange(date)` は `monthGridRange(date)` の開始・終了を7日ずつ拡張。リクエストは既存の `getWorklogs` に限定し、一度得た `items` を `worklogShowCachedDay` で日付抽出する。
 - `loadWorklogs` は初回/強制取得以外の `includeProjects` を省略し、`projects:[]` の応答を既存の取得済みマスタへ上書きしない。保存・削除時の `invalidatePageCache('worklog')` と最大2並列・世代管理は従来通り。
 - `scripts/test_client_contract.mjs` で10月から11月への移動のRPC=0、プロジェクト情報維持、別月キャッシュ、書き込み後の破棄を検証する。
+
+
+## v0.16.0 見積書の作成・プレビュー・発行（2026-10-09）
+
+- AppQuotes.htmlのquoteEditor_はquote-builder、qb-edit-column、qb-preview-columnで構成。quoteLineEditor_の編集表で明細の複製・移動・削除・注記操作を行う。
+- quotePreviewDocument_は編集状態からA4風の見積プレビューHTMLを生成し、quoteRefreshPreview_がプレビューDOMのみ更新する。外部入力はescapeHtmlでサニタイズし、毎キー入力のGAS通信は行わない。
+- StylesWorkflowV15.htmlへquote-builderスコープのCSSを追加。狭幅では編集→プレビューの順に積み、表部分のみ横スクロールする。
+- Quotes.gsのquotePaintSheet_はB7:F7に取引先所在地、B9:I9に件名を含め、明細見出しを「品名・内容」とする。正式発行後にGoogle SheetsからPDF・Excel形式を作成する。
+- 管理者が明示確認した場合だけquoteSetupStorage_から既存migrateDatabaseToCurrentを実行し、バックアップを作成して必要シートを追加する。quoteAddSingleVendor_はimportQuoteVendorsを呼び出すが、過去番号の確認を省略しない。
+- test_quote_integration.mjsで帳票文字列を検証し、test_client_contract.mjsでライブプレビュー・行編集・HTMLエスケープと追加RPCなしを確認。test_quote_viewport.mjsでスマホとPCのレイアウトを確認する。
+- 元Excelの帳票書式完全一致と本番GASの実出力E2Eは未確認である。
