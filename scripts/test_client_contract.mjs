@@ -233,6 +233,19 @@ const result=vm.runInContext(`
   invokeServerSuccess({ok:true,id:'QUOTE-DRAFT',revision:1,status:'下書き'});
   expect('newly saved draft holds persisted ID and is eligible for issuance',
     quoteUi.editor.id==='QUOTE-DRAFT'&&!quoteUi.dirty&&quoteUi.editor.revision===1);
+  quoteUi.details={header:{...quoteUi.editor,status:'出力失敗',number:'FI-0001-0002',ownerName:'架空社員',
+    vendorName:'架空法人A',subtotal:500000,taxAmount:50000,total:550000},lines:quoteUi.editor.lines};
+  quoteUi.mode='detail';
+  const failedQuoteView=quotePage();
+  expect('failed exports retain same number, provide retry and never offer download',
+    failedQuoteView.includes('FI-0001-0002')&&failedQuoteView.includes('同じ番号で出力を再試行')&&
+    !failedQuoteView.includes('PDFを保存'));
+  quoteUi.details.header.status='発行処理中';
+  expect('running output does not expose nonexistent document download',
+    quotePage().includes('発行処理中')&&!quotePage().includes('Excelを保存'));
+  quoteUi.details.header.status='発行済';
+  expect('both downloads become available after finalized issuance',
+    quotePage().includes('PDFを保存')&&quotePage().includes('Excelを保存'));
   resetQuoteUi();
   state.data=quoteBeforeData;
   resetCalls();

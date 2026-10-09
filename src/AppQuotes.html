@@ -380,18 +380,27 @@ function quoteEditor_(){
 function quoteDetail_(){
   const q=quoteUi.details;
   if(!q)return "<div class='card quote-state'>見積の詳細を読み込み中です。</div>";
-  const e=q.header;
-  return ["<div class='quote-layout quote-detail'><button class='quote-back' onclick='quoteBack()'>← 見積一覧へ</button>",
-    "<div class='quote-toolbar'><div><span class='eyebrow'>ISSUED / 正式見積書</span><h1>"+
-      escapeHtml(e.number||'未発行'),"</h1><p>"+escapeHtml(e.vendorName||'')+" ／ "+escapeHtml(e.quoteDate)+
-      " ／ "+escapeHtml(e.ownerName)+"</p></div>",
-    "<div class='quote-detail-actions'><button class='primary-button' onclick='quoteDownload(\"pdf\")' "+
-      (quoteUi.busy?'disabled':'')+">PDFを保存</button>",
-    "<button class='secondary-button' onclick='quoteDownload(\"xlsx\")' "+
-      (quoteUi.busy?'disabled':'')+">Excelを保存</button></div></div>",
+  const e=q.header,issued=e.status==='発行済',failed=e.status==='出力失敗';
+  const running=e.status==='発行処理中';
+  return ["<div class='quote-layout quote-detail'><button type='button' class='quote-back' onclick='quoteBack()'>← 見積一覧へ</button>",
+    "<div class='quote-toolbar'><div><span class='eyebrow'>",issued?'ISSUED / 正式見積書':'ISSUING / 発行の確認',
+    "</span><h1>",escapeHtml(e.number||'番号未確定'),"</h1><p>"+escapeHtml(e.vendorName||'')+" ／ "+
+      escapeHtml(e.quoteDate)+" ／ "+escapeHtml(e.ownerName)+" ／ "+escapeHtml(e.status)+"</p></div>",
+    issued?"<div class='quote-detail-actions'><button type='button' class='primary-button' onclick='quoteDownload(\"pdf\")' "+
+      (quoteUi.busy?'disabled':'')+">PDFを保存</button>"+
+      "<button type='button' class='secondary-button' onclick='quoteDownload(\"xlsx\")' "+
+      (quoteUi.busy?'disabled':'')+">Excelを保存</button></div>":"",
+    "</div>",
+    failed?"<div class='card quote-state' role='alert'><strong>帳票ファイルの出力が完了していません。</strong>"+
+      "<p>見積番号は保持されています。内容を変更せず、同じ番号でPDF・Excel出力を再試行できます。</p>"+
+      "<button type='button' class='primary-button' onclick='quoteIssue()'>同じ番号で出力を再試行</button></div>":"",
+    running?"<div class='card quote-state' role='status'><strong>発行処理中です。</strong>"+
+      "<p>通常は数十秒で完了します。時間がかかる場合は一覧を更新してください。"+
+      "15分を超えて処理中のままなら、同じ番号で再試行できます。</p>"+
+      "<button type='button' class='secondary-button' onclick='quoteIssue()'>処理状態を確認・再試行</button></div>":"",
     quoteUi.error?"<p class='quote-warning' role='alert'>"+escapeHtml(quoteUi.error)+"</p>":"",
     "<section class='card quote-preview'>",
-    "<header><strong>見積書 / ESTIMATE</strong><span>見積番号："+escapeHtml(e.number)+"</span></header>",
+    "<header><strong>見積書 / ESTIMATE</strong><span>見積番号："+escapeHtml(e.number||'未確定')+"</span></header>",
     "<h2>"+escapeHtml(e.vendorName)+" 御中</h2><p>下記の通りお見積もり申し上げます。</p>",
     "<div class='quote-preview-info'><div>見積日："+escapeHtml(e.quoteDate)+"</div>"+
       "<div>納期："+escapeHtml(e.delivery)+"</div><div>支払条件："+escapeHtml(e.payment)+"</div>"+

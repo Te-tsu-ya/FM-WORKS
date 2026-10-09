@@ -1686,3 +1686,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - v0.14.0 UI補足: 破棄・正式発行・採番確認はAppQuotes内のensureModal()/closeModal()を使用し、App本体と一貫したDialog UI・閉じる操作・フォーカス処理を継承する。
 
 - スクリーンショットQA: scripts/test_quote_viewport.mjs が架空の見積データで一覧・編集中・正式発行後をそれぞれPC/スマホ表示し、横スクロールとボタン配置を検証する。CI成果物 fmworks-quote-layout-qa に画像を保管する。
+
+- エラーフロー追加: quoteDetail_は発行済／出力失敗／発行処理中を区別。出力失敗は同じ番号で再試行するアクションを設けるが、正式発行完了まではgetQuoteDocumentのダウンロードボタンを表示しない。クライアント契約テストで確認する。
