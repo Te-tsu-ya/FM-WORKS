@@ -8,6 +8,8 @@ const root=process.cwd();
 const styles=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
 const source=fs.readFileSync(path.join(root,'src/AppQuotes.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+const documentSource=fs.readFileSync(path.join(root,'src/AppDocuments.html'),'utf8')
+  .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const demoUser={employeeId:'FM9009',name:'架空社員'};
 const vendor={code:'FI-0001',name:'架空DX支援株式会社',invoice:'T1234567890123',address:'架空県架空市'};
@@ -27,14 +29,18 @@ function renderQuote(kind){
  financeYen:value=>(Number(value)||0).toLocaleString('ja-JP')+'円',
  showToast(){},renderPageIfActive(){},pageHead(){},svg:()=>'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h18v16H3z"/></svg>'});
  vm.runInContext(source,cx,{filename:'AppQuotes.html'});
- const base={setupRequired:false,vendors:[vendor],sequencesReady:['FI-0001'],quotes:[demo],total:1,displayLimit:200,canConfigure:false};
+ vm.runInContext(documentSource,cx,{filename:'AppDocuments.html'});
+ const base={setupRequired:false,vendors:[vendor],sequencesReady:['FI-0001'],quotes:[demo],total:1,displayLimit:200,canConfigure:false,
+  relatedDocs:[{id:'DOC-INVOICE-FAKE',kind:'invoice',quoteId:demo.id,number:'INV-2026-0001',
+    vendorName:vendor.name,subject:demo.subject,documentDate:'2026-10-09',
+    total:550000,status:'発行済',updatedAt:'2026-10-09 09:00:00',ownerName:demoUser.name}]};
  cx.quoteUi=undefined;
  vm.runInContext('quoteUi.data=__sampleData;quoteUi.mode=__sampleMode;quoteUi.editor=__sampleEditor;quoteUi.details=__sampleDetails;quoteUi.id=__sampleId;',Object.assign(cx,{
   __sampleData:base,__sampleMode:kind==='list'?'list':kind==='edit'?'edit':'detail',
   __sampleEditor:{...demo,id:'',revision:0,lines:demoLines},
   __sampleDetails:{header:demo,lines:demoLines},__sampleId:demo.id
  }));
- return vm.runInContext('quotePage()',cx);
+ return vm.runInContext(kind==='history'?'documentHistoryPage()':'quotePage()',cx);
 }
 let chrome='';
 for(const program of ['google-chrome','google-chrome-stable','chromium']){
@@ -46,7 +52,8 @@ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-quote-'));
 const cases=[
  [1366,768,'list','light'],[390,844,'list','light'],
  [1440,900,'edit','light'],[390,844,'edit','light'],
- [1366,768,'detail','light'],[390,844,'detail','dark']
+ [1366,768,'detail','light'],[390,844,'detail','dark'],
+ [1366,768,'history','light'],[390,844,'history','dark']
 ];
 let bad=0;
 for(const [width,height,kind,theme] of cases){
@@ -56,7 +63,7 @@ for(const [width,height,kind,theme] of cases){
   '<body><div class="app-shell"><aside class="sidebar"><div class="brand">FM WORKS</div></aside>'+
   '<div class="workspace"><header class="topbar">FM WORKS</header><main class="content">'+html+
   '</main></div></div>'+
-  '<script>const shell=document.querySelector(".quote-layout")||document.querySelector(".v15-quote-overview"),'+
+  '<script>const shell=document.querySelector(".quote-layout")||document.querySelector(".doc-history-page")||document.querySelector(".v15-quote-overview"),'+
   'toolbar=shell.querySelector(".quote-toolbar")||shell.querySelector(".doc-page-header")||shell.querySelector(".v15-page-hero"),'+
   'buttons=[...shell.querySelectorAll("button")],all=[...shell.querySelectorAll(".quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
