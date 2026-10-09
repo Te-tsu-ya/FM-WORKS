@@ -28,11 +28,23 @@ jobs:
         run: node scripts/test_client_contract.mjs
       - name: Test finance authorization and workflows
         run: node scripts/test_finance_integration.mjs
+      - name: Test employee estimates and formal issuance
+        run: node scripts/test_quote_integration.mjs
       - name: Install Japanese fonts for layout verification
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
           fc-cache -f
+      - name: Verify quote layouts and Japanese typography
+        run: node scripts/test_quote_viewport.mjs
+      - name: Upload quote layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-quote-layout-qa
+          path: artifacts/quote-layout/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify home viewports in headless Chrome
         run: node scripts/test_home_viewport.mjs
       - name: Verify office hybrid layouts in Chromium

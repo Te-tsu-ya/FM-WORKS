@@ -36,6 +36,8 @@ jobs:
         run: node scripts/test_client_contract.mjs
       - name: Test finance authorization and workflows
         run: node scripts/test_finance_integration.mjs
+      - name: Test estimates and formal document outputs
+        run: node scripts/test_quote_integration.mjs
       - name: Install clasp
         run: npm install --global @google/clasp@latest
       - name: Restore clasp credentials

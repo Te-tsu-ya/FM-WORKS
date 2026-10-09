@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -196,12 +196,59 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','office','finance','admin']));
+  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','office','finance','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
   expect('people administration is represented by admin in the primary navigation',primaryNavIdForPage('people')==='admin');
   expect('attendance workspace exposes today monthly and history views',attendanceWorkspaceTabs('history').includes('本日')&&attendanceWorkspaceTabs('history').includes('月間')&&attendanceWorkspaceTabs('history').includes('履歴'));
+
+  // v0.14.0: quote creation is a self-service business action, not finance access.
+  const quoteBeforeData=state.data;
+  state.data={today:'2026-10-09',user:{employeeId:'FM9011',name:'架空社員',role:'USER'},
+    permissions:{quoteWorkspace:true,officeWorkspace:false,financeWorkspace:false,adminConsole:false}};
+  state.sessionToken='SESSION_TOKEN';
+  expect('quote menu is visible to ordinary staff without accounting privileges',
+    visibleNav().some(x=>x[0]==='quotes')&&!visibleNav().some(x=>x[0]==='office'||x[0]==='finance'));
+  resetQuoteUi();
+  quoteUi.data={setupRequired:false,vendors:[{code:'FI-0001',name:'架空法人A',invoice:'T1234567890123',address:'架空市'}],
+    sequencesReady:['FI-0001'],quotes:[],canConfigure:false};
+  quoteUi.identity=quoteIdentity_();quoteUi.at=Date.now();
+  resetCalls();
+  quoteNew();
+  expect('ordinary employee can open an editable quote without GAS roundtrip',
+    quoteUi.mode==='edit'&&quotePage().includes('見積明細')&&apiCalls.length===0);
+  quoteUi.editor.vendorCode='FI-0001';
+  quoteUi.editor.lines=[{description:'開発支援',quantity:'2',unit:'ヶ月',price:'300000'},
+    {description:'値引き',quantity:'2',unit:'式',price:'-50000'}];
+  quoteUi.key='CLIENT_QUOTE_KEY000001';
+  const localSum=quoteTotals_(quoteUi.editor.lines);
+  expect('local preview matches source Excel totals',localSum.subtotal===500000&&
+    localSum.tax===50000&&localSum.total===550000);
+  quoteSaveDraft();
+  let quoteCall=lastCall();
+  expect('client posts all quote data to authenticated draft endpoint',
+    quoteCall&&quoteCall.method==='saveQuoteDraft'&&quoteCall.args[0]==='SESSION_TOKEN'&&
+    quoteCall.args[1].vendorCode==='FI-0001');
+  invokeServerSuccess({ok:true,id:'QUOTE-DRAFT',revision:1,status:'下書き'});
+  expect('newly saved draft holds persisted ID and is eligible for issuance',
+    quoteUi.editor.id==='QUOTE-DRAFT'&&!quoteUi.dirty&&quoteUi.editor.revision===1);
+  quoteUi.details={header:{...quoteUi.editor,status:'出力失敗',number:'FI-0001-0002',ownerName:'架空社員',
+    vendorName:'架空法人A',subtotal:500000,taxAmount:50000,total:550000},lines:quoteUi.editor.lines};
+  quoteUi.mode='detail';
+  const failedQuoteView=quotePage();
+  expect('failed exports retain same number, provide retry and never offer download',
+    failedQuoteView.includes('FI-0001-0002')&&failedQuoteView.includes('同じ番号で出力を再試行')&&
+    !failedQuoteView.includes('PDFを保存'));
+  quoteUi.details.header.status='発行処理中';
+  expect('running output does not expose nonexistent document download',
+    quotePage().includes('発行処理中')&&!quotePage().includes('Excelを保存'));
+  quoteUi.details.header.status='発行済';
+  expect('both downloads become available after finalized issuance',
+    quotePage().includes('PDFを保存')&&quotePage().includes('Excelを保存'));
+  resetQuoteUi();
+  state.data=quoteBeforeData;
+  resetCalls();
 
   // v0.12.0: unified office navigation with least-privilege preview access.
   const beforeOfficeData=state.data;
