@@ -58,7 +58,7 @@ for(const [width,height,kind,theme] of cases){
   '</main></div></div>'+
   '<script>window.addEventListener("error",e=>parent.postMessage({kind:"QUOTE_QA_ERROR",message:String(e.message)},"*"));'+
   'const shell=document.querySelector(".quote-layout"),'+
-  'toolbar=document.querySelector(".quote-toolbar"),buttons=[...document.querySelectorAll(".quote-layout button")],'+
+  'toolbar=document.querySelector(".quote-toolbar")||document.querySelector(".fm-business-hero"),buttons=[...document.querySelectorAll(".quote-layout button")],'+
   'all=[...document.querySelectorAll(".quote-layout .quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
   'shellWidth:shell.getBoundingClientRect().width,toolbarHeight:toolbar.getBoundingClientRect().height,'+
