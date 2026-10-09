@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.14.0  
+**文書版:** 0.15.0  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.14.0`
+`APP.version = 0.15.0`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1688,3 +1688,22 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - スクリーンショットQA: scripts/test_quote_viewport.mjs が架空の見積データで一覧・編集中・正式発行後をそれぞれPC/スマホ表示し、横スクロールとボタン配置を検証する。CI成果物 fmworks-quote-layout-qa に画像を保管する。
 
 - エラーフロー追加: quoteDetail_は発行済／出力失敗／発行処理中を区別。出力失敗は同じ番号で再試行するアクションを設けるが、正式発行完了まではgetQuoteDocumentのダウンロードボタンを表示しない。クライアント契約テストで確認する。
+
+## 56. 業務UI再設計（v0.15.0）
+- AppCore: NAV_GROUPSによる4分類。内部financeEntryは申請・報告の画面として表示。認証していない直リンクは申請へ戻す。
+- AppShell: PC/モバイルとも同じグループ。financeEntryPageを画面ルートへ追加。
+- AppFinance: 経費・出張の独立フォームを既存認可/保存APIへ接続。経理ページはサーバーが返す件数を表示し、絞込はローカル処理。
+- AppQuotes: 見積一覧のKPI・検索・状態表示を統一。取引先取込と採番設定はAppAdminに移動。業務の金額検証と正式発行ルールは変更しない。
+- AppOffice: 総務の未実装領域と利用可能な関連メニューを区別し、経理明細を重複表示しない。
+- AppOperations: 申請一覧から経費申請・出張報告へ直接アクセス可能。
+- AppHomePortal: 勤怠・予定・TODOを維持し、見積/経費/出張/工数を優先ショートカットに設定。
+- StylesWorkflowV15: 共通ヘッダー、4枚の指標、2カラム入力/概要、検索/絞込、画面幅別の配置を定義。
+- Code.gs: ADMINまたは経理・総務部門のみofficeWorkspaceを許可。一般MANAGERには総務権限を自動付与しない。
+- DBスキーマ・GAS保存API・実顧客情報は変更なし。見積原本とPDF/Excel完全一致、領収書アップロードは未実装のため実装済みと表現しない。
+
+- v0.15.0 QA補足: StylesWorkflowV15の共有ヘッダーはホームに限って1200px以上・690px以上でコンパクト化し、既存の1366×768/1792×854一画面表示条件を保つ。共通スタイルの変更後には新旧CSSを同時に読み込むChromium試験を再実行する。
+- `scripts/test_workflow_viewport_v15.mjs` で経費・出張独立フォーム、経理の検索と承認一覧、見積一覧、管理者用取引先・採番設定のPCとスマホ10条件を実DOMレンダリングで検証しCIで必須とする。
+
+### v0.15.0 ホーム高密度レイアウトの調整
+- StylesWorkflowV15.html に `min-width:1200px; min-height:690px; max-height:820px` の限定メディアクエリを追加。ホームの予定、タスク、打刻履歴はカード内でスクロールできるようにし、1366×768の実データ多件ケースで一画面要件を維持する。
+- CI の `test_home_viewport.mjs` に含まれるdenseケースを、他の画面テストとともに再実行する。

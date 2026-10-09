@@ -45,6 +45,16 @@ jobs:
           path: artifacts/quote-layout/*.png
           if-no-files-found: warn
           retention-days: 14
+      - name: Verify v0.15 forms, finance and admin at desktop/mobile widths
+        run: node scripts/test_workflow_viewport_v15.mjs
+      - name: Upload unified workflow screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-v15-workflow-layout-qa
+          path: artifacts/workflow-v15/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify home viewports in headless Chrome
         run: node scripts/test_home_viewport.mjs
       - name: Verify office hybrid layouts in Chromium

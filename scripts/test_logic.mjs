@@ -126,8 +126,8 @@ function expectThrows(name, fn) {
 
 expect('office access is offered to ADMIN but not implicitly to personnel editing',
   api.getPermissions_({role:'ADMIN',department:'開発'}).officeWorkspace===true);
-expect('office access is offered to MANAGER while employee admin remains false',
-  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===true&&
+expect('MANAGER without accounting or general affairs duties does not gain office access',
+  api.getPermissions_({role:'MANAGER',department:'開発'}).officeWorkspace===false&&
   api.getPermissions_({role:'MANAGER',department:'開発'}).financeWorkspace===false&&
   api.getPermissions_({role:'MANAGER',department:'開発'}).employeeAdmin===false);
 expect('office access includes general affairs department without granting admin console',

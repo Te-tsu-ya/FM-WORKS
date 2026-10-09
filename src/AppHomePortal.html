@@ -106,42 +106,42 @@ function homePortalPriorities(tasks){
   </section>`;
 }
 function homePortalShortcuts(){
-  const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
   const routes=[
-    ['worklog','工数入力','業務時間を記録','i-chart'],
-    ['requests','休暇・申請','有給・打刻修正','i-file'],
-    ['monthly','月次勤怠','勤怠を確認','i-clock'],
-    ['schedule','予定表','スケジュール','i-calendar']
+    ['見積書を作成','取引先・金額を入力','i-doc',"navigate('quotes')"],
+    ['経費を申請','立替経費を登録','i-trend',"openFinanceForm('expense')"],
+    ['出張を報告','出張内容・結果を提出','i-calendar',"openFinanceForm('travel')"],
+    ['工数を入力','今日の仕事を記録','i-chart',"navigate('worklog')"]
   ];
-  if(admin)routes.push(['people','社員・設定','権限と労務管理','i-gear']);
-  return `<section class='card home-portal-panel home-portal-shortcuts'>
-    <header class='home-portal-panel-head'><div><span class='eyebrow'>QUICK ACCESS</span><h2>よく使う機能</h2></div></header>
-    <div class='home-portal-shortcut-grid'>${routes.map(([page,label,detail,icon])=>`
-      <button type='button' class='home-portal-shortcut' onclick="navigate('${page}')">
-        ${svg(icon)}<span><strong>${label}</strong><small>${detail}</small></span><i aria-hidden='true'>›</i>
-      </button>`).join('')}</div>
-  </section>`;
+  return "<section class='card home-portal-panel home-portal-shortcuts'>"+
+    "<header class='home-portal-panel-head'><div><span class='eyebrow'>QUICK ACTIONS</span>"+
+    "<h2>クイックアクション</h2><p>よく使う業務をすぐに実行できます。</p></div></header>"+
+    "<div class='home-portal-shortcut-grid v15-home-quick'>"+
+    routes.map(([label,detail,icon,action])=>
+      "<button type='button' class='home-portal-shortcut' onclick=\""+action+"\">"+
+      svg(icon)+"<span><strong>"+escapeHtml(label)+"</strong><small>"+escapeHtml(detail)+
+      "</small></span><i aria-hidden='true'>›</i></button>").join('')+
+    "</div></section>";
 }
 function homePage(){
   const d=state.data||{},a=d.attendance||{},schedule=Array.isArray(d.todaySchedule)?d.todaySchedule:[],
     tasks=Array.isArray(d.tasks)?d.tasks:null,company=d.companyToday,
     manager=!!(d.permissions&&d.permissions.requestApprove);
   return `<div class='single-screen-layout home-screen home-portal-screen'>
-    <header class='home-portal-header'>
+    <header class='home-portal-header v15-page-hero'>
       <div class='home-portal-intro'><div class='home-portal-meta'>
         <span class='home-portal-today'><i aria-hidden='true'></i>TODAY</span>
         <span>${escapeHtml(fmtDate(d.today||''))}</span>
         <span>${company?escapeHtml(company.name||company.type||'会社カレンダー'):'会社カレンダー未登録'}</span></div>
-        <h1>${homePortalGreeting()}、${escapeHtml(d.user&&d.user.displayName||'')}</h1>
-        <p>${manager?'自分の勤務とチームの確認事項を、ここで確認できます。':'今日の勤務・予定・対応事項を、ここから確認できます。'}</p>
+        <h1>ホーム</h1>
+        <p>${homePortalGreeting()}、${escapeHtml(d.user&&d.user.displayName||'')}。 ${manager?'自分の勤務とチームの確認事項を確認できます。':'今日の勤務・予定・対応事項をまとめて確認できます。'}</p>
       </div>
       <div class='home-portal-current'><span>${manager?'承認担当者':'個人ポータル'}</span>
         <strong>${escapeHtml(a.stateLabel||'未打刻')}</strong>
         <button type='button' onclick="navigate('attendance')">勤務状況を確認 ›</button></div>
     </header>
-    <div class='home-portal-stats' aria-label='今月の状況'>${homePortalStats()}</div>
+    <div class='home-portal-stats v15-stats' aria-label='今月の状況'>${homePortalStats()}</div>
     ${state.homeOverview.error?`<div class='home-portal-load-error'>${homeOverviewError()}</div>`:''}
-    <div class='home-portal-layout'>
+    <div class='home-portal-layout v15-home-layout'>
       ${homePortalPunch(a)}
       ${homePortalPriorities(tasks)}
       ${homePortalSchedule(schedule)}

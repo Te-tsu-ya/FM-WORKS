@@ -5,7 +5,7 @@ import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 const root=process.cwd();
-const styles=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
+const styles=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
 const source=fs.readFileSync(path.join(root,'src/AppQuotes.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -56,9 +56,9 @@ for(const [width,height,kind,theme] of cases){
   '<body><div class="app-shell"><aside class="sidebar"><div class="brand">FM WORKS</div></aside>'+
   '<div class="workspace"><header class="topbar">FM WORKS</header><main class="content">'+html+
   '</main></div></div>'+
-  '<script>const shell=document.querySelector(".quote-layout"),'+
-  'toolbar=document.querySelector(".quote-toolbar"),buttons=[...document.querySelectorAll(".quote-layout button")],'+
-  'all=[...document.querySelectorAll(".quote-layout .quote-line")];'+
+  '<script>const shell=document.querySelector(".quote-layout")||document.querySelector(".v15-quote-overview"),'+
+  'toolbar=shell.querySelector(".quote-toolbar")||shell.querySelector(".v15-page-hero"),'+
+  'buttons=[...shell.querySelectorAll("button")],all=[...shell.querySelectorAll(".quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
   'shellWidth:shell.getBoundingClientRect().width,toolbarHeight:toolbar.getBoundingClientRect().height,'+
   'lines:all.length,buttons:buttons.length,smallButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+

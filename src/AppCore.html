@@ -1,5 +1,11 @@
 <script>
-const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['quotes','見積','i-doc'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']];
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','見積書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']];
+const NAV_GROUPS=[
+  {label:'日常業務',ids:['home','attendance','worklog','schedule']},
+  {label:'申請・帳票',ids:['requests','quotes']},
+  {label:'管理業務',ids:['finance','office']},
+  {label:'システム管理',ids:['admin']}
+];
 const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
 const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
 let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false,refreshing:false,error:'',loadedKey:'',historyFilter:'ALL',historyQuery:'',historyLimit:10,approvalLimit:4,submitting:false},monthly:{yearMonth:null,employeeId:null,data:null,loadedKey:'',error:'',view:'calendar',loading:false},adminTab:'people',officeUi:{selected:'overview',recordId:'',query:'',status:'all'},adminUi:{selectedEmployeeId:'',detailTab:'basic',search:'',role:'ALL',status:'ALL',menuOpen:false,wizard:false,wizardStep:1,saving:false},documents:{requirements:null,technical:null,loading:null},schedule:{date:null,selectedDate:null,selectedEventId:null,mobileDetailOpen:false,loadedKey:'',loadedIdentity:'',refreshing:false,highlightEmployeeId:'ALL',rawEvents:[],error:'',view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
@@ -293,6 +299,7 @@ function primaryNavIdForPage(page){
   if(page==='monthly')return 'attendance';
   if(page==='companyCalendar')return 'schedule';
   if(page==='people')return 'admin';
+  if(page==='financeEntry')return 'requests';
   return page;
 }
 function visibleNav(){
@@ -301,9 +308,14 @@ function visibleNav(){
 }
 function renderNav(){
   const nav=visibleNav(),activeId=primaryNavIdForPage(state.page);
-  document.getElementById('desktopNav').innerHTML=nav.map(([id,label,icon])=>
-    `<button class='nav-button ${activeId===id?'active':''}' data-route='${id}'>${svg(icon)}<span>${label}</span></button>`
-  ).join('');
+  const byId=new Map(nav.map(item=>[item[0],item]));
+  document.getElementById('desktopNav').innerHTML=NAV_GROUPS.map(group=>{
+    const links=group.ids.map(id=>byId.get(id)).filter(Boolean);
+    if(!links.length)return '';
+    return `<div class='nav-section'><span class='nav-section-label'>${escapeHtml(group.label)}</span>
+      ${links.map(([id,label,icon])=>`<button type='button' class='nav-button ${activeId===id?'active':''}' data-route='${id}'
+        aria-current='${activeId===id?'page':'false'}'>${svg(icon)}<span>${escapeHtml(label)}</span></button>`).join('')}</div>`;
+  }).join('');
   const allowedIds=new Set(nav.map(x=>x[0]));
   const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
   const mobile=document.getElementById('mobileNav');
@@ -335,6 +347,7 @@ function navigate(page){
   if((page==='admin'||page==='people')&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
   if(page==='office'&&!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace)){page='home'}
   if(page==='finance'&&!(state.data&&state.data.permissions&&state.data.permissions.financeWorkspace)){page='home'}
+  if(page==='financeEntry'&&!financeActiveForm){page='requests';}
   if(page==='admin'&&state.adminTab==='people')page='people';
   if(page!=='schedule')state.schedule.mobileDetailOpen=false;
   state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
@@ -342,12 +355,10 @@ function navigate(page){
   if(page==='schedule')loadSchedule({silent:true});
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs({silent:true});
-  if(page==='requests')loadRequests();
+  if(page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
   if(page==='quotes')loadQuoteWorkspace({silent:true});
   if(page==='finance')loadFinanceOverview();
-  if(page==='office'&&state.data&&state.data.permissions&&state.data.permissions.financeWorkspace){
-    scheduleBackgroundTask(()=>{if(state.page==='office')loadFinanceOverview({silent:true});},100);
-  }
+
   if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
   if(page==='monthly')loadMonthly();
   if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
@@ -355,6 +366,7 @@ function navigate(page){
     if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
     if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
     if(state.adminTab==='operation')loadMaintenance();
+    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
     if(state.adminTab==='requirements')loadSystemDocument('requirements');
     if(state.adminTab==='technical')loadSystemDocument('technical');
   }
