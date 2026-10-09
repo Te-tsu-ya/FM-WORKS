@@ -4,7 +4,7 @@ const AUTO_LEAVE_PREFIX='FM_AUTO_LEAVE_V1_';
 function leaveDueAtIndex_(hire,index){
   const [y,m,d]=String(hire||'').split('-').map(Number),i=Number(index);
   if(!y||!m||!d||m>12||d>31||!Number.isInteger(i)||i<0||i>80)return '';
-  const mon=(m-1)+6+12*i,Y=y+Math.floor(mon/12),M=((mon%12)+12)%12;
+  const mon=m+5+12*i,Y=y+Math.floor(mon/12),M=((mon%12)+12)%12;
   const D=Math.min(d,new Date(Date.UTC(Y,M+1,0)).getUTCDate());
   return [Y,String(M+1).padStart(2,'0'),String(D).padStart(2,'0')].join('-');
 }
