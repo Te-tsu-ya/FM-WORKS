@@ -454,7 +454,7 @@ for (const marker of [
     failed = true;
   }
 }
-if (!app.includes('includeEmployees:false') || !app.includes('includeProjects:true')) {
+if (!app.includes('includeEmployees:false') || !app.includes('const includeProjects=') || !app.includes('start:range.start,end:range.end,includeProjects')) {
   console.error('Client page bundles must avoid redundant master-data reads.');
   failed = true;
 }
