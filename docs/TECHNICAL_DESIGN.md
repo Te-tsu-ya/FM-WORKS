@@ -1717,3 +1717,9 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 位置ヒントがある場合も毎回該当行全列を再読込し、検索キーの完全一致を検査。ヒントなし・行移動・位置競合は `TextFinder` へフォールバックする。
 - `Auth.gs:requireSession_` の期限/無効化チェック、`getEmployeeAuthRecord_` の在籍・権限チェックは従来通りライブデータ。認証ハッシュと社員IDのキャッシュスコープを分離。
 - `scripts/test_data_access_performance.mjs` はダミーSheetで接続重複、検索回数、セッション失効、権限変更、行移動、DB切替を回帰検証。実時間の効果は `FM_WORKS_PERF` ログで評価する。
+
+### v0.15.1 工数画面のウィンドウキャッシュ拡大
+
+- `AppOperations.html:worklogWindowRange(date)` は `monthGridRange(date)` の開始・終了を7日ずつ拡張。リクエストは既存の `getWorklogs` に限定し、一度得た `items` を `worklogShowCachedDay` で日付抽出する。
+- `loadWorklogs` は初回/強制取得以外の `includeProjects` を省略し、`projects:[]` の応答を既存の取得済みマスタへ上書きしない。保存・削除時の `invalidatePageCache('worklog')` と最大2並列・世代管理は従来通り。
+- `scripts/test_client_contract.mjs` で10月から11月への移動のRPC=0、プロジェクト情報維持、別月キャッシュ、書き込み後の破棄を検証する。
