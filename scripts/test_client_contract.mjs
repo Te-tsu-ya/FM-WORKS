@@ -844,7 +844,7 @@ const result=vm.runInContext(`
   expect('management opens integrated employee hub with six vertical sections',
     initialHub.includes('admin-workspace-body')&&initialHub.includes('admin-overview-card')&&
     initialHub.includes('admin-people-split')&&initialHub.includes('admin-side-nav')&&
-    ADMIN_CATEGORIES.length===6&&settingsTabs('people').split('data-admin-tab=').length===7);
+    ADMIN_CATEGORIES.length===7&&settingsTabs('people').split('data-admin-tab=').length===8);
   expect('management KPI counts only real active employees, leave and PIN statuses',
     adminRecords.filter(x=>x.active!==false).length===3&&
     adminOverviewStats().includes('年休未設定')&&
@@ -1132,7 +1132,7 @@ const result=vm.runInContext(`
     homePortalTaskRoute('constructor')===null);
   expect('staff shortcuts do not expose administrator-only settings',
     homePortalShortcuts().includes("navigate('worklog')")&&
-    homePortalShortcuts().includes("navigate('monthly')")&&
+    homePortalShortcuts().includes("navigate('quotes')")&&
     !homePortalShortcuts().includes("navigate('people')"));
   expect('rendering home does not issue additional server calls',apiCalls.length===0);
   const noTasks=homePortalTaskRows([
@@ -1156,7 +1156,7 @@ const result=vm.runInContext(`
   expect('manager sees team pending count and role-specific administration links',
     managerPortal.includes('チーム承認待ち')&&managerPortal.includes('3件')&&
     managerPortal.includes('担当チームの承認待ち申請')&&
-    managerPortal.includes("navigate('people')"));
+    managerPortal.includes("navigate('admin')"));
   state.data.todaySchedule=[{id:'EVENT-X',date:'2026-10-08',title:'<img src=x onerror=alert(1)>',start:'14:00'}];
   const malicious=homePortalScheduleRows(state.data.todaySchedule);
   expect('home calendar event titles are escaped',malicious.includes('&lt;img')&&!malicious.includes('<img src=x'));
