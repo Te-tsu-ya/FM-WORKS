@@ -20,9 +20,13 @@ class Sheet{
     for(let r=0;r<height;r++){let ix=row+r-1;self.rows[ix]=self.rows[ix]||[];
       for(let c=0;c<width;c++)self.rows[ix][col+c-1]=next[r][c];}}};
  }}
-function fakeRange(value){
+function fakeRange(value,column,countRows=1,countColumns=1){
+ let rows,cols;
+ if(typeof value==='number'){rows=countRows;cols=countColumns;}
+ else{
  const m=String(value).split(':');const parse=s=>{const x=s.match(/^([A-Z]+)(\d+)$/);return {col:[...x[1]].reduce((n,v)=>n*26+v.charCodeAt(0)-64,0),row:+x[2]}};
- const a=parse(m[0]),b=parse(m[1]||m[0]),rows=b.row-a.row+1,cols=b.col-a.col+1;
+ const a=parse(m[0]),b=parse(m[1]||m[0]);rows=b.row-a.row+1;cols=b.col-a.col+1;
+ }
  let self={setValues:v=>{if(v.length!==rows||v.some(row=>row.length!==cols))throw Error('XLSX range mismatch '+value);return self;}};
  for(const n of ['setValue','merge','setFontSize','setFontWeight','setFontColor','setFontFamily','setBackground','setVerticalAlignment','setHorizontalAlignment','setWrap','setNumberFormat','setBorder','setWrapStrategy'])self[n]=()=>self;
  return self;
