@@ -356,6 +356,7 @@ const result=vm.runInContext(`
   expect('returned finance claim offers an owner resubmission path',
     financeMyRow('expense',financeFakeExpense).includes('修正して再申請'));
   resetCalls();
+  state.page='requests'; // A returned employee claim is edited from the requests workspace.
   openFinanceForm('expense','EXP-FAKE-1');
   expect('returned claim editing retains original row id and prepopulates fields',
     financeActiveForm&&financeActiveForm.editId==='EXP-FAKE-1'&&
