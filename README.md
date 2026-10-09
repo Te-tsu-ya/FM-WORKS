@@ -1,5 +1,11 @@
 # FM WORKS
 
+## 勤怠管理アプリ（GAS公開URL）
+
+**[FM WORKS アプリを開く](https://script.google.com/macros/s/AKfycbw7oWIZkrOE-ClTVNeI0Kq4hzsZrYaKSC0CqNVsV4bwpufgBVR5-7MYxVEuj_51A9YgvQ/exec)**
+
+公開先は既存のGoogle Apps Scriptウェブアプリです。GitHub Actionsによるデプロイ後は、このURLから動作確認してください。
+
 Fusion Mind社内向けの統合ワークポータルです。
 
 ## 主な機能
