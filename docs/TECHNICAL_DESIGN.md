@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.16.0  
+**文書版:** 0.16.1  
 **更新日:** 2026-10-09  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1734,3 +1734,9 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 管理者が明示確認した場合だけquoteSetupStorage_から既存migrateDatabaseToCurrentを実行し、バックアップを作成して必要シートを追加する。quoteAddSingleVendor_はimportQuoteVendorsを呼び出すが、過去番号の確認を省略しない。
 - test_quote_integration.mjsで帳票文字列を検証し、test_client_contract.mjsでライブプレビュー・行編集・HTMLエスケープと追加RPCなしを確認。test_quote_viewport.mjsでスマホとPCのレイアウトを確認する。
 - 元Excelの帳票書式完全一致と本番GASの実出力E2Eは未確認である。
+
+## v0.16.1 見積確定情報のスナップショット表示（2026-10-09）
+
+- quoteDetail_ は quotePreviewDocument_(Object.assign({},header,{lines})) を使い、エディターと同じ帳票コンポーネントを表示する。
+- quotePreviewDocument_ は状態が「発行済」「発行処理中」「出力失敗」のとき、quoteVendor_ に依存せず header.vendorName/vendorAddress を使い、header.subtotal/taxAmount/total と line.amount の保存値を表示する。
+- test_client_contract.mjs は発行済み詳細のプレビューデザイン一致・サーバー保存金額優先・後日のマスタ名称変更の非影響を検証する。既存のファイル発行・認証・権限検証を維持する。
