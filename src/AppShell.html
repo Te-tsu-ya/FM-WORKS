@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,quotes:quotePage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
@@ -142,12 +142,13 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.monthly.view='calendar';
   state.company.year=parseIso(data.today).getFullYear();
   const requested=(location.hash||'#home').slice(1);
-  const nestedRoutes=['monthly','companyCalendar','people'];
+  const nestedRoutes=['monthly','companyCalendar','people','financeEntry'];
   state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
   if(state.page==='admin'&&state.adminTab==='people')state.page='people';
   if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
   if(state.page==='office'&&!(data.permissions&&data.permissions.officeWorkspace))state.page='home';
   if(state.page==='finance'&&!(data.permissions&&data.permissions.financeWorkspace))state.page='home';
+  if(state.page==='financeEntry')state.page='requests';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
   document.getElementById('app').hidden=false;
@@ -165,18 +166,17 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='schedule')loadSchedule({silent:true});
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs({silent:true});
-  if(state.page==='requests')loadRequests();
+  if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
   if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
-  if(state.page==='office'&&data.permissions&&data.permissions.financeWorkspace){
-    scheduleBackgroundTask(()=>{if(state.page==='office')loadFinanceOverview({silent:true});},100);
-  }
+
   if(state.page==='monthly')loadMonthly();
   if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
   if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){
     if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
     if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
     if(state.adminTab==='operation')loadMaintenance();
+    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
     if(state.adminTab==='requirements')loadSystemDocument('requirements');
     if(state.adminTab==='technical')loadSystemDocument('technical');
   }
@@ -222,7 +222,12 @@ function openMobileDrawer(){
   root.innerHTML=`<div class='mobile-drawer-backdrop' onclick='closeMobileDrawer()'></div>
     <aside class='mobile-drawer' aria-label='全メニュー'>
       <div class='mobile-drawer-head'>${svgLogo()}<div><strong>FM WORKS</strong><small>${state.data?escapeHtml(state.data.user.displayName):''}</small></div><button class='icon-button' onclick='closeMobileDrawer()' aria-label='メニューを閉じる'>×</button></div>
-      <nav>${nav.map(([id,label,icon])=>`<button class='${state.page===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${label}</span></button>`).join('')}</nav>
+      <nav>${NAV_GROUPS.map(group=>{
+        const links=group.ids.map(id=>nav.find(x=>x[0]===id)).filter(Boolean);
+        if(!links.length)return '';
+        return `<div class='mobile-drawer-nav-group'><small>${escapeHtml(group.label)}</small>${links.map(([id,label,icon])=>
+          `<button class='${primaryNavIdForPage(state.page)===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${escapeHtml(label)}</span></button>`).join('')}</div>`;
+      }).join('')}</nav>
     </aside>`;
   document.body.classList.add('drawer-open');
 }

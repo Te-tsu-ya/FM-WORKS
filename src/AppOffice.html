@@ -406,8 +406,30 @@ function officeQuickCreate(){
   else openFinanceForm(kind);
 }
 function officePage(){
-  if(!officeWorkspaceAllowed())
-    return pageHead('事務・経理','この画面を表示する権限がありません。管理者または総務担当者にご確認ください。');
-  return officeUiState_().selected==='overview'?officeOverviewPage_():officeModulePage_();
+  if(!officeWorkspaceAllowed())return pageHead('総務','この画面を表示する権限がありません。');
+  const finance=officeFinanceAllowed_();
+  return ["<div class='v15-workspace v15-general-affairs'>",
+    "<header class='v15-page-hero'><div><div class='v15-kicker'>FM WORKS / 管理業務</div>",
+    "<h1>総務</h1><p>事務所の備品・購買・書類整理を扱うための業務スペースです。</p></div>",
+    "<div class='v15-hero-mark'>",svg('i-briefcase'),"</div></header>",
+    "<div class='card v15-empty' role='status'><strong>総務の管理機能は順次整備しています。</strong>",
+    "元Excelの「事務所で必要なもの」などを安全に引き継ぐため、実際のデータ登録・棚卸し・購入管理はまだ利用できません。",
+    "未実装機能を操作可能なようには表示しません。</div>",
+    "<section class='v15-affairs-grid'>",
+    "<article class='card v15-affairs-card'>",svg('i-briefcase'),"<h2>備品・購買</h2>",
+    "<p>備品番号・所在場所・数量・購入履歴を管理する予定です。元Excelからのデータ移行は未実施です。</p>",
+    "<span class='v15-pending-label'>設計中</span></article>",
+    "<article class='card v15-affairs-card'>",svg('i-doc'),"<h2>書類の整理</h2>",
+    "<p>事務所で使用する申請書・各種書類の保管ルールを整理します。電子保存は未実装です。</p>",
+    "<span class='v15-pending-label'>設計中</span></article>",
+    "<article class='card v15-affairs-card'>",svg('i-chart'),"<h2>物品の貸出・返却</h2>",
+    "<p>貸出先・期限・返却状況を一覧で確認できる仕組みを予定しています。</p>",
+    "<span class='v15-pending-label'>設計中</span></article>",
+    "</section><section class='card'><div class='v15-section-heading'><div class='v15-section-icon'>",
+    svg('i-file'),"</div><div><h2>関連する業務</h2><p>実際に利用できる機能へ移動</p></div></div>",
+    "<div class='v15-finance-actions'>",
+    "<button type='button' class='secondary-button' onclick='navigate(\"requests\")'>経費申請・出張報告</button>",
+    finance?"<button type='button' class='secondary-button' onclick='navigate(\"finance\")'>経理の処理一覧</button>":"",
+    "</div></section></div>"].join('');
 }
 </script>

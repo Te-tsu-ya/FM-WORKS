@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_office_viewport.mjs'
+  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -17,7 +17,7 @@ for (const file of required) {
 }
 const clientFiles=['AppQuotes.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
-const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
+const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','事務','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
@@ -117,7 +117,7 @@ for(const marker of ['function quotePage()','function quoteNew()','function quot
 for(const sheet of ['見積取引先','見積ヘッダー','見積明細','見積採番']){
  if(!schemaCodeText.includes("'"+sheet+"':")){console.error('Missing estimate DB sheet '+sheet);failed=true;}
 }
-if(!app.includes("'quotes','見積'")||!app.includes('quotes:quotePage')||
+if(!app.includes("'quotes','見積書'")||!app.includes('quotes:quotePage')||
  !indexText.includes("include_('AppQuotes')")){
  console.error('All-employee estimates must be a visible, routed application page.');failed=true;
 }
@@ -671,13 +671,13 @@ if(!styles.includes('.worklog-date-picker')||!app.includes('rememberWorklogQuick
   console.error('Worklog date picker styling or render preservation is missing.');failed=true;
 }
 
-if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") ||
+if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people','financeEntry']") ||
     !app.includes("(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home'")) {
   console.error('Nested workspace deep links must survive authenticated bootstrap.');
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['quotes','見積','i-doc'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','見積書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",
@@ -789,6 +789,10 @@ for(const marker of [
 
 /* v0.12.0 universal design-system and office scaffold guardrails */
 const officePreview=fs.readFileSync(path.join(root,'src','AppOffice.html'),'utf8');
+const workflowQa=fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+if(!workflowQa.includes('node scripts/test_workflow_viewport_v15.mjs')){
+  console.error('Unified business viewport test must run in CI.');failed=true;
+}
 const designNotes=fs.readFileSync(path.join(root,'docs','UI_DESIGN_SYSTEM.md'),'utf8');
 const officeSources=fs.readFileSync(path.join(root,'docs','OFFICE_SOURCE_MAPPING.md'),'utf8');
 const systemCss=styles.slice(styles.indexOf('FM WORKS Design System v1'));
@@ -805,7 +809,7 @@ for(const marker of [
   if(!styles.includes(marker)){console.error('v0.12.0 shared design token/office style missing: '+marker);failed=true;}
 }
 for(const marker of [
-  "['office','事務','i-briefcase']",
+  "['office','総務','i-briefcase']",
   "officeWorkspace: role ===",
   "id==='office'?!!p.officeWorkspace",
   "if(page==='office'&&!(state.data",
@@ -853,6 +857,28 @@ if(!designNotes.includes('共通UI/UXデザインシステム')||!officeSources.
   console.error('v0.12.0 UI design rulebook / sanitized office source mapping missing.');failed=true;
 }
 
+
+/* v0.15.0 approved workflow UI acceptance markers. */
+for(const marker of [
+  "const NAV_GROUPS=[","label:'日常業務'","label:'申請・帳票'","label:'管理業務'","label:'システム管理'",
+  "financeEntry:financeEntryPage","function financeEntryPage()","function financeCancelEntry()",
+  "function financeVisibleItems_(kind)","function financeSearchVisible(value)",
+  "function quoteSetFilter(filter)","function quoteAdministrationSection_()",
+  "function requestWorkflowActions_()","function requestWorkflowMetrics_()",
+  "quoteAdminSetup_()","function officePage()"
+]){
+  if(!app.includes(marker)){console.error('v0.15.0 workflow marker missing: '+marker);failed=true;}
+}
+for(const marker of [
+ '.nav-section','.v15-page-hero','.v15-stats','.v15-entry-form',
+ '.v15-finance-body','.v15-quote-columns','.v15-quick-grid','.v15-affairs-grid'
+]){
+  if(!styles.includes(marker)){console.error('v0.15.0 design style missing '+marker);failed=true;}
+}
+if(!indexText.includes("include_('StylesWorkflowV15')")||
+ !serverCode.includes("officeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_")){
+ console.error('v0.15.0 design or restricted affairs access missing');failed=true;
+}
 
 /* v0.13.0 finance least-privilege and schema integration. */
 for(const workflow of ['.github/workflows/ci.yml','.github/workflows/deploy.yml']){
@@ -1496,8 +1522,8 @@ for (const homePortalMarker of [
   'home-portal-agenda-empty',
   'home-portal-all-clear',
   'state.schedule.selectedEventId=this.dataset.eventId||null',
-  "['worklog','工数入力'",
-  "['requests','休暇・申請'"
+  "['工数を入力','今日の仕事を記録'",
+  "['経費を申請','立替経費を登録'"
 ]) {
   if(!portalFile.includes(homePortalMarker)){console.error('v0.11.9 home portal missing: '+homePortalMarker);failed=true;}
 }

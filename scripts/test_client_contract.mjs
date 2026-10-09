@@ -96,7 +96,8 @@ const context=vm.createContext({
   apiCalls,
   Object,Array,Set,Map,JSON,RegExp,Error,Date,Math,Number,String,Boolean,
   document,
-  window:{matchMedia:()=>({matches:true})},
+  window:{matchMedia:()=>({matches:true}),scrollTo(){}},
+  history:{replaceState(){}},
   navigator:{platform:'CI',userAgent:'FM-WORKS-CLIENT-CONTRACT'},
   location:{hash:'#home'},
   localStorage:makeStorage(),
@@ -196,7 +197,7 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','office','finance','admin']));
+  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','finance','office','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
@@ -250,53 +251,38 @@ const result=vm.runInContext(`
   state.data=quoteBeforeData;
   resetCalls();
 
-  // v0.12.0: unified office navigation with least-privilege preview access.
+  // v0.15.0: General Affairs is a planning-only area, distinct from finance.
   const beforeOfficeData=state.data;
   const beforeOfficePage=state.page;
   state.data={today:'2026-10-08',user:{employeeId:'FM9000',displayName:'一般社員',department:'開発'},
     permissions:{adminConsole:false,employeeAdmin:false,officeWorkspace:false}};
-  state.officeUi={selected:'documents'};
+  state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
   state.page='home';
   resetCalls();
-  expect('non-office staff never see the office or administrator routes',
-    !visibleNav().some(x=>x[0]==='office'||x[0]==='admin'));
+  expect('general employee navigation excludes finance, general affairs and settings',
+    !visibleNav().some(x=>['office','finance','admin'].includes(x[0])));
+  expect('all employees can access estimates, leave and business reports',
+    visibleNav().some(x=>x[0]==='quotes')&&visibleNav().some(x=>x[0]==='requests'));
+  expect('four sidebar groups separate daily activity, forms, finance, settings',
+    NAV_GROUPS.length===4&&NAV_GROUPS[0].label==='日常業務'&&
+    NAV_GROUPS[1].label==='申請・帳票'&&NAV_GROUPS[2].label==='管理業務'&&
+    NAV_GROUPS[3].label==='システム管理');
   const officeDenied=officePage();
-  expect('office page is protected when link is opened directly',
-    officeDenied.includes('権限')&&!officeDenied.includes('office-module-detail'));
-  const initialDeniedModule=state.officeUi.selected;
-  selectOfficeModule('expenses');
-  expect('unauthorized office module selection does not change UI state or call the backend',
-    state.officeUi.selected===initialDeniedModule&&apiCalls.length===0);
+  expect('unauthorized general affairs is blocked even through direct page call',
+    officeDenied.includes('権限')&&!officeDenied.includes('v15-affairs-grid'));
   state.data.permissions.officeWorkspace=true;
-  expect('office member sees only office navigation, not administrative navigation',
-    visibleNav().some(x=>x[0]==='office')&&!visibleNav().some(x=>x[0]==='admin'));
-  const moduleHtml=officePage();
-  expect('office scaffold lists six reference-grounded modules',
-    OFFICE_MODULES.length===6&&moduleHtml.includes('office-module-nav')&&
-    OFFICE_MODULES.every(m=>moduleHtml.includes("data-office-module='"+m.id+"'")));
-  expect('office scaffold clearly states that saving and PDF export are not available',
-    moduleHtml.includes('入力・保存機能は未実装')&&
-    moduleHtml.includes('PDF発行はできません')&&moduleHtml.includes('元Excelの実データは移行していません'));
-  selectOfficeModule('expenses');
-  const expenseScaffold=officePage();
-  expect('expense scaffold shows source columns without uploading any real business data',
-    state.officeUi.selected==='expenses'&&expenseScaffold.includes('立替者受取日')&&
-    expenseScaffold.includes('出金日')&&expenseScaffold.includes('申請理由'));
-  selectOfficeModule('travel');
-  const travelScaffold=officePage();
-  expect('travel scaffold includes traveler dates, lodging and allowance fields',
-    state.officeUi.selected==='travel'&&travelScaffold.includes('宿泊地域')&&
-    travelScaffold.includes('日当区分'));
-  selectOfficeModule('vendors');
-  expect('vendor scaffold includes invoice registration and vendor code',
-    officePage().includes('適格請求書発行事業者登録番号')&&officePage().includes('ベンダーコード'));
-  selectOfficeModule('not-a-module');
-  expect('unknown office module ID is rejected without changing state',
-    state.officeUi.selected==='vendors'&&apiCalls.length===0);
+  const officePlanning=officePage();
+  expect('general affairs is not a second quote or finance workspace',
+    officePlanning.includes('v15-affairs-grid')&&
+    officePlanning.includes('備品・購買')&&officePlanning.includes('書類の整理')&&
+    officePlanning.includes('設計中')&&
+    !officePlanning.includes('finance-overview-row')&&!officePlanning.includes('quote-record'));
+  expect('general affairs planning does not offer fake asset saves',
+    !officePlanning.includes('備品を登録')&&!officePlanning.includes('新規資産登録'));
   state.data.permissions.adminConsole=true;
-  expect('administrators can access both office and administrator routes',
+  expect('administrator can open both general affairs and system settings',
     visibleNav().some(x=>x[0]==='office')&&visibleNav().some(x=>x[0]==='admin'));
-  expect('office module switching sends zero GAS requests',apiCalls.length===0);
+  expect('planning operations have no GAS roundtrip',apiCalls.length===0);
 
   state.data.permissions.financeWorkspace=false;
   expect('non-accounting staff cannot see finance page or route',
@@ -337,81 +323,49 @@ const result=vm.runInContext(`
   openFinanceForm('expense','EXP-FAKE-1');
   expect('returned claim editing retains original row id and prepopulates fields',
     financeActiveForm&&financeActiveForm.editId==='EXP-FAKE-1'&&
-    document.getElementById('fin-vendor').value==='安全な取引先');
+    state.page==='financeEntry'&&financeEntryPage().includes('安全な取引先'));
+  document.getElementById('fin-vendor').value='安全な取引先';
+  document.getElementById('fin-item').value='消耗品';
+  document.getElementById('fin-amount').value='2500';
+  document.getElementById('fin-usedOn').value='2026-10-08';
+  document.getElementById('fin-purpose').value='確認';
   submitFinanceForm();
   call=lastCall();
   expect('finance resubmission uses dedicated server endpoint with original id',
     call&&call.method==='resubmitFinanceRequest'&&call.args[0]==='SESSION_TOKEN'&&
     call.args[1]==='expense'&&call.args[2]==='EXP-FAKE-1');
   resetFinanceUi();
-  // v0.13.3 Office Hybrid: actual finance data in actionable dashboard and list/detail,
-  // but no financial data rendered for office-only managers.
+  // v0.15.0: dashboard access, query filtering and self-approval protections.
   state.data.permissions.officeWorkspace=true;
   state.data.permissions.financeWorkspace=true;
-  state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
-  const financePending={...financeFakeExpense,id:'EXP-FAKE-PENDING',status:'承認待ち',employeeName:'架空別社員'};
-  financeUi.overview={setupRequired:false,expenses:[financeFakeExpense,financePending],travels:[],receipts:[],
-    receiptMatches:{'EXP-FAKE-1':{status:'AMOUNT_MISMATCH',label:'金額差異',recordedAmount:2000,claimAmount:2500}},
-    totals:{expensePending:1,travelPending:0,expenseToSettle:0}};
-  const overviewOffice=officePage();
-  expect('priority action center precedes the module menu in keyboard and reading order',
-    overviewOffice.indexOf('office-home-work')<overviewOffice.indexOf('office-home-menu'));
-  expect('hybrid office top provides six business shortcuts, quick entry and actionable queue',
-    overviewOffice.includes('office-command')&&overviewOffice.includes('office-home-body')&&
-    overviewOffice.includes('office-tile-grid')&&overviewOffice.includes('office-queue-row')&&
-    (overviewOffice.match(/office-shortcut-tile/g)||[]).length===6);
-  expect('overview uses financial records, never invented placeholder totals',
-    overviewOffice.includes('EXP-FAKE-1')&&overviewOffice.includes('架空社員')&&
-    !overviewOffice.includes('dummy-count'));
+  financeVisual={query:'',status:'ALL'};
+  const pendingFake={...financeFakeExpense,id:'EXP-PENDING',status:'承認待ち',
+    employeeId:'OTHER',employeeName:'架空他社員'};
+  financeUi.overview={setupRequired:false,expenses:[financeFakeExpense,pendingFake],travels:[],
+    receipts:[],totals:{expensePending:1,travelPending:0,expenseToSettle:0,
+      receipt:0,expenseHidden:0,travelHidden:0,receiptHidden:0}};
+  expect('accounting dashboard reads real response totals rather than hardcoded sample values',
+    financePage().includes('v15-finance-dashboard')&&financePage().includes('承認待ち')&&
+    financePage().includes('1件')&&financePage().includes('financeTableRows'));
   resetCalls();
-  selectOfficeModule('expenses');
-  const officeWorklist=officePage();
-  expect('finance office module renders real index with inline detail',
-    officeWorklist.includes('office-record-columns')&&officeWorklist.includes('officeRecordsList')&&
-    officeWorklist.includes('officeRecordsDetail')&&officeWorklist.includes('finance-detail-rows'));
-  expect('inline record details escape untrusted names',
-    officeWorklist.includes('&lt;img')&&!officeWorklist.includes('<img src=x'));
-  expect('switching to record/detail makes no extra GAS calls',
-    apiCalls.length===0);
-  officeFilterRecords('nomatch-xyz');
-  expect('client-side office search has explicit empty state without a GAS request',
-    officeFilteredRecords_('expense').length===0&&apiCalls.length===0&&
-    document.getElementById('officeRecordsList').innerHTML.includes('該当する記録'));
-  officeFilterRecords('');
-  officeSetStatus('承認済');
-  expect('filter by status restores matching rows without network',
-    officeFilteredRecords_('expense').length===0&&apiCalls.length===0);
-  officeSetStatus('差戻し');
-  expect('status filter finds returned records',
-    officeFilteredRecords_('expense').length===1);
-  officeOpenFinanceRecord('expense','EXP-FAKE-1');
-  expect('summary opens exact record in list and detail',
-    state.officeUi.selected==='expenses'&&state.officeUi.recordId==='EXP-FAKE-1');
-  officeOpenFinanceRecord('expense','UNKNOWN');
-  expect('invalid record id does not move the selected document',
-    state.officeUi.recordId==='EXP-FAKE-1');
-  state.officeUi.selected='overview';
+  financeSearchVisible('No matching record');
+  expect('accounting query filter is local and has a proper empty state',
+    financeVisibleItems_('expense').length===0&&apiCalls.length===0);
+  financeVisual.query='';
+  financeSetVisualFilter('承認待ち');
+  expect('accounting status filter finds pending approvals without extra requests',
+    financeVisibleItems_('expense').length===1&&apiCalls.length===0);
+  financeVisual.status='ALL';
+  const safeOffice=officePage();
+  expect('finance records never appear in general affairs workspace',
+    !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
+  quoteUi.data={setupRequired:false,canConfigure:true,vendors:[{name:'架空ベンダー',code:'FI-0001'}],sequencesReady:[]};
+  expect('administration contains quote vendors and numbering setup section',
+    ADMIN_CATEGORIES.some(x=>x.id==='quotes')&&
+    quoteAdministrationSection_().includes('取引先マスタ'));
   state.data.permissions.financeWorkspace=false;
-  const managerOverview=officePage();
-  expect('office-only manager cannot see personal accounting rows even if prior finance state exists',
-    managerOverview.includes('office-home-body')&&!managerOverview.includes('EXP-FAKE-1')&&
-    !managerOverview.includes('架空社員')&&!managerOverview.includes('2,500円'));
-  selectOfficeModule('expenses');
-  expect('office-only role gets self-service guidance but no accounting records',
-    officePage().includes('担当者向け')&&!officePage().includes('EXP-FAKE-1'));
-  state.data.permissions.financeWorkspace=true;
-  financeUi.overview={setupRequired:true,expenses:[],travels:[],receipts:[]};
-  expect('uninitialized accounting sheets are announced rather than showing invented records',
-    officePage().includes('初期設定が必要'));
-  financeUi.overview=null;
-  financeUi.error='権限確認のエラー';
-  expect('data-loading failure is visible and provides retry feedback',
-    officePage().includes('取得できませんでした')&&officePage().includes('再試行'));
-  financeUi.error='';
-  financeUi.overview=null;
-  state.officeUi.selected='overview';
-  expect('office never interprets an unloaded financial total as zero',
-    !officePage().includes('0件表示')&&officePage().includes('経理データを読み込み中'));
+  expect('finance records are guarded for non-operators',
+    financePage().includes('権限')&&!financePage().includes('EXP-PENDING'));
   resetFinanceUi();
   state.data=beforeOfficeData;
   state.page=beforeOfficePage;
@@ -814,10 +768,10 @@ const result=vm.runInContext(`
   state.sessionToken='SESSION_TOKEN';
   resetCalls();
   const initialHub=peoplePage();
-  expect('management opens integrated employee hub with six vertical sections',
+  expect('management opens integrated employee hub with seven sections including quote settings',
     initialHub.includes('admin-workspace-body')&&initialHub.includes('admin-overview-card')&&
     initialHub.includes('admin-people-split')&&initialHub.includes('admin-side-nav')&&
-    ADMIN_CATEGORIES.length===6&&settingsTabs('people').split('data-admin-tab=').length===7);
+    ADMIN_CATEGORIES.length===7&&settingsTabs('people').split('data-admin-tab=').length===8);
   expect('management KPI counts only real active employees, leave and PIN statuses',
     adminRecords.filter(x=>x.active!==false).length===3&&
     adminOverviewStats().includes('年休未設定')&&
@@ -1103,9 +1057,11 @@ const result=vm.runInContext(`
     homePortalTaskRoute('勤怠の確認')==='attendance'&&
     homePortalTaskRoute('申請の承認')==='requests'&&
     homePortalTaskRoute('constructor')===null);
-  expect('staff shortcuts do not expose administrator-only settings',
+  expect('staff shortcuts expose estimates, expenses, travel and worklog without admin settings',
     homePortalShortcuts().includes("navigate('worklog')")&&
-    homePortalShortcuts().includes("navigate('monthly')")&&
+    homePortalShortcuts().includes("navigate('quotes')")&&
+    homePortalShortcuts().includes("openFinanceForm('expense')")&&
+    homePortalShortcuts().includes("openFinanceForm('travel')")&&
     !homePortalShortcuts().includes("navigate('people')"));
   expect('rendering home does not issue additional server calls',apiCalls.length===0);
   const noTasks=homePortalTaskRows([
@@ -1126,10 +1082,10 @@ const result=vm.runInContext(`
   state.data.month.pendingRequests=3;
   state.data.tasks[2]={label:'申請の承認',status:'3件',tone:'warning'};
   const managerPortal=homePage();
-  expect('manager sees team pending count and role-specific administration links',
+  expect('manager sees team pending count without mixing employee administration into shortcuts',
     managerPortal.includes('チーム承認待ち')&&managerPortal.includes('3件')&&
     managerPortal.includes('担当チームの承認待ち申請')&&
-    managerPortal.includes("navigate('people')"));
+    !managerPortal.includes("navigate('people')"));
   state.data.todaySchedule=[{id:'EVENT-X',date:'2026-10-08',title:'<img src=x onerror=alert(1)>',start:'14:00'}];
   const malicious=homePortalScheduleRows(state.data.todaySchedule);
   expect('home calendar event titles are escaped',malicious.includes('&lt;img')&&!malicious.includes('<img src=x'));

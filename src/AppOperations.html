@@ -1784,10 +1784,54 @@ function requestHistoryPanel(){
     <div class='request-history-results' id='requestHistoryResults'>${requestHistoryContent()}</div>
   </section>`;
 }
+function requestWorkflowHero_(){
+  return "<header class='v15-page-hero'><div><div class='v15-kicker'>FM WORKS / 申請・帳票</div>"+
+    "<h1>申請・報告</h1><p>有給・打刻修正・経費申請・出張報告をまとめて管理できます。</p></div>"+
+    "<div class='v15-hero-mark'>"+svg('i-file')+"</div></header>";
+}
+function requestWorkflowActions_(){
+  return "<section class='v15-quick-grid' aria-label='新しい申請を作成'>"+
+    "<button type='button' class='v15-quick-action primary' onclick='openRequestModal(\"有給\")'>"+svg('i-file')+
+    "<span>有給・休暇を申請</span><span aria-hidden='true'>›</span></button>"+
+    "<button type='button' class='v15-quick-action' onclick='openFinanceForm(\"expense\")'>"+svg('i-trend')+
+    "<span>経費を申請</span><span aria-hidden='true'>›</span></button>"+
+    "<button type='button' class='v15-quick-action' onclick='openFinanceForm(\"travel\")'>"+svg('i-calendar')+
+    "<span>出張を報告</span><span aria-hidden='true'>›</span></button></section>";
+}
+function requestWorkflowMetrics_(){
+  const r=state.requests||{},own=Array.isArray(r.own)?r.own:[],
+    available=requestsDataReady(),team=Array.isArray(r.team)?r.team:[],
+    allOwnFinance=financeUi.mine&&!financeUi.mine.setupRequired?
+      (financeUi.mine.expenses||[]).concat(financeUi.mine.travels||[]):[];
+  const availableFinance=!!(financeUi.mine&&!financeUi.mine.setupRequired);
+  const pending=own.filter(x=>x.status==='承認待ち').length,
+    financePending=allOwnFinance.filter(x=>x.status==='承認待ち').length,
+    returned=own.filter(x=>x.status==='差戻し').length+
+      allOwnFinance.filter(x=>x.status==='差戻し').length;
+  const value=n=>n==null?'—':String(n)+'件';
+  return "<section class='v15-stats' aria-label='申請の状況'>"+
+    "<div class='card v15-stat'><span class='v15-stat-symbol'>"+svg('i-file')+"</span>"+
+      "<div class='v15-stat-content'><span class='v15-stat-title'>自分の勤怠申請</span>"+
+      "<strong class='v15-stat-value'>"+value(available?own.length:null)+"</strong>"+
+      "<span class='v15-stat-caption'>勤怠関連の申請</span></div></div>"+
+    "<div class='card v15-stat'><span class='v15-stat-symbol warn'>"+svg('i-clock')+"</span>"+
+      "<div class='v15-stat-content'><span class='v15-stat-title'>承認待ち</span>"+
+      "<strong class='v15-stat-value'>"+value(available&&availableFinance?pending+financePending:null)+"</strong>"+
+      "<span class='v15-stat-caption'>自分の申請の処理待ち</span></div></div>"+
+    "<div class='card v15-stat'><span class='v15-stat-symbol danger'>"+svg('i-file')+"</span>"+
+      "<div class='v15-stat-content'><span class='v15-stat-title'>差戻し</span>"+
+      "<strong class='v15-stat-value'>"+value(available&&availableFinance?returned:null)+"</strong>"+
+      "<span class='v15-stat-caption'>修正・再申請が必要</span></div></div>"+
+    "<div class='card v15-stat'><span class='v15-stat-symbol good'>"+svg('i-chart')+"</span>"+
+      "<div class='v15-stat-content'><span class='v15-stat-title'>チーム承認待ち</span>"+
+      "<strong class='v15-stat-value'>"+value(available&&state.data.permissions.requestApprove?team.length:null)+"</strong>"+
+      "<span class='v15-stat-caption'>権限のある人だけ表示</span></div></div></section>";
+}
+
 function requestsPage(){
   const r=state.requests;
-  if(!requestsDataReady())return `<div class='request-dashboard'>
-    ${pageHead('申請','申請の作成・状況確認・承認をひとつの画面で。')}
+  if(!requestsDataReady())return `<div class='request-dashboard v15-workspace v15-requests-page'>
+    ${requestWorkflowHero_()}
     <section class='request-load-panel' role='${r.error?'alert':'status'}'>
       ${r.error?`<strong>${escapeHtml(r.error)}</strong><button type='button' class='primary-button' onclick='loadRequests({force:true})'>再読込</button>`:
         `<div class='loading-card'></div><span>申請情報を読み込んでいます…</span>`}
@@ -1802,8 +1846,10 @@ function requestsPage(){
     requestTypeCard('休日出勤'),
     requestTypeCard('欠勤')
   ].join('');
-  return `<div class='request-dashboard'>
-    ${pageHead('申請','申請の作成・状況確認・承認を、ひとつの画面で。')}
+  return `<div class='request-dashboard v15-workspace v15-requests-page'>
+    ${requestWorkflowHero_()}
+    ${requestWorkflowMetrics_()}
+    ${requestWorkflowActions_()}
     ${requestCompactLeaveAlert()}
     ${requestAnnualLeaveNotice()}
     ${requestOverview()}

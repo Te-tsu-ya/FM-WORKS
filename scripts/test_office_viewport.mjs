@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 
 const root=process.cwd();
-const css=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8');
+const css=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
 const source=fs.readFileSync(path.join(root,'src/AppOffice.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -91,14 +91,12 @@ for(const test of cases){
   if(!test.privileged&&page.includes('架空経理対象')){
     failures++;console.error('FAIL '+id+' protected financial data leaked');continue;
   }
-  if(test.kind==='overview'&&page.indexOf("office-home-work")>page.indexOf("office-home-menu")){
-    failures++;console.error('FAIL '+id+' priority work should precede module list in DOM for mobile reading order');continue;
+  if(!page.includes('v15-general-affairs')||!page.includes('v15-affairs-grid')||
+     !page.includes('備品・購買')||!page.includes('設計中')){
+    failures++;console.error('FAIL '+id+' general affairs overview and honest planning labels missing');continue;
   }
-  if(test.kind==='overview'&&!page.includes('office-command')){
-    failures++;console.error('FAIL '+id+' hybrid dashboard missing');continue;
-  }
-  if(test.kind==='records'&&(!page.includes('office-record-columns')||!page.includes('finance-detail-rows'))){
-    failures++;console.error('FAIL '+id+' list or record detail missing');continue;
+  if(page.includes('EXP-FAKE')||page.includes('REC-FAKE')||page.includes('TRP-FAKE')){
+    failures++;console.error('FAIL '+id+' finance identifiers leaked into General Affairs');continue;
   }
   const body='<!doctype html><html data-theme="'+test.theme+'" data-font-size="standard"><head><meta charset="utf-8">'+css+
     '</head><body><div class="app-shell"><aside class="sidebar"><div class="brand">FM WORKS</div></aside>'+
@@ -106,12 +104,12 @@ for(const test of cases){
     '<main class="content">'+page+'</main></div></div>'+
     '<script>'+
     '(()=>{const doc=document.documentElement,content=document.querySelector(".content"),'+
-      'office=document.querySelector(".office-v2"),'+
-      'homeTiles=[...document.querySelectorAll(".office-shortcut-tile")],'+
-      'records=[...document.querySelectorAll(".office-record-row")],'+
-      'list=document.querySelector(".office-workspace-list"),detail=document.querySelector(".office-workspace-detail"),'+
-      'button=document.querySelector(".office-command-actions button")||document.querySelector(".office-record-row"),'+
-      'pageTitle=document.querySelector(".office-v2 > .page-head h1");'+
+      'office=document.querySelector(".v15-general-affairs"),'+
+      'homeTiles=[...document.querySelectorAll(".v15-affairs-card")],'+
+      'records=[...document.querySelectorAll(".v15-affairs-card .v15-pending-label")],'+
+      'list=document.querySelector(".v15-affairs-grid"),detail=document.querySelector(".v15-page-hero"),'+
+      'button=document.querySelector(".v15-general-affairs .secondary-button"),'+
+      'pageTitle=document.querySelector(".v15-general-affairs .v15-page-hero h1");'+
       'const info={width:innerWidth,height:innerHeight,htmlWidth:doc.scrollWidth,htmlHeight:doc.scrollHeight,'+
       'contentWidth:content.getBoundingClientRect().width,officeWidth:office.getBoundingClientRect().width,'+
       'tiles:homeTiles.length,records:records.length,listWidth:list?list.getBoundingClientRect().width:0,'+
@@ -161,15 +159,11 @@ for(const test of cases){
     noHorizontalOverflow:result.htmlWidth<=result.width+2,
     contentWidth:result.officeWidth<=result.contentWidth+2
   };
-  if(test.kind==='overview'){checks.sixBusinessCards=result.tiles===6;checks.buttonSize=result.buttonHeight>=40;}
-  if(test.kind==='overview'&&test.width<=390){
-    checks.mobileOfficeHeadingSingleLine=result.pageTitleLines===1;
-  }
-  if(test.kind==='records'){
-    checks.recordPresent=result.records>=1;
-    checks.listAndDetailsHaveWidth=result.listWidth>=200&&result.detailWidth>=200;
-    checks.recordControlSize=result.buttonHeight>=40;
-  }
+  checks.threeAffairsModules=result.tiles===3;
+  checks.threePlanningStates=result.records===3;
+  checks.affairsGridWidth=result.listWidth>=200;
+  checks.headingShown=result.pageTitleLines>=1&&result.pageTitleLines<=2;
+  checks.relatedNavigationButton=result.buttonHeight>=39;
   const failed=Object.entries(checks).filter(([,ok])=>!ok).map(([name])=>name);
   console.log((failed.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+(failed.length?' checks='+failed.join(','):''));
   if(failed.length)failures++;

@@ -1,0 +1,151 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import os from 'node:os';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+
+const root=process.cwd();
+const css=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+
+  fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
+const source=name=>fs.readFileSync(path.join(root,'src/'+name+'.html'),'utf8')
+  .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[ch]));
+const sampleExpense={id:'EXP-QA',employeeId:'FM-OTHER',employeeName:'架空社員B',
+ vendor:'架空食品株式会社',item:'事務用品・文具',category:'消耗品費',amount:'14680',
+ usedOn:'2026-10-09',purpose:'社内業務用品の購入',paymentMethod:'立替',
+ receiptRef:'QA-RECEIPT',status:'承認待ち',createdAt:'2026-10-09 09:00:00'};
+const sampleTravel={id:'TR-QA',employeeId:'FM-OTHER',employeeName:'架空社員B',
+ destination:'架空市役所',startsOn:'2026-10-07',endsOn:'2026-10-09',startsAt:'09:00',
+ endsAt:'18:00',spentAmount:'42620',purpose:'架空の打ち合わせ',outcome:'仕様を確認',
+ status:'承認待ち',createdAt:'2026-10-09 09:00:00'};
+const sampleQuote={id:'QU-QA',number:'FI-0001-0002',revision:2,ownerName:'架空社員A',
+ vendorName:'架空DX支援株式会社',vendorCode:'FI-0001',quoteDate:'2026-10-09',
+ issuedAt:'2026-10-09 09:00:00',subject:'業務システム開発',
+ status:'発行済',subtotal:500000,taxAmount:50000,total:550000};
+const vendors=[
+ {code:'FI-0001',name:'架空DX支援株式会社',invoice:'T1234567890123',address:'架空市'},
+ {code:'SV-0002',name:'架空物流株式会社',invoice:'',address:'架空町'}
+];
+function renderScreen(kind){
+ const state={page:kind==='finance'?'finance':kind==='quote'?'quotes':'financeEntry',
+  sessionToken:'SYNTHETIC_SESSION',data:{
+   today:'2026-10-09',user:{employeeId:'FM-QA',name:'架空社員A',displayName:'架空社員A'},
+   permissions:{adminConsole:true,officeWorkspace:true,financeWorkspace:true,quoteWorkspace:true}}};
+ const cx=vm.createContext({state,console,Date,Math,Number,String,Object,Array,Set,Map,JSON,
+  RegExp,escapeHtml,showToast(){},renderPageIfActive(){},navigate(){},pageHead:(title,sub)=>
+    '<div class="page-head"><h1>'+escapeHtml(title)+'</h1><p>'+escapeHtml(sub)+'</p></div>',
+  financeYen:v=>(Number(v)||0).toLocaleString('ja-JP')+'円',
+  svg:icon=>'<svg role="img" aria-label="'+escapeHtml(icon)+'" viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>'});
+ if(['finance','expense','travel'].includes(kind)){
+  vm.runInContext(source('AppFinance'),cx,{filename:'AppFinance.html'});
+  if(kind==='finance'){
+   cx.qaFinance={setupRequired:false,expenses:[sampleExpense],travels:[sampleTravel],
+    receipts:[],totals:{expensePending:1,travelPending:1,expenseToSettle:0,
+      travelToSettle:0,receipt:0,expenseHidden:0,travelHidden:0,receiptHidden:0}};
+   vm.runInContext('financeUi.overview=qaFinance;financeUi.tab="expense";',cx);
+   return vm.runInContext('financePage()',cx);
+  }
+  cx.qaKind=kind;
+  cx.qaDraft=kind==='expense'?
+   {usedOn:'2026-10-09',vendor:'架空食品株式会社',item:'事務用品',category:'消耗品費',
+    amount:'14680',purpose:'事務用品の購入',paymentMethod:'立替',receiptRef:'REC-001'}:
+   {startsOn:'2026-10-07',startsAt:'09:00',endsOn:'2026-10-09',endsAt:'18:00',
+    destination:'架空市役所',purpose:'協議',outcome:'内容を確認',spentAmount:'42620'};
+  vm.runInContext('financeActiveForm={kind:qaKind,source:qaDraft,key:"QA-FAKE-KEY",editId:"",changed:false};',cx);
+  return vm.runInContext('financeEntryPage()',cx);
+ }
+ vm.runInContext(source('AppQuotes'),cx,{filename:'AppQuotes.html'});
+ cx.qaQuotes={setupRequired:false,canConfigure:true,vendors,sequencesReady:['FI-0001'],
+   quotes:[sampleQuote],total:1,displayLimit:200};
+ vm.runInContext('quoteUi.data=qaQuotes;',cx);
+ if(kind==='quote')return vm.runInContext('quotePage()',cx);
+ vm.runInContext(source('AppAdmin'),cx,{filename:'AppAdmin.html'});
+ const section=vm.runInContext('quoteAdministrationSection_()',cx);
+ return '<div class="v15-workspace"><header class="v15-page-hero"><div><h1>管理・設定 / 取引先・採番</h1>'+
+   '<p>取引先の登録と見積番号の確認</p></div></header>'+section+'</div>';
+}
+function findChrome(){
+ for(const exe of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
+  try{const p=execFileSync('which',[exe],{encoding:'utf8'}).trim();if(p)return p;}catch(_){}
+ }
+ throw Error('Chromium not found');
+}
+const chrome=findChrome();
+const output=path.join(root,'artifacts','workflow-v15');fs.mkdirSync(output,{recursive:true});
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-workflow-'));
+const cases=[
+ [1366,768,'finance','light'],[390,844,'finance','dark'],
+ [1366,768,'expense','light'],[390,844,'expense','light'],
+ [1440,900,'travel','light'],[390,844,'travel','dark'],
+ [1366,768,'quote','light'],[390,844,'quote','light'],
+ [1440,900,'admin','light'],[390,844,'admin','light']
+];
+let failed=0;
+for(const [width,height,kind,theme] of cases){
+ const id=width+'x'+height+'-'+kind+'-'+theme;
+ let page;
+ try{page=renderScreen(kind);}catch(error){
+  failed++;console.error('FAIL '+id+' render: '+String(error.stack||error));continue;
+ }
+ if(!page.includes("v15-workspace")||page.includes('ReferenceError:')){
+  failed++;console.error('FAIL '+id+' missing unified content');continue;
+ }
+ if((kind==='expense'||kind==='travel')&&!page.includes('financeEntryForm')){
+  failed++;console.error('FAIL '+id+' missing data entry form');continue;
+ }
+ const frame=path.join(temp,id+'-frame.html');
+ const html='<!doctype html><html lang="ja" data-theme="'+theme+'"><head><meta charset="utf-8">'+css+
+  '</head><body><div class="app-shell"><aside class="sidebar"><strong>FM WORKS</strong></aside>'+
+  '<div class="workspace"><header class="topbar">FM WORKS</header><main class="content">'+page+
+  '</main></div></div>'+
+  '<script>window.addEventListener("error",e=>parent.postMessage({kind:"WORKFLOW_ERROR",msg:e.message},"*"));'+
+  'const root=document.querySelector(".v15-workspace"),'+
+  'content=document.querySelector(".content"),buttons=[...root.querySelectorAll("button")],'+
+  'inputs=[...root.querySelectorAll("input,textarea,select")],'+
+  'info={width:innerWidth,height:innerHeight,htmlWidth:document.documentElement.scrollWidth,'+
+  'rootWidth:root.getBoundingClientRect().width,contentWidth:content.getBoundingClientRect().width,'+
+  'buttons:buttons.length,inputs:inputs.length,'+
+  'shortestButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
+  'parent.postMessage({kind:"WORKFLOW_QA",info},"*");</script></body></html>';
+ fs.writeFileSync(frame,html);
+ const host='<html><head><meta charset="utf-8"><script>'+
+  'window.addEventListener("message",e=>{const n=document.getElementById("qa");'+
+  'if(e.data?.kind==="WORKFLOW_QA")n.setAttribute("data-payload",encodeURIComponent(JSON.stringify(e.data.info)));'+
+  'if(e.data?.kind==="WORKFLOW_ERROR")n.setAttribute("data-error",e.data.msg);});</script>'+
+  '</head><body style="margin:0;overflow:hidden"><iframe src="'+pathToFileURL(frame).href+
+  '" style="display:block;border:0;width:'+width+'px;height:'+height+'px" title="V15 application viewport"></iframe>'+
+  '<output id="qa"></output></body></html>';
+ const hostFile=path.join(temp,id+'-host.html');fs.writeFileSync(hostFile,host);
+ const args=['--headless=new','--disable-gpu','--no-sandbox','--disable-dev-shm-usage','--disable-extensions',
+  '--hide-scrollbars','--window-size='+Math.max(600,width)+','+(height+110),
+  '--virtual-time-budget=5000'];
+ try{
+  let result=null,body='';
+  for(let i=0;i<2;i++){
+   body=execFileSync(chrome,[...args,'--dump-dom',pathToFileURL(hostFile).href],
+    {encoding:'utf8',timeout:45000,maxBuffer:6*1024*1024,stdio:['ignore','pipe','ignore']});
+   const match=body.match(/id="qa"[^>]*data-payload="([^"]+)"/);
+   if(match){result=JSON.parse(decodeURIComponent(match[1]));break;}
+  }
+  if(!result)throw Error((body.match(/data-error="([^"]+)"/)||[])[1]||'No viewport metrics');
+  const errors=[];
+  if(Math.abs(result.width-width)>2)errors.push('viewport width');
+  if(result.htmlWidth>width+2)errors.push('horizontal overflow');
+  if(result.rootWidth<=0||result.rootWidth>result.contentWidth+2)errors.push('content width');
+  if(!result.buttons)errors.push('no actions');
+  if(['expense','travel'].includes(kind)&&result.inputs<6)errors.push('missing form fields');
+  if(kind==='finance'&&result.inputs<2)errors.push('missing search controls');
+  if(kind==='admin'&&result.inputs<3)errors.push('missing master form controls');
+  if(result.shortestButton<25)errors.push('button below 25px');
+  console.log((errors.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+
+    (errors.length?' checks='+errors.join(', '):''));
+  if(errors.length)failed++;
+  try{execFileSync(chrome,[...args,'--screenshot='+path.join(output,id+'.png'),
+   '--virtual-time-budget=1800',pathToFileURL(hostFile).href],{timeout:45000,stdio:'ignore'});}catch(_){}
+ }catch(error){failed++;console.error('FAIL '+id+' '+String(error.message||error));}
+}
+console.log('UNIFIED WORKFLOW V15 VIEWPORTS: '+(cases.length-failed)+'/'+cases.length+' passed');
+if(failed)process.exitCode=1;

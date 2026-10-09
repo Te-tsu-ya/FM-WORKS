@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.14.0',
+  version: '0.15.0',
   locale: 'ja-JP'
 });
 
@@ -586,7 +586,7 @@ function getPermissions_(employee) {
     adminConsole: role === 'ADMIN',
     // The finance APIs independently enforce this permission on the server.
     quoteWorkspace: true, // Every authenticated employee may create, save, and issue own estimates.
-    officeWorkspace: role === 'ADMIN' || role === 'MANAGER' || financeDepartmentAllowed_(employee && employee.department),
+    officeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     financeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     employeeAdmin: role === 'ADMIN',
     requestApprove: role === 'ADMIN' || role === 'MANAGER',
