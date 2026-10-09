@@ -45,7 +45,7 @@ const ctx=vm.createContext({console,Date,Math,Number,String,Object,Array,Set,Map
  DriveApp:{getFoldersByName:()=>({hasNext:()=>true,next:()=>folder}),createFolder:()=>folder,
  getFileById:id=>id.startsWith('TMP-')?{setTrashed(){}}:files[id]},
  UrlFetchApp:{fetch:url=>{
-  const bytes=url.includes('format=pdf')?[37,80,...new Array(250).fill(0)]:[80,75,...new Array(300).fill(0)];
+  const bytes=url.includes('format=pdf')?[37,80,68,70,...new Array(250).fill(0)]:[80,75,3,4,...new Array(300).fill(0)];
   return {getResponseCode:()=>200,getContent:()=>bytes,getBlob:()=>({
    bytes,name:'',type:'',setContentType(t){this.type=t;return this},setName(n){this.name=n;return this}
   })};
