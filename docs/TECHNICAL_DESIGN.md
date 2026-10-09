@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.15.0  
+**文書版:** 0.15.1  
 **更新日:** 2026-10-09  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1709,3 +1709,11 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 ### v0.15.0 ホーム高密度レイアウトの調整
 - StylesWorkflowV15.html に `min-width:1200px; min-height:690px; max-height:820px` の限定メディアクエリを追加。ホームの予定、タスク、打刻履歴はカード内でスクロールできるようにし、1366×768の実データ多件ケースで一画面要件を維持する。
 - CI の `test_home_viewport.mjs` に含まれるdenseケースを、他の画面テストとともに再実行する。
+
+## v0.15.1 データベース読み込み最適化（2026-10-09）
+
+- `Code.gs:getDb_` はV8実行コンテキストでID別にSpreadsheetハンドルを保持。取得前に `getDatabaseSpreadsheetId_` を毎回実行し、PRODUCTIONからSTAGING既定DBへの接続を拒否する。
+- `DataAccess.gs:findVerifiedSheetRow_` はDB ID/スコープ/検索キー別にScriptCacheへ行番号だけを300秒保存。キャッシュに行の内容を入れない。
+- 位置ヒントがある場合も毎回該当行全列を再読込し、検索キーの完全一致を検査。ヒントなし・行移動・位置競合は `TextFinder` へフォールバックする。
+- `Auth.gs:requireSession_` の期限/無効化チェック、`getEmployeeAuthRecord_` の在籍・権限チェックは従来通りライブデータ。認証ハッシュと社員IDのキャッシュスコープを分離。
+- `scripts/test_data_access_performance.mjs` はダミーSheetで接続重複、検索回数、セッション失効、権限変更、行移動、DB切替を回帰検証。実時間の効果は `FM_WORKS_PERF` ログで評価する。

@@ -22,6 +22,8 @@ jobs:
         run: node scripts/generate_docs.mjs
       - name: Validate repository
         run: node scripts/validate.mjs
+      - name: Verify cached-row security and sheet I/O
+        run: node scripts/test_data_access_performance.mjs
       - name: Run logic tests
         run: node scripts/test_logic.mjs
       - name: Run client contract tests
