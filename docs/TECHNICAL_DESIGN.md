@@ -1684,3 +1684,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - scripts/test_quote_integration.mjs に架空DB/Drive/URLFetchによる認可・採番・保存・金額・出力テストを追加。CIとデプロイで実行する。実際のGAS/OAuthでの出力・本番DB接続先は現時点では未検証。
 
 - v0.14.0 UI補足: 破棄・正式発行・採番確認はAppQuotes内のensureModal()/closeModal()を使用し、App本体と一貫したDialog UI・閉じる操作・フォーカス処理を継承する。
+
+- スクリーンショットQA: scripts/test_quote_viewport.mjs が架空の見積データで一覧・編集中・正式発行後をそれぞれPC/スマホ表示し、横スクロールとボタン配置を検証する。CI成果物 fmworks-quote-layout-qa に画像を保管する。
