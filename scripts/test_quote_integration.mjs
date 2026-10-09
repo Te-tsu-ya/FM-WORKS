@@ -16,6 +16,7 @@ class Sheet{
  getRange(row,col,height=1,width=1){const self=this;
   const data=()=>Array.from({length:height},(_,r)=>Array.from({length:width},(_,c)=>(self.rows[row+r-1]||[])[col+c-1]??''));
   return {getValues:data,getDisplayValues:()=>data().map(a=>a.map(String)),
+   createTextFinder:value=>({matchEntireCell(){return this},findNext(){const found=self.rows.findIndex((r,i)=>i>0&&String(r[col-1])===String(value));return found<0?null:{getRow:()=>found+1}}}),
    setValues:next=>{if(next.length!==height||next.some(r=>r.length!==width))throw Error('Wrong setValues size');
     for(let r=0;r<height;r++){let ix=row+r-1;self.rows[ix]=self.rows[ix]||[];
       for(let c=0;c<width;c++)self.rows[ix][col+c-1]=next[r][c];}}};
@@ -52,13 +53,15 @@ const ctx=vm.createContext({console,Date,Math,Number,String,Object,Array,Set,Map
   })};
  }}
 });
-for(const file of ['src/Code.gs','src/Schema.gs','src/Finance.gs','src/Quotes.gs'])
+for(const file of ['src/Code.gs','src/Schema.gs','src/Finance.gs','src/Quotes.gs','src/Documents.gs'])
  vm.runInContext(fs.readFileSync(file,'utf8'),ctx,{filename:file});
 const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx),defs=vm.runInContext('QUOTE_MODEL',ctx),sheets={};
 for(const k of Object.keys(defs))sheets[defs[k].sheet]=new Sheet(specs[defs[k].sheet]);
+sheets['関連書類']=new Sheet(specs['関連書類']);
+sheets['関連書類採番']=new Sheet(specs['関連書類採番']);
 ctx.mockDb={getSheetByName:name=>sheets[name]||null};ctx.audits=audits;
 vm.runInContext('getDb_=()=>mockDb;appendAudit_=v=>audits.push(v);',ctx);
-const api=vm.runInContext('({getQuoteWorkspace,getQuote,saveQuoteDraft,issueQuote,getQuoteDocument,importQuoteVendors,configureQuoteSequence,quoteNormalize_,quoteStorageStatus_,getPermissions_})',ctx);
+const api=vm.runInContext('({getQuoteWorkspace,getQuote,saveQuoteDraft,issueQuote,getQuoteDocument,importQuoteVendors,configureQuoteSequence,quoteNormalize_,quoteStorageStatus_,getPermissions_,createRelatedDocument,getRelatedDocument,getRelatedDocumentFile,documentStorageStatus_,retryRelatedDocument})',ctx);
 const vendors=[{name:'架空法人A',code:'FI-0001',invoice:'T1234567890123',address:'架空県'},
  {name:'架空法人B',code:'SV-0002',invoice:'',address:'架空県'}];
 const lines=[{description:'月額開発',quantity:2,unit:'ヶ月',price:300000},
@@ -115,5 +118,48 @@ no('more than 21 lines rejected',()=>api.quoteNormalize_({...draft,lines:new Arr
 no('8 percent tax is not silently miscalculated',()=>api.quoteNormalize_({...draft,taxRate:8}),/10%/);
 ok('admin sees all employee drafts',api.getQuoteWorkspace('ADMIN').quotes.length===1);
 ok('issuance logged in audit',audits.some(x=>x.operation==='見積正式発行'));
+ok('related document storage is ready for invoices, deliveries and receipts',api.documentStorageStatus_().ready);
+no('staff cannot issue receipt without payment confirmation',()=>api.createRelatedDocument('STAFF',saved.id,'receipt',{
+ requestKey:'receipt-confirm-key1',documentDate:'2026-10-09',paidDate:'2026-10-09'
+}),/入金/);
+no('another employee cannot convert someone else quote',()=>api.createRelatedDocument('OTHER',saved.id,'invoice',{
+ requestKey:'unowned-invoice-key1',documentDate:'2026-10-09',dueDate:'2026-11-09'
+}),/権限/);
+const firstInvoice=api.createRelatedDocument('STAFF',saved.id,'invoice',{
+ requestKey:'quote-invoice-key-0001',documentDate:'2026-10-09',dueDate:'2026-11-09'
+});
+ok('issued invoice receives own serial and two real output files',firstInvoice.number==='INV-2026-0001'&&
+ firstInvoice.status==='発行済'&&Object.keys(files).length===4);
+const invoiceDetails=api.getRelatedDocument('STAFF',firstInvoice.id);
+ok('invoice freezes the original quote items and amounts',invoiceDetails.lines.length===3&&
+ Number(invoiceDetails.header.total)===550000&&invoiceDetails.lines[0].description==='月額開発'&&
+ invoiceDetails.header.quoteId===saved.id);
+no('another employee cannot read invoice snapshot',()=>api.getRelatedDocument('OTHER',firstInvoice.id),/権限/);
+no('another employee cannot download invoice',()=>api.getRelatedDocumentFile('OTHER',firstInvoice.id,'pdf'),/権限/);
+const duplicateInvoice=api.createRelatedDocument('STAFF',saved.id,'invoice',{
+ requestKey:'quote-invoice-key-0002',documentDate:'2026-10-09',dueDate:'2026-11-09'
+});
+ok('same quote cannot double-issue an invoice even with new request key',
+ duplicateInvoice.duplicate&&duplicateInvoice.id===firstInvoice.id&&Object.keys(files).length===4);
+const delivery=api.createRelatedDocument('STAFF',saved.id,'delivery',{
+ requestKey:'quote-delivery-key-01',documentDate:'2026-10-09',dueDate:'2026-10-10'
+});
+ok('delivery has independent sequential number',delivery.number==='DEL-2026-0001'&&delivery.status==='発行済');
+const receipt=api.createRelatedDocument('STAFF',saved.id,'receipt',{
+ requestKey:'quote-receipt-key-0001',documentDate:'2026-10-09',paidDate:'2026-10-09',paidConfirmed:true
+});
+ok('receipt can issue only after confirmed payment',receipt.number==='REC-2026-0001'&&receipt.status==='発行済');
+ok('document archive shows linked records by staff ownership',api.getQuoteWorkspace('STAFF').relatedDocs.length===3&&
+ api.getQuoteWorkspace('OTHER').relatedDocs.length===0);
+const invoicePdf=api.getRelatedDocumentFile('STAFF',firstInvoice.id,'pdf'),
+ invoiceXlsx=api.getRelatedDocumentFile('STAFF',firstInvoice.id,'xlsx');
+ok('related documents can be downloaded in PDF and Excel',invoicePdf.base64.startsWith('JVBER')&&
+ invoiceXlsx.base64.startsWith('UEs')&&invoicePdf.name.endsWith('.pdf')&&invoiceXlsx.name.endsWith('.xlsx'));
+no('other employee cannot retry another employee document',()=>api.retryRelatedDocument('OTHER',receipt.id),/権限/);
+no('unknown document kind is rejected',()=>api.createRelatedDocument('STAFF',saved.id,'purchase',{
+ requestKey:'quote-purchase-key-01',documentDate:'2026-10-09'
+}),/種別/);
+ok('quote template remains unchanged and still uses 21-row batch',paintedBlocks.filter(x=>x.range==='B17:I37').length===4);
+
 console.log('QUOTE TESTS: '+pass+' passed, '+fail+' failed');
 if(fail)process.exitCode=1;

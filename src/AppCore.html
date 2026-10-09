@@ -1,8 +1,8 @@
 <script>
-const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','見積書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']];
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']];
 const NAV_GROUPS=[
   {label:'日常業務',ids:['home','attendance','worklog','schedule']},
-  {label:'申請・帳票',ids:['requests','quotes']},
+  {label:'申請・帳票',ids:['requests','quotes','documentHistory']},
   {label:'管理業務',ids:['finance','office']},
   {label:'システム管理',ids:['admin']}
 ];
@@ -356,7 +356,7 @@ function navigate(page){
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs({silent:true});
   if(page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
-  if(page==='quotes')loadQuoteWorkspace({silent:true});
+  if(page==='quotes'||page==='documentHistory')loadQuoteWorkspace({silent:true});
   if(page==='finance')loadFinanceOverview();
 
   if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);

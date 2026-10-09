@@ -146,13 +146,15 @@ function quoteForUser_(user,header){
 }
 function getQuoteWorkspace(sessionToken){
   const user=quoteUser_(sessionToken),status=quoteStorageStatus_();
-  if(!status.ready)return {setupRequired:true,missing:status.missing,vendors:[],quotes:[],canConfigure:quoteIsAdmin_(user)};
+  const docsReady=typeof documentStorageStatus_==='function'&&documentStorageStatus_().ready;
+  if(!status.ready)return {setupRequired:true,missing:status.missing,vendors:[],quotes:[],relatedDocs:[],documentsSetupRequired:!docsReady,canConfigure:quoteIsAdmin_(user)};
   const vendors=quoteRows_('vendor').filter(x=>x.active==='有効')
     .map(({code,name,invoice,address,industry})=>({code,name,invoice,address,industry}));
   const headers=quoteRows_('header').filter(h=>quoteVisible_(user,h));
   headers.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
   const codes=quoteRows_('sequence').filter(x=>x.verified==='確認済').map(x=>x.vendorCode);
   return {setupRequired:false,vendors,quotes:headers.slice(0,200),
+    relatedDocs:docsReady?documentListForUser_(user):[],documentsSetupRequired:!docsReady,
     sequencesReady:codes,canConfigure:quoteIsAdmin_(user),
     total:headers.length,displayLimit:200};
 }
