@@ -6,7 +6,7 @@ const staff={employeeId:'FM0002',name:'架空社員',role:'USER',department:'開
 const admin={employeeId:'FM0001',name:'架空管理者',role:'ADMIN'};
 const other={employeeId:'FM0003',name:'他の架空社員',role:'USER',department:'営業'};
 const users={STAFF:staff,ADMIN:admin,OTHER:other};let uuid=0;
-const audits=[],files={};
+const audits=[],files={},paintedCells=[];
 class Sheet{
  constructor(head){this.rows=[head]}
  getLastRow(){return this.rows.length}
@@ -28,7 +28,8 @@ function fakeRange(value,column,countRows=1,countColumns=1){
  const a=parse(m[0]),b=parse(m[1]||m[0]);rows=b.row-a.row+1;cols=b.col-a.col+1;
  }
  let self={setValues:v=>{if(v.length!==rows||v.some(row=>row.length!==cols))throw Error('XLSX range mismatch '+value);return self;}};
- for(const n of ['setValue','merge','setFontSize','setFontWeight','setFontColor','setFontFamily','setBackground','setVerticalAlignment','setHorizontalAlignment','setWrap','setNumberFormat','setBorder','setWrapStrategy'])self[n]=()=>self;
+ for(const n of ['merge','setFontSize','setFontWeight','setFontColor','setFontFamily','setBackground','setVerticalAlignment','setHorizontalAlignment','setWrap','setNumberFormat','setBorder','setWrapStrategy'])self[n]=()=>self;
+ self.setValue=v=>{paintedCells.push({range:String(value),value:v});return self;};
  return self;
 }
 const folder={createFile:blob=>{const id='FILE-'+(++uuid);
@@ -88,6 +89,11 @@ ok('admin confirmed pre-existing FI-0001-0001',sheets['見積採番'].rows[1][1]
 no('sequence cannot decrease',()=>api.configureQuoteSequence('ADMIN','FI-0001',0),/小さい/);
 const issued=api.issueQuote('STAFF',saved.id,saved.revision);
 ok('staff issues both PDF and Excel',issued.number==='FI-0001-0002'&&Object.keys(files).length===2&&api.getQuote('STAFF',saved.id).header.status==='発行済');
+ok('issued workbook contains real quote subject and recipient address',
+ paintedCells.some(x=>x.range==='B9:I9'&&x.value==='件名：テスト')&&
+ paintedCells.some(x=>x.range==='B7:F7'&&x.value==='架空県'));
+ok('issued workbook labels items as product descriptions, not unsupported item codes',
+ paintedCells.some(x=>x.range==='B9:I9'&&x.value.includes('テスト')));
 const again=api.issueQuote('STAFF',saved.id,saved.revision);
 ok('repeat issue returns original number without new files',again.number===issued.number&&Object.keys(files).length===2);
 no('issued quote cannot be edited',()=>api.saveQuoteDraft('STAFF',{...draft,id:saved.id,revision:saved.revision,requestKey:'quote-update-0000001'}),/編集できません/);

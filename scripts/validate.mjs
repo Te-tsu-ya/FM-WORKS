@@ -117,6 +117,15 @@ for(const marker of ['function quotePage()','function quoteNew()','function quot
 for(const sheet of ['見積取引先','見積ヘッダー','見積明細','見積採番']){
  if(!schemaCodeText.includes("'"+sheet+"':")){console.error('Missing estimate DB sheet '+sheet);failed=true;}
 }
+for(const marker of ['function quotePreviewDocument_(e)','function quoteRefreshPreview_()',
+  'function quoteDuplicateLine(index)','function quoteMoveLine(index,offset)',
+  'function quoteSetupStorage_()','function quoteAddSingleVendor_()',
+  'qb-preview-column','quoteLivePreview']){
+  if(!quoteClientText.includes(marker)){console.error('v0.16.0 quote UI missing '+marker);failed=true;}
+}
+for(const marker of ['.quote-builder','.qb-paper','.qb-grid-head','.qb-vendor-quick-add']){
+  if(!styles.includes(marker)){console.error('v0.16.0 quote styles missing '+marker);failed=true;}
+}
 if(!app.includes("'quotes','見積書'")||!app.includes('quotes:quotePage')||
  !indexText.includes("include_('AppQuotes')")){
  console.error('All-employee estimates must be a visible, routed application page.');failed=true;
