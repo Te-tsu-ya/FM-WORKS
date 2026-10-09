@@ -53,7 +53,7 @@ function quoteNew(){
 }
 function quoteBack(){
   if(quoteUi.busy)return;
-  if(quoteUi.mode==='edit'&&quoteUi.dirty&&!window.confirm('保存していない変更を破棄して一覧へ戻りますか？'))return;
+  if(quoteUi.mode==='edit'&&quoteUi.dirty){quoteConfirmDiscard();return;}
   quoteUi.mode='list';quoteUi.editor=null;quoteUi.dirty=false;quoteUi.id='';quoteUi.details=null;
   renderPageIfActive('quotes');
 }
@@ -71,6 +71,18 @@ function quoteOpen(id){
     if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(err,'見積を開けませんでした。');renderPageIfActive('quotes');
   }).getQuote(state.sessionToken,id);
+}
+function quoteConfirmDiscard(){
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='下書きの変更を破棄'>"+
+    "<div class='modal-head'><h2>変更内容を破棄しますか？</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>保存していない見積の変更は消えます。</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' onclick='quoteDiscard()'>破棄して一覧へ</button></div></section>";
+}
+function quoteDiscard(){
+  closeModal();quoteUi.dirty=false;quoteBack();
 }
 function quoteUpdateField(name,value){
   if(!quoteUi.editor||quoteUi.busy)return;
@@ -159,7 +171,18 @@ function quoteSaveDraft(){
 function quoteIssue(){
   const e=quoteUi.editor;
   if(!e||!e.id||quoteUi.busy||quoteUi.dirty){showToast('保存済みの下書きから発行してください。');return;}
-  if(!window.confirm('この見積を正式発行しますか？ 発行後は内容を変更できません。'))return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='見積書の正式発行確認'>"+
+    "<div class='modal-head'><h2>見積書を正式発行しますか？</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>発行後は内容を変更できません。見積番号を確定し、PDFとExcelを生成します。</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' onclick='quotePerformIssue()'>正式発行する</button></div></section>";
+}
+function quotePerformIssue(){
+  const e=quoteUi.editor;
+  if(!e||!e.id||quoteUi.busy||quoteUi.dirty)return;
+  closeModal();
   quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
   const identity=quoteIdentity_();
   google.script.run.withSuccessHandler(result=>{
@@ -274,7 +297,18 @@ function quoteConfirmSequence(code){
   const input=[...document.querySelectorAll('[data-seq]')].find(x=>x.dataset.seq===code);
   const raw=input&&input.value;
   if(!/^\d{1,4}$/.test(String(raw||''))){showToast('過去の最大発行番号を入力してください');return;}
-  if(!window.confirm(code+' の既存見積の最大番号が '+raw+' であることを確認しましたか？'))return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='採番開始番号の確認'>"+
+    "<div class='modal-head'><h2>既存の最終番号を確認</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>"+escapeHtml(code)+" の既存最大番号を "+escapeHtml(raw)+" として登録します。元Excelの発行済み番号を確認しましたか？</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' data-code='"+escapeHtml(code)+"' data-last='"+escapeHtml(raw)+
+    "' onclick='quoteCommitSequence(this.dataset.code,this.dataset.last)'>確認して保存</button></div></section>";
+}
+function quoteCommitSequence(code,raw){
+  if(quoteUi.busy)return;
+  closeModal();
   quoteUi.busy=true;
   google.script.run.withSuccessHandler(()=>{
     quoteUi.busy=false;showToast('採番設定を保存しました');loadQuoteWorkspace({force:true});

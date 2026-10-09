@@ -1682,3 +1682,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 取引先実データはGitHubへハードコードしない。ユーザー提供のベンダーコードExcel Sheet1を管理者が認証後に貼り付けて取り込む。既存の最大番号は別途確認済にする必要がある。
 - 公式のPDF作成手順参照: https://developers.google.com/apps-script/samples/automations/generate-pdfs
 - scripts/test_quote_integration.mjs に架空DB/Drive/URLFetchによる認可・採番・保存・金額・出力テストを追加。CIとデプロイで実行する。実際のGAS/OAuthでの出力・本番DB接続先は現時点では未検証。
+
+- v0.14.0 UI補足: 破棄・正式発行・採番確認はAppQuotes内のensureModal()/closeModal()を使用し、App本体と一貫したDialog UI・閉じる操作・フォーカス処理を継承する。
