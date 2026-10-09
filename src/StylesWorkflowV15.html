@@ -493,4 +493,21 @@
  .qb-issued-surface .qb-paper{padding:16px 12px;min-height:450px;width:100%}
  .qb-issued-preview-heading{margin-bottom:8px}
 }
+
+/* v0.16.2: legacy .quote-preview header was a flex row with border,
+   but the shared document preview uses a centered title and its own rule. */
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title{
+ display:block;border:0;border-bottom:0!important;padding:0;margin:0 0 9px;
+ text-align:center;justify-content:initial;align-items:initial
+}
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title h2{
+ font-size:21px;line-height:1.35;letter-spacing:.3em;margin:0;color:#1a3155;
+ font-weight:850;display:block;text-align:center
+}
+.quote-detail .qb-issued-preview .qb-paper .qb-paper-title-rule{
+ display:block;height:2px;width:54%;background:#247de8;margin:6px auto 0
+}
+@media(max-width:690px){
+ .quote-detail .qb-issued-preview .qb-paper .qb-paper-title h2{font-size:18px}
+}
 </style>

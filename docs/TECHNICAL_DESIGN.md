@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.16.1  
+**文書版:** 0.16.2  
 **更新日:** 2026-10-09  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1740,3 +1740,8 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - quoteDetail_ は quotePreviewDocument_(Object.assign({},header,{lines})) を使い、エディターと同じ帳票コンポーネントを表示する。
 - quotePreviewDocument_ は状態が「発行済」「発行処理中」「出力失敗」のとき、quoteVendor_ に依存せず header.vendorName/vendorAddress を使い、header.subtotal/taxAmount/total と line.amount の保存値を表示する。
 - test_client_contract.mjs は発行済み詳細のプレビューデザイン一致・サーバー保存金額優先・後日のマスタ名称変更の非影響を検証する。既存のファイル発行・認証・権限検証を維持する。
+
+## v0.16.2 帳票プレビューCSSの詳細画面上書き（2026-10-09）
+
+- StylesWorkflowV15.html末尾に .quote-detail .qb-issued-preview .qb-paper .qb-paper-title の高特異度上書きを追加し、旧 .quote-preview header のflex/border指定を無効化する。内部タイトル罫線 .qb-paper-title-rule を使う。
+- 既存 scripts/test_quote_viewport.mjs のデスクトップ/スマホ詳細画像で中央タイトル位置と罫線を目視検証する。金融計算/認証は変更しない。
