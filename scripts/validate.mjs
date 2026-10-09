@@ -966,7 +966,7 @@ for (const requestUxMarker of [
   "id='requestFormError'",
   'function showRequestError(',
   'function refreshRequestPreview(',
-  '何を申請しますか？',
+  'その他の勤務申請',
   '申請可能残'
 ]) {
   if (!app.includes(requestUxMarker)) {
@@ -1511,7 +1511,7 @@ for (const homePortalMarker of [
   'home-portal-all-clear',
   'state.schedule.selectedEventId=this.dataset.eventId||null',
   "['worklog','工数入力'",
-  "['requests','休暇・申請'"
+  "['requests','申請・報告'"
 ]) {
   if(!portalFile.includes(homePortalMarker)){console.error('v0.11.9 home portal missing: '+homePortalMarker);failed=true;}
 }
