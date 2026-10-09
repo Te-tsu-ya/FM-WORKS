@@ -677,7 +677,7 @@ if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") |
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['quotes','見積','i-doc'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",
