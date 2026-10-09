@@ -391,8 +391,10 @@ function worklogWindowIdentity(){
 }
 
 function worklogWindowRange(date){
-  const monday=addDays(date,-((parseIso(date).getDay()+6)%7));
-  return {start:addDays(monday,-7),end:addDays(monday,6)};
+  // Cache the calendar month and one extra week on both sides, reducing
+  // day-by-day and month-boundary navigation to local, zero-RPC switches.
+  const grid=monthGridRange(date);
+  return {start:addDays(grid.start,-7),end:addDays(grid.end,7)};
 }
 
 function worklogCachedWindow(date){
@@ -461,6 +463,8 @@ function loadWorklogs(options={}){
     if(!options.silent)renderPageIfActive('worklog');
   }
   const range=worklogWindowRange(date);
+  // Projects only need an initial load and explicit force refresh.
+  const includeProjects=!!options.force||!Array.isArray(state.data.projects)||!state.data.projects.length;
   const generation=worklogWindowGeneration;
   const requestKey=identity+'|'+range.start+'|'+range.end;
   if(worklogWindowRequests.has(requestKey))return;
@@ -486,7 +490,7 @@ function loadWorklogs(options={}){
       if(state.page==='worklog')loadWorklogs({force:true});
       return;
     }
-    worklogStoreWindow(identity,range,data||{});
+    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null});
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM WORKS] worklog range '+(Date.now()-started)+'ms ('+range.start+' / '+range.end+')');
     const selected=state.worklog.date||state.data.today;
     const selectedCache=worklogCachedWindow(selected);
@@ -519,7 +523,7 @@ function loadWorklogs(options={}){
     if(!options.silent)handleApiError(err,'工数を読み込めませんでした');
     renderPageIfActive('worklog');
   }).getWorklogs(state.sessionToken,{
-    start:range.start,end:range.end,includeProjects:true
+    start:range.start,end:range.end,includeProjects
   });
 }
 

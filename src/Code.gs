@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.15.0',
+  version: '0.15.1',
   locale: 'ja-JP'
 });
 
@@ -696,8 +696,15 @@ function getRuntimeInfo_() {
   };
 }
 
+// Reuse a Spreadsheet handle within an Apps Script execution. The environment
+// guard runs before every reuse; switching the configured DB opens a new handle.
+let fmWorksOpenDb_={id:'',handle:null};
 function getDb_() {
-  return SpreadsheetApp.openById(getDatabaseSpreadsheetId_());
+  const id=getDatabaseSpreadsheetId_();
+  if(fmWorksOpenDb_.handle&&fmWorksOpenDb_.id===id)return fmWorksOpenDb_.handle;
+  const handle=SpreadsheetApp.openById(id);
+  fmWorksOpenDb_={id,handle};
+  return handle;
 }
 
 function createId_(prefix) {

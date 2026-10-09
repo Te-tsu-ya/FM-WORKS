@@ -529,14 +529,9 @@ function requireSession_(sessionToken) {
   if (raw.length < 40) throw new Error('AUTH_REQUIRED');
   const hash = hashToken_(raw);
   const sheet = getDb_().getSheetByName(AUTH.sessionSheet);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) throw new Error('AUTH_REQUIRED');
-
-  const found = sheet.getRange(2, 2, lastRow - 1, 1).createTextFinder(hash).matchEntireCell(true).findNext();
-  if (!found) throw new Error('AUTH_REQUIRED');
-
-  const rowNumber = found.getRow();
-  const row = sheet.getRange(rowNumber, 1, 1, 11).getValues()[0];
+  const verified=findVerifiedSheetRow_(sheet,2,11,hash,'session',false);
+  if (!verified) throw new Error('AUTH_REQUIRED');
+  const {rowNumber,row}=verified;
   const now = new Date();
   const absoluteExpiry = parseTimestamp_(row[4]);
   const idleExpiry = parseTimestamp_(row[5]);
@@ -636,12 +631,9 @@ function invalidateEmployeeSessions_(employeeId, exceptRowNumber) {
 function getEmployeeAuthRecord_(employeeId) {
   const id = normalizeEmployeeId_(employeeId);
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return null;
-  const found=sheet.getRange(2,1,lastRow-1,1).createTextFinder(id).matchEntireCell(true).findNext();
-  if(!found)return null;
-  const rowNumber=found.getRow();
-  const r=sheet.getRange(rowNumber,1,1,26).getDisplayValues()[0];
+  const verified=findVerifiedSheetRow_(sheet,1,26,id,'employee',true);
+  if(!verified)return null;
+  const rowNumber=verified.rowNumber,r=verified.row;
   return {
     rowNumber: rowNumber,
     employeeId: r[0],

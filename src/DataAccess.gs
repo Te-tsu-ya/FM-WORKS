@@ -56,6 +56,41 @@ function cacheRemove_(key){
   try{CacheService.getScriptCache().remove(String(key||''));}catch(e){console.warn('cache remove failed',key,e);}
 }
 
+// Cache only a row-number hint. Authentication, permissions, PIN fields,
+// status and expiry are ALWAYS read fresh from the actual sheet row.
+function findVerifiedSheetRow_(sheet,column,width,value,scope,display){
+  const key=String(value==null?'':value);
+  if(!key)return null;
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return null;
+  const started=Date.now();
+  const cacheKey='fm:rowhint:v1:'+getDatabaseSpreadsheetId_()+':'+scope+':'+key;
+  const hint=cacheJsonGet_(cacheKey);
+  const rowHint=Number(hint&&hint.row);
+  const readRow=rowNumber=>{
+    const range=sheet.getRange(rowNumber,1,1,width);
+    return (display?range.getDisplayValues():range.getValues())[0];
+  };
+  if(Number.isInteger(rowHint)&&rowHint>=2&&rowHint<=lastRow){
+    try{
+      const row=readRow(rowHint);
+      if(String(row&&row[column-1])===key){
+        if(Date.now()-started>400)logPerformance_('verifiedRowLookup',started,400,{scope,source:'ROW_HINT'});
+        return {rowNumber:rowHint,row};
+      }
+    }catch(_){/* A moved or deleted row invalidates the hint. */}
+  }
+  const found=sheet.getRange(2,column,lastRow-1,1)
+    .createTextFinder(key).matchEntireCell(true).findNext();
+  if(!found)return null;
+  const rowNumber=found.getRow();
+  const row=readRow(rowNumber);
+  if(String(row&&row[column-1])!==key)return null;
+  cacheJsonPut_(cacheKey,{row:rowNumber},300);
+  if(Date.now()-started>400)logPerformance_('verifiedRowLookup',started,400,{scope,source:'TEXT_FINDER'});
+  return {rowNumber,row};
+}
+
 function readRowsByColumnValues_(sheet,column,width,values){
   const lastRow=sheet.getLastRow();
   if(lastRow<2)return [];

@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -433,7 +433,7 @@ for (const marker of [
 for (const marker of [
   "const cacheKey='fm:settings:v2'",
   'cacheJsonGet_(cacheKey)',
-  'createTextFinder(id).matchEntireCell(true).findNext()',
+  "findVerifiedSheetRow_(sheet,1,26,id,'employee',true)",
   'result.initialData = buildInitialDataForEmployee_(session.employee)'
 ]) {
   if (!authPerfText.includes(marker)) {
@@ -454,7 +454,7 @@ for (const marker of [
     failed = true;
   }
 }
-if (!app.includes('includeEmployees:false') || !app.includes('includeProjects:true')) {
+if (!app.includes('includeEmployees:false') || !app.includes('const includeProjects=') || !app.includes('start:range.start,end:range.end,includeProjects')) {
   console.error('Client page bundles must avoid redundant master-data reads.');
   failed = true;
 }
@@ -1655,7 +1655,11 @@ if (authCode.includes("prototypePin: '000000'")) {
       failed = true;
     }
   }
-  if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
+  if (!dataAccessText.includes('return (display?range.getDisplayValues():range.getValues())[0]')) {
+  console.error('Verified session lookup must read live values, never cached auth objects.');
+  failed=true;
+}
+if (!manifest.webapp || manifest.webapp.access !== 'MYSELF') {
     console.error('Prototype PIN must never be enabled when the web app is accessible beyond MYSELF.');
     failed = true;
   }
@@ -1684,7 +1688,7 @@ if (!maintenanceCode.includes('const prototypeMode=isPrototypeConfigured_();') |
 }
 
 for (const sessionMarker of [
-  'getRange(rowNumber, 1, 1, 11).getValues()[0]',
+  "findVerifiedSheetRow_(sheet,2,11,hash,'session',false)",
   'value instanceof Date',
   '(\\d{1,2}):(\\d{1,2})'
 ]) {

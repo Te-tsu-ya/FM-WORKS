@@ -408,10 +408,11 @@ const result=vm.runInContext(`
   // One GAS call should fill a 14-day window, not just one selected day.
   invalidatePageCache('worklog');
   state.worklog.date='2026-10-08';
+  state.data.projects=[];
   resetCalls();
   loadWorklogs();
   call=lastCall();
-  expect('worklog fetch requests a multi-day window',call&&call.method==='getWorklogs'&&call.args[1].start==='2026-09-28'&&call.args[1].end==='2026-10-11');
+  expect('worklog fetch covers month and surrounding weeks',call&&call.method==='getWorklogs'&&call.args[1].start==='2026-09-20'&&call.args[1].end==='2026-11-07'&&call.args[1].includeProjects===true);
   invokeServerSuccess({
     items:[
       {id:'W-7',date:'2026-10-07',project:'テスト案件A',category:'設計',description:'画面設計',start:'09:00',end:'10:00',minutes:60},
@@ -420,6 +421,13 @@ const result=vm.runInContext(`
     projects:[{name:'テスト案件A',status:'進行中'}]
   });
   expect('worklog window presents the requested day',state.worklog.loadedDate==='2026-10-08'&&state.worklog.totalMinutes===120);
+  resetCalls();
+  jumpWorklogDate('2026-11-01');
+  expect('cross-month worklog day navigation has zero extra GAS requests',
+    apiCalls.length===0&&state.worklog.loadedDate==='2026-11-01');
+  jumpWorklogDate('2026-10-08');
+  expect('cross-month return uses the same cached worklog and minutes',
+    apiCalls.length===0&&state.worklog.totalMinutes===120);
   resetCalls();
   moveWorklogDate(-1);
   expect('adjacent date opens without another GAS call',apiCalls.length===0&&state.worklog.loadedDate==='2026-10-07'&&state.worklog.totalMinutes===60);
@@ -431,14 +439,16 @@ const result=vm.runInContext(`
   state.worklog.date='2026-09-10';
   loadWorklogs();
   call=lastCall();
-  expect('uncached period starts exactly one ranged fetch',apiCalls.length===1&&call.method==='getWorklogs'&&call.args[1].start==='2026-08-31'&&call.args[1].end==='2026-09-13');
+  expect('uncached month fetches once without repeating project master',apiCalls.length===1&&call.method==='getWorklogs'&&call.args[1].start==='2026-08-23'&&call.args[1].end==='2026-10-10'&&call.args[1].includeProjects===false);
   moveWorklogDate(-1);
   moveWorklogDate(-1);
   expect('rapid navigation does not queue repeated GAS requests',apiCalls.length===1&&state.worklog.date==='2026-09-08');
   invokeServerSuccess({
     items:[{id:'W-9',date:'2026-09-08',project:'テスト案件A',start:'09:00',end:'11:00',minutes:120}],
-    projects:[{name:'テスト案件A',status:'進行中'}]
+    projects:[]
   });
+  expect('worklog day navigation preserves loaded project master when omitted',
+    state.data.projects.length===1&&state.data.projects[0].name==='テスト案件A');
   expect('late server response applies the last selected day',state.worklog.loadedDate==='2026-09-08'&&state.worklog.items[0].id==='W-9');
   expect('cached earlier days survive a later window fetch',worklogCachedWindow('2026-10-08')!==null);
   invalidatePageCache('worklog');
