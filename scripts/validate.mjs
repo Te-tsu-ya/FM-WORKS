@@ -117,7 +117,7 @@ for(const marker of ['function quotePage()','function quoteNew()','function quot
 for(const sheet of ['見積取引先','見積ヘッダー','見積明細','見積採番']){
  if(!schemaCodeText.includes("'"+sheet+"':")){console.error('Missing estimate DB sheet '+sheet);failed=true;}
 }
-if(!app.includes("'quotes','見積'")||!app.includes('quotes:quotePage')||
+if(!app.includes("'quotes','見積書'")||!app.includes('quotes:quotePage')||
  !indexText.includes("include_('AppQuotes')")){
  console.error('All-employee estimates must be a visible, routed application page.');failed=true;
 }
@@ -677,7 +677,7 @@ if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people']") |
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請','i-file'],['quotes','見積','i-doc'],['office','事務','i-briefcase'],['finance','経理','i-trend'],['admin','管理','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','見積書','i-doc'],['finance','経理','i-trend'],['admin','管理・設定','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",
@@ -787,6 +787,21 @@ for(const marker of [
   if(!styles.includes(marker)){console.error('v0.11.8 responsive demo style missing: '+marker);failed=true;}
 }
 
+/* v0.14.1: one primary entry per business capability + role-controlled setting page */
+for(const m of ["['requests','申請・報告'","['quotes','見積書'","['finance','経理'",
+ "['admin','管理・設定'","const NAV_GROUPS=[","fm-nav-group",
+ "function financeEntryPage_()","function financeCancelEntry()",
+ "function financeSelectedDetail_()","function quoteSetFilter(filter)",
+ "function quoteAdminSettingsSection_()","id:'quoteSettings'"]){
+ if(!(app+styles).includes(m)){console.error('Unified business workspace missing '+m);failed=true;}
+}
+if((app.match(/const NAV = [^\n]+/)||[''])[0].includes("['office','事務'")){
+ console.error('Legacy office menu must not duplicate finance/quotes.');failed=true;
+}
+if(app.includes("d&&d.canConfigure&&!d.setupRequired?quoteAdminSetup_()")){
+ console.error('Quote vendor administration must not appear inside staff quote list.');failed=true;
+}
+
 /* v0.12.0 universal design-system and office scaffold guardrails */
 const officePreview=fs.readFileSync(path.join(root,'src','AppOffice.html'),'utf8');
 const designNotes=fs.readFileSync(path.join(root,'docs','UI_DESIGN_SYSTEM.md'),'utf8');
@@ -805,10 +820,9 @@ for(const marker of [
   if(!styles.includes(marker)){console.error('v0.12.0 shared design token/office style missing: '+marker);failed=true;}
 }
 for(const marker of [
-  "['office','事務','i-briefcase']",
+  "const NAV_GROUPS=[",
   "officeWorkspace: role ===",
-  "id==='office'?!!p.officeWorkspace",
-  "if(page==='office'&&!(state.data",
+  "if(page==='office')page=state.data",
   "office:officePage",
   "include_('AppOffice')",
   'id="i-briefcase"'

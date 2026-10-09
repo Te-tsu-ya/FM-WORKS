@@ -196,7 +196,7 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','office','finance','admin']));
+  expect('primary menu groups daily work, requests, quotes and role-controlled management without office duplication',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','finance','admin'])&&NAV_GROUPS.length===4);
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
@@ -246,6 +246,28 @@ const result=vm.runInContext(`
   quoteUi.details.header.status='発行済';
   expect('both downloads become available after finalized issuance',
     quotePage().includes('PDFを保存')&&quotePage().includes('Excelを保存'));
+  // v0.14.1: new list/detail renders only real records; admin settings stay separate.
+  quoteUi.mode='list';quoteUi.data.quotes=[
+    {id:'QUOTE-QA-1',number:'FI-0001-0002',status:'発行済',vendorName:'架空法人A',
+      ownerName:'架空社員',subject:'テスト業務',quoteDate:'2026-10-09',total:550000},
+    {id:'QUOTE-QA-2',number:'',status:'下書き',vendorName:'架空法人A',
+      ownerName:'架空社員',subject:'次の見積',quoteDate:'2026-10-09',total:120000}
+  ];
+  const quotesLanding=quotePage();
+  expect('quote landing has real-record metrics and list table with no staff admin controls',
+    quotesLanding.includes('見積履歴')&&quotesLanding.includes('fm-data-table')&&
+    quotesLanding.includes('550,000円')&&!quotesLanding.includes('quoteVendorPaste'));
+  resetCalls();
+  quoteSetFilter('issued');
+  expect('quote status tab filters existing records with zero API calls',
+    quoteList_().length===1&&quoteList_()[0].id==='QUOTE-QA-1'&&apiCalls.length===0);
+  quoteSetFilter('all');
+  quoteChangeSearch('次の見積');
+  expect('quote search shows a single matching draft without GAS RPC',
+    quoteList_().length===1&&quoteList_()[0].id==='QUOTE-QA-2'&&apiCalls.length===0);
+  quoteChangeSearch('');
+  expect('admin vendor panel is available as dedicated settings content', 
+    ADMIN_CATEGORIES.some(x=>x.id==='quoteSettings')&&typeof quoteAdminSettingsSection_==='function');
   resetQuoteUi();
   state.data=quoteBeforeData;
   resetCalls();
@@ -268,8 +290,8 @@ const result=vm.runInContext(`
   expect('unauthorized office module selection does not change UI state or call the backend',
     state.officeUi.selected===initialDeniedModule&&apiCalls.length===0);
   state.data.permissions.officeWorkspace=true;
-  expect('office member sees only office navigation, not administrative navigation',
-    visibleNav().some(x=>x[0]==='office')&&!visibleNav().some(x=>x[0]==='admin'));
+  expect('legacy office permissions do not reintroduce duplicate office navigation',
+    !visibleNav().some(x=>x[0]==='office')&&!visibleNav().some(x=>x[0]==='admin'));
   const moduleHtml=officePage();
   expect('office scaffold lists six reference-grounded modules',
     OFFICE_MODULES.length===6&&moduleHtml.includes('office-module-nav')&&
@@ -294,8 +316,8 @@ const result=vm.runInContext(`
   expect('unknown office module ID is rejected without changing state',
     state.officeUi.selected==='vendors'&&apiCalls.length===0);
   state.data.permissions.adminConsole=true;
-  expect('administrators can access both office and administrator routes',
-    visibleNav().some(x=>x[0]==='office')&&visibleNav().some(x=>x[0]==='admin'));
+  expect('administrators see management settings but not duplicate office entry',
+    !visibleNav().some(x=>x[0]==='office')&&visibleNav().some(x=>x[0]==='admin'));
   expect('office module switching sends zero GAS requests',apiCalls.length===0);
 
   state.data.permissions.financeWorkspace=false;
@@ -329,7 +351,7 @@ const result=vm.runInContext(`
     htmlDetail.includes('REC-001')&&htmlDetail.includes('金額差異')&&htmlDetail.includes('2,000円'));
   const financeRowsHtml=financeOverviewRows('expense');
   expect('financial approval view includes detail action for every record',
-    financeRowsHtml.includes('financeShowDetail('));
+    financeRowsHtml.includes('financeSelectRecord('));
   financeUi.mine={setupRequired:false,expenses:[financeFakeExpense],travels:[]};
   expect('returned finance claim offers an owner resubmission path',
     financeMyRow('expense',financeFakeExpense).includes('修正して再申請'));
@@ -337,7 +359,11 @@ const result=vm.runInContext(`
   openFinanceForm('expense','EXP-FAKE-1');
   expect('returned claim editing retains original row id and prepopulates fields',
     financeActiveForm&&financeActiveForm.editId==='EXP-FAKE-1'&&
-    document.getElementById('fin-vendor').value==='安全な取引先');
+    financeActiveForm.inline&&financeActiveForm.draft.vendor==='安全な取引先'&&
+    financeEntryPage_().includes('安全な取引先'));
+  financeUpdateEntryField({name:'amount',value:'2500'});
+  expect('employee form state survives requests screen re-render without losing entered amount',
+    financeEntryPage_().includes('2,500円')&&financeActiveForm.draft.amount==='2500');
   submitFinanceForm();
   call=lastCall();
   expect('finance resubmission uses dedicated server endpoint with original id',
@@ -710,7 +736,7 @@ const result=vm.runInContext(`
   state.requests.context={leaveBalanceConfigured:false,availableLeaveDays:null};
   state.requests.loadedKey=requestsIdentity();
   const employeeDashboard=requestsPage();
-  expect('employee requests dashboard shows its own metrics and quick actions',employeeDashboard.includes('request-overview-metric')&&employeeDashboard.includes('QUICK REQUEST')&&employeeDashboard.includes('何を申請しますか？'));
+  expect('employee requests dashboard shows its own metrics and quick actions',employeeDashboard.includes('request-overview-metric')&&employeeDashboard.includes('OTHER REQUESTS')&&employeeDashboard.includes('その他の勤務申請'));
   expect('unconfigured leave is compact and never invents balance',employeeDashboard.includes('request-inline-alert')&&employeeDashboard.includes('未設定')&&!employeeDashboard.includes('12.0日'));
   expect('employee does not see approval controls',!employeeDashboard.includes("id='requestApprovalPanel'")&&!employeeDashboard.includes('取消承認'));
   expect('request guidance explains three steps',employeeDashboard.includes('申請の進め方')&&employeeDashboard.includes('内容を確認'));
@@ -972,7 +998,7 @@ const result=vm.runInContext(`
   state.requests.loadedKey=requestsIdentity();
   resetCalls();
   expect('annual leave demo is available from the requests page',
-    requestsPage().includes('有給の動作デモを見る'));
+    requestsPage().includes('有給休暇の付与・取得デモを見る'));
   expect('annual leave demo is linked in employee administration',
     adminPeopleContent().includes('架空の社員で動作を試す'));
   expect('demo opens for authenticated staff without a server call',

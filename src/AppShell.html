@@ -146,7 +146,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.page=(NAV.some(n=>n[0]===requested)||nestedRoutes.includes(requested))?requested:'home';
   if(state.page==='admin'&&state.adminTab==='people')state.page='people';
   if((state.page==='admin'||state.page==='people')&&!(data.permissions&&data.permissions.adminConsole))state.page='home';
-  if(state.page==='office'&&!(data.permissions&&data.permissions.officeWorkspace))state.page='home';
+  if(state.page==='office')state.page=data.permissions&&data.permissions.financeWorkspace?'finance':'quotes';
   if(state.page==='finance'&&!(data.permissions&&data.permissions.financeWorkspace))state.page='home';
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
@@ -166,6 +166,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs({silent:true});
   if(state.page==='requests')loadRequests();
+  if(state.page==='requests')loadMyFinanceItems({silent:true});
   if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
   if(state.page==='office'&&data.permissions&&data.permissions.financeWorkspace){
@@ -222,7 +223,12 @@ function openMobileDrawer(){
   root.innerHTML=`<div class='mobile-drawer-backdrop' onclick='closeMobileDrawer()'></div>
     <aside class='mobile-drawer' aria-label='全メニュー'>
       <div class='mobile-drawer-head'>${svgLogo()}<div><strong>FM WORKS</strong><small>${state.data?escapeHtml(state.data.user.displayName):''}</small></div><button class='icon-button' onclick='closeMobileDrawer()' aria-label='メニューを閉じる'>×</button></div>
-      <nav>${nav.map(([id,label,icon])=>`<button class='${state.page===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${label}</span></button>`).join('')}</nav>
+      <nav>${NAV_GROUPS.map(group=>{
+        const items=group.ids.map(id=>nav.find(item=>item[0]===id)).filter(Boolean);
+        return items.length?`<div class='fm-mobile-nav-group'><span class='fm-nav-caption'>${escapeHtml(group.title)}</span>${items.map(([id,label,icon])=>
+          `<button type='button' class='${state.page===id?'active':''}' onclick="navigate('${id}')">${svg(icon)}<span>${escapeHtml(label)}</span></button>`
+        ).join('')}</div>`:'';
+      }).join('')}</nav>
     </aside>`;
   document.body.classList.add('drawer-open');
 }

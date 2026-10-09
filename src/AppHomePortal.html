@@ -106,16 +106,17 @@ function homePortalPriorities(tasks){
   </section>`;
 }
 function homePortalShortcuts(){
-  const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
+  const permissions=state.data&&state.data.permissions||{};
   const routes=[
-    ['worklog','工数入力','業務時間を記録','i-chart'],
-    ['requests','休暇・申請','有給・打刻修正','i-file'],
-    ['monthly','月次勤怠','勤怠を確認','i-clock'],
-    ['schedule','予定表','スケジュール','i-calendar']
+    ['quotes','見積書を作成','下書きから正式発行まで','i-doc'],
+    ['requests','申請・報告','経費・出張・有給','i-file'],
+    ['worklog','工数入力','今日の仕事を記録','i-chart'],
+    ['schedule','予定表','予定を確認','i-calendar']
   ];
-  if(admin)routes.push(['people','社員・設定','権限と労務管理','i-gear']);
+  if(permissions.financeWorkspace)routes.push(['finance','経理の処理','承認・精算の確認','i-trend']);
+  if(permissions.adminConsole)routes.push(['admin','管理・設定','取引先・権限・採番','i-gear']);
   return `<section class='card home-portal-panel home-portal-shortcuts'>
-    <header class='home-portal-panel-head'><div><span class='eyebrow'>QUICK ACCESS</span><h2>よく使う機能</h2></div></header>
+    <header class='home-portal-panel-head'><div><span class='eyebrow'>QUICK ACCESS</span><h2>クイックアクション</h2></div></header>
     <div class='home-portal-shortcut-grid'>${routes.map(([page,label,detail,icon])=>`
       <button type='button' class='home-portal-shortcut' onclick="navigate('${page}')">
         ${svg(icon)}<span><strong>${label}</strong><small>${detail}</small></span><i aria-hidden='true'>›</i>

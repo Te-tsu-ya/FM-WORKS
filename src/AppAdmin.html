@@ -11,6 +11,7 @@ const ADMIN_CATEGORIES=[
   {id:'people',label:'社員・権限',short:'社員',icon:'人',help:'社員情報、権限と年休を管理'},
   {id:'auth',label:'認証・サポート',short:'認証',icon:'鍵',help:'PIN、ロックとサポート'},
   {id:'projects',label:'プロジェクト',short:'案件',icon:'案',help:'工数で利用する案件マスタ'},
+  {id:'quoteSettings',label:'取引先・見積採番',short:'取引先',icon:'見',help:'ベンダーコード・過去の最終番号'},
   {id:'operation',label:'運用・労務',short:'運用',icon:'運',help:'労務ルールと運用状態'},
   {id:'requirements',label:'要件定義書',short:'要件',icon:'文',help:'アプリの要件と業務ルール'},
   {id:'technical',label:'技術設計書',short:'設計',icon:'技',help:'実装・データ設計'}
@@ -98,6 +99,7 @@ function setAdminTab(tab){
   renderNav();renderPage();
   if(tab==='auth')loadAuthAdmin({scope:'auth'});
   if(tab==='projects')loadAuthAdmin({scope:'projects'});
+  if(tab==='quoteSettings')loadQuoteWorkspace({silent:true});
   if(tab==='operation')loadMaintenance();
   if(tab==='requirements')loadSystemDocument('requirements');
   if(tab==='technical')loadSystemDocument('technical');
@@ -188,12 +190,25 @@ function documentPane(type){
   if(!doc)return `<div class='document-loading'><div class='loading-card'></div><p>文書を読み込んでいます…</p></div>`;
   return `<section class='document-shell'><header><div><span class='badge'>${escapeHtml(doc.version||state.data.app.version)}</span><strong>${escapeHtml(doc.title)}</strong><small>最終更新 ${escapeHtml(doc.updatedAt||'—')}</small></div><button class='secondary-button compact' onclick="loadSystemDocument('${type}',{force:true})">再読込</button></header><article class='document-reader'>${renderMarkdownDoc(doc.markdown)}</article></section>`;
 }
+function quoteAdminSettingsSection_(){
+  if(!state.data||!state.data.permissions||!state.data.permissions.adminConsole)return '';
+  if(quoteUi.loading&&!quoteUi.data)return "<div class='card quote-state' role='status'>取引先と採番情報を読み込んでいます…</div>";
+  if(quoteUi.error&&!quoteUi.data)return "<div class='card quote-state' role='alert'>"+
+    escapeHtml(quoteUi.error)+"<button class='secondary-button' type='button' onclick='loadQuoteWorkspace({force:true})'>再取得</button></div>";
+  if(!quoteUi.data)return "<div class='card quote-state' role='status'>見積マスタを読み込んでいます…</div>";
+  if(quoteUi.data.setupRequired)return "<div class='card quote-state' role='alert'>"+
+    "<strong>見積用DBの初期設定が必要です</strong><p>バックアップ取得後に「運用・労務」からDB更新を行ってください。</p></div>";
+  return "<div class='fm-admin-quote-settings'><div class='fm-business-panel-head'>"+
+    "<h2>取引先マスタ・見積採番</h2><p>取引先の登録と過去の見積番号の確認は管理者だけが行えます。</p></div>"+
+    quoteAdminSetup_()+"</div>";
+}
 function adminPage(){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return pageHead('管理','この画面を表示する権限がありません。');
   if(state.adminTab==='people')return peoplePage();
   let content='';
   if(state.adminTab==='auth')content=authSettingsSection();
   else if(state.adminTab==='projects')content=projectAdminSection();
+  else if(state.adminTab==='quoteSettings')content=quoteAdminSettingsSection_();
   else if(state.adminTab==='operation')content=maintenanceSection();
   else if(state.adminTab==='requirements')content=documentPane('requirements');
   else if(state.adminTab==='technical')content=documentPane('technical');

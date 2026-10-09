@@ -1785,45 +1785,44 @@ function requestHistoryPanel(){
   </section>`;
 }
 function requestsPage(){
-  const r=state.requests;
-  if(!requestsDataReady())return `<div class='request-dashboard'>
-    ${pageHead('申請','申請の作成・状況確認・承認をひとつの画面で。')}
-    <section class='request-load-panel' role='${r.error?'alert':'status'}'>
-      ${r.error?`<strong>${escapeHtml(r.error)}</strong><button type='button' class='primary-button' onclick='loadRequests({force:true})'>再読込</button>`:
-        `<div class='loading-card'></div><span>申請情報を読み込んでいます…</span>`}
-    </section></div>`;
-  const canApprove=!!(state.data.permissions&&state.data.permissions.requestApprove);
+  if(financeActiveForm&&financeActiveForm.inline)return financeEntryPage_();
+  const r=state.requests,ready=requestsDataReady();
+  const canApprove=!!(state.data&&state.data.permissions&&state.data.permissions.requestApprove);
   const quick=[
     requestTypeCard('有給','有給休暇','残日数を確認して申請'),
-    requestTypeCard('午前半休','半休・1/4日','午前・午後・1/4日から選択'),
-    requestTypeCard('打刻修正','打刻修正','出勤・退勤などを修正'),
+    requestTypeCard('午前半休','半休・1/4日','午前・午後・1/4日'),
+    requestTypeCard('打刻修正','打刻修正','出退勤の記録を修正'),
     requestTypeCard('在宅勤務'),
     requestTypeCard('残業'),
     requestTypeCard('休日出勤'),
     requestTypeCard('欠勤')
   ].join('');
-  return `<div class='request-dashboard'>
-    ${pageHead('申請','申請の作成・状況確認・承認を、ひとつの画面で。')}
-    ${requestCompactLeaveAlert()}
-    ${requestAnnualLeaveNotice()}
-    ${requestOverview()}
-    <section class='leave-demo-invite'><div><strong>有給がどう増減するか試せます</strong>
-      <span>架空の入社日と取得履歴を使うデモです。実際の有給残数は変更しません。</span></div>
-      <button type='button' class='secondary-button compact' onclick='leaveDemoOpen()'>有給の動作デモを見る</button></section>
-    ${r.refreshing?`<div class='request-refresh-hint' role='status'>最新の申請情報を確認中です。表示中の内容はそのまま操作できます。</div>`:''}
-    <div class='request-action-layout'>
-      <section class='request-launch request-dashboard-launch'>
-        <header class='request-panel-heading'><div><span class='eyebrow'>QUICK REQUEST / 新規申請</span><h2>何を申請しますか？</h2><p>申請したい種類を選び、必要な項目だけ入力します。</p></div></header>
-        <div class='request-quick-grid'>${quick}</div>
-      </section>
-      <div class='request-side-column'>
-        ${canApprove?requestApprovalPanel():requestRecentPanel()}
-        ${requestGuidePanel()}
-      </div>
-    </div>
-    ${financeSelfSection()}
-    ${requestHistoryPanel()}
-  </div>`;
+  return "<div class='request-dashboard fm-business-page fm-requests-screen'>"+
+    "<header class='fm-business-hero'><div><span class='eyebrow'>FM WORKS / 申請・帳票</span>"+
+    "<h1>申請・報告</h1><p>休暇・経費・出張の申請と、自分の手続き状況をまとめて確認できます。</p></div>"+
+    "<div class='fm-hero-actions'>"+
+    "<button type='button' class='primary-button' onclick='openRequestModal(\"有給\")'>有給を申請</button>"+
+    "<button type='button' class='secondary-button' onclick='openFinanceForm(\"expense\")'>経費を申請</button>"+
+    "<button type='button' class='secondary-button' onclick='openFinanceForm(\"travel\")'>出張を報告</button></div></header>"+
+    (!ready?"<section class='request-load-panel' role='"+(r.error?'alert':'status')+"'>"+
+      (r.error?"<strong>"+escapeHtml(r.error)+"</strong><button type='button' class='primary-button' onclick='loadRequests({force:true})'>再読込</button>":
+      "<div class='loading-card'></div><span>勤務関連の申請情報を読み込んでいます…</span>")+
+      "</section>":(
+        requestCompactLeaveAlert()+requestAnnualLeaveNotice()+requestOverview()+
+        (r.refreshing?"<div class='request-refresh-hint' role='status'>申請状況を更新中です。</div>":"")+
+        "<div class='fm-request-content'><main class='fm-request-main'>"+
+        "<section class='fm-request-main-panel card'>"+requestHistoryPanel()+"</section>"+
+        financeSelfSection()+"</main>"+
+        "<aside class='fm-request-aside'>"+(canApprove?requestApprovalPanel():requestRecentPanel())+
+        requestGuidePanel()+"</aside></div>"+
+        "<section class='request-launch request-dashboard-launch fm-request-more-types'>"+
+        "<header class='request-panel-heading'><div><span class='eyebrow'>OTHER REQUESTS</span>"+
+        "<h2>その他の勤務申請</h2><p>残業・打刻修正・休日出勤などを申請できます。</p></div></header>"+
+        "<div class='request-quick-grid'>"+quick+"</div></section>"+
+        "<details class='fm-request-demo'><summary>有給休暇の付与・取得デモを見る</summary>"+
+        "<p>架空社員データによる動作デモです。実際の有給残日数は変更しません。</p>"+
+        "<button type='button' class='secondary-button' onclick='leaveDemoOpen()'>デモを開く</button></details>"
+      ))+"</div>";
 }
 function requestReasonSuggestions(type){
   if(type==='打刻修正')return ['打刻漏れ','操作ミス','その他'];

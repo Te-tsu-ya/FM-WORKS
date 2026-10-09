@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.14.0  
+**文書版:** 0.14.1  
 **更新日:** 2026-10-08  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.14.0`
+`APP.version = 0.14.1`
 
 DBスキーマ: 10。  
 認証スキーマ: 3。  
@@ -1688,3 +1688,25 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - スクリーンショットQA: scripts/test_quote_viewport.mjs が架空の見積データで一覧・編集中・正式発行後をそれぞれPC/スマホ表示し、横スクロールとボタン配置を検証する。CI成果物 fmworks-quote-layout-qa に画像を保管する。
 
 - エラーフロー追加: quoteDetail_は発行済／出力失敗／発行処理中を区別。出力失敗は同じ番号で再試行するアクションを設けるが、正式発行完了まではgetQuoteDocumentのダウンロードボタンを表示しない。クライアント契約テストで確認する。
+
+
+## 56. 業務ワークスペース統合（v0.14.1）
+
+### 56.1 ナビゲーション
+- AppCore.html: NAV はホーム/勤怠/工数/予定/申請・報告/見積書/経理/管理・設定。NAV_GROUPSは日常業務/申請・帳票/管理業務/システム管理。経理・管理は既存のpermissionによって初めて表示し、officeは通常メニューに含めない。
+- AppShell.html: PCとスマホドロワーで同じ分類を表示。過去の #office ブックマークは、認証済み社員の権限に応じて #finance または #quotes に誘導する。
+- サーバーgetPermissions_は変更せず、financeWorkspace/adminConsole/quoteWorkspaceを役割で従来どおり検証する。
+
+### 56.2 画面のデータ境界
+- AppQuotes.html: 見積状態別一覧/検索/明細編集/発行済の紙面プレビューと操作パネル。値はgetQuoteWorkspace/getQuoteから取得。改訂版衝突・正式採番・PDF/XLSX出力などはQuotes.gsが最終責任を持つ。表示件数が最大200のため指標に「表示中」の制限を明記。
+- AppAdmin.html: quoteSettingsセクション追加。quoteAdminSetup_で取引先一覧、Excel A〜D列のインポート、番号の検証。AppQuotesの社員用一覧には管理者設定を混ぜない。既存QuoteWorkspaceのキャッシュを使い重複APIを抑制。
+- AppOperations.html: requestsPage は申請・報告の業務入口/履歴/承認キュー/その他勤務申請を表示する。financeActiveForm.inlineがあれば先にfinanceEntryPage_を表示して、勤務申請API取得中でも入力を続けられる。
+- AppFinance.html: financeActiveForm.inlineは経費と出張の入力内容をメモリに保持し、旧来と同じsubmitFinanceExpense/submitFinanceTravel/resubmitFinanceRequestを呼ぶ。receiptだけは経理管理の既存モーダルを維持する。financePageは検索/状態絞込/一覧選択/詳細/既存承認処理をGAS追加通信なしで操作する。
+- AppHomePortal.html: ホームのクイックアクションを実際に利用できる見積/申請/工数/予定/経理/管理へ変更。承認待ちの架空数値は挿入しない。
+
+### 56.3 設計・保守
+- Styles.html: .fm-business-*共通コンポーネントと用途別.fm-entry-、.fm-quote-、.fm-finance-を追加。既存画面のトークン（surface/text/muted/blue/line）に従う。1170/760/390pxでレイアウトを切替。
+- リスク防止: 旧officeのソースとその既存の申請APIを消さない。見積番号・経費・年休台帳のDBスキーマや権限を変えない。取得済み金額・人数だけを表示し、0件と読み込み中を区別する。
+- 発行待ち/出力失敗時はファイルが未完成のためダウンロードボタンを出さない。確認と再試行は既存の見積状態契約を再利用する。
+- 見た目の基準はユーザー承認済み9画面の構成、Shopify Polarisの検索可能な一覧と詳細、Atlassianの統一ナビゲーション。生成画像に含まれる2024年等の架空数字・架空社名・承認待ちの見積・存在しない添付操作は対象外。
+- 公式参照: https://polaris-react.shopify.com/components/tables/index-table / https://www.atlassian.com/blog/how-we-build/designing-atlassians-new-navigation
