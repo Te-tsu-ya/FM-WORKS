@@ -1,7 +1,7 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.16.3  
-**更新日:** 2026-10-09  
+**文書版:** 0.17.0  
+**更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -1752,3 +1752,15 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 明細ヘッダーをB16:I16、帳票件名をB12:E12、取引先住所をB7:E7へ配置。小計・消費税・合計は従来のB38:I40に続く行へ表示し、ユーザーに連動する帳票構成を維持。PDF・Excel変換は既存の `quoteCreateFiles_` の二段階発行処理を継続する。
 - `AppQuotes.html:quotePreviewDocument_` と `StylesWorkflowV15.html` には参考帳票に近い青い区切り・薄灰ストライプ・発行元詳細を反映。現行帳票の細部や原本比較は未検証。
 - `scripts/test_quote_integration.mjs` では21行一括setValues、マイナス値引き、注記、取引先住所と件名セル配置を検査する。既存の再送耐性と発行済み書換禁止テストも維持する。
+
+
+## v0.17.0 統合書類作成・関連帳票の技術設計（2026-10-10）
+
+- UI: AppCore.html の NAV に書類作成（quotes既存ルート）と書類一覧・履歴（documentHistory新規ルート）を追加。AppShellで documentHistoryPage に配信。AppQuotes.html の共通入力・下書き・見積正式発行は従来APIを利用し、見積正式発行後に AppDocuments.html の documentCreateFromQuote を表示。
+- 共通入力: quoteUi.editor は現行見積データだけを編集する。取引先の新規登録は quoteQuickVendorDialog_ で既存の管理者専用 importQuoteVendors を呼び、フォームの編集中データを失わず新規コードを選択する。登録情報と採番確認済み状態は別に検査。
+- 新規 Apps Script Documents.gs: documentStorageStatus_, documentRows_, getRelatedDocument, createRelatedDocument, retryRelatedDocument, getRelatedDocumentFile。取引先／単価／明細／金額は発行済み元見積からスナップショットとして関連書類シートに記録。明細JSONは45,000文字を上限とする。
+- 番号: 種別・年ごとの最終番号を関連書類採番シートに格納。LockService経由の withScriptLock_ を利用した予約処理で1つの元見積ID・種別につき1つの番号に制限する。発行に失敗したときは状態「出力失敗」にし、再試行でも元の番号を維持する。
+- 発行: quotePaintSheet_ を呼んで既存見積テンプレートのレイアウトを引き継いだ後、タイトル・書類番号・発行日・期限/納品日/入金日・合計見出しを種別ごとに差し替え、一時Google SheetsからPDF/ExcelをエクスポートしてDriveへ保存。一時ファイルは処理終了時に破棄する。
+- セキュリティ: 書類一覧・詳細・ダウンロード・再試行で requireSession_ による所有者チェックを毎回実施。管理者は全社員を閲覧可能。ユーザー入力は quoteText_／financeDate_／quoteKey_ を用いて検証。ブラウザ側の文字列はescapeHtmlで表示する。
+- 運用: Schema.gs DB_SCHEMA_VERSION=12。関連書類（32列）・関連書類採番（5列）を追加。既存migrateDatabaseToCurrentのバックアップ→ヘッダー整合検査→作成→DB_VERSION更新→監査の工程を再利用。関連書類シートが無い場合は既存見積が利用可能なまま設定導線を表示。
+- 回帰: scripts/test_quote_integration.mjs は見積書既存テンプレート、独立番号、PDF/Excel出力、金額凍結、領収入金確認、本人以外のアクセス遮断と重複発行防止を検証。test_client_contract.mjs は作成・履歴画面、変換ボタン、領収確認UIを検証。横幅と表示は既存viewportテストで確認する。

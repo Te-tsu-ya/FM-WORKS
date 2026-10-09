@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -197,7 +197,7 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','finance','office','admin']));
+  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','documentHistory','finance','office','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');
@@ -215,6 +215,15 @@ const result=vm.runInContext(`
   quoteUi.data={setupRequired:false,vendors:[{code:'FI-0001',name:'架空法人A',invoice:'T1234567890123',address:'架空市'}],
     sequencesReady:['FI-0001'],quotes:[],canConfigure:false};
   quoteUi.identity=quoteIdentity_();quoteUi.at=Date.now();
+  expect('creation page offers all four documents without status-dashboard clutter',
+    quotePage().includes('書類を作成する')&&quotePage().includes('請求書')&&
+    quotePage().includes('納品書')&&quotePage().includes('領収書')&&
+    !quotePage().includes('今月の発行額'));
+  expect('separate history route renders unified search and type filters',
+    documentHistoryPage().includes('書類一覧・履歴')&&
+    documentHistoryPage().includes('docHistorySearch')&&
+    documentHistoryPage().includes('請求書'));
+
   resetCalls();
   quoteNew();
   expect('ordinary employee can open an editable quote without GAS roundtrip',
@@ -268,6 +277,26 @@ const result=vm.runInContext(`
   expect('running output does not expose nonexistent document download',
     quotePage().includes('発行処理中')&&!quotePage().includes('Excelを保存'));
   quoteUi.details.header.status='発行済';
+  quoteUi.data.documentsSetupRequired=false;
+  quoteUi.data.quotes=[{...quoteUi.details.header,id:'QUOTE-DRAFT',number:'FI-0001-0002',quoteId:'QUOTE-DRAFT'}];
+  quoteUi.data.relatedDocs=[{id:'DOC-INVOICE',kind:'invoice',quoteId:'QUOTE-DRAFT',
+    number:'INV-2026-0001',vendorName:'架空法人A',subject:'導入',total:550000,status:'発行済',
+    updatedAt:'2026-10-09 10:00:00',documentDate:'2026-10-09'}];
+  const historyWithDocuments=documentHistoryPage();
+  expect('archive mixes quote and issued invoice with clear document labels',
+    historyWithDocuments.includes('FI-0001-0002')&&historyWithDocuments.includes('INV-2026-0001'));
+  documentSetFilter('invoice');
+  expect('invoice archive filter excludes estimates',documentRowsClient_().length===1&&
+    documentRowsClient_()[0].kind==='invoice');
+  documentSetFilter('all');
+  expect('conversion buttons appear for issued quotes',quotePage().includes('請求書を作成')&&
+    quotePage().includes('領収書を作成'));
+  documentCreateFromQuote('receipt','QUOTE-DRAFT');
+  expect('receipt issuance always requires explicit payment confirmation in its UI',
+    document.getElementById('modalRoot').innerHTML.includes('docPaidConfirmed')&&
+    document.getElementById('modalRoot').innerHTML.includes('入金を確認'));
+  closeModal();
+
   expect('both downloads become available after finalized issuance',
     quotePage().includes('PDFを保存')&&quotePage().includes('Excelを保存'));
   const persistedQuote=quotePage();

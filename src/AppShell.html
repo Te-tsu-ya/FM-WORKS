@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
