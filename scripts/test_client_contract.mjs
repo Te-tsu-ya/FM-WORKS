@@ -377,9 +377,15 @@ const result=vm.runInContext(`
     htmlDetail.includes('&lt;img')&&!htmlDetail.includes('<img src=x'));
   expect('finance detail shows receipt reference and mismatch evidence',
     htmlDetail.includes('REC-001')&&htmlDetail.includes('金額差異')&&htmlDetail.includes('2,000円'));
-  const financeRowsHtml=financeOverviewRows('expense');
+  financeVisual.match='ISSUE';
+  expect('finance discrepancy filter finds an actual mismatch',financeVisibleItems_('expense').length===1);
+  financeVisual.match='MATCHED';
+  expect('finance reconciliation match filter excludes discrepancy',financeVisibleItems_('expense').length===0);
+  financeVisual.match='ALL';
+  expect('finance detail inspector escapes untrusted data',financeInspectorHtml_('expense',financeFakeExpense).includes('金額差異')&&!financeInspectorHtml_('expense',financeFakeExpense).includes('<img src=x'));
+    const financeRowsHtml=financeOverviewRows('expense');
   expect('financial approval view includes detail action for every record',
-    financeRowsHtml.includes('financeShowDetail('));
+    financeRowsHtml.includes('financeSelectRecord('));
   financeUi.mine={setupRequired:false,expenses:[financeFakeExpense],travels:[]};
   expect('returned finance claim offers an owner resubmission path',
     financeMyRow('expense',financeFakeExpense).includes('修正して再申請'));
@@ -420,7 +426,10 @@ const result=vm.runInContext(`
   expect('accounting status filter finds pending approvals without extra requests',
     financeVisibleItems_('expense').length===1&&apiCalls.length===0);
   financeVisual.status='ALL';
-  const safeOffice=officePage();
+  resetCalls();financeSelectRecord('expense','EXP-PENDING');
+  expect('finance record selection does not call GAS',financeUi.selectedIds.expense==='EXP-PENDING'&&apiCalls.length===0);
+  expect('finance review uses side-by-side inspector',financePage().includes('financeSelectedDetail')&&financePage().includes('financeJumpTo('));
+    const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
   quoteUi.data={setupRequired:false,canConfigure:true,vendors:[{name:'架空ベンダー',code:'FI-0001'}],sequencesReady:[]};

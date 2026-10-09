@@ -1771,3 +1771,11 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 修正: `.modal-card` に `background:var(--surface);color:var(--text);border:1px solid var(--line)` を適用し、`.modal-head small`、閉じる `.icon-button`、dark `.field>span` をテーマに応じた色にする。`.request-modal-actions` も `var(--surface)` と `var(--line)` に揃え、スクロール時の白いフッターを回避する。
 - 新設 `scripts/test_modal_theme.mjs`: 実際の AppQuotes.html / AppDocuments.html のダイアログ生成関数をVMで実行し、Styles.html + StylesWorkflowV15.html をChromiumでレンダリング。1366×768と390×844、light/dark、5種のモーダルを検証し、computedStyle色からWCAGコントラスト比4.5以上、モーダル枠の画面内配置、申請フッター色一致を検査する。
 - CI / mainデプロイの両方で、既存の業務テストに加えてモーダルの表示契約テストを必須化。CIではスクリーンショットを `fmworks-modal-theme-qa` の成果物として保存。元の見積Excel描画・DB構造・業務権限・採番ルールに変更を加えない。
+
+## v0.17.2 経理レビュー表示と競合防止（2026-10-10）
+
+- src/AppFinance.html のfinanceUiに種類別選択IDを保持し、financeSelectedItem_とfinanceInspectorHtml_で一覧・詳細を同期する。選択・検索はDOMを局所更新、GAS呼出しなし。
+- 証憑要確認はサーバー既存のreceiptMatchesと現在読込済みのexpensesを使う。総数はgetFinanceOverviewのtotalsを使う。
+- src/StylesWorkflowV15.html末尾のfinance専用CSSだけを変更する。Finance.gs/Schema.gs/書類発行機能と共通CSSは変更しない。
+- クライアントの所有者・状態の追加確認はUX向けガードであり、正式な認可は既存のGASサーバーで引き続き行う。
+- 架空データのクライアント契約試験・既存経理統合試験・レスポンシブChromium試験を完了条件とする。本番DBは触らない。
