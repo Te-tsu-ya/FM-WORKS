@@ -477,4 +477,20 @@
  .quote-builder .qb-edit-column,.quote-builder .qb-preview-column{overflow-x:clip}
  .quote-builder .qb-grid-scroll{overflow-x:auto!important;overflow-y:hidden!important;contain:layout;isolation:isolate}
 }
+
+/* v0.16.1: consistent issued and editable quotation presentation */
+.quote-detail .qb-issued-preview{max-width:980px;margin-inline:auto;padding:18px}
+.qb-issued-preview-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+ border-bottom:1px solid var(--line);padding:0 0 14px;margin-bottom:14px}
+.qb-issued-preview-heading h2{font-size:16px;color:var(--text);font-weight:850;margin:0}
+.qb-issued-preview-heading p{font-size:11px;color:var(--muted);margin:0;line-height:1.5}
+.qb-issued-surface{background:var(--surface2);padding:16px;border-radius:12px;overflow-x:auto}
+.qb-issued-surface .qb-paper{max-width:770px;margin:0 auto;min-height:650px;padding:33px 34px}
+.qb-issued-surface .qb-paper-issuer strong{font-size:11px}
+@media(max-width:690px){
+ .quote-detail .qb-issued-preview{padding:10px}
+ .qb-issued-surface{padding:5px}
+ .qb-issued-surface .qb-paper{padding:16px 12px;min-height:450px;width:100%}
+ .qb-issued-preview-heading{margin-bottom:8px}
+}
 </style>

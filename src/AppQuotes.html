@@ -450,8 +450,16 @@ function quoteFormatAmount_(value){
   return Number.isFinite(n)?financeYen(Math.round(n)):'—';
 }
 function quotePreviewDocument_(e){
-  const vendor=quoteVendor_();
-  const totals=quoteTotals_(e.lines||[]);
+  // Issued quotations are immutable records: never substitute a later change
+  // to the vendor master or reprice an old estimate from editable client data.
+  const status=String(e.status||'');
+  const persisted=['発行済','発行処理中','出力失敗'].includes(status);
+  const vendor=persisted?null:quoteVendor_();
+  const computed=quoteTotals_(e.lines||[]);
+  const storedValue=v=>Number(String(v==null?'':v).replace(/,/g,''));
+  const totals=persisted&&['subtotal','taxAmount','total'].every(k=>
+    e[k]!==''&&e[k]!=null&&Number.isFinite(storedValue(e[k])))?
+    {subtotal:storedValue(e.subtotal),tax:storedValue(e.taxAmount),total:storedValue(e.total)}:computed;
   const vendorName=vendor?vendor.name:e.vendorName||'取引先を選択してください';
   const date=String(e.quoteDate||'');
   const formatDate=value=>{
@@ -461,7 +469,9 @@ function quotePreviewDocument_(e){
   const rows=(e.lines||[]).filter(x=>String(x.description||'').trim()).map((line,i)=>{
     const note=!!line.noteOnly;
     const quantity=Number(line.quantity||0),price=Number(String(line.price||0).replace(/,/g,''));
-    const amount=Number.isFinite(quantity*price)?Math.round(quantity*price):0;
+    const recalculated=Number.isFinite(quantity*price)?Math.round(quantity*price):0;
+    const amount=persisted&&line.amount!==''&&line.amount!=null&&Number.isFinite(storedValue(line.amount))?
+      storedValue(line.amount):recalculated;
     return "<tr class='"+(note?'qb-paper-note-row':'')+"'><td>"+(i+1)+"</td>"+
       "<td>"+escapeHtml(line.description||'')+"</td><td>"+(note?'':escapeHtml(line.quantity||''))+"</td>"+
       "<td>"+(note?'':escapeHtml(line.unit||''))+"</td><td>"+(note?'':escapeHtml(quoteFormatAmount_(price)))+"</td>"+
@@ -489,7 +499,9 @@ function quotePreviewDocument_(e){
       "<div class='qb-paper-grand'><span>合計金額（税込）</span><strong>",escapeHtml(quoteFormatAmount_(totals.total)),"</strong></div></div>",
     "<div class='qb-paper-bottom'><div><strong>備考</strong><p>",escapeHtml(e.note||'—'),"</p></div>",
       "<div><strong>振込先</strong><p>",escapeHtml(e.bank||'お見積もり時にご案内します。'),"</p></div></div>",
-    "<footer class='qb-paper-footer'>このプレビューは入力内容の確認用です。正式なPDF・Excelは発行後に取得できます。</footer>",
+    "<footer class='qb-paper-footer'>",status==='発行済'?
+      '発行済みの見積情報です。正式なPDF・Excelは上部のボタンから取得できます。':
+      'このプレビューは入力内容の確認用です。正式なPDF・Excelは発行後に取得できます。',"</footer>",
     "</article>"].join('');
 }
 function quoteRefreshPreview_(){
@@ -639,22 +651,12 @@ function quoteDetail_(){
       "15分を超えて処理中のままなら、同じ番号で再試行できます。</p>"+
       "<button type='button' class='secondary-button' onclick='quoteIssue()'>処理状態を確認・再試行</button></div>":"",
     quoteUi.error?"<p class='quote-warning' role='alert'>"+escapeHtml(quoteUi.error)+"</p>":"",
-    "<section class='card quote-preview'>",
-    "<header><strong>見積書 / ESTIMATE</strong><span>見積番号："+escapeHtml(e.number||'未確定')+"</span></header>",
-    "<h2>"+escapeHtml(e.vendorName)+" 御中</h2><p>下記の通りお見積もり申し上げます。</p>",
-    "<div class='quote-preview-info'><div>見積日："+escapeHtml(e.quoteDate)+"</div>"+
-      "<div>納期："+escapeHtml(e.delivery)+"</div><div>支払条件："+escapeHtml(e.payment)+"</div>"+
-      "<div>有効期限："+escapeHtml(e.expires)+"</div></div>",
-    "<div class='quote-preview-table'><div class='quote-preview-head'><span>品名・内容</span><span>数量</span><span>単位</span><span>単価</span><span>金額</span></div>",
-    (q.lines||[]).map(x=>"<div class='quote-preview-row'><span>"+escapeHtml(x.description)+"</span><span>"+
-      escapeHtml(x.noteOnly?'—':x.quantity)+"</span><span>"+escapeHtml(x.unit||'')+"</span><span>"+
-      escapeHtml(x.noteOnly?'—':financeYen(x.price))+"</span><strong>"+
-      escapeHtml(x.noteOnly?'—':financeYen(x.amount))+"</strong></div>").join(''),"</div>",
-    "<div class='quote-total-box'><div><span>小計</span><strong>"+financeYen(e.subtotal)+
-      "</strong></div><div><span>消費税</span><strong>"+financeYen(e.taxAmount)+"</strong></div>",
-    "<div class='quote-total-final'><span>合計（税込）</span><strong>"+financeYen(e.total)+"</strong></div></div>",
-    e.note?"<p class='quote-preview-note'>"+escapeHtml(e.note)+"</p>":"",
-    "</section></div>"].join('');
+    "<section class='card quote-preview qb-issued-preview' aria-label='見積書の内容確認'>",
+    "<div class='qb-issued-preview-heading'><h2>",issued?'発行済みの見積書':'発行内容の確認',"</h2>"+
+    "<p>入力時と同じ帳票レイアウトで内容を確認できます。正式ファイルは上部のボタンから取得してください。</p></div>",
+    "<div class='qb-issued-surface'>",
+    quotePreviewDocument_(Object.assign({},e,{lines:q.lines||[]})),
+    "</div></section></div>"].join('');
 }
 function quotePage(){
   if(!state.data||!state.sessionToken)return pageHead('見積書','ログインしてください。');

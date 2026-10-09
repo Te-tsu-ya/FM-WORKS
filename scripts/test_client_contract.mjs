@@ -270,6 +270,18 @@ const result=vm.runInContext(`
   quoteUi.details.header.status='発行済';
   expect('both downloads become available after finalized issuance',
     quotePage().includes('PDFを保存')&&quotePage().includes('Excelを保存'));
+  const persistedQuote=quotePage();
+  expect('issued quotation reuses the same full document preview as editor',
+    persistedQuote.includes('qb-issued-surface')&&persistedQuote.includes('qb-paper')&&
+    persistedQuote.includes('件名：')&&persistedQuote.includes('Fusion Mind株式会社'));
+  expect('issued quotation displays server-recorded price and total, not an accidental client recalculation',
+    persistedQuote.includes('550,000円')&&!persistedQuote.includes('800,000円'));
+  const priorVendorName=quoteUi.data.vendors[0].name;
+  quoteUi.data.vendors[0].name='変更後の取引先表示名';
+  const frozenView=quotePage();
+  expect('previously issued quotation keeps its customer name after vendor master changes',
+    frozenView.includes('架空法人A')&&!frozenView.includes('変更後の取引先表示名'));
+  quoteUi.data.vendors[0].name=priorVendorName;
   resetQuoteUi();
   state.data=quoteBeforeData;
   resetCalls();
