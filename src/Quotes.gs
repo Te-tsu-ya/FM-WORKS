@@ -316,52 +316,70 @@ function quotePaintSheet_(sh,h,lines){
   sh.setColumnWidth(1,26);sh.setColumnWidth(2,138);sh.setColumnWidth(3,140);
   sh.setColumnWidth(4,70);sh.setColumnWidth(5,62);sh.setColumnWidth(6,55);
   sh.setColumnWidth(7,92);sh.setColumnWidth(8,96);sh.setColumnWidth(9,113);
-  sh.getRange('A1:I46').setFontFamily('Noto Sans JP').setFontSize(10).setVerticalAlignment('middle');
-  sh.getRange('A1:I46').setBackground('#ffffff');
-  sh.getRange('B1:G2').merge().setValue('見積書  ESTIMATE').setFontSize(22).setFontWeight('bold').setFontColor('#183963');
+  sh.getRange('A1:I49').setFontFamily('Noto Sans JP').setFontSize(10).setVerticalAlignment('middle');
+  sh.getRange('A1:I49').setBackground('#ffffff');
+  sh.getRange('B1:E2').merge().setValue('見積書').setFontSize(23).setFontColor('#888888');
+  sh.getRange('B3:I3').setBackground('#33369a');sh.setRowHeight(3,6);
   sh.getRange('H2:I2').merge().setValue('見積番号：'+h.number).setHorizontalAlignment('right').setFontSize(9);
-  sh.getRange('G3:I3').merge().setValue('見積日：'+h.quoteDate).setHorizontalAlignment('right');
-  sh.getRange('B5:F6').merge().setValue(h.vendorName+' 御中').setFontSize(16).setFontWeight('bold');
+  sh.getRange('F2:G2').merge().setValue('見積日：'+h.quoteDate).setHorizontalAlignment('right').setFontSize(8);
+  sh.getRange('B5:E6').merge().setValue(h.vendorName+' 御中').setFontSize(16).setFontWeight('bold');
   sh.getRange('G5:I5').merge().setValue('Fusion Mind 株式会社').setFontWeight('bold');
-  sh.getRange('G6:I6').merge().setValue('〒958-0854 新潟県村上市田端町14-7').setFontSize(9);
-  sh.getRange('G7:I7').merge().setValue('TEL：0254-62-7852').setFontSize(9);
-  sh.getRange('B7:F7').merge().setValue(h.vendorAddress||'').setFontSize(9).setWrap(true);
-  sh.getRange('B8:F8').merge().setValue('下記の通りお見積もり申し上げます。');
-  sh.getRange('B9:I9').merge().setValue('件名：'+(h.subject||'')).setFontWeight('bold').setWrap(true);
-  sh.getRange('G8:I8').merge().setValue('登録番号：T2110001038035').setFontSize(9);
-  sh.getRange('B10').setValue('納期');sh.getRange('C10:F10').merge().setValue(h.delivery);
-  sh.getRange('G10').setValue('支払条件');sh.getRange('H10:I10').merge().setValue(h.payment);
-  sh.getRange('B11').setValue('有効期限');sh.getRange('C11:F11').merge().setValue(h.expires);
-  sh.getRange('G11').setValue('担当');sh.getRange('H11:I11').merge().setValue(h.contact||h.ownerName);
-  sh.getRange('B13:F13').merge().setValue('お見積金額（税込）').setFontSize(13).setFontWeight('bold');
-  sh.getRange('G13:I13').merge().setValue(h.total).setNumberFormat('¥#,##0').setFontSize(17).setFontWeight('bold').setHorizontalAlignment('right');
-  sh.getRange('B15:I15').setValues([['品名・内容','','','','数量','単位','単価','金額']]).setBackground('#dcebf9').setFontWeight('bold');
-  sh.getRange('B15:E15').merge();
-  const start=16,end=36,max=QUOTE_MAX_LINES;
+  sh.getRange('G6:I6').merge().setValue('〒958-0854').setFontSize(8);
+  sh.getRange('G7:I7').merge().setValue('新潟県村上市田端町14-7 きどビル1階').setFontSize(8);
+  sh.getRange('B7:E7').merge().setValue(h.vendorAddress||'').setFontSize(9).setWrap(true);
+  sh.getRange('B8:E8').merge().setValue('下記の通りお見積もり申し上げます。');
+  sh.getRange('B12:E12').merge().setValue('件名：'+(h.subject||'')).setFontWeight('bold').setWrap(true);
+  sh.getRange('G8:I8').merge().setValue('登録番号：T2110001038035').setFontSize(8);
+  sh.getRange('G9:I9').merge().setValue('TEL：0254-62-7852').setFontSize(8);
+  sh.getRange('G10:I10').merge().setValue('FAX：0254-62-7852').setFontSize(8);
+  sh.getRange('G11:I11').merge().setValue('E-Mail：t-sakai@fusionmind.co.jp').setFontSize(8);
+  sh.getRange('G12:I12').merge().setValue('担当：'+(h.contact||h.ownerName)).setFontSize(8);
+  sh.getRange('B9').setValue('納期');sh.getRange('C9:E9').merge().setValue(h.delivery);
+  sh.getRange('B10').setValue('支払条件');sh.getRange('C10:E10').merge().setValue(h.payment);
+  sh.getRange('B11').setValue('有効期限');sh.getRange('C11:E11').merge().setValue(h.expires);
+  
+  sh.getRange('B13:I14').setBackground('#efefef');
+  sh.getRange('B13:E14').merge().setValue('お見積金額').setFontSize(13).setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange('F13:H14').merge().setValue(h.total).setNumberFormat('¥#,##0').setFontSize(17).setFontWeight('bold').setHorizontalAlignment('right');
+  sh.getRange('I13:I14').merge().setValue('（税込）').setFontSize(10);
+  sh.getRange('B16:I16').setValues([['品番・品名','','','','数量','単位','単価','金額']]).setFontColor('#33369a').setFontWeight('bold');
+  sh.getRange('B16:E16').merge();
+  const start=17,max=QUOTE_MAX_LINES;
+  const values=Array.from({length:max},(_,i)=>{
+    const line=lines[i];
+    if(!line)return ['','','','','','','',''];
+    const noteOnly=!Number(line.quantity);
+    return [line.description||'','','','',noteOnly?'':Number(line.quantity),
+      noteOnly?'':String(line.unit||''),noteOnly?'':Number(line.price),noteOnly?'':Number(line.amount)];
+  });
+  // One batch write instead of four per-line writes (preserves zero-yen items).
+  sh.getRange('B17:I37').setValues(values).setBackground('#f2f2f2');
+  sh.getRange('H17:I37').setNumberFormat('¥#,##0;[Red](¥#,##0);¥0');
+  sh.setRowHeights(17,21,25);
   for(let i=0;i<max;i++){
-    const line=lines[i]||{description:'',quantity:'',unit:'',price:'',amount:''};
     const row=start+i;
-    sh.getRange(row,2,1,4).merge().setValue(line.description||'');
-    sh.getRange(row,6).setValue(line.quantity||'');
-    sh.getRange(row,7).setValue(line.unit||'');
-    sh.getRange(row,8).setValue(line.price===''?'':Number(line.price)).setNumberFormat('#,##0;[Red](#,##0)');
-    sh.getRange(row,9).setValue(line.amount===''?'':Number(line.amount)).setNumberFormat('#,##0;[Red](#,##0)');
-    sh.getRange(row,2,1,8).setBorder(null,null,true,null,null,null,'#d9e0e8',SpreadsheetApp.BorderStyle.SOLID);
+    sh.getRange(row,2,1,4).merge();
+    if(i%2===1)sh.getRange(row,2,1,8).setBackground('#ffffff');
+    if(lines[i]&&String(lines[i].description||'').length>38)sh.setRowHeight(row,40);
   }
+  sh.getRange('B17:E37').setWrap(true);
   sh.getRange('G38:H38').merge().setValue('小計');sh.getRange('I38').setValue(Number(h.subtotal));
   sh.getRange('G39:H39').merge().setValue('消費税（10%）');sh.getRange('I39').setValue(Number(h.taxAmount));
   sh.getRange('G40:H40').merge().setValue('合計金額');sh.getRange('I40').setValue(Number(h.total));
   sh.getRange('G38:I40').setNumberFormat('¥#,##0');
   sh.getRange('G40:I40').setBackground('#dcebf9').setFontWeight('bold');
-  sh.getRange('B43:I43').merge().setValue(h.note||'いつもご利用いただきありがとうございます。')
+  sh.getRange('B43:I43').setBackground('#33369a');sh.setRowHeight(43,5);
+  sh.getRange('B45:I45').merge().setValue(h.note||'いつもご利用いただきありがとうございます。')
     .setWrap(true);
-  sh.getRange('B44:I44').merge().setValue('振込先：'+(h.bank||'お見積もり時にご案内します。')).setFontSize(9);
-  sh.getRange('B45:I45').merge().setValue('お振込み手数料は御社ご負担にてお願いいたします。').setFontSize(9);
-  sh.getRange('B5:I45').setVerticalAlignment('middle');
-  sh.getRange('B15:I40').setBorder(true,true,true,true,false,false,'#d9e0e8',SpreadsheetApp.BorderStyle.SOLID);
-  sh.setRowHeights(16,21,23);sh.setRowHeight(9,28);sh.setRowHeight(43,52);
-  sh.getRange('B1:I45').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
-  sh.getRange('B43:I43').setWrap(true);
+  sh.getRange('B46:I46').merge().setValue('振込先：'+(h.bank||'お見積もり時にご案内します。')).setFontSize(9).setWrap(true);
+  sh.getRange('B47:I47').merge().setValue('お振込み手数料は御社ご負担にてお願いいたします。').setFontSize(9);
+  sh.getRange('B48:I48').setBackground('#33369a');sh.setRowHeight(48,5);
+  sh.getRange('B5:I47').setVerticalAlignment('middle');
+  sh.getRange('B16:I16').setBorder(null,null,true,null,null,null,'#33369a',SpreadsheetApp.BorderStyle.SOLID);
+  sh.setRowHeight(45,52);sh.setRowHeight(46,30);
+  sh.getRange('B1:I48').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  sh.getRange('B7:E7').setWrap(true);sh.getRange('B12:E12').setWrap(true);
+  sh.getRange('B17:E37').setWrap(true);sh.getRange('B45:I46').setWrap(true);
 }
 function getQuoteDocument(sessionToken,id,format){
   const e=quoteUser_(sessionToken),h=quoteForUser_(e,quoteFind_('header',id).data);

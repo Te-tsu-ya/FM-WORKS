@@ -479,13 +479,13 @@ function quotePreviewDocument_(e){
   });
   if(!rows.length)rows.push("<tr class='qb-paper-empty'><td>1</td><td>明細を入力すると、ここに反映されます。</td><td></td><td></td><td></td><td></td></tr>");
   return ["<article class='qb-paper' aria-label='見積書の完成イメージ'>",
-    "<header class='qb-paper-title'><h2>御 見 積 書</h2><div class='qb-paper-title-rule'></div></header>",
+    "<header class='qb-paper-title'><h2>見積書</h2><div class='qb-paper-title-rule'></div></header>",
     "<div class='qb-paper-meta'><span>見積番号：",escapeHtml(e.number||'発行時に確定'),"</span><span>見積日：",escapeHtml(formatDate(date)),"</span></div>",
     "<div class='qb-paper-parties'><div class='qb-paper-recipient'><strong>",escapeHtml(vendorName),"　御中</strong>",
       "<span>",escapeHtml(vendor&&vendor.address||e.vendorAddress||''),"</span>",
       "<small>下記のとおり、お見積もり申し上げます。</small></div>",
-    "<div class='qb-paper-issuer'><strong>Fusion Mind株式会社</strong><span>〒958-0854 新潟県村上市田端町14-7</span>",
-      "<span>TEL：0254-62-7852</span><span>登録番号：T2110001038035</span></div></div>",
+    "<div class='qb-paper-issuer'><strong>Fusion Mind株式会社</strong><span>〒958-0854</span><span>新潟県村上市田端町14-7 きどビル1階</span>",
+      "<span>登録番号：T2110001038035</span><span>TEL：0254-62-7852</span><span>FAX：0254-62-7852</span><span>E-Mail：t-sakai@fusionmind.co.jp</span></div></div>",
     "<p class='qb-paper-subject'>件名：",escapeHtml(e.subject||'（件名未入力）'),"</p>",
     "<div class='qb-paper-condition'><span>納期：",escapeHtml(e.delivery||'ご相談'),"</span>",
       "<span>支払条件：",escapeHtml(e.payment||'銀行振込'),"</span>",
