@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.0  
+**文書版:** 0.17.1  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1764,3 +1764,10 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - セキュリティ: 書類一覧・詳細・ダウンロード・再試行で requireSession_ による所有者チェックを毎回実施。管理者は全社員を閲覧可能。ユーザー入力は quoteText_／financeDate_／quoteKey_ を用いて検証。ブラウザ側の文字列はescapeHtmlで表示する。
 - 運用: Schema.gs DB_SCHEMA_VERSION=12。関連書類（32列）・関連書類採番（5列）を追加。既存migrateDatabaseToCurrentのバックアップ→ヘッダー整合検査→作成→DB_VERSION更新→監査の工程を再利用。関連書類シートが無い場合は既存見積が利用可能なまま設定導線を表示。
 - 回帰: scripts/test_quote_integration.mjs は見積書既存テンプレート、独立番号、PDF/Excel出力、金額凍結、領収入金確認、本人以外のアクセス遮断と重複発行防止を検証。test_client_contract.mjs は作成・履歴画面、変換ボタン、領収確認UIを検証。横幅と表示は既存viewportテストで確認する。
+
+## v0.17.1 モーダルテーマの実測・再発防止（2026-10-10）
+
+- 根本原因: Styles.html の `.modal-card` が背景 `#fff` 固定だった一方、darkテーマでルート `--text:#edf4ff` を継承した。ユーザー実機画像では文字が白背景に埋没していた。従来の viewport テストは通常の画面のみ描画し、共通モーダルを開いた状態を確認していなかった。
+- 修正: `.modal-card` に `background:var(--surface);color:var(--text);border:1px solid var(--line)` を適用し、`.modal-head small`、閉じる `.icon-button`、dark `.field>span` をテーマに応じた色にする。`.request-modal-actions` も `var(--surface)` と `var(--line)` に揃え、スクロール時の白いフッターを回避する。
+- 新設 `scripts/test_modal_theme.mjs`: 実際の AppQuotes.html / AppDocuments.html のダイアログ生成関数をVMで実行し、Styles.html + StylesWorkflowV15.html をChromiumでレンダリング。1366×768と390×844、light/dark、5種のモーダルを検証し、computedStyle色からWCAGコントラスト比4.5以上、モーダル枠の画面内配置、申請フッター色一致を検査する。
+- CI / mainデプロイの両方で、既存の業務テストに加えてモーダルの表示契約テストを必須化。CIではスクリーンショットを `fmworks-modal-theme-qa` の成果物として保存。元の見積Excel描画・DB構造・業務権限・採番ルールに変更を加えない。
