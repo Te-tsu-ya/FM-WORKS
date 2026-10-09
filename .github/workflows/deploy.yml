@@ -40,6 +40,8 @@ jobs:
         run: node scripts/test_finance_integration.mjs
       - name: Test estimates and formal document outputs
         run: node scripts/test_quote_integration.mjs
+      - name: Test light and dark modal dialog contrast before publication
+        run: node scripts/test_modal_theme.mjs
       - name: Install clasp
         run: npm install --global @google/clasp@latest
       - name: Restore clasp credentials

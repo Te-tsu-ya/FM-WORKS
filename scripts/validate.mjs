@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -151,6 +151,17 @@ for(const sh of ['関連書類','関連書類採番']){
 for(const cls of ['.doc-start-grid','.doc-history-layout','.doc-modal','.doc-inline-vendor']){
   if(!styles.includes(cls)){console.error('Shared document UX style missing '+cls);failed=true;}
 }
+
+const modalQaText=fs.readFileSync(path.join(root,'scripts/test_modal_theme.mjs'),'utf8');
+for(const marker of ['quoteConfirmDiscard()','quoteIssue()','quoteQuickVendorDialog_()',
+  "documentCreateFromQuote('receipt'",'contrastRatio','data-theme','modal-card']){
+  if(!modalQaText.includes(marker)){console.error('Theme-aware modal visual QA missing: '+marker);failed=true;}
+}
+if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8').includes('node scripts/test_modal_theme.mjs') ||
+   !fs.readFileSync(path.join(root,'.github/workflows/deploy.yml'),'utf8').includes('node scripts/test_modal_theme.mjs')){
+  console.error('Modal contrast QA must gate both PR validation and production deployment.');failed=true;
+}
+
 const dataAccessCodeText = fs.readFileSync(path.join(root,'src/DataAccess.gs'),'utf8');
 const monthlySnapshotMainCode = fs.readFileSync(path.join(root,'src/Monthly.gs'),'utf8');
 const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8');
