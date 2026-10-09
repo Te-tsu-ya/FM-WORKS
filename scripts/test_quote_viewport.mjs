@@ -57,7 +57,7 @@ for(const [width,height,kind,theme] of cases){
   '<div class="workspace"><header class="topbar">FM WORKS</header><main class="content">'+html+
   '</main></div></div>'+
   '<script>const shell=document.querySelector(".quote-layout")||document.querySelector(".v15-quote-overview"),'+
-  'toolbar=shell.querySelector(".quote-toolbar")||shell.querySelector(".v15-page-hero"),'+
+  'toolbar=shell.querySelector(".quote-toolbar")||shell.querySelector(".doc-page-header")||shell.querySelector(".v15-page-hero"),'+
   'buttons=[...shell.querySelectorAll("button")],all=[...shell.querySelectorAll(".quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
   'shellWidth:shell.getBoundingClientRect().width,toolbarHeight:toolbar.getBoundingClientRect().height,'+
