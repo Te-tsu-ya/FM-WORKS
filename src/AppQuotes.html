@@ -2,14 +2,15 @@
 /* FM WORKS v0.14.0 - quotations for every authenticated employee.
    All client calculations are previews; all amounts/permissions are validated on server. */
 const QUOTE_UI_TTL=45000;
-let quoteUi={data:null,at:0,identity:'',loading:false,busy:false,error:'',
+let quoteUi={data:null,at:0,identity:'',loading:false,refreshNeeded:false,busy:false,error:'',
   mode:'list',id:'',editor:null,search:'',filter:'all',details:null,dirty:false,key:''};
 function quoteIdentity_(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
 }
 function resetQuoteUi(){
-  quoteUi={data:null,at:0,identity:'',loading:false,busy:false,error:'',
+  quoteUi={data:null,at:0,identity:'',loading:false,refreshNeeded:false,busy:false,error:'',
     mode:'list',id:'',editor:null,search:'',filter:'all',details:null,dirty:false,key:''};
+  if(typeof resetDocumentUi==='function')resetDocumentUi();
 }
 function quoteNewKey_(){
   return 'Q-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15);
@@ -18,25 +19,46 @@ function loadQuoteWorkspace(options={}){
   if(!state.sessionToken||!state.data)return;
   const identity=quoteIdentity_();
   if(!options.force&&quoteUi.data&&quoteUi.identity===identity&&Date.now()-quoteUi.at<QUOTE_UI_TTL)return;
-  if(quoteUi.loading)return;
+  if(quoteUi.loading){
+    if(options.force)quoteUi.refreshNeeded=true;
+    return;
+  }
   quoteUi.loading=true;quoteUi.error='';quoteUi.identity=identity;
   if(!options.silent&&state.page==='quotes')renderPageIfActive('quotes');
   google.script.run.withSuccessHandler(data=>{
-    if(identity!==quoteIdentity_())return;
-    quoteUi.loading=false;quoteUi.data=data;quoteUi.at=Date.now();quoteUi.error='';
-    if(quoteUi.pendingVendorCode&&quoteUi.editor&&(data.vendors||[]).some(v=>v.code===quoteUi.pendingVendorCode)){
+    if(identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    quoteUi.loading=false;
+    // Do not render an older snapshot after a save or forced refresh.
+    if(quoteUi.refreshNeeded){
+      quoteUi.refreshNeeded=false;
+      loadQuoteWorkspace({force:true,silent:true});
+      return;
+    }
+    if(!data||!Array.isArray(data.vendors)||!Array.isArray(data.quotes)||!Array.isArray(data.relatedDocs)){
+      quoteUi.error='見積・書類一覧の応答を確認できませんでした。もう一度更新してください。';
+      renderPageIfActive('quotes');renderPageIfActive('documentHistory');
+      if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
+      return;
+    }
+    quoteUi.data=data;quoteUi.at=Date.now();quoteUi.error='';
+    if(quoteUi.pendingVendorCode&&quoteUi.editor&&data.vendors.some(v=>v.code===quoteUi.pendingVendorCode)){
       quoteUi.editor.vendorCode=quoteUi.pendingVendorCode;quoteUi.dirty=true;quoteUi.pendingVendorCode='';
     }
     renderPageIfActive('quotes');renderPageIfActive('documentHistory');
     if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
-    quoteUi.loading=false;quoteUi.error=cleanApiErrorMessage(error,'見積一覧を読み込めませんでした。');
+    if(identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    quoteUi.loading=false;
+    if(quoteUi.refreshNeeded){
+      quoteUi.refreshNeeded=false;
+      loadQuoteWorkspace({force:true,silent:true});
+      return;
+    }
+    quoteUi.error=cleanApiErrorMessage(error,'見積一覧を読み込めませんでした。');
     renderPageIfActive('quotes');renderPageIfActive('documentHistory');
     if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
   }).getQuoteWorkspace(state.sessionToken);
 }
-
 function quoteSetupStorage_(){
   if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
   ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
@@ -88,10 +110,13 @@ function quoteAddSingleVendor_(){
   }
   quoteUi.busy=true;quoteUi.pendingVendorCode=vendor.code;
   closeModal();
+  const identity=quoteIdentity_();
   google.script.run.withSuccessHandler(()=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast('取引先を登録しました。採番を確認すると正式発行できます');
     loadQuoteWorkspace({force:true,silent:true});
   }).withFailureHandler(error=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');
     renderPageIfActive('quotes');
   }).importQuoteVendors(state.sessionToken,[vendor]);
@@ -422,10 +447,13 @@ function quoteImportVendors(){
     .map(r=>({name:r[0],code:r[1],invoice:r[2]||'',address:r[3]||'',industry:''}));
   if(!data.length){showToast('ExcelのA〜D列を貼り付けてください');return;}
   quoteUi.busy=true;
+  const identity=quoteIdentity_();
   google.script.run.withSuccessHandler(result=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast(result.created+'件追加、'+result.updated+'件更新しました');
     loadQuoteWorkspace({force:true});
   }).withFailureHandler(error=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');renderPageIfActive('quotes');
   }).importQuoteVendors(state.sessionToken,data);
 }
@@ -447,9 +475,12 @@ function quoteCommitSequence(code,raw){
   if(quoteUi.busy)return;
   closeModal();
   quoteUi.busy=true;
+  const identity=quoteIdentity_();
   google.script.run.withSuccessHandler(()=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast('採番設定を保存しました');loadQuoteWorkspace({force:true});
   }).withFailureHandler(error=>{
+    if(identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'採番設定を保存できませんでした');renderPageIfActive('quotes');
   }).configureQuoteSequence(state.sessionToken,code,Number(raw));
 }

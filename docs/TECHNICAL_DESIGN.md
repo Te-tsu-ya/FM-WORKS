@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.6  
+**文書版:** 0.17.7  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1823,3 +1823,10 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `documentListForUser_(user,storageAlreadyValidated)` は呼出し元が `documentStorageStatus_` の結果を確認したときに限り二重検査を省く。実際のデータ読取で `documentSheet_` が引き続きヘッダーを検査する。個別APIの従来動作も保持する。
 - `logPerformance_('quoteWorkspace',...)` は経過時間と見積・書類・取引先件数を記録する。Sheet参照はサーバーリクエストを跨いで保存しない。
 - `scripts/test_quote_integration.mjs` は1回の正常ワークスペース取得時のヘッダー7回と、不正な取引先シートヘッダーの拒否、帳票全体の回帰を検証する。APP.versionは0.17.6に整合。
+
+## v0.17.7 書類詳細のセッション破棄と一覧更新キュー（2026-10-10）
+
+- `resetQuoteUi()` から `resetDocumentUi()` を呼び、文書詳細、`Map` キャッシュ、選択ID、busy/loadingを全消去する。既存の `clearLocalSession()`・`mountAuthenticatedApp()` から実行される。描画側でも `docUi.cacheIdentity===quoteIdentity_()` とログイン済み状態を検査する。
+- `loadQuoteWorkspace(options)` は読み込み中の `force` を `refreshNeeded=true` に記録し、先行通信の完了後に最後の1回を再取得する。古いレスポンスの描画を回避し、配列構造不一致で旧正常データを破棄しない。
+- 取引先単体追加、貼付インポート、採番設定は `quoteIdentity_` でログイン元の遅延コールバックを拒否する。
+- 新規 `scripts/test_quote_session.mjs` にて、連続force・通信失敗・異常データ・書類詳細の別ログイン混入・遅延応答をVMで模擬。既存 `test_quote_integration.mjs` に組み込んで全CIとGAS公開前チェックへ適用する。

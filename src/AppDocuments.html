@@ -1,6 +1,10 @@
 <script>
 /* Related documents: conversion from a frozen quote; archive is its own page. */
 let docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',requestKey:'',requestSeq:0,cacheIdentity:'',detailCache:new Map()};
+function resetDocumentUi(){
+ docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',
+   requestKey:'',requestSeq:0,cacheIdentity:'',detailCache:new Map()};
+}
 const DOC_LABELS={quote:'見積書',invoice:'請求書',delivery:'納品書',receipt:'領収書'};
 function documentRowsClient_(){
  const data=quoteUi.data||{},q=(data.quotes||[]).map(row=>({id:row.id,kind:'quote',number:row.number||'下書き',vendorName:row.vendorName||'',subject:row.subject||'',status:row.status,date:row.quoteDate,total:row.total,updatedAt:row.updatedAt,ownerName:row.ownerName,quoteId:row.id}));
@@ -82,7 +86,7 @@ function documentCreateFromQuote(kind,quoteId){
 }
 function documentConfirmIssue(kind,quoteId){if(docUi.busy)return;const date=document.getElementById('docIssueDate'),due=document.getElementById('docDueDate'),note=document.getElementById('docIssueNote'),paid=document.getElementById('docPaidConfirmed');if(!date||!date.value||!due||!due.value){showToast('発行日と必要な日付を入力してください。');return;}if(kind==='receipt'&&!(paid&&paid.checked)){showToast('実際の入金確認が必要です。');return;}const payload={requestKey:docUi.requestKey,documentDate:date.value,dueDate:kind==='receipt'?'':due.value,paidDate:kind==='receipt'?due.value:'',paidConfirmed:!!(paid&&paid.checked),note:note&&note.value||''};docUi.busy=true;closeModal();showToast('帳票ファイルを生成しています…');const identity=quoteIdentity_();google.script.run.withSuccessHandler(result=>{if(identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' を正式発行しました');docUi.filter='all';navigate('documentHistory');loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(result.id);}).withFailureHandler(error=>{if(identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'発行できませんでした');renderPageIfActive('documentHistory');showToast(docUi.error);}).createRelatedDocument(state.sessionToken,String(quoteId),kind,payload);}
 function documentHistoryPage(){
- const data=quoteUi.data,rows=documentRowsClient_(),selected=docUi.selected&&docUi.selected.header&&docUi.selected.header.id===docUi.selectedId?docUi.selected:null;
+ const data=quoteUi.data,rows=documentRowsClient_(),selected=state.sessionToken&&docUi.cacheIdentity===quoteIdentity_()&&docUi.selected&&docUi.selected.header&&docUi.selected.header.id===docUi.selectedId?docUi.selected:null;
  const filters=[['all','すべて'],['quote','見積書'],['invoice','請求書'],['delivery','納品書'],['receipt','領収書']];
  const list=rows.length?rows.map(row=>"<button type='button' class='doc-history-row "+(row.id===docUi.selectedId?'selected':'')+"' data-id='"+escapeHtml(row.id)+"' data-kind='"+escapeHtml(row.kind)+"' onclick='this.dataset.kind===\"quote\"?documentOpenQuote(this.dataset.id):documentOpenRecord(this.dataset.id)'>"+
    "<span class='doc-kind doc-kind-"+row.kind+"'>"+DOC_LABELS[row.kind]+"</span><span class='doc-row-primary'>"+
