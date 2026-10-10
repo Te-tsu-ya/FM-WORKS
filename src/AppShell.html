@@ -381,7 +381,12 @@ function closeProfileMenu(){const menu=document.getElementById('profileMenu'),bu
 function performLogout(){
   const token=state.sessionToken;
   clearLocalSession();closeProfileMenu();document.getElementById('app').hidden=true;
-  google.script.run.withSuccessHandler(()=>showLogin('ログアウトしました。')).withFailureHandler(()=>showLogin('ログアウトしました。')).logout(token);
+  // A prior logout must not hide the application after a different user signs in.
+  const completed=()=>{
+    if(state.sessionToken||state.data)return;
+    showLogin('ログアウトしました。');
+  };
+  google.script.run.withSuccessHandler(completed).withFailureHandler(completed).logout(token);
 }
 
 function openChangePinModal(force=false){

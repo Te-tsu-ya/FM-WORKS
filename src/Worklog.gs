@@ -56,6 +56,7 @@ function saveWorklog(sessionToken, payload) {
     let rowNumber = 0;
     let createdAt = nowText;
     let existingProject = '';
+    let existingEmployeeId = '';
     let auditBefore = '';
 
 
@@ -72,6 +73,7 @@ function saveWorklog(sessionToken, payload) {
         throw new Error('この工数を編集する権限がありません。');
       }
       existingProject = existing[4] || '';
+      existingEmployeeId = String(existing[2] || '');
       createdAt = existing[11] || nowText;
     } else {
       id = createId_('W');
@@ -82,8 +84,10 @@ function saveWorklog(sessionToken, payload) {
       throw new Error('停止・完了したプロジェクトには新しい工数を登録できません。');
     }
 
-    const targetEmployeeId = employee.role === 'ADMIN' && payload.employeeId
-      ? String(payload.employeeId).trim().toUpperCase()
+    // Editing another employee's record must never silently transfer ownership to the admin.
+    const targetEmployeeId = employee.role === 'ADMIN'
+      ? (payload.employeeId ? String(payload.employeeId).trim().toUpperCase()
+        : (existingEmployeeId || employee.employeeId))
       : employee.employeeId;
     const target = getEmployee_(targetEmployeeId);
     if (!target.active) throw new Error('在籍していない社員には工数を登録できません。');
@@ -140,7 +144,8 @@ function deleteWorklog(sessionToken, worklogId) {
 function assertNoWorklogOverlap_(sheet, employeeId, date, start, end, excludeId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const rows = sheet.getRange(2, 1, lastRow - 1, 15).getDisplayValues();
+  // Use the already-tested date index, instead of downloading all months of worklogs.
+  const rows = readRowsByDateRange_(sheet,2,15,date,date);
   const startMin = timeToMinutes_(start);
   const endMin = timeToMinutes_(end);
 

@@ -705,12 +705,15 @@ function saveQuickWorklog(){
   state.busy=true;
   const actionButton=get('wlQuickSaveButton');
   if(actionButton){actionButton.disabled=true;actionButton.setAttribute('aria-busy','true')}
+  const identity=requestsIdentity();
   google.script.run.withSuccessHandler(function(){
+    if(identity!==requestsIdentity())return;
     state.busy=false;
     worklogQuickDrafts.delete(worklogDraftKey(payload.date));
     if(state.worklog.renderedDate===payload.date)state.worklog.renderedDate=null;
     showToast('工数を登録しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
   }).withFailureHandler(function(err){
+    if(identity!==requestsIdentity())return;
     state.busy=false;
     const button=get('wlQuickSaveButton');
     if(button){button.disabled=false;button.setAttribute('aria-busy','false')}
@@ -778,10 +781,38 @@ function openWorklogModal(id){
   var r=ensureModal();
   r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>'+(item?'工数を編集':'工数を追加')+'</small><h2>'+fmtDate(date)+'</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト</span><select id="wlProject">'+(options||'<option value="">プロジェクトが未登録です</option>')+'</select></label><label class="field"><span>作業分類</span><input id="wlCategory" value="'+escapeHtml(item?item.category:'')+'" placeholder="開発 / 営業 / 会議 等"></label><label class="field"><span>日付</span><input id="wlDate" type="date" value="'+(item?item.date:date)+'"></label><label class="field"><span>開始</span><input id="wlStart" type="time" value="'+escapeHtml(item?item.start:'09:00')+'"></label><label class="field"><span>終了</span><input id="wlEnd" type="time" value="'+escapeHtml(item?item.end:'10:00')+'"></label><label class="field full"><span>作業内容</span><textarea id="wlDescription" rows="3" placeholder="実施した内容を入力">'+escapeHtml(item?item.description:'')+'</textarea></label><label class="field full"><span>備考</span><textarea id="wlNote" rows="2">'+escapeHtml(item?item.note:'')+'</textarea></label></div><div class="modal-actions"><span class="muted">'+(projects.length?'':'管理者がプロジェクトを登録してください。')+'</span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" '+(projects.length?'':'disabled')+' onclick="saveWorklogFromModal(\''+id+'\')">保存</button></div></div></section>';
 }
-function saveWorklogFromModal(id){var payload={id:id,date:document.getElementById('wlDate').value,project:document.getElementById('wlProject').value,category:document.getElementById('wlCategory').value,start:document.getElementById('wlStart').value,end:document.getElementById('wlEnd').value,description:document.getElementById('wlDescription').value,note:document.getElementById('wlNote').value};google.script.run.withSuccessHandler(function(){closeModal();state.worklog.date=payload.date;showToast('工数を保存しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});}).withFailureHandler(function(err){handleApiError(err,'工数を保存できませんでした');}).saveWorklog(state.sessionToken,payload);}
-function deleteWorklogItem(id){openConfirmDialog('工数を削除','削除後も監査用データは保持されます。削除しますか？','削除',function(){google.script.run.withSuccessHandler(function(){showToast('工数を削除しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});}).withFailureHandler(function(err){handleApiError(err,'工数を削除できませんでした');}).deleteWorklog(state.sessionToken,id);},true);}
+function saveWorklogFromModal(id){
+  if(state.busy)return;
+  state.busy=true;
+  const payload={id:id,date:document.getElementById('wlDate').value,project:document.getElementById('wlProject').value,
+    category:document.getElementById('wlCategory').value,start:document.getElementById('wlStart').value,
+    end:document.getElementById('wlEnd').value,description:document.getElementById('wlDescription').value,
+    note:document.getElementById('wlNote').value};
+  const identity=requestsIdentity();
+  google.script.run.withSuccessHandler(function(){
+    if(identity!==requestsIdentity())return;
+    state.busy=false;
+    closeModal();state.worklog.date=payload.date;showToast('工数を保存しました');
+    invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
+  }).withFailureHandler(function(err){
+    if(identity!==requestsIdentity())return;
+    state.busy=false;
+    handleApiError(err,'工数を保存できませんでした');
+  }).saveWorklog(state.sessionToken,payload);
+}
 
-
+function deleteWorklogItem(id){
+  openConfirmDialog('工数を削除','削除後も監査用データは保持されます。削除しますか？','削除',function(){
+    const identity=requestsIdentity();
+    google.script.run.withSuccessHandler(function(){
+      if(identity!==requestsIdentity())return;
+      showToast('工数を削除しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
+    }).withFailureHandler(function(err){
+      if(identity!==requestsIdentity())return;
+      handleApiError(err,'工数を削除できませんでした');
+    }).deleteWorklog(state.sessionToken,id);
+  },true);
+}
 
 function scheduleRange(){
   const s=state.schedule;
@@ -2008,9 +2039,9 @@ function refreshRequestPreview(){
   if(!payload.startDate||!payload.endDate)return;
   box.classList.remove('is-hidden');
   box.innerHTML="<span class='preview-loading'>有給日数を確認しています…</span>";
-  const seq=++requestPreviewSequence;
+  const seq=++requestPreviewSequence,identity=requestsIdentity();
   google.script.run.withSuccessHandler(data=>{
-    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    if(identity!==requestsIdentity()||seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
     if(!data.leaveBalanceConfigured){
       box.innerHTML="<div class='preview-warning'><strong>有給残日数が未設定です</strong><span>管理者が社員情報から設定すると、有給を申請できます。</span></div>";
       return;
@@ -2019,17 +2050,19 @@ function refreshRequestPreview(){
     const bad=projected<0;
     box.innerHTML=`<div class='preview-item'><span>今回の消化</span><strong>${formatLeaveDays(data.requestedDays)}</strong></div><div class='preview-arrow'>→</div><div class='preview-item'><span>申請後の残数</span><strong class='${bad?'danger':''}'>${formatLeaveDays(projected)}</strong></div>${bad?"<div class='preview-warning full'><strong>残日数が不足しています</strong><span>日付または申請区分を変更してください。</span></div>":''}`;
   }).withFailureHandler(err=>{
-    if(seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
+    if(identity!==requestsIdentity()||seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
     box.innerHTML=`<div class='preview-warning'><strong>日数を確認できません</strong><span>${escapeHtml(cleanApiErrorMessage(err,'会社カレンダーを確認してください。'))}</span></div>`;
   }).previewRequest(state.sessionToken,payload);
 }
 function loadCorrectionPunchOptions(){
   const date=document.getElementById('reqStart').value;if(!date)return;
   const select=document.getElementById('reqOriginalPunch');if(select)select.innerHTML='<option value="">読み込み中…</option>';
+  const identity=requestsIdentity();
   google.script.run.withSuccessHandler(function(items){
+    if(identity!==requestsIdentity())return;
     const el=document.getElementById('reqOriginalPunch'),start=document.getElementById('reqStart');if(!el||!start||start.value!==date)return;
     el.innerHTML='<option value="">不足打刻として追加</option>'+items.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>').join('');
-  }).withFailureHandler(function(err){showRequestError(cleanApiErrorMessage(err,'打刻履歴を読み込めませんでした。'),'');}).getPunchesForDate(state.sessionToken,date);
+  }).withFailureHandler(function(err){if(identity!==requestsIdentity())return;showRequestError(cleanApiErrorMessage(err,'打刻履歴を読み込めませんでした。'),'');}).getPunchesForDate(state.sessionToken,date);
 }
 function submitRequestFromModal(){
   if(state.requests.submitting)return;
