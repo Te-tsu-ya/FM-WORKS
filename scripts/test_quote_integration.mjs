@@ -192,6 +192,13 @@ ok('interleaved quote rows are not overwritten or deleted',
  detailSheet.bulkDeleteCalls===1&&detailSheet.rows.length===5&&
  detailSheet.rows[2][2]==='他見積の内容'&&detailSheet.rows[4][2]==='別の見積'&&
  detailSheet.rows[1][2]==='新明細1'&&detailSheet.rows[3][2]==='新明細2');
+detailSheet.writeCalls=0;detailSheet.bulkDeleteCalls=0;
+replaceQuoteDetails(saved.id,edited21.slice(0,4));
+const grownOwnRows=detailSheet.rows.slice(1).filter(x=>x[0]===saved.id);
+ok('growing existing draft appends only extra lines in one batch and preserves neighbors',
+ grownOwnRows.length===4&&grownOwnRows[3][2]==='新明細4'&&
+ detailSheet.rows.length===7&&detailSheet.rows[2][2]==='他見積の内容'&&
+ detailSheet.rows[4][2]==='別の見積'&&detailSheet.writeCalls===3&&detailSheet.bulkDeleteCalls===0);
 detailSheet.rows=previousDetailRows;
 
 console.log('QUOTE TESTS: '+pass+' passed, '+fail+' failed');
