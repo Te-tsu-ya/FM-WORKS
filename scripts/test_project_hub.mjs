@@ -223,6 +223,27 @@ assert.equal(fieldNodes.prjSaveButton.disabled,false,'failed save restores the f
 const invalidSchedule={...detail,tasks:[{...detail.tasks[0],startDate:'2026-99-99',dueDate:'2026-10-31'}]};
 assert.doesNotThrow(()=>client.projectHubTaskTimeline_(invalidSchedule),'malformed imported schedule cannot crash timeline');
 assert.ok(client.projectHubTaskTimeline_(invalidSchedule).includes('開始予定日'),'invalid schedule is treated as unscheduled');
+
+// Assignee-facing task editing must be a short form but still preserve immutable plan fields.
+client.resetProjectHubUi();
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.view="detail";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');
+client.projectHubOpenTask_(t1.id);
+assert.ok(cr('projectHubPage()').includes('ph-task-context'),'assignee sees task context without full planning form');
+assert.ok(!cr('projectHubPage()').includes('id="ph-title"'),'assignee does not need to edit immutable task name');
+const taskBefore=calls.length;
+client.projectHubTaskCompletion_();
+assert.equal(cr('projectHubUi.editor.form.progress'),'100','quick completion updates draft progress');
+assert.equal(cr('projectHubUi.editor.form.status'),'完了','quick completion updates draft status');
+assert.equal(calls.length,taskBefore,'completion preset never saves without confirmation');
+client.projectHubSave_();
+assert.equal(calls.at(-1).method,'saveProjectHubRecord');
+assert.equal(calls.at(-1).args[1],'task');
+assert.equal(calls.at(-1).args[2].title,'開発','non-editable task plan data is preserved for server verification');
+assert.equal(calls.at(-1).args[2].plannedHours,8,'stored task planned hours are preserved');
+calls.at(-1).failure(Error('network'));
+assert.equal(cr('projectHubUi.editor.form.status'),'完了','failed task save retains progress draft');
+client.resetProjectHubUi();
+
 console.log('PASS project UX: tasks board/timeline/list, effort split, document filters, shared memo filters, simple master form and failed save recovery');
 
 
