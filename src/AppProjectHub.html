@@ -1,8 +1,8 @@
 <script>
 /* Project workspace uses session-local snapshots and drafts, never persistent business storage. */
-let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false};
+let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};
 const PROJECT_HUB_TABS=[['overview','概要'],['tasks','計画・進捗'],['effort','工数'],['resources','資料'],['updates','共有メモ']];
-function resetProjectHubUi(){projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false};}
+function resetProjectHubUi(){projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
 function projectHubIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();}
 function loadProjectHub(options={}){
@@ -39,20 +39,37 @@ function projectHubLoadDetail_(id,force=false){
   ui.error=cleanApiErrorMessage(error,'案件の詳細を読み込めませんでした。');renderPageIfActive('projects');
  }).getProjectHubDetail(state.sessionToken,id,force);
 }
-function projectHubSelect_(id){if(projectHubUi.busy)return;projectHubRememberDraft_();projectHubUi.selected=id;projectHubUi.pickerOpen=false;projectHubUi.error='';projectHubLoadDetail_(id);renderPageIfActive('projects');}
-function projectHubTab_(tab){if(projectHubUi.busy||!PROJECT_HUB_TABS.some(x=>x[0]===tab))return;projectHubRememberDraft_();projectHubUi.tab=tab;renderPageIfActive('projects');}
-function projectHubSearch_(value){projectHubUi.query=value;const list=document.getElementById('projectHubList');if(list)list.innerHTML=projectHubProjectList_();}
+function projectHubSelect_(id){
+ if(projectHubUi.busy)return;
+ if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
+ projectHubRememberDraft_();
+ projectHubUi.selected=id;projectHubUi.view='detail';projectHubUi.tab='overview';projectHubUi.pickerOpen=false;projectHubUi.error='';
+ projectHubLoadDetail_(id);renderPageIfActive('projects');
+}
+function projectHubTab_(tab){
+ if(projectHubUi.busy||!PROJECT_HUB_TABS.some(x=>x[0]===tab))return;
+ projectHubRememberDraft_();projectHubUi.tab=tab;projectHubUi.view='detail';renderPageIfActive('projects');
+}
+function projectHubSearch_(value){
+ projectHubUi.query=value;projectHubUi.limit=20;
+ const list=document.getElementById('phPortfolioResults');
+ if(list)list.innerHTML=projectHubPortfolioRows_();
+ const count=document.getElementById('phPortfolioCount');
+ if(count)count.textContent=projectHubVisibleProjects_().length+' 件の案件';
+ const legacy=document.getElementById('projectHubList');
+ if(legacy)legacy.innerHTML=projectHubProjectList_();
+}
 function projectHubTogglePicker_(){if(projectHubUi.busy)return;projectHubRememberDraft_();projectHubUi.pickerOpen=!projectHubUi.pickerOpen;renderPageIfActive('projects');}
-function projectHubFilter_(value){projectHubUi.filter=value;renderPageIfActive('projects');}
+function projectHubFilter_(value){
+ projectHubUi.filter=value;projectHubUi.limit=20;renderPageIfActive('projects');
+}
 function projectHubDetail_(){const e=projectHubUi.details.get(projectHubUi.selected);return e&&e.data;}
 function projectHubHours_(v){return v==null?'未設定':(Number(v)/60).toLocaleString('ja-JP',{maximumFractionDigits:1})+'時間';}
 function projectHubPct_(v){return v==null?'未設定':Number(v)+'%';}
 function projectHubAction_(action,label,id='',cls='secondary-button'){return `<button type="button" class="${cls}" data-id="${escapeHtml(id)}" onclick="${action}(this.dataset.id)">${escapeHtml(label)}</button>`;}
 function projectHubProgress_(actual,plan){return `<div class="ph-progress" aria-label="作業進捗 ${projectHubPct_(actual)}"><span style="width:${Math.max(0,Math.min(100,Number(actual)||0))}%"></span>${plan==null?'':`<i style="left:${Math.max(0,Math.min(100,Number(plan)||0))}%" title="予定日程の目安 ${plan}%"></i>`}</div>`;}
 function projectHubProjectList_(){
- const d=projectHubUi.data||{projects:[]},q=projectHubUi.query.trim().toLowerCase();
- const projects=d.projects.filter(p=>(projectHubUi.filter==='all'||projectHubUi.filter==='risk'&&p.health==='要対応'||projectHubUi.filter==='active'&&p.status==='進行中')&&(!q||[p.name,p.client,p.projectId].join(' ').toLowerCase().includes(q)));
- return projects.map(p=>`<button type="button" class="ph-project ${p.projectId===projectHubUi.selected?'is-selected':''}" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)" aria-pressed="${p.projectId===projectHubUi.selected}"><small>${escapeHtml(p.client||p.projectId)} <em class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</em></small><strong>${escapeHtml(p.name)}</strong>${projectHubProgress_(p.progress,p.scheduledProgress)}<span>進捗 ${projectHubPct_(p.progress)} <b>${projectHubHours_(p.actualMinutes)}</b></span><small>予定 ${projectHubHours_(p.plannedMinutes)} / 資料 ${p.resourceCount}件</small></button>`).join('')||'<p class="ph-empty">該当する案件がありません。</p>';
+ return projectHubVisibleProjects_().map(p=>`<button type="button" class="ph-project ${p.projectId===projectHubUi.selected?'is-selected':''}" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)" aria-pressed="${p.projectId===projectHubUi.selected}"><small>${escapeHtml(p.client||'社内')} <em class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</em></small><strong>${escapeHtml(p.name)}</strong>${projectHubProgress_(p.progress,p.scheduledProgress)}<span>進捗 ${projectHubPct_(p.progress)} <b>${projectHubHours_(p.actualMinutes)}</b></span><small>予定 ${projectHubHours_(p.plannedMinutes)} / 資料 ${p.resourceCount||0}件</small></button>`).join('')||'<p class="ph-empty">該当する案件がありません。</p>';
 }
 function projectHubMetric_(label,value,help='',risk=false){return `<div class="ph-metric ${risk?'is-risk':''}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(help)}</span></div>`;}
 function projectHubOverview_(d){
@@ -68,16 +85,81 @@ function projectHubBars_(map){const entries=Object.entries(map||{}).sort((a,b)=>
 function projectHubEffort_(d){return `<div class="ph-metrics">${projectHubMetric_('この案件の総工数',projectHubHours_(d.metrics.actualMinutes),'既存の工数記録から自動集計')}${projectHubMetric_('予定工数',projectHubHours_(d.metrics.plannedMinutes),'案件の予算工数、未設定なら作業計画の合計')}${projectHubMetric_('残り工数',projectHubHours_(d.metrics.remainingMinutes),'マイナスは予定超過',d.metrics.remainingMinutes<0)}</div><div class="ph-overview-grid"><section class="ph-panel"><h3>作業分類別</h3>${projectHubBars_(d.byCategory)}</section><section class="ph-panel"><h3>月別の工数</h3>${projectHubBars_(Object.fromEntries(Object.entries(d.byMonth).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,6)))}</section></div><section class="ph-panel"><h3>担当者別の工数</h3><p class="ph-help">案件全体の合計は社員共有。個人別・作業明細は既存権限に合わせて ${escapeHtml(d.worklogScope)} を表示します。</p>${projectHubBars_(Object.fromEntries(d.byPerson.map(p=>[p.name+'（'+p.employeeId+'）',p.minutes])))}</section><section class="ph-panel"><div class="ph-panel-heading"><h3>工数の作業明細</h3>${projectHubAction_('projectHubRecordWork_','この案件の工数を入力','','primary-button')}</div><div class="ph-table-wrap"><table><thead><tr><th>日付</th><th>担当</th><th>作業内容</th><th>工数</th></tr></thead><tbody>${d.worklogs.map(w=>`<tr><td>${escapeHtml(w.date)}</td><td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.description)}</td><td>${projectHubHours_(w.minutes)}</td></tr>`).join('')||'<tr><td colspan="4">表示できる工数記録がありません。</td></tr>'}</tbody></table></div><p class="ph-help">最新100件を表示（閲覧できる記録 ${d.worklogDetailCount}件）。集計は全期間の有効な記録が対象です。</p></section>`;}
 function projectHubResources_(d){return `<section class="ph-panel"><div class="ph-panel-heading"><div><h3>この案件の資料</h3><p class="ph-help">案件資料は社員共有です。本文を保存するか、Google Driveなどの原本リンクを登録できます。</p></div>${projectHubAction_('projectHubOpenResource_','＋ 資料を追加','','primary-button')}</div>${d.resources.map(r=>`<details class="ph-resource" data-form-section="ph-resource-${escapeHtml(r.id)}"><summary><span class="ph-resource-icon">文</span><span><strong>${escapeHtml(r.title)}</strong><small>${escapeHtml(r.kind)}・第${Number(r.revision)}版・${escapeHtml(r.updatedAt)}</small></span></summary><div><p class="ph-body">${escapeHtml(r.body||'本文なし')}</p>${r.url?`<a class="secondary-button" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">原本を開く ↗</a>`:''}${r.canEdit?projectHubAction_('projectHubOpenResource_','資料を編集',r.id)+projectHubAction_('projectHubHideResource_','非表示',r.id):''}</div></details>`).join('')||'<p class="ph-empty">要件定義書・技術設計書・議事録・成果物を、ここにまとめてください。</p>'}</section>`;}
 function projectHubUpdates_(d){return `<section class="ph-panel"><div class="ph-panel-heading"><div><h3>共有メモ・決定事項</h3><p class="ph-help">相談、進捗、決定事項、次の対応を案件に残します。新しい投稿は「更新」で確認できます。</p></div>${projectHubAction_('projectHubOpenUpdate_','＋ 共有する','','primary-button')}</div>${d.updates.map(u=>`<article class="ph-update"><header><strong>${escapeHtml(u.authorName)}</strong><span class="ph-badge">${escapeHtml(u.kind)}</span><time>${escapeHtml(u.createdAt)}</time></header><p class="ph-body">${escapeHtml(u.body)}</p></article>`).join('')||'<p class="ph-empty">「テストをお願いします」「仕様はこの案で決定」などを、案件内で共有できます。</p>'}<p class="ph-help">最新60件を表示。共有メモは追記方式です。</p></section>`;}
+function projectHubVisibleProjects_(){
+ const ui=projectHubUi,projects=ui.data&&ui.data.projects||[],q=String(ui.query||'').trim().toLocaleLowerCase();
+ return projects.filter(p=>{
+  if(ui.filter==='active'&&p.status!=='進行中')return false;
+  if(ui.filter==='risk'&&p.health!=='要対応')return false;
+  if(ui.filter==='planned'&&p.health!=='計画未設定')return false;
+  if(ui.filter==='complete'&&p.status!=='完了')return false;
+  return !q||[p.name,p.client,p.projectId,p.note].join(' ').toLocaleLowerCase().includes(q);
+ }).sort((a,b)=>{
+  if(ui.sort==='name')return a.name.localeCompare(b.name,'ja');
+  if(ui.sort==='deadline')return String(a.endDate||'9999').localeCompare(String(b.endDate||'9999'));
+  return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));
+ });
+}
+function projectHubOpenList_(){
+ if(projectHubUi.busy)return;
+ if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
+ projectHubUi.editor=null;projectHubUi.view='list';projectHubUi.error='';renderPageIfActive('projects');
+}
+function projectHubOpenManagement_(){
+ if(projectHubUi.busy||!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return;
+ if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
+ projectHubUi.view='dashboard';projectHubUi.error='';renderPageIfActive('projects');
+}
+function projectHubSort_(value){projectHubUi.sort=value;renderPageIfActive('projects');}
+function projectHubMore_(){projectHubUi.limit=(projectHubUi.limit||20)+20;renderPageIfActive('projects');}
+function projectHubPortfolioRows_(){
+ const all=projectHubVisibleProjects_(),limit=projectHubUi.limit||20,projects=all.slice(0,limit),today=projectHubUi.data&&projectHubUi.data.today;
+ if(!projects.length)return '<div class="ph-panel ph-empty">条件に合う案件がありません。検索条件を変更してください。</div>';
+ return projects.map(p=>{
+  const pct=p.progress==null?'<span class="ph-muted">計画未設定</span>':`<strong>${projectHubPct_(p.progress)}</strong>${projectHubProgress_(p.progress,p.scheduledProgress)}`;
+  const urgent=p.health==='要対応',due=p.endDate?`${escapeHtml(p.endDate)}${projectHubDeadlineText_(p.endDate,today)}`:'期限未設定';
+  return `<button type="button" class="ph-portfolio-row" onclick="projectHubSelect_(this.dataset.id)" data-id="${escapeHtml(p.projectId)}" aria-label="${escapeHtml(p.name)}の詳細を開く"><span class="ph-portfolio-primary"><span class="ph-badge ${urgent?'risk':''}">${escapeHtml(p.health)}</span><span class="ph-portfolio-text"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.client||'社内')} · ${escapeHtml(p.status||'')}</small></span></span><span class="ph-portfolio-progress"><small>作業の完成度</small>${pct}</span><span class="ph-portfolio-effort"><small>実績 / 予定工数</small><strong>${projectHubHours_(p.actualMinutes)}</strong><small>予定 ${projectHubHours_(p.plannedMinutes)}</small></span><span class="ph-portfolio-deadline"><small>終了予定日</small><strong>${due}</strong>${Number(p.overdue)>0?`<em class="ph-warning">${p.overdue}件の作業が期限超過</em>`:''}</span><span class="ph-portfolio-arrow" aria-hidden="true">›</span></button>`;
+ }).join('')+(all.length>limit?`<button type="button" class="secondary-button ph-load-more" onclick="projectHubMore_()">さらに表示（残り ${all.length-limit}件）</button>`:'');
+}
+function projectHubDeadlineText_(date,today){
+ if(!date||!today||! /^\d{4}-\d{2}-\d{2}$/.test(date))return '';
+ const t=Date.parse(today+'T00:00:00Z'),d=Date.parse(date+'T00:00:00Z');
+ if(!Number.isFinite(t)||!Number.isFinite(d))return '';
+ const remaining=Math.round((d-t)/86400000);
+ return remaining<0?'（'+Math.abs(remaining)+'日超過）':remaining===0?'（今日）':'（残り'+remaining+'日）';
+}
+function projectHubPortfolio_(){
+ const d=projectHubUi.data||{projects:[],canCreate:false},all=d.projects||[],active=all.filter(p=>p.status==='進行中'),risk=all.filter(p=>p.health==='要対応'),unplanned=all.filter(p=>p.health==='計画未設定'),completed=all.filter(p=>p.status==='完了');
+ const count=(value,label,cls)=>`<div class="ph-counter ${cls||''}"><strong>${value}</strong><span>${label}</span></div>`;
+ const filters=[['all','すべて'],['active','進行中'],['risk','要対応'],['planned','計画未設定'],['complete','完了']];
+ return `<section class="ph-portfolio"><div class="ph-portfolio-toolbar"><label class="ph-search"><span>案件を検索</span><input id="projectHubSearch" type="search" value="${escapeHtml(projectHubUi.query)}" oninput="projectHubSearch_(this.value)" placeholder="案件名・顧客名・キーワード" autocomplete="off"></label><label class="ph-sort"><span>並び替え</span><select aria-label="案件の並び順" onchange="projectHubSort_(this.value)"><option value="updated" ${projectHubUi.sort!=='name'&&projectHubUi.sort!=='deadline'?'selected':''}>更新日順</option><option value="deadline" ${projectHubUi.sort==='deadline'?'selected':''}>期限が近い順</option><option value="name" ${projectHubUi.sort==='name'?'selected':''}>案件名順</option></select></label>${d.canCreate?projectHubAction_('projectHubCreate_','＋ 案件を登録','','primary-button'):''}</div>
+ <div class="ph-portfolio-counters">${count(all.length+'件','すべての案件')}${count(active.length+'件','進行中')}${count(risk.length+'件','要対応','ph-counter-risk')}${count(unplanned.length+'件','計画未設定')}${count(completed.length+'件','完了')}</div>
+ <div class="ph-portfolio-body"><div class="ph-portfolio-main"><div class="ph-portfolio-head"><div><h2>案件一覧</h2><p id="phPortfolioCount" class="ph-help">${projectHubVisibleProjects_().length} 件の案件</p></div><div class="ph-filter-tabs" role="group" aria-label="案件の状態で絞り込み">${filters.map(([v,label])=>`<button type="button" class="${projectHubUi.filter===v?'is-active':''}" aria-pressed="${projectHubUi.filter===v}" onclick="projectHubFilter_('${v}')">${label}</button>`).join('')}</div></div><div id="phPortfolioResults" class="ph-portfolio-results">${projectHubPortfolioRows_()}</div></div>
+ <aside class="ph-portfolio-aside"><section class="ph-panel"><h3>対応が必要な案件</h3>${risk.slice(0,5).map(p=>`<button type="button" class="ph-aside-link" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)"><strong>${escapeHtml(p.name)}</strong><small>${p.overdue?escapeHtml(String(p.overdue))+'件の期限超過 · ':''}${escapeHtml(p.client||'社内')}</small><span>›</span></button>`).join('')||'<p class="ph-empty">現在、要対応の案件はありません。</p>'}</section><section class="ph-panel"><h3>クイックアクセス</h3><button type="button" class="secondary-button ph-full-button" onclick="projectHubFilter_('planned')">計画未設定の案件</button><button type="button" class="secondary-button ph-full-button" onclick="projectHubFilter_('risk')">対応が必要な案件</button>${d.canCreate?'<button type="button" class="secondary-button ph-full-button" onclick="projectHubCreate_()">新しい案件を登録</button>':''}</section></aside></div></section>`;
+}
+function projectHubDashboard_(){
+ const d=projectHubUi.data||{projects:[]},projects=d.projects||[],risk=projects.filter(p=>p.health==='要対応'),totalMinutes=projects.reduce((s,p)=>s+(Number(p.actualMinutes)||0),0),plans=projects.filter(p=>p.plannedMinutes!=null),plannedMinutes=plans.reduce((s,p)=>s+(Number(p.plannedMinutes)||0),0),overdue=projects.reduce((s,p)=>s+(Number(p.overdue)||0),0);
+ const important=[...projects].sort((a,b)=>(b.health==='要対応')-(a.health==='要対応')||(Number(b.overdue)||0)-(Number(a.overdue)||0)).slice(0,12);
+ const states=[['要対応',risk.length],['進行中',projects.filter(p=>p.health==='進行中').length],['計画未設定',projects.filter(p=>p.health==='計画未設定').length],['完了',projects.filter(p=>p.status==='完了').length]];
+ return `<section class="ph-dashboard"><div class="ph-panel-heading"><div><h2>管理者ダッシュボード</h2><p class="ph-help">全案件の進捗・工数・期限を比較します。数値は現在登録されている情報から集計しています。</p></div></div>
+ <div class="ph-metrics">${projectHubMetric_('案件総数',projects.length+'件','登録済みの案件')}${projectHubMetric_('要対応',risk.length+'件','期限超過・予定工数超過',risk.length>0)}${projectHubMetric_('期限超過の作業',overdue+'件','案件を横断して集計',overdue>0)}${projectHubMetric_('実績工数（全案件）',projectHubHours_(totalMinutes),'有効な工数記録の合計')}${projectHubMetric_('登録済み予定工数',projectHubHours_(plannedMinutes),plans.length+'件に予定工数あり')}</div>
+ <div class="ph-overview-grid"><section class="ph-panel"><h3>案件の状況</h3><div class="ph-dashboard-bars">${states.map(([label,count])=>`<div class="ph-bar-row"><span>${label}</span><div><i style="width:${projects.length?count/projects.length*100:0}%"></i></div><strong>${count}件</strong></div>`).join('')}</div><p class="ph-help">「要対応」は期限超過や工数超過など、現在の登録情報に基づく状態です。</p></section>
+ <section class="ph-panel"><h3>管理上の確認事項</h3>${risk.slice(0,5).map(p=>`<button type="button" class="ph-aside-link" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)"><strong>${escapeHtml(p.name)}</strong><small>期限超過 ${Number(p.overdue)||0}件 · 実績 ${projectHubHours_(p.actualMinutes)}</small><span>›</span></button>`).join('')||'<p class="ph-empty">現在、要対応の案件はありません。</p>'}</section></div>
+ <section class="ph-panel"><div class="ph-panel-heading"><div><h3>全案件の比較</h3><p class="ph-help">案件を選択すると、詳細画面で作業や工数を確認できます。</p></div></div><div class="ph-table-wrap"><table class="ph-manager-table"><thead><tr><th>案件</th><th>状態</th><th>作業の完成度</th><th>実績 / 予定工数</th><th>期限超過</th><th>終了予定</th><th>詳細</th></tr></thead><tbody>${important.map(p=>`<tr><td><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.client||'社内')}</small></td><td><span class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</span></td><td>${projectHubPct_(p.progress)}</td><td>${projectHubHours_(p.actualMinutes)} / ${projectHubHours_(p.plannedMinutes)}</td><td>${Number(p.overdue)||0}件</td><td>${escapeHtml(p.endDate||'未設定')}</td><td><button type="button" class="secondary-button" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)">開く</button></td></tr>`).join('')||'<tr><td colspan="7">案件がありません。</td></tr>'}</tbody></table></div></section></section>`;
+}
 function projectHubPage(){
- const ui=projectHubUi,data=ui.data,d=projectHubDetail_(),p=data&&data.projects.find(x=>x.projectId===ui.selected),editor=ui.editor&&ui.editor.projectId===ui.selected;
- return `<div class="ph-workspace"><header class="ph-heading"><div><span class="eyebrow">PROJECTS</span><h1>プロジェクト</h1><p>受注・計画・工数・資料・共有を、案件ごとにひとつに。</p></div><div class="button-row">${data&&data.canCreate?projectHubAction_('projectHubCreate_','＋ 案件を登録'):''}<button type="button" class="secondary-button" onclick="loadProjectHub({force:true})" ${ui.busy?'disabled':''}>更新</button></div></header>
- ${ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}</p>`:''}
- ${data&&data.setupRequired?`<aside class="ph-setup"><strong>計画・資料・共有の保存先を準備してください</strong><p>管理者が「管理・設定 → 運用・労務 → DBスキーマ更新」でバックアップして更新します。既存の案件と工数は引き続き参照できます。</p><small>未作成：${escapeHtml(data.missing.join('、'))}</small>${data.canCreate?`<button type="button" class="secondary-button" onclick="setAdminTab('operation')">DB更新の画面へ</button>`:''}</aside>`:''}
- ${data&&data.unlinkedWorklogCount?`<details class="ph-link-warning"><summary>案件との対応を確認する工数：${data.unlinkedWorklogCount}件</summary><p>現在の案件・記録済み旧案件名に結び付かない記録です。案件の集計には含まれません。管理者が元の案件名を確認してください。</p></details>`:''}
- <div class="ph-layout"><aside class="ph-project-sidebar ${ui.pickerOpen?'is-expanded':''}"><button type="button" class="ph-mobile-picker" onclick="projectHubTogglePicker_()" aria-expanded="${ui.pickerOpen}" ${ui.busy?'disabled':''}><span>${escapeHtml(p?p.name:'案件を選択')}</span><small>${ui.pickerOpen?'選択を閉じる ▴':'案件を変更 ▾'}</small></button><div class="ph-project-controls"><label class="field"><span>案件を検索</span><input id="projectHubSearch" type="search" value="${escapeHtml(ui.query)}" placeholder="案件名・顧客名" oninput="projectHubSearch_(this.value)"></label><select aria-label="案件を絞り込み" onchange="projectHubFilter_(this.value)"><option value="all" ${ui.filter==='all'?'selected':''}>すべての案件</option><option value="active" ${ui.filter==='active'?'selected':''}>進行中</option><option value="risk" ${ui.filter==='risk'?'selected':''}>要対応</option></select><div id="projectHubList" class="ph-project-list">${data?projectHubProjectList_():'<p class="ph-empty">案件を読み込んでいます…</p>'}</div></div></aside><section class="ph-detail">
- ${p?`<header class="ph-detail-heading"><div><small>${escapeHtml(p.client||p.projectId)}</small><h2>${escapeHtml(p.name)}</h2></div><span class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</span></header><nav class="ph-tabs" aria-label="プロジェクトの内容">${PROJECT_HUB_TABS.map(([id,label])=>`<button type="button" class="${ui.tab===id?'is-active':''}" data-tab="${id}" aria-pressed="${ui.tab===id}" onclick="projectHubTab_(this.dataset.tab)" ${ui.busy?'disabled':''}>${label}</button>`).join('')}</nav>`:''}
- ${editor?projectHubEditor_():!d?`<div class="ph-panel ph-empty">${p?'案件の詳細を読み込んでいます…':'案件を登録するか、一覧から選択してください。'}</div>`:({overview:projectHubOverview_,tasks:projectHubTasks_,effort:projectHubEffort_,resources:projectHubResources_,updates:projectHubUpdates_}[ui.tab]||projectHubOverview_)(d)}
- </section></div></div>`;
+ const ui=projectHubUi,data=ui.data,view=ui.view||'list',d=projectHubDetail_()||(ui.editor&&ui.editor.context),p=data&&data.projects.find(x=>x.projectId===ui.selected),editor=ui.editor&&ui.editor.projectId===ui.selected;
+ let intro='';
+ if(data&&data.setupRequired)intro+=`<aside class="ph-setup"><strong>案件データの保存先を準備してください</strong><p>管理者が「管理・設定 → 運用・労務 → DBスキーマ更新」でバックアップと更新を行います。</p><small>${escapeHtml((data.missing||[]).join('、'))}</small></aside>`;
+ if(data&&data.unlinkedWorklogCount)intro+=`<details class="ph-link-warning"><summary>案件とのひも付けを確認する工数：${data.unlinkedWorklogCount}件</summary><p>現在の案件名・旧案件名に一致しない工数記録です。案件集計には含まれません。</p></details>`;
+ const error=ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}</p>`:'';
+ if(view!=='detail'||!p){
+  const allowed=view==='dashboard'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole;
+  return `<div class="ph-workspace ph-experience"><header class="ph-heading"><div><span class="eyebrow">PROJECTS</span><h1>プロジェクト</h1><p>案件を探す・計画を進める・工数や資料を共有する</p></div><div class="button-row"><button type="button" class="secondary-button" onclick="loadProjectHub({force:true})" ${ui.busy?'disabled':''}>更新</button></div></header><nav class="ph-view-switch" aria-label="プロジェクト画面"><button type="button" class="${allowed?'':'is-active'}" onclick="projectHubOpenList_()">案件一覧</button>${state.data&&state.data.permissions&&state.data.permissions.adminConsole?`<button type="button" class="${allowed?'is-active':''}" onclick="projectHubOpenManagement_()">管理者ダッシュボード</button>`:''}</nav>${error}${intro}${allowed?projectHubDashboard_():projectHubPortfolio_()}</div>`;
+ }
+ const owner=data.employees&&data.employees.find(e=>e.employeeId===(d&&d.plan&&d.plan.ownerId||p.ownerId));
+ return `<div class="ph-workspace ph-experience"><nav class="ph-breadcrumb" aria-label="現在地"><button type="button" onclick="projectHubOpenList_()">プロジェクト一覧</button><span aria-hidden="true">›</span><span>${escapeHtml(p.name)}</span></nav><header class="ph-heading ph-project-hero"><div><span class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</span><h1>${escapeHtml(p.name)}</h1><p>${escapeHtml(p.client||'社内')} · ${escapeHtml(p.projectId)}</p></div><div class="button-row">${state.data&&state.data.permissions&&state.data.permissions.adminConsole?projectHubAction_('projectHubEditMaster_','案件情報を編集',p.projectId):''}<button type="button" class="secondary-button" onclick="loadProjectHub({force:true})" ${ui.busy?'disabled':''}>更新</button></div></header><div class="ph-hero-facts"><span><small>案件期間</small><strong>${escapeHtml(p.startDate||'未設定')} 〜 ${escapeHtml(p.endDate||'未設定')}</strong></span><span><small>案件責任者</small><strong>${escapeHtml(owner?owner.name:'未設定')}</strong></span><span><small>状態</small><strong>${escapeHtml(p.status||'未設定')}</strong></span><span><small>実績工数</small><strong>${projectHubHours_(p.actualMinutes)}</strong></span></div>${error}${intro}
+ <nav class="ph-tabs" aria-label="プロジェクトの内容">${PROJECT_HUB_TABS.map(([id,label])=>`<button type="button" class="${ui.tab===id?'is-active':''}" data-tab="${id}" aria-pressed="${ui.tab===id}" onclick="projectHubTab_(this.dataset.tab)" ${ui.busy?'disabled':''}>${label}</button>`).join('')}</nav>
+ <main class="ph-detail">${editor?projectHubEditor_():!d?`<section class="ph-panel ph-empty" role="status">案件の詳細を読み込んでいます…</section>`:({overview:projectHubOverview_,tasks:projectHubTasks_,effort:projectHubEffort_,resources:projectHubResources_,updates:projectHubUpdates_}[ui.tab]||projectHubOverview_)(d)}</main></div>`;
 }
 function projectHubEditMaster_(id){state.authAdmin={...(state.authAdmin||{}),projects:projectHubUi.data.projects};openProjectModal(id);}
 function projectHubCreate_(){if(projectHubUi.busy)return;openProjectModal('');}
@@ -93,7 +175,7 @@ function projectHubOpenEditor_(kind,id=''){
  if(kind==='task'){form.plannedHours=source&&source.plannedMinutes?Number(source.plannedMinutes)/60:'';form.progress=Number(form.progress||0);form.status=form.status||'未着手';}
  if(kind==='resource'){form.resourceKind=form.kind||'要件定義書';form.status=form.status||'共有';}
  if(kind==='update')form.updateKind='共有';
- ui.editor={kind,projectId:ui.selected,form,changed:false,context:d};renderPageIfActive('projects');
+ ui.view='detail';ui.editor={kind,projectId:ui.selected,form,changed:false,context:d};renderPageIfActive('projects');
 }
 function projectHubOpenPlan_(){projectHubOpenEditor_('plan');}function projectHubOpenTask_(id){projectHubOpenEditor_('task',id);}function projectHubOpenResource_(id){projectHubOpenEditor_('resource',id);}function projectHubOpenUpdate_(){projectHubOpenEditor_('update');}
 function projectHubField_(key,value){if(!projectHubUi.editor||projectHubUi.busy)return;projectHubUi.editor.form[key]=value;projectHubUi.editor.changed=true;if(key==='quoteId'&&projectHubUi.editor.kind==='plan')renderPageIfActive('projects');}

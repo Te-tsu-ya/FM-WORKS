@@ -111,5 +111,17 @@ client.resetProjectHubUi();assert.equal(cr('projectHubUi.editor'),null);
 cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');
 client.projectHubHideResource_(r1.id);assert.equal(calls.at(-1).args[2].status,'非表示');calls.at(-1).failure(Error('network'));client.projectHubSave_();assert.equal(calls.at(-1).args[2].status,'非表示','failed hide retry keeps confirmed operation');client.resetProjectHubUi();
 cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify({...detail,canSeeOrderValue:false,plan:{...detail.plan,quoteId:'Q2',orderValue:undefined}})+',at:Date.now()});');client.projectHubOpenPlan_();assert.ok(!cr('projectHubPage()').includes('id="ph-orderValue"'));client.projectHubField_('quoteId','Q1');assert.ok(cr('projectHubPage()').includes('id="ph-orderValue"'),'selecting a visible quote exposes its order amount field');client.resetProjectHubUi();
+// Portfolio and manager screens are client-only, secure and reusable across routes.
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.view="list";');
+assert.ok(cr('projectHubPage()').includes('案件一覧'),'portfolio is default daily entry');
+assert.ok(cr('projectHubPage()').includes('期限が近い順'),'portfolio has deadline sorting');
+client.projectHubSelect_('PRJ-001');assert.equal(cr('projectHubUi.view'),'detail','opening a project uses the record page');
+client.projectHubOpenList_();assert.equal(cr('projectHubUi.view'),'list','breadcrumb returns to portfolio');
+client.projectHubFilter_('risk');assert.equal(cr('projectHubUi.filter'),'risk');
+client.projectHubFilter_('all');
+assert.ok(!cr('projectHubPage()').includes('管理者ダッシュボード'),'employee cannot see manager tab');
+client.projectHubOpenManagement_();assert.equal(cr('projectHubUi.view'),'list','employee cannot enter manager mode');
+client.projectHubSearch_('<script>');assert.ok(!cr('projectHubPage()').includes('<script>'),'project search stays escaped');
+client.projectHubSearch_('');
 console.log('PASS project client: cached tabs/routes, escaped documents, retained failed forms, stable retries, stale-response and session isolation');
 export {workspace,detail,escapeHtml};
