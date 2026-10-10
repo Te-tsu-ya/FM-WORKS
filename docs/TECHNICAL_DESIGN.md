@@ -2061,3 +2061,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Management overview is restricted by `state.data.permissions.adminConsole`. It displays only real project aggregates (count, overdue tasks, total hours, existing planned hours) and links to detail. Project-level figures do not imply permission to access restricted personal worklogs or order values.
 - `StylesProjectHub.html` provides desktop/tablet/mobile rules for portfolio rows, management tables, hero facts, and filters. The existing detail viewport test explicitly selects detail view. `test_project_hub.mjs` checks portfolio entry, sort, navigation, escape and manager access.
 - Known gap: the illustrated designs include future concepts that are outside existing APIs (uploading binary files, auto-generated risk predictions, financial profitability analytics, comprehensive member assignment). Those remain unimplemented. Production authenticated browser CRUD/performance measurement is a separate acceptance gate.
+
+- 320px小画面は案件ヘッダ/基本情報帯を圧縮し、基本情報を横スワイプ表示に切り替えて作業タブの先頭が初期スクロール位置で見えるようにする。
