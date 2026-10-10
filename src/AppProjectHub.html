@@ -1,8 +1,8 @@
 <script>
 /* Project workspace uses session-local snapshots and drafts, never persistent business storage. */
 let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};
-const PROJECT_HUB_TABS=[['overview','概要'],['tasks','計画・進捗'],['effort','工数'],['resources','資料'],['updates','共有メモ']];
-function resetProjectHubUi(){projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
+const PROJECT_HUB_TABS=[['overview','概要'],['tasks','計画・進捗'],['effort','工数'],['resources','資料'],['updates','共有メモ'],['advanced','詳細管理']];
+function resetProjectHubUi(){if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
 function projectHubIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();}
 function loadProjectHub(options={}){
@@ -49,6 +49,7 @@ function projectHubSelect_(id){
 function projectHubTab_(tab){
  if(projectHubUi.busy||!PROJECT_HUB_TABS.some(x=>x[0]===tab))return;
  projectHubRememberDraft_();projectHubUi.tab=tab;projectHubUi.view='detail';
+ if(tab==='advanced'&&typeof projectAdvancedLoad_==='function')projectAdvancedLoad_();
  if(projectHubUi.selected)projectHubLoadDetail_(projectHubUi.selected);
  renderPageIfActive('projects');
 }
@@ -306,7 +307,7 @@ function projectHubPage(){
  const owner=data.employees&&data.employees.find(e=>e.employeeId===(d&&d.plan&&d.plan.ownerId||p.ownerId));
  return `<div class="ph-workspace ph-experience"><nav class="ph-breadcrumb" aria-label="現在地"><button type="button" onclick="projectHubOpenList_()">プロジェクト一覧</button><span aria-hidden="true">›</span><span>${escapeHtml(p.name)}</span></nav><header class="ph-heading ph-project-hero"><div><span class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</span><h1>${escapeHtml(p.name)}</h1><p>${escapeHtml(p.client||'社内')} · ${escapeHtml(p.projectId)}</p></div><div class="button-row">${state.data&&state.data.permissions&&state.data.permissions.adminConsole?projectHubAction_('projectHubEditMaster_','案件情報を編集',p.projectId):''}<button type="button" class="secondary-button" onclick="loadProjectHub({force:true})" ${ui.busy?'disabled':''}>更新</button></div></header><div class="ph-hero-facts"><span><small>案件期間</small><strong>${escapeHtml(p.startDate||'未設定')} 〜 ${escapeHtml(p.endDate||'未設定')}</strong></span><span><small>案件責任者</small><strong>${escapeHtml(owner?owner.name:'未設定')}</strong></span><span><small>状態</small><strong>${escapeHtml(p.status||'未設定')}</strong></span><span><small>実績工数</small><strong>${projectHubHours_(p.actualMinutes)}</strong></span></div>${error}${intro}
  <nav class="ph-tabs" aria-label="プロジェクトの内容">${PROJECT_HUB_TABS.map(([id,label])=>`<button type="button" class="${ui.tab===id?'is-active':''}" data-tab="${id}" aria-pressed="${ui.tab===id}" onclick="projectHubTab_(this.dataset.tab)" ${ui.busy?'disabled':''}>${label}</button>`).join('')}</nav>
- <main class="ph-detail">${editor?projectHubEditor_():!d?`<section class="ph-panel ph-empty" role="status">案件の詳細を読み込んでいます…</section>`:({overview:projectHubOverview_,tasks:projectHubTasks_,effort:projectHubEffort_,resources:projectHubResources_,updates:projectHubUpdates_}[ui.tab]||projectHubOverview_)(d)}</main></div>`;
+ <main class="ph-detail">${editor?projectHubEditor_():!d?`<section class="ph-panel ph-empty" role="status">案件の詳細を読み込んでいます…</section>`:({overview:projectHubOverview_,tasks:projectHubTasks_,effort:projectHubEffort_,resources:projectHubResources_,updates:projectHubUpdates_,advanced:(typeof projectAdvancedPage_==='function'?projectAdvancedPage_:projectHubOverview_)}[ui.tab]||projectHubOverview_)(d)}</main></div>`;
 }
 function projectHubEditMaster_(id){state.authAdmin={...(state.authAdmin||{}),projects:projectHubUi.data.projects};openProjectModal(id);}
 function projectHubCreate_(){if(projectHubUi.busy)return;openProjectModal('');}
@@ -317,7 +318,7 @@ function projectHubRecordWork_(taskId=''){
  const task=taskId?(d.tasks||[]).find(t=>t.id===taskId):null;
  if(taskId&&!task){showToast('選択した作業が見つかりません。案件を再読込してください。');return;}
  if(typeof queueProjectWorklogIntent!=='function'){showToast('工数の入力準備を確認できませんでした。');return;}
- if(!queueProjectWorklogIntent(d.project.name,task?task.title:'')){showToast('工数の入力準備ができませんでした。');return;}
+ if(!queueProjectWorklogIntent(d.project.name,task?task.title:'',task?task.id:'')){showToast('工数の入力準備ができませんでした。');return;}
  state.data.projects=projectHubUi.data.projects.filter(p=>p.status==='進行中');
  if(state.worklog&&state.data&&state.data.today)state.worklog.date=state.data.today;
  navigate('worklog');

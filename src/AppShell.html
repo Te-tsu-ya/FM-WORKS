@@ -392,6 +392,14 @@ function openNotificationItem(index){
   const item=menu&&menu._items&&menu._items[index];
   closeNotificationMenu();
   if(item){
+    if(item.route==='projects'&&item.projectId&&typeof projectHubUi!=='undefined'){
+      projectHubUi.selected=item.projectId;projectHubUi.view='detail';
+      projectHubUi.tab=item.type==='案件共有'?'updates':'tasks';
+      if(item.notificationId){
+        (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{loadNotifications();})
+          .withFailureHandler(()=>{}).markProjectAlertRead(state.sessionToken,item.notificationId);
+      }
+    }
     if(item.route==='monthly'&&item.yearMonth){
       state.monthly.yearMonth=item.yearMonth;state.monthly.employeeId=state.data.user.employeeId;state.monthly.view='calendar';
     }

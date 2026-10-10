@@ -90,6 +90,15 @@ function getNotifications(sessionToken) {
     }
   }
 
-  logPerformance_('getNotifications',perfStarted,1200,{items:items.length});
-  return { count: items.length, items: items.slice(0, 20), monthlyReview:monthlyReview };
+  const projectItems=[];
+  if(typeof projectAdvancedAlerts_==='function'){
+    try{projectAdvancedAlerts_(employee,false).forEach(item=>projectItems.push(item));}
+    catch(err){if(typeof console!=='undefined'&&console.warn)console.warn('Project alerts unavailable: '+String(err.message||err));}
+  }
+  // Keep high-priority HR messages, but reserve room for up to eight project alerts.
+  const slots=Math.min(projectItems.length,Math.max(8,20-Math.min(items.length,12)));
+  const visible=items.slice(0,20-slots).concat(projectItems.slice(0,slots));
+  const count=items.length+projectItems.length;
+  logPerformance_('getNotifications',perfStarted,1200,{items:count});
+  return { count, items: visible, monthlyReview:monthlyReview };
 }
