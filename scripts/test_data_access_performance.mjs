@@ -1,3 +1,4 @@
+import './test_monthly_review_index.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
