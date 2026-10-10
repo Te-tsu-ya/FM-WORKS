@@ -222,11 +222,11 @@ function adminPage(){
 
 function saveLaborRulesFromAdmin(){
   const profile=document.getElementById('laborProfile').value,weekStartDay=document.getElementById('laborWeekStart').value,agreementStartMonth=document.getElementById('laborAgreementStart').value,specialClause=document.getElementById('laborSpecialClause').value,note=document.getElementById('laborRuleNote').value;
-  openConfirmDialog('労務ルールを保存','就業規則・36協定の起算月・特別条項を確認した内容として保存します。','保存',()=>(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast('労務ルールを保存しました');loadMaintenance();}).withFailureHandler(err=>handleApiError(err,'保存できませんでした')).saveLaborRuleConfig(state.sessionToken,{profile,weekStartDay,agreementStartMonth,specialClause,note}),true);
+  openConfirmDialog('労務ルールを保存','就業規則・36協定の起算月・特別条項を確認した内容として保存します。','保存',()=>(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast('労務ルールを保存しました');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'保存できませんでした')).saveLaborRuleConfig(state.sessionToken,{profile,weekStartDay,agreementStartMonth,specialClause,note}),true);
 }
 function migrateDatabaseFromAdmin(){
   openConfirmDialog('DBスキーマを更新','現在のDBをバックアップしてから、欠けているシート・列見出しを現在のスキーマへ更新します。既存の非空欄見出しが想定と異なる場合は停止します。','バックアップして更新',()=>{
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(r=>{showToast(r&&r.changed?'DBスキーマを更新しました':'DBスキーマは最新です');loadMaintenance();}).withFailureHandler(err=>handleApiError(err,'DBスキーマを更新できませんでした')).migrateDatabaseToCurrent(state.sessionToken);
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(r=>{showToast(r&&r.changed?'DBスキーマを更新しました':'DBスキーマは最新です');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'DBスキーマを更新できませんでした')).migrateDatabaseToCurrent(state.sessionToken);
   },true);
 }
 function maintenanceSection(){
@@ -280,7 +280,7 @@ function maintenanceSection(){
         <div><span>アプリバージョン</span><strong>${escapeHtml(state.data.app.version)}</strong></div>
         <div><span>実行環境</span><strong>${escapeHtml(s.environment||'STAGING')}</strong></div>
         <div><span>最終確認</span><strong>${escapeHtml(s.checkedAt)}</strong></div>
-      </div><div class='button-row section-gap'><button class='secondary-button' onclick='loadMaintenance()'>状態を再確認</button><button class='secondary-button' onclick='migrateDatabaseFromAdmin()'>DBスキーマ更新</button></div>${schemaIssuesHtml}`)}
+      </div><div class='button-row section-gap'><button class='secondary-button' onclick='loadMaintenance({force:true})'>状態を再確認</button><button class='secondary-button' onclick='migrateDatabaseFromAdmin()'>DBスキーマ更新</button></div>${schemaIssuesHtml}`)}
     </div>
     <div class='section-gap'>${card('監査ログ（最新40件）',auditRows?`<div class='table-wrap'><table class='auth-table'><thead><tr><th>日時</th><th>操作者</th><th>操作</th><th>対象</th><th>結果</th></tr></thead><tbody>${auditRows}</tbody></table></div>`:"<p class='muted'>監査ログはありません。</p>")}</div>
   </div>`;
@@ -300,16 +300,28 @@ function switchToProductionMode(){
 
 function loadMaintenance(options={}){
   if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return;
-  const key='current';
+  const key='current',view=state.maintenance,identity=state.sessionToken;
   if(!options.force&&cacheFresh('maintenance',key))return;
-  const ticket=beginPageLoad('maintenance',key);if(!ticket)return;
+  const ticket=beginPageLoad('maintenance',key);
+  if(!ticket){if(options.force)view.refreshNeeded=true;return;}
   const hasCurrent=cacheHas('maintenance',key);
-  state.maintenance.loading=!hasCurrent;
+  view.loading=!hasCurrent;view.refreshNeeded=false;
   if(!options.silent)renderPageIfActive('admin');
-  let pending=2,failed=false;
-  const done=()=>{pending--;if(pending<=0){endPageLoad(ticket);state.maintenance.loading=false;if(!failed)markPageCache('maintenance',key);renderPageIfActive('admin')}};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{state.maintenance.status=data;done()}).withFailureHandler(err=>{failed=true;done();handleApiError(err,'システム状態を読み込めませんでした')}).getSystemStatus(state.sessionToken);
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{state.maintenance.audit=data||[];done()}).withFailureHandler(err=>{failed=true;done();handleApiError(err,'監査ログを読み込めませんでした')}).getAuditLogs(state.sessionToken,100);
+  let pending=2,failed=false,status,audit;
+  const current=()=>state.sessionToken===identity&&state.maintenance===view&&!!state.data;
+  const done=()=>{
+    if(!current())return;
+    pending--;if(pending>0)return;
+    endPageLoad(ticket);view.loading=false;
+    if(view.refreshNeeded){view.refreshNeeded=false;loadMaintenance({force:true,silent:true});return;}
+    if(status!==undefined)view.status=status;
+    if(audit!==undefined)view.audit=audit;
+    if(!failed)markPageCache('maintenance',key);
+    renderPageIfActive('admin');
+  };
+  const fail=message=>err=>{if(!current())return;failed=true;const obsolete=view.refreshNeeded;done();if(!obsolete)handleApiError(err,message);};
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{if(!current())return;status=data;done()}).withFailureHandler(fail('システム状態を読み込めませんでした')).getSystemStatus(identity);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{if(!current())return;audit=data||[];done()}).withFailureHandler(fail('監査ログを読み込めませんでした')).getAuditLogs(identity,100);
 }
 
 function createBackupNow(){
@@ -403,3 +415,4 @@ function saveSupportSettingsFromAdmin(){
 }
 
 </script>
+
