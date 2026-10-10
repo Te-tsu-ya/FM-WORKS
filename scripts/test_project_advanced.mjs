@@ -67,7 +67,7 @@ for(const name of newSheets)db[name]=new Sheet(specs[name]);
 db['工数']=new Sheet(Array.from({length:15},(_,i)=>'H'+i));
 vm.runInContext(fs.readFileSync('src/ProjectAdvanced.gs','utf8'),gctx);
 const run=expr=>vm.runInContext(expr,gctx);
-assert.equal(run('DB_SCHEMA_VERSION'),17);
+assert.equal(run('DB_SCHEMA_VERSION'),18);
 assert.equal(newSheets.filter(x=>specs[x]).length,6);
 assert.equal(gctx.projectAdvancedReady_().ready,true,'all six extension sheets ready');
 

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.21.0
+**文書版:** 0.22.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,9 +65,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.21.0`
+`APP.version = 0.22.0`
 
-DBスキーマ: 17。  
+DBスキーマ: 18。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -2152,3 +2152,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - FMRotaryRPCの保存は同じrequestKeyで安全に再試行し、成功後は再読込で確認。失敗時は草稿を保持する。
 - 年度切替・戻る・再読み込みの入力破棄確認はFM WORKS共通の確認ダイアログを使用する。未保存の場合、キャンセルで入力を保持する。
 - `financeUi.demo===true` では資金繰り表への入口を無効化し、サーバー呼出を開始しない。サンプル画面と実データの誤混同を避ける。
+
+
+## v0.22.0 金融機関明細・定期予定
+- DB v18 追加シート: 資金口座、資金予定、資金取引、資金月次確定（既存の年間資金繰りは保存）。管理者によるヘッダー検査→自動バックアップ→追加シート作成→監査の順に移行する。
+- CashFlowBank.gs: saveCashFlowBankAccount、saveCashFlowScheduledItem、importCashFlowBankRows、setCashFlowTransfer、saveCashFlowClosedThrough、getCashFlowBankWorkspace。すべて requireAdminSession_ で守る。
+- 取引は銀行口座・日付・金額・摘要・銀行識別子/残高・同一取引内連番からSHA-256を算出し、再取込を排除。実績確定月までは明細、以降は入出金予定を見込み計算に採用する。
+
+- 取引CSVを最大200件の小分けで、SheetsのsetValuesによるまとめ書きとして実装。最大行数を超えるときはinsertRowsAfterで拡張し、1行ごとappendRowによる待ち時間を避ける。
