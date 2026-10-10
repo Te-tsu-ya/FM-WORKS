@@ -1842,3 +1842,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - CIは `scripts/test_finance_integration.mjs`／`scripts/test_client_contract.mjs` で登録内容一致、長文、重複申請、行番号照合、書込中と古いレスポンスの順不同を検証する。実本番データへの書き込み、監査ログの偽造、本人承認を伴う試験は行わない。
 
 - AppFinance.html の submitFinanceForm は実際のフォームの input/select/textarea/button を元の disabled 状態ごと記録し、書込中は凍結する。失敗や確認不能時に restore() で復旧し、保存成功時は画面遷移で破棄する。PC台帳の日付ボタンのクリックは伝播停止し、親行からの重複処理を抑止する。
+
+- AppFinance.html の経理モーダルに financeCloseModalIfIdle() を使用し、financeUi.busy 中は閉じる動作を抑止する。完了後は通常の closeModal() を実行し、異常応答時にはダイアログ内のエラーを確認できる状態を維持する。

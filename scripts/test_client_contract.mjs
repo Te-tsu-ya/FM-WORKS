@@ -596,6 +596,16 @@ const result=vm.runInContext(`
   financeUi.tab='expense';financeVisual={query:'',status:'ALL',match:'ALL',month:''};
   expect('desktop ledger selection button does not double-fire from its parent row',
     financeOverviewRows('expense').includes('event.stopPropagation();financeSelectRecord('));
+  const originalCloseModal=closeModal;
+  let modalCloseCalls=0;
+  closeModal=()=>{modalCloseCalls++;};
+  financeUi.busy=true;
+  financeCloseModalIfIdle();
+  expect('finance modal cannot close while save or approval is pending',modalCloseCalls===0);
+  financeUi.busy=false;
+  financeCloseModalIfIdle();
+  expect('finance modal can close once the operation has finished',modalCloseCalls===1);
+  closeModal=originalCloseModal;
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));

@@ -203,6 +203,10 @@ function financeNewKey(){
   return 'FM'+Date.now().toString(36)+Math.random().toString(36).slice(2,15);
 }
 let financeActiveForm=null;
+function financeCloseModalIfIdle(){
+  if(financeUi.busy){showToast('経理の処理中です。結果を確認してから閉じてください。');return;}
+  closeModal();
+}
 function financeOwnEditableItem_(kind,id){
   const items=kind==='travel'?financeUi.mine&&financeUi.mine.travels:financeUi.mine&&financeUi.mine.expenses;
   const hit=(items||[]).find(x=>x.id===id&&x.status==='差戻し');
@@ -211,7 +215,6 @@ function financeOwnEditableItem_(kind,id){
 function openFinanceForm(kind,editId=''){
   if(!FINANCE_FORM_FIELDS[kind]||financeUi.busy)return;
   if(financeUi.demo){showToast('サンプル表示中は実データへ登録できません。経理画面で「実データに戻る」を選択してください。');return;}
-  if(kind==='receipt'&&financeUi.demo){showToast('サンプル表示中は新規登録できません。実データに戻してください。');return;}
   if(kind==='receipt'&&!financeAccessAllowed()){showToast('経理の閲覧・記録権限が必要です');return;}
   if(!state.sessionToken)return;
   const source=editId?financeOwnEditableItem_(kind,editId):null;
@@ -222,16 +225,16 @@ function openFinanceForm(kind,editId=''){
   if(kind==='expense'||kind==='travel'){navigate('financeEntry');return;}
   const title=editId?'修正して再申請':({expense:'経費精算申請',travel:'出張報告',receipt:'レシート・経費記録'}[kind]);
   const root=ensureModal();
-  root.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  root.innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card finance-form-modal" role="dialog" aria-modal="true" aria-label="'+title+'">'+
     '<div class="modal-head"><div><small>FM WORKS / FINANCE</small><h2>'+title+'</h2></div>'+
-    '<button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<form id="financeEntryForm" onsubmit="event.preventDefault();submitFinanceForm()">'+
     '<div class="finance-form-grid">'+FINANCE_FORM_FIELDS[kind].map(financeFormField).join('')+'</div>'+
     '<p class="finance-note">'+(kind==='travel'?'日当・宿泊費は自動計算していません。金額は会社規程に従い担当者が確認してください。':
     '経費記録と精算申請を照合するには、双方に同じ証憑整理番号を入力してください。領収書画像はここでは保存されません。')+'</p>'+
     '<p id="financeFormError" role="alert" class="finance-error" hidden></p>'+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeSubmitButton" type="submit" class="primary-button">'+(editId?'再申請する':'登録する')+'</button></div></form></section>';
   if(source){
     FINANCE_FORM_FIELDS[kind].forEach(([field])=>{
@@ -552,11 +555,11 @@ function financeShowDetail(kind,id){
   if(!financeAccessAllowed())return;
   const item=financeOverviewItem_(kind,id);
   if(!item){showToast('最新の経理記録を再読込してください');return;}
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card finance-form-modal" role="dialog" aria-modal="true" aria-label="経理記録の詳細">'+
-    '<div class="modal-head"><h2>経理記録の詳細</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<div class="modal-head"><h2>経理記録の詳細</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     financeDetailRows_(kind,item)+
-    '<div class="modal-actions"><button type="button" class="primary-button" onclick="closeModal()">閉じる</button></div></section>';
+    '<div class="modal-actions"><button type="button" class="primary-button" onclick="financeCloseModalIfIdle()">閉じる</button></div></section>';
 }
 function financeVisibleItems_(kind){
   const d=financeDisplayedOverview_()||{},records=(kind==='receipt'?d.receipts:kind==='expense'?d.expenses:d.travels)||[];
@@ -829,13 +832,13 @@ function financeApprovalDialog(kind,id,decision){
   const item=financeOverviewItem_(kind,id),own=String(state.data&&state.data.user&&state.data.user.employeeId||'');
   if(!item||item.status!=='承認待ち'||String(item.employeeId||'')===own){showToast('承認できる申請ではありません。最新の情報を確認してください。');return;}
   const title=decision==='APPROVE'?'申請を承認':'申請を差戻し';
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="'+title+'">'+
-    '<div class="modal-head"><h2>'+title+'</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<div class="modal-head"><h2>'+title+'</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<p>'+ (decision==='APPROVE'?'金額・証憑・会社規程を確認してから承認してください。':'差戻しの理由を入力してください。')+'</p>'+
     (financeOverviewItem_(kind,id)?financeDetailRows_(kind,financeOverviewItem_(kind,id)):'')+
     (decision==='RETURN'?'<label class="finance-field"><span>差戻し理由（必須）</span><textarea id="financeDecisionReason" maxlength="500" rows="3"></textarea></label>':'')+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeDecisionSubmitButton" type="button" class="primary-button" data-k="'+escapeHtml(kind)+'" data-id="'+escapeHtml(id)+
     '" data-decision="'+decision+'" onclick="financeSubmitDecision(this.dataset.k,this.dataset.id,this.dataset.decision)">'+title+'</button></div>'+
     '<p id="financeDecisionError" class="finance-error" role="alert" hidden></p></section>';
@@ -870,13 +873,13 @@ function financeSettlementDialog(kind,id){
   const item=financeOverviewItem_(kind,id),own=String(state.data&&state.data.user&&state.data.user.employeeId||'');
   if(!item||item.status!=='承認済'||String(item.employeeId||'')===own){showToast('精算できる申請ではありません。最新の情報を確認してください。');return;}
   const today=state.data&&state.data.today||'';
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="精算確認">'+
-    '<div class="modal-head"><h2>精算済みにする</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="精算確認">'+
+    '<div class="modal-head"><h2>精算済みにする</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<p>実際の振込・出金が完了した場合のみ確定してください。この操作で銀行振込は行われません。</p>'+
     '<label class="finance-field"><span>出金・精算日</span><input id="financePaidOn" type="date" value="'+escapeHtml(today)+'"></label>'+
     (kind==='expense'?'<label class="finance-field"><span>立替者受取日（任意）</span><input id="financeReceivedOn" type="date"></label>':'')+
     '<p id="financeDecisionError" role="alert" class="finance-error" hidden></p>'+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeDecisionSubmitButton" type="button" class="primary-button" data-k="'+escapeHtml(kind)+'" data-id="'+escapeHtml(id)+'" onclick="financeSubmitSettlement(this.dataset.k,this.dataset.id)">精算確認を登録</button></div></section>';
 }
 function financeSubmitSettlement(kind,id){
