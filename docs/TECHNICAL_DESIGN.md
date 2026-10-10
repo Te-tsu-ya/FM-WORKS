@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.2  
+**文書版:** 0.17.5  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1798,3 +1798,9 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 取得結果の `header.id` が要求IDと一致することもクライアントで検査する。これは防御的検査であり、認証・認可の代替にはしない。
 - 新設 `scripts/test_document_history.mjs` は、遅延レスポンス、遅延エラー、ダブルクリック、一覧更新、別ユーザーへの切替、異なるIDの応答、通信失敗後の再取得をNode VMで再現。既存の `scripts/test_quote_integration.mjs` から読み込み、CI・Deploy双方の書類発行ゲートに含める。
 
+## v0.17.5 見積明細の差分書込とDB I/O改善（2026-10-10）
+
+- `Quotes.gs:quoteReplaceDetails_` は対象見積ID列のみ1回読取、物理行番号を収集する。既存の行と新しい配列の共通部分は連続した行番号ごとに `setValues` で一括更新する。
+- 新しい明細が少ない場合だけ不要な行を末尾側から `deleteRows(start,count)` で削除し、他見積行の順序と値を保つ。行が増える場合だけ追加分の `setValues` を1回行う。新規見積と既存見積のDB形式は不変。
+- `logPerformance_('quoteDetailSave',...)` に過去/新行数、書込・削除ブロック数、計測所要時間を記録する（個人情報・取引先名・品目の文字列は記録しない）。
+- 既存 `scripts/test_quote_integration.mjs` のSheetモックに `deleteRows` と書込回数計測を加え、21行全更新、21→2行、行が交互に存在する他見積の保護を回帰確認する。アプリのバージョン文字列を 0.17.5 に統一する。
