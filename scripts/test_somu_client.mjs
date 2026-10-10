@@ -96,4 +96,40 @@ evaluate("somuDemo(true)");
 const count=calls.length;
 evaluate("somuOpenForm('asset')");
 assert.equal(calls.length,count,'demo does not write');
-console.log('PASS SOMU client: save, idempotent submit, refresh, return, return reason, loan preselection, demo isolation');
+// Render a large (synthetic) inventory with at most 60 nodes per screen, without server calls.
+evaluate("somuDemo(false)");
+const largeAssets=Array.from({length:305},(_,i)=>({
+ id:'AST-'+i,code:'TEST-'+String(i).padStart(4,'0'),name:'架空備品'+i,location:'倉庫',
+ quantity:2,minimum:0,status:'利用中',revision:1,updatedAt:'2026-10-10 10:00:00'
+}));
+vm.runInContext('somuUi.data='+JSON.stringify({setupRequired:false,assets:largeAssets,loans:[],purchases:[],documents:[],today:'2026-10-10',canApprove:true}),ctx);
+evaluate("somuUi.loaded=true;somuUi.tab='assets';somuUi.listLimit=60;somuUi.query='';somuUi.filter='all';somuUi.selected=''");
+const firstPage=evaluate("somuPage()");
+assert.equal((firstPage.match(/class="somu-list-item/g)||[]).length,60,'render at most 60 cards');
+assert.match(firstPage,/残り245件/);
+const beforeMoreRpc=calls.length;
+evaluate("somuMore()");
+assert.equal((get('somuList').innerHTML.match(/class="somu-list-item/g)||[]).length,120);
+assert.equal(calls.length,beforeMoreRpc,'pagination must remain entirely client-side');
+evaluate("somuSearch('TEST-0304')");
+assert.equal(evaluate("somuRows('assets').length"),1);
+assert.equal(evaluate("somuUi.listLimit"),60,'search returns to first page');
+evaluate("somuUi.query='';somuUi.loadedAt=Date.now()");
+const beforeLocalCache=calls.length;
+evaluate("somuLoad(false)");
+assert.equal(calls.length,beforeLocalCache,'fresh local data makes reentry without any RPC');
+evaluate("somuUi.loadedAt=Date.now()-46000");
+const previousData=evaluate("somuUi.data");
+evaluate("somuLoad(false)");
+assert.equal(calls.at(-1).api,'getSomuWorkspace');
+assert.equal(calls.at(-1).args[1],false);
+assert.equal(evaluate("somuUi.data"),previousData,'background refresh must keep old rows');
+success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:true});
+assert.equal(evaluate("somuUi.loaded"),true);
+assert.ok(evaluate("somuUi.loadedAt")>0);
+evaluate("somuLoad(true)");
+assert.equal(calls.at(-1).args[1],true,'explicit reload bypasses server cache');
+failure({message:'Synthetic network outage'});
+assert.equal(evaluate("somuUi.loaded"),true,'failed refresh keeps existing dataset');
+assert.ok(evaluate("somuUi.data"));
+console.log('PASS SOMU client: saves, lending, return reason, demo, 60-row paging, local cache and resilient refresh');

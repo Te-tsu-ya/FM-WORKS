@@ -406,7 +406,7 @@ function officeQuickCreate(){
   else openFinanceForm(kind);
 }
 function officePage(){
-  if(typeof somuUi!=='undefined'&&(somuUi.loaded||somuUi.loading)&&typeof somuPage==='function')return somuPage();
+  if(typeof somuUi!=='undefined'&&typeof somuPage==='function')return somuPage();
   if(!officeWorkspaceAllowed())return pageHead('総務','この画面を表示する権限がありません。');
   const finance=officeFinanceAllowed_();
   return ["<div class='v15-workspace v15-general-affairs'>",

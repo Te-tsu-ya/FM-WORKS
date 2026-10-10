@@ -14,11 +14,11 @@ const headers={
  '総務購買':['購買ID','品名','数量','概算単価','希望日','申請理由','申請者ID','申請者名','状態','関連備品ID','発注日','入荷日','備考','登録日時','更新日時','送信識別子','承認者ID','承認日時'],
  '総務書類':['書類ID','書類名','分類','保管場所','HTTPSリンク','期限','備考','状態','登録者ID','登録日時','更新日時','送信識別子']
 };
-let serial=0;const logs=[],sheets={};let employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者',department:'総務'};
+let serial=0,rangeReads=0;const logs=[],sheets={},snapshotCache=new Map();let employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者',department:'総務'};
 function sheet(rows){return{
  rows,getLastRow(){return this.rows.length;},
  getRange(r,c,n,w){return{
- getDisplayValues:()=>this.rows.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w).map(v=>String(v??''))),
+ getDisplayValues:()=>{rangeReads++;return this.rows.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w).map(v=>String(v??'')));},
  setValues:values=>{for(let i=0;i<values.length;i++){if(!this.rows[r-1+i])this.rows[r-1+i]=[];for(let j=0;j<values[i].length;j++)this.rows[r-1+i][c-1+j]=values[i][j];}}
  };},
  appendRow(row){this.rows.push(row)}
@@ -28,7 +28,14 @@ const ctx=vm.createContext({
  Object,Array,Number,String,Date,RegExp,Math,JSON,Set,
  DB:{timeZone:'Asia/Tokyo'},DB_SCHEMA_SPECS:headers,
  requireSession_:()=>({employee}),assertPermission_:(who,permission)=>{if(permission!=='officeWorkspace'||!((who.role==='ADMIN')||who.department==='総務'))throw Error('権限なし')},
- Utilities:{formatDate:(d,tz,fmt)=>fmt==='yyyy-MM-dd'?'2026-10-10':'2026-10-10 10:00:00'},
+ Utilities:{formatDate:(d,tz,fmt)=>fmt==='yyyy-MM-dd'?'2026-10-10':'2026-10-10 10:00:00',
+  newBlob:raw=>({getBytes:()=>new Uint8Array(Buffer.byteLength(raw,'utf8'))})},
+ getDatabaseSpreadsheetId_:()=> 'SYNTHETIC_DB',
+ cacheJsonGet_:key=>snapshotCache.get(key)||null,
+ cacheJsonPut_:(key,value)=>{snapshotCache.set(key,JSON.parse(JSON.stringify(value)));return true;},
+ cacheRemove_:key=>{snapshotCache.delete(key);},
+ logPerformance_:()=>{},
+
  getDb_:()=>({getSheetByName:n=>sheets[n]||null}),
  schemaHeaderIssues_:(a,b)=>a.flatMap((v,i)=>v===b[i]?[]:[i]),
  safeSheetText_:(x,max)=>String(x??'').trim().slice(0,max||200),
@@ -42,10 +49,33 @@ const call=(name,...args)=>vm.runInContext(name,ctx)(...args);
 const storage=call('getSomuWorkspace','token');
 assert.equal(storage.setupRequired,false);
 assert.equal(storage.assets.length,0);
+assert.equal(storage.canApprove,true);
+const firstReadCount=rangeReads;
+assert.equal(firstReadCount,4,'cold empty workspace verifies 4 headers exactly once');
+const warmStorage=call('getSomuWorkspace','token');
+assert.equal(rangeReads,firstReadCount,'hot cache must not read the Sheets header or any rows');
+assert.equal(warmStorage.canApprove,true);
+employee={role:'USER',employeeId:'FM0040',name:'架空総務社員',department:'総務'};
+const warmStaff=call('getSomuWorkspace','token');
+assert.equal(warmStaff.canApprove,false,'approval rights must be recalculated per session');
+assert.equal(rangeReads,firstReadCount);
+employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者',department:'総務'};
+call('getSomuWorkspace','token',true);
+assert.equal(rangeReads,firstReadCount+4,'explicit refresh must bypass server cache');
+const checkedAfterForce=rangeReads;
+call('getSomuWorkspace','token');
+assert.equal(rangeReads,checkedAfterForce);
+
 const saved=call('saveSomuAsset','token',{code:'AS-001',name:'架空PC',quantity:'3',minimum:'1'});
 assert.equal(saved.ok,true);
 assert.equal(saved.record.quantity,3);
+const afterAssetWrite=rangeReads;
 assert.equal(call('getSomuWorkspace','token').assets.length,1);
+assert.equal(rangeReads,afterAssetWrite+5,'cache invalidation reads 4 headers and 1 data block only');
+const cachedAssetRead=rangeReads;
+assert.equal(call('getSomuWorkspace','token').assets[0].code,'AS-001');
+assert.equal(rangeReads,cachedAssetRead,'second read must use the snapshot cache');
+
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-001',name:'重複',quantity:1,minimum:0}),/同じ管理番号/);
 const assetId=saved.record.id;
 const loan=call('createSomuLoan','token',{assetId,borrower:'架空社員A',quantity:2,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-test-key-001'});

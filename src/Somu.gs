@@ -42,6 +42,32 @@ function somuModel_(kind){
   if(!model)throw new Error('総務機能の種類を確認してください。');
   return model;
 }
+// ScriptCache is an optional, short-lived display accelerator only.
+ // Every API still rechecks the real session and office permission.
+ // Stock, approval and return mutations always read Sheets under ScriptLock.
+const SOMU_VIEW_CACHE_TTL_SECONDS=20;
+function somuSnapshotCacheKey_(){
+  return 'fm:somu:workspace:v3:'+getDatabaseSpreadsheetId_();
+}
+function somuInvalidateSnapshot_(){
+  if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
+}
+function somuGetCachedSnapshot_(){
+  if(typeof cacheJsonGet_!=='function')return null;
+  const result=cacheJsonGet_(somuSnapshotCacheKey_());
+  return result&&result.setupRequired===false&&Array.isArray(result.assets)&&
+    Array.isArray(result.loans)&&Array.isArray(result.purchases)&&Array.isArray(result.documents)
+    ?result:null;
+}
+function somuPutCachedSnapshot_(snapshot){
+  if(typeof cacheJsonPut_!=='function')return false;
+  // CacheService has a 100 KB/item limit. Do not mistake JS UTF-16 length for UTF-8 bytes.
+  const raw=JSON.stringify(snapshot);
+  const bytes=typeof Utilities.newBlob==='function'
+    ?Utilities.newBlob(raw).getBytes().length:raw.length*3;
+  if(bytes>85000)return false;
+  return cacheJsonPut_(somuSnapshotCacheKey_(),snapshot,SOMU_VIEW_CACHE_TTL_SECONDS);
+}
 function somuStorageStatus_(){
   const db=getDb_(),missing=[];
   Object.keys(SOMU_MODELS).forEach(kind=>{
@@ -79,8 +105,9 @@ function somuPublic_(kind,item){
   delete copy.requestKey;
   return copy;
 }
-function somuRows_(kind,limit){
-  const m=somuModel_(kind),sheet=somuSheet_(kind),last=sheet.getLastRow();
+function somuRows_(kind,limit,preverifiedSheet){
+  // A previously header-verified sheet skips a second remote header read.
+  const m=somuModel_(kind),sheet=preverifiedSheet||somuSheet_(kind),last=sheet.getLastRow();
   if(last<2)return {items:[],total:0,truncated:false};
   const count=Math.max(0,last-1),max=Math.max(1,Math.min(2500,Number(limit)||1500));
   // Keep the newest entries, but do not quietly represent a partial result as complete.
@@ -101,9 +128,11 @@ function somuFind_(kind,id){
 }
 function somuWrite_(kind,target,item){
   target.sheet.getRange(target.rowNumber,1,1,somuModel_(kind).keys.length).setValues([somuArray_(kind,item)]);
+  somuInvalidateSnapshot_();
 }
 function somuNew_(kind,item){
   somuSheet_(kind).appendRow(somuArray_(kind,item));
+  somuInvalidateSnapshot_();
 }
 function somuByRequestKey_(kind,key){
   const m=somuModel_(kind),idx=m.keys.indexOf('requestKey');
@@ -124,16 +153,39 @@ function somuAudit_(employee,action,kind,id,before,after){
     operation:action,target:'総務'+kind,targetId:id,before:auditJson_(before),
     after:auditJson_(after),source:'WEB',result:'SUCCESS',note:''});
 }
-function getSomuWorkspace(token){
-  const employee=somuOperator_(token),status=somuStorageStatus_();
-  if(!status.ready)return {setupRequired:true,missing:status.missing,
-    assets:[],loans:[],purchases:[],documents:[],canApprove:employee.role==='ADMIN'};
-  const assets=somuRows_('asset',1500),loans=somuRows_('loan',2500);
-  const purchases=somuRows_('purchase',1500),documents=somuRows_('document',1500);
-  return {setupRequired:false,assets:assets.items,loans:loans.items,
+function getSomuWorkspace(token,forceFresh){
+  const started=Date.now();
+  // The session and permissions are checked even on a hot shared cache hit.
+  const employee=somuOperator_(token),canApprove=employee.role==='ADMIN';
+  const cached=forceFresh?null:somuGetCachedSnapshot_();
+  if(cached){
+    if(typeof logPerformance_==='function')
+      logPerformance_('getSomuWorkspace',started,1200,{source:'SCRIPT_CACHE',rows:cached.rowCount||0});
+    return Object.assign({},cached,{canApprove:canApprove,today:somuToday_()});
+  }
+  const status=somuStorageStatus_();
+  if(!status.ready){
+    if(typeof logPerformance_==='function')
+      logPerformance_('getSomuWorkspace',started,1200,{source:'SETUP_REQUIRED'});
+    return {setupRequired:true,missing:status.missing,
+      assets:[],loans:[],purchases:[],documents:[],canApprove:canApprove,today:somuToday_()};
+  }
+  const db=getDb_();
+  // The 4 header checks above are reused. Avoid repeating a header read
+  // for every collection, and read the newest rows at most once per sheet.
+  const assets=somuRows_('asset',1500,db.getSheetByName(SOMU_MODELS.asset.sheet));
+  const loans=somuRows_('loan',2500,db.getSheetByName(SOMU_MODELS.loan.sheet));
+  const purchases=somuRows_('purchase',1500,db.getSheetByName(SOMU_MODELS.purchase.sheet));
+  const documents=somuRows_('document',1500,db.getSheetByName(SOMU_MODELS.document.sheet));
+  const result={setupRequired:false,assets:assets.items,loans:loans.items,
     purchases:purchases.items,documents:documents.items,
     truncated:assets.truncated||loans.truncated||purchases.truncated||documents.truncated,
-    canApprove:employee.role==='ADMIN',today:somuToday_()};
+    rowCount:assets.items.length+loans.items.length+purchases.items.length+documents.items.length};
+  const cachedSuccessfully=somuPutCachedSnapshot_(result);
+  if(typeof logPerformance_==='function')
+    logPerformance_('getSomuWorkspace',started,1200,
+      {source:'SHEETS',cacheStored:cachedSuccessfully,rows:result.rowCount});
+  return Object.assign({},result,{canApprove:canApprove,today:somuToday_()});
 }
 function somuAssetFields_(p){
   const code=somuText_(p.code,'管理番号',55,true);

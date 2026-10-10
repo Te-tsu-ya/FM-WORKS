@@ -42,10 +42,11 @@ function prefetchRouteOnIntent(page){
   if(page==='schedule')loadSchedule({silent:true});
   else if(page==='worklog')loadWorklogs({silent:true});
   else if(page==='requests')loadRequests({silent:true});
+  else if(page==='office'&&typeof somuLoad==='function')somuLoad(false);
 }
 function queueRoutePrefetch(page){
   clearTimeout(routePrefetchTimer);
-  if(!['schedule','worklog','requests'].includes(page))return;
+  if(!['schedule','worklog','requests','office'].includes(page))return;
   routePrefetchTimer=setTimeout(()=>prefetchRouteOnIntent(page),220);
 }
 function startMenuPrefetch(){
