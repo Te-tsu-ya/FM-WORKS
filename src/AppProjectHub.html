@@ -80,11 +80,145 @@ function projectHubOverview_(d){
  <section class="ph-panel"><div class="ph-panel-heading"><h3>次の作業・確認事項</h3>${projectHubAction_('projectHubShowTasks_','作業一覧を見る')}</div>${d.tasks.filter(t=>Number(t.progress)<100).sort((a,b)=>String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))).slice(0,4).map(t=>`<div class="ph-next"><strong>${escapeHtml(t.title)}</strong><span>${escapeHtml(t.dueDate||'期限未設定')}・${projectHubPct_(t.progress)}</span></div>`).join('')||'<p class="ph-empty">作業計画を登録すると、次に取り組む内容を確認できます。</p>'}</section>`;
 }
 function projectHubShowTasks_(){projectHubTab_('tasks');}
-function projectHubTasks_(d){return `<section class="ph-panel"><div class="ph-panel-heading"><div><h3>計画と作業の進捗</h3><p class="ph-help">完成度と工数消化率は別の指標です。開始日・期限が全作業にそろうと日程の目安を計算します。</p></div>${d.canManage?projectHubAction_('projectHubOpenTask_','＋ 作業を追加','','primary-button'):''}</div><div class="ph-task-list">${d.tasks.map(t=>{const owner=projectHubUi.data.employees.find(e=>e.employeeId===t.ownerId);return `<article class="ph-task"><div><span class="ph-badge ${t.dueDate&&t.dueDate<d.today&&Number(t.progress)<100?'risk':''}">${escapeHtml(t.status)}</span><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(owner?owner.name:'担当未設定')}・${escapeHtml(t.startDate||'開始未設定')} 〜 ${escapeHtml(t.dueDate||'期限未設定')}・予定 ${projectHubHours_(Number(t.plannedMinutes))}</p>${projectHubProgress_(Number(t.progress),null)}<small>${escapeHtml(t.note||'')}</small></div><strong>${projectHubPct_(Number(t.progress))}</strong>${t.canEdit?projectHubAction_('projectHubOpenTask_','進捗を更新',t.id):''}${d.canManage?projectHubAction_('projectHubHideTask_','非表示',t.id):''}</article>`;}).join('')||'<p class="ph-empty">要件整理、設計、開発、テストなどの作業と予定工数を登録してください。</p>'}</div></section>`;}
+function projectHubTaskView_(view){
+ if(!['board','timeline','list'].includes(view)||projectHubUi.busy||projectHubUi.editor)return;
+ projectHubUi.taskView=view;renderPageIfActive('projects');
+}
+function projectHubTaskRow_(t,d){
+ const team=projectHubUi.data&&projectHubUi.data.employees||[];
+ const owner=team.find(x=>x.employeeId===t.ownerId),late=t.dueDate&&t.dueDate<d.today&&Number(t.progress)<100;
+ return `<article class="ph-task"><div><span class="ph-badge ${late?'risk':''}">${escapeHtml(t.status||'未着手')}</span><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(owner?owner.name:'担当未設定')}・${escapeHtml(t.startDate||'開始日未設定')} ～ ${escapeHtml(t.dueDate||'期限未設定')}・予定 ${projectHubHours_(t.plannedMinutes)}</p>${projectHubProgress_(t.progress,null)}${t.note?`<small>${escapeHtml(t.note)}</small>`:''}</div><strong>${projectHubPct_(t.progress)}</strong>${t.canEdit?projectHubAction_('projectHubOpenTask_','編集',t.id):''}${d.canManage?projectHubAction_('projectHubHideTask_','非表示',t.id):''}</article>`;
+}
+function projectHubTaskList_(d,tasks){
+ const rows=tasks||d.tasks||[];
+ return `<div class="ph-task-list">${rows.map(t=>projectHubTaskRow_(t,d)).join('')||'<p class="ph-empty">作業がありません。案件責任者が作業を追加できます。</p>'}</div>`;
+}
+function projectHubTaskBoard_(d){
+ const tasks=d.tasks||[],columns=['未着手','進行中','確認待ち','保留','完了'];
+ const team=projectHubUi.data&&projectHubUi.data.employees||[];
+ return `<div class="ph-kanban-board">${columns.map(status=>{
+  const list=tasks.filter(t=>(t.status||'未着手')===status).sort((a,b)=>String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999')));
+  return `<section class="ph-kanban-column"><h4>${escapeHtml(status)} <small>${list.length}件</small></h4>${list.map(t=>{
+   const owner=team.find(x=>x.employeeId===t.ownerId),late=t.dueDate&&t.dueDate<d.today&&Number(t.progress)<100;
+   return `<article class="ph-kanban-card ${late?'ph-is-late':''}"><div class="ph-kanban-top"><span class="ph-badge ${late?'risk':''}">${escapeHtml(t.status||'未着手')}</span>${late?'<span class="ph-warning">期限超過</span>':''}</div><h4>${escapeHtml(t.title)}</h4><p>担当：${escapeHtml(owner?owner.name:'未設定')}</p><p>期限：${escapeHtml(t.dueDate||'未設定')} / 予定 ${projectHubHours_(t.plannedMinutes)}</p>${projectHubProgress_(t.progress,null)}<div class="ph-kanban-bottom"><strong>${projectHubPct_(t.progress)}</strong>${t.canEdit?projectHubAction_('projectHubOpenTask_','編集',t.id):''}</div></article>`;
+  }).join('')||'<p class="ph-empty">作業なし</p>'}</section>`;
+ }).join('')}</div>`;
+}
+function projectHubTaskTimeline_(d){
+ const tasks=d.tasks||[],isDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||'')),day=v=>Date.parse(v+'T00:00:00Z');
+ const dated=tasks.filter(t=>isDate(t.startDate)&&isDate(t.dueDate)&&t.startDate<=t.dueDate),undated=tasks.filter(t=>!dated.includes(t));
+ if(!dated.length)return `<p class="ph-empty">工程表を表示するには、作業の開始予定日と期限を入力してください。</p>${undated.length?projectHubTaskList_(d,undated):''}`;
+ const start=Math.min(...dated.map(t=>day(t.startDate))),end=Math.max(...dated.map(t=>day(t.dueDate))),span=Math.max(86400000,end-start);
+ const ticks=Array.from({length:5},(_,i)=>new Date(start+span*i/4).toISOString().slice(5,10));
+ const today=day(d.today),showToday=Number.isFinite(today)&&today>=start&&today<=end;
+ const marker=showToday?`<i class="ph-timeline-today" style="left:${((today-start)/span*100).toFixed(2)}%" aria-label="本日"></i>`:'';
+ const header=`<div class="ph-timeline-line ph-timeline-header"><strong>作業名 / 期間</strong><div class="ph-timeline-track">${ticks.map((text,i)=>`<span style="left:${i*25}%">${escapeHtml(text)}</span>`).join('')}${marker}</div></div>`;
+ const rows=[...dated].sort((a,b)=>a.startDate.localeCompare(b.startDate)).map(t=>{
+  const left=(day(t.startDate)-start)/span*100,length=Math.max(1,(day(t.dueDate)-day(t.startDate)+86400000)/span*100);
+  const width=Math.min(100-left,length),pct=Math.max(0,Math.min(100,Number(t.progress)||0)),late=t.dueDate<d.today&&pct<100;
+  return `<div class="ph-timeline-line"><div class="ph-timeline-label"><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.startDate)} ～ ${escapeHtml(t.dueDate)}</small></div><div class="ph-timeline-track">${marker}<div class="ph-timeline-bar ${late?'ph-is-late':''}" role="img" aria-label="${escapeHtml(t.title)}・完成度${pct}%" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"><i style="width:${pct}%"></i></div></div></div>`;
+ }).join('');
+ return `<p class="ph-help">表示期間：${new Date(start).toISOString().slice(0,10)} ～ ${new Date(end).toISOString().slice(0,10)}。帯は予定期間、塗り部分は作業の完成度を表します。依存関係や休日を考慮した工程予測ではありません。</p><div class="ph-timeline-scroll"><div class="ph-timeline">${header}${rows}</div></div>${undated.length?`<div class="ph-timeline-undated"><h4>予定日が未設定の作業（${undated.length}件）</h4>${projectHubTaskList_(d,undated)}</div>`:''}`;
+}
+function projectHubTasks_(d){
+ const tasks=d.tasks||[],complete=tasks.filter(t=>Number(t.progress)>=100).length,late=tasks.filter(t=>t.dueDate&&t.dueDate<d.today&&Number(t.progress)<100).length;
+ const view=['board','timeline','list'].includes(projectHubUi.taskView)?projectHubUi.taskView:'board';
+ const options=[['board','ボード'],['timeline','工程表'],['list','一覧']];
+ return `<section class="ph-panel ph-tasks-workspace"><div class="ph-panel-heading"><div><h3>計画・進捗</h3><p class="ph-help">担当者、期限、作業の完成度を確認できます。</p></div>${d.canManage?projectHubAction_('projectHubOpenTask_','＋ 作業を追加','','primary-button'):''}</div>
+ <div class="ph-task-summary"><div><strong>${tasks.length}件</strong><small>作業総数</small></div><div><strong>${complete}件</strong><small>完了</small></div><div class="${late?'ph-is-late':''}"><strong>${late}件</strong><small>期限超過</small></div><div><strong>${projectHubPct_(d.metrics.progress)}</strong><small>作業の完成度</small></div></div>
+ <nav class="ph-display-tabs" role="group" aria-label="計画・進捗の表示方法">${options.map(([id,label])=>`<button type="button" class="${view===id?'is-active':''}" aria-pressed="${view===id}" onclick="projectHubTaskView_('${id}')">${label}</button>`).join('')}</nav>
+ ${view==='timeline'?projectHubTaskTimeline_(d):view==='list'?projectHubTaskList_(d):projectHubTaskBoard_(d)}
+ <p class="ph-help">状態を変更する場合は「編集」から保存してください。完成度と工数消化率は異なる数値です。</p></section>`;
+}
 function projectHubBars_(map){const entries=Object.entries(map||{}).sort((a,b)=>b[1]-a[1]),max=Math.max(1,...entries.map(x=>x[1]));return entries.map(([label,v])=>`<div class="ph-bar-row"><span>${escapeHtml(label)}</span><div><i style="width:${v/max*100}%"></i></div><strong>${projectHubHours_(v)}</strong></div>`).join('')||'<p class="ph-empty">工数はまだ登録されていません。</p>';}
-function projectHubEffort_(d){return `<div class="ph-metrics">${projectHubMetric_('この案件の総工数',projectHubHours_(d.metrics.actualMinutes),'既存の工数記録から自動集計')}${projectHubMetric_('予定工数',projectHubHours_(d.metrics.plannedMinutes),'案件の予算工数、未設定なら作業計画の合計')}${projectHubMetric_('残り工数',projectHubHours_(d.metrics.remainingMinutes),'マイナスは予定超過',d.metrics.remainingMinutes<0)}</div><div class="ph-overview-grid"><section class="ph-panel"><h3>作業分類別</h3>${projectHubBars_(d.byCategory)}</section><section class="ph-panel"><h3>月別の工数</h3>${projectHubBars_(Object.fromEntries(Object.entries(d.byMonth).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,6)))}</section></div><section class="ph-panel"><h3>担当者別の工数</h3><p class="ph-help">案件全体の合計は社員共有。個人別・作業明細は既存権限に合わせて ${escapeHtml(d.worklogScope)} を表示します。</p>${projectHubBars_(Object.fromEntries(d.byPerson.map(p=>[p.name+'（'+p.employeeId+'）',p.minutes])))}</section><section class="ph-panel"><div class="ph-panel-heading"><h3>工数の作業明細</h3>${projectHubAction_('projectHubRecordWork_','この案件の工数を入力','','primary-button')}</div><div class="ph-table-wrap"><table><thead><tr><th>日付</th><th>担当</th><th>作業内容</th><th>工数</th></tr></thead><tbody>${d.worklogs.map(w=>`<tr><td>${escapeHtml(w.date)}</td><td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.description)}</td><td>${projectHubHours_(w.minutes)}</td></tr>`).join('')||'<tr><td colspan="4">表示できる工数記録がありません。</td></tr>'}</tbody></table></div><p class="ph-help">最新100件を表示（閲覧できる記録 ${d.worklogDetailCount}件）。集計は全期間の有効な記録が対象です。</p></section>`;}
-function projectHubResources_(d){return `<section class="ph-panel"><div class="ph-panel-heading"><div><h3>この案件の資料</h3><p class="ph-help">案件資料は社員共有です。本文を保存するか、Google Driveなどの原本リンクを登録できます。</p></div>${projectHubAction_('projectHubOpenResource_','＋ 資料を追加','','primary-button')}</div>${d.resources.map(r=>`<details class="ph-resource" data-form-section="ph-resource-${escapeHtml(r.id)}"><summary><span class="ph-resource-icon">文</span><span><strong>${escapeHtml(r.title)}</strong><small>${escapeHtml(r.kind)}・第${Number(r.revision)}版・${escapeHtml(r.updatedAt)}</small></span></summary><div><p class="ph-body">${escapeHtml(r.body||'本文なし')}</p>${r.url?`<a class="secondary-button" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">原本を開く ↗</a>`:''}${r.canEdit?projectHubAction_('projectHubOpenResource_','資料を編集',r.id)+projectHubAction_('projectHubHideResource_','非表示',r.id):''}</div></details>`).join('')||'<p class="ph-empty">要件定義書・技術設計書・議事録・成果物を、ここにまとめてください。</p>'}</section>`;}
-function projectHubUpdates_(d){return `<section class="ph-panel"><div class="ph-panel-heading"><div><h3>共有メモ・決定事項</h3><p class="ph-help">相談、進捗、決定事項、次の対応を案件に残します。新しい投稿は「更新」で確認できます。</p></div>${projectHubAction_('projectHubOpenUpdate_','＋ 共有する','','primary-button')}</div>${d.updates.map(u=>`<article class="ph-update"><header><strong>${escapeHtml(u.authorName)}</strong><span class="ph-badge">${escapeHtml(u.kind)}</span><time>${escapeHtml(u.createdAt)}</time></header><p class="ph-body">${escapeHtml(u.body)}</p></article>`).join('')||'<p class="ph-empty">「テストをお願いします」「仕様はこの案で決定」などを、案件内で共有できます。</p>'}<p class="ph-help">最新60件を表示。共有メモは追記方式です。</p></section>`;}
+function projectHubEffort_(d){
+ const m=d.metrics||{},hasPlan=m.plannedMinutes!=null&&Number(m.plannedMinutes)>0;
+ const usage=hasPlan?Math.round(Number(m.actualMinutes||0)/Number(m.plannedMinutes)*100):null;
+ const progress=m.progress==null?'未設定':projectHubPct_(m.progress),usageText=usage==null?'予定未設定':usage+'%';
+ const categories=d.byCategory||{},months=Object.fromEntries(Object.entries(d.byMonth||{}).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,6));
+ const people=Object.fromEntries((d.byPerson||[]).map(p=>[p.name+'（'+p.employeeId+'）',p.minutes]));
+ const worklogs=d.worklogs||[];
+ const remaining=m.remainingMinutes==null?'未設定':projectHubHours_(m.remainingMinutes);
+ return `<section class="ph-effort-workspace"><div class="ph-panel ph-effort-hero"><div class="ph-panel-heading"><div><h3>工数の実績と計画</h3><p class="ph-help">作業の完成度と工数の消化率を分けて表示します。</p></div>${projectHubAction_('projectHubRecordWork_','＋ この案件の工数を入力','','primary-button')}</div>
+ <div class="ph-metrics">${projectHubMetric_('実績工数',projectHubHours_(m.actualMinutes),'既存の有効な工数記録から集計')}${projectHubMetric_('予定工数',projectHubHours_(m.plannedMinutes),'案件の計画、未設定なら作業計画の合計')}${projectHubMetric_('残り工数',remaining,'予定 − 実績。マイナスは予定超過',m.remainingMinutes!=null&&m.remainingMinutes<0)}${projectHubMetric_('工数消化率',usageText,'実績 ÷ 予定。作業の完成度とは異なります',usage!=null&&usage>100)}</div>
+ <div class="ph-effort-comparison"><div><span>作業の完成度</span><strong>${progress}</strong><div class="ph-progress"><span style="width:${Math.max(0,Math.min(100,Number(m.progress)||0))}%"></span></div></div><div><span>工数消化率</span><strong>${usageText}</strong><div class="ph-progress ${usage!=null&&usage>100?'ph-effort-over':''}"><span style="width:${Math.max(0,Math.min(100,usage||0))}%"></span></div></div></div>
+ ${!hasPlan?'<p class="ph-help">予定工数が未設定のため、消化率は計算しません。計画・受注情報または作業計画に時間を登録してください。</p>':''}</div>
+ <div class="ph-overview-grid"><section class="ph-panel"><h3>作業分類別</h3>${projectHubBars_(categories)}</section><section class="ph-panel"><h3>最近6か月の工数</h3>${projectHubBars_(months)}</section></div>
+ <section class="ph-panel"><h3>担当者別の工数</h3><p class="ph-help">個人別工数は既存の閲覧権限を適用しています。表示範囲：${escapeHtml(d.worklogScope||'本人のみ')}。案件の総工数には閲覧権限外の記録も含まれる場合があります。</p>${projectHubBars_(people)}</section>
+ <section class="ph-panel"><div class="ph-panel-heading"><div><h3>工数の記録</h3><p class="ph-help">最新100件を表示（閲覧できる記録 ${Number(d.worklogDetailCount)||0}件）。集計値は全期間の有効な記録です。</p></div></div><div class="ph-table-wrap"><table class="ph-worklog-table"><thead><tr><th>日付</th><th>担当</th><th>分類</th><th>作業内容</th><th>工数</th></tr></thead><tbody>${worklogs.map(w=>`<tr><td>${escapeHtml(w.date)}</td><td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.category||'未分類')}</td><td>${escapeHtml(w.description)}</td><td><strong>${projectHubHours_(w.minutes)}</strong></td></tr>`).join('')||'<tr><td colspan="5">閲覧できる工数記録がありません。</td></tr>'}</tbody></table></div></section></section>`;
+}
+function projectHubResourceFilter_(kind){
+ const kinds=['all','要件定義書','技術設計書','議事録','契約・受注','成果物','その他'];
+ if(!kinds.includes(kind)||projectHubUi.busy||projectHubUi.editor)return;
+ projectHubUi.resourceFilter=kind;renderPageIfActive('projects');
+}
+function projectHubResourceQuery_(value){
+ projectHubUi.resourceQuery=String(value||'');
+ const d=projectHubDetail_(),list=document.getElementById('phResourceResults'),count=document.getElementById('phResourceCount');
+ if(d&&list)list.innerHTML=projectHubResourceRows_(d);
+ if(d&&count)count.textContent=projectHubResourceMatches_(d).length+'件の資料';
+}
+function projectHubResourceMatches_(d){
+ const kind=projectHubUi.resourceFilter||'all',q=String(projectHubUi.resourceQuery||'').trim().toLocaleLowerCase();
+ return (d.resources||[]).filter(r=>(kind==='all'||r.kind===kind)&&(!q||[r.title,r.kind,r.body].join(' ').toLocaleLowerCase().includes(q))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+}
+function projectHubResourceRows_(d){
+ const files=projectHubResourceMatches_(d);
+ return files.map(r=>{
+ const safeUrl=/^https:\/\/[^\s]+$/i.test(String(r.url||''))?r.url:'';
+ return `<details class="ph-resource" data-form-section="ph-resource-${escapeHtml(r.id)}"><summary><span class="ph-resource-icon" aria-hidden="true">文</span><span class="ph-resource-caption"><strong>${escapeHtml(r.title)}</strong><small>${escapeHtml(r.kind)} ・第${Number(r.revision)||1}版 ・更新 ${escapeHtml(r.updatedAt||'未設定')}</small></span><span class="ph-resource-open" aria-hidden="true">詳細 ›</span></summary><div class="ph-resource-body"><p class="ph-body">${escapeHtml(r.body||'本文は登録されていません。原本リンクがあればそちらを確認してください。')}</p><div class="ph-resource-actions">${safeUrl?`<a class="secondary-button" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">原本の資料を開く ↗</a>`:''}${r.canEdit?projectHubAction_('projectHubOpenResource_','編集する',r.id)+projectHubAction_('projectHubHideResource_','非表示にする',r.id):''}</div></div></details>`;
+ }).join('')||'<p class="ph-empty">条件に合う資料がありません。検索語や分類を変更してください。</p>';
+}
+function projectHubCreateResourceKind_(kind){
+ if(projectHubUi.busy)return;
+ if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
+ projectHubOpenResource_('');
+ const e=projectHubUi.editor;
+ if(e&&e.kind==='resource'&&['要件定義書','技術設計書','議事録','契約・受注','成果物','その他'].includes(kind)){
+  e.form.resourceKind=kind;renderPageIfActive('projects');
+ }
+}
+function projectHubResources_(d){
+ const all=d.resources||[],kinds=['要件定義書','技術設計書','議事録','契約・受注','成果物','その他'],active=projectHubUi.resourceFilter||'all';
+ const folder=(kind,label,count)=>`<button type="button" class="ph-resource-folder ${active===kind?'is-active':''}" aria-pressed="${active===kind}" onclick="projectHubResourceFilter_('${kind}')"><span>${escapeHtml(label)}</span><strong>${count}件</strong></button>`;
+ return `<section class="ph-panel ph-resource-workspace"><div class="ph-panel-heading"><div><h3>資料・設計文書</h3><p class="ph-help">案件にひも付く文書本文と、Google Driveなどの原本リンクを分類して保存します。</p></div>${projectHubAction_('projectHubOpenResource_','＋ 資料を追加','','primary-button')}</div>
+ <div class="ph-resource-columns"><nav class="ph-resource-categories" aria-label="資料の分類"><h4>分類から探す</h4>${folder('all','すべての資料',all.length)}${kinds.map(k=>folder(k,k,all.filter(r=>r.kind===k).length)).join('')}<p class="ph-help">分類は既存の資料種別を使用します。新しい保存用フォルダは作りません。</p></nav>
+ <div class="ph-resource-main"><div class="ph-resource-toolbar"><label class="ph-search"><span>資料を検索</span><input type="search" id="phResourceSearch" placeholder="タイトル・本文・キーワード" value="${escapeHtml(projectHubUi.resourceQuery||'')}" oninput="projectHubResourceQuery_(this.value)" autocomplete="off"></label><span id="phResourceCount" class="ph-help">${projectHubResourceMatches_(d).length}件の資料</span></div><div id="phResourceResults">${projectHubResourceRows_(d)}</div></div></div>
+ <div class="ph-resource-template-row"><h4>よく使う文書から作る</h4>${['要件定義書','技術設計書','議事録'].map(k=>`<button type="button" class="secondary-button" onclick="projectHubCreateResourceKind_('${k}')">＋ ${k}</button>`).join('')}</div></section>`;
+}
+function projectHubUpdateType_(kind){
+ if(!['all','共有','進捗','相談','決定事項'].includes(kind)||projectHubUi.busy||projectHubUi.editor)return;
+ projectHubUi.updateFilter=kind;renderPageIfActive('projects');
+}
+function projectHubUpdateQuery_(value){
+ projectHubUi.updateQuery=String(value||'');
+ const d=projectHubDetail_(),list=document.getElementById('phUpdateResults'),count=document.getElementById('phUpdateCount');
+ if(d&&list)list.innerHTML=projectHubUpdateFeed_(d);
+ if(d&&count)count.textContent=projectHubUpdateVisible_(d).length+'件を表示';
+}
+function projectHubUpdateVisible_(d){
+ const kind=projectHubUi.updateFilter||'all',q=String(projectHubUi.updateQuery||'').trim().toLocaleLowerCase();
+ return (d.updates||[]).filter(u=>(kind==='all'||u.kind===kind)&&(!q||[u.kind,u.body,u.authorName].join(' ').toLocaleLowerCase().includes(q)));
+}
+function projectHubUpdateFeed_(d){
+ const posts=projectHubUpdateVisible_(d);
+ return posts.map(u=>`<article class="ph-update ph-feed-entry"><header><span class="ph-update-avatar" aria-hidden="true">${escapeHtml(String(u.authorName||'社').slice(0,1))}</span><strong>${escapeHtml(u.authorName||'投稿者')}</strong><span class="ph-badge">${escapeHtml(u.kind||'共有')}</span><time>${escapeHtml(u.createdAt||'')}</time></header><p class="ph-body">${escapeHtml(u.body)}</p></article>`).join('')||'<p class="ph-empty">該当する共有メモがありません。分類や検索語を変更してください。</p>';
+}
+function projectHubUpdateQuick_(kind){
+ if(projectHubUi.busy)return;
+ if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
+ projectHubOpenUpdate_();
+ const e=projectHubUi.editor;
+ if(e&&e.kind==='update'&&['共有','進捗','相談','決定事項'].includes(kind)){e.form.updateKind=kind;renderPageIfActive('projects');}
+}
+function projectHubUpdates_(d){
+ const posts=d.updates||[],kinds=[['all','すべて'],['共有','共有'],['進捗','進捗'],['相談','相談'],['決定事項','決定事項']],decisions=posts.filter(x=>x.kind==='決定事項').slice(0,4);
+ return `<section class="ph-panel ph-updates-workspace"><div class="ph-panel-heading"><div><h3>共有メモ・決定事項</h3><p class="ph-help">仕様の決定、相談、進捗を時系列で残します。投稿は追記方式で、更新から最新情報を取得できます。</p></div>${projectHubAction_('projectHubOpenUpdate_','＋ 共有メモ','','primary-button')}</div>
+ <div class="ph-updates-summary"><div><strong>${posts.length}件</strong><small>最近の投稿（最大60件）</small></div><div><strong>${posts.filter(x=>x.kind==='決定事項').length}件</strong><small>決定事項</small></div><button type="button" class="secondary-button" onclick="projectHubUpdateQuick_('決定事項')">＋ 決定事項を記録</button></div>
+ <div class="ph-updates-grid"><div class="ph-updates-feed"><div class="ph-updates-controls"><label class="ph-search"><span>メモを検索</span><input id="phUpdateSearch" type="search" placeholder="キーワード・投稿者" autocomplete="off" value="${escapeHtml(projectHubUi.updateQuery||'')}" oninput="projectHubUpdateQuery_(this.value)"></label><span class="ph-help" id="phUpdateCount">${projectHubUpdateVisible_(d).length}件を表示</span></div><nav class="ph-display-tabs" aria-label="共有メモの分類">${kinds.map(([id,label])=>`<button type="button" class="${(projectHubUi.updateFilter||'all')===id?'is-active':''}" aria-pressed="${(projectHubUi.updateFilter||'all')===id}" onclick="projectHubUpdateType_('${id}')">${label}</button>`).join('')}</nav><div id="phUpdateResults">${projectHubUpdateFeed_(d)}</div></div>
+ <aside class="ph-decisions-panel"><h4>最近の決定事項</h4>${decisions.map(u=>`<div class="ph-decision"><span>${escapeHtml(u.createdAt||'')}</span><p>${escapeHtml(String(u.body||'').slice(0,140))}</p></div>`).join('')||'<p class="ph-empty">決定事項が登録されるとここに表示されます。</p>'}<p class="ph-help">重要度の自動判定ではなく、投稿種別「決定事項」の新着を表示します。</p></aside></div>
+ <p class="ph-help">共有メモは最新60件まで取得します。過去のメモが必要な場合は今後の履歴機能の対象です。</p></section>`;
+}
 function projectHubVisibleProjects_(){
  const ui=projectHubUi,projects=ui.data&&ui.data.projects||[],q=String(ui.query||'').trim().toLocaleLowerCase();
  return projects.filter(p=>{

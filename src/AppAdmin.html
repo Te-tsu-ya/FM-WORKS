@@ -125,22 +125,44 @@ function projectAdminSection(){
   return '<div class="section-gap">'+card('プロジェクト管理','<div class="card-toolbar"><p class="muted">工数入力で利用するプロジェクトを管理します。停止・完了した案件は新規工数の選択肢から外れます。</p><button class="primary-button" onclick="openProjectModal()">＋ プロジェクト追加</button></div>'+(rows?'<div class="table-wrap panel-scroll"><table class="auth-table"><thead><tr><th>プロジェクト</th><th>顧客</th><th>状態</th><th>開始</th><th>終了</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="muted">プロジェクトが登録されていません。</p>'))+'</div>';
 }
 function openProjectModal(projectId){
-  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){showToast('管理者権限が必要です');return;}
-  const p=projectId&&state.authAdmin?(state.authAdmin.projects||[]).find(x=>x.projectId===projectId):null;
-  const r=ensureModal();
-  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle"><div class="modal-head"><div><small>プロジェクトマスタ</small><h2 id="projectModalTitle">'+(p?'プロジェクトを編集':'プロジェクトを追加')+'</h2></div><button class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト名</span><input id="prjName" maxlength="120" value="'+escapeHtml(p?p.name:'')+'" placeholder="例：Project Atlas"></label><label class="field"><span>顧客表示名</span><input id="prjClient" maxlength="100" value="'+escapeHtml(p?p.client:'')+'" placeholder="例：顧客A"></label><label class="field"><span>ステータス</span><select id="prjStatus"><option '+(!p||p.status==='進行中'?'selected':'')+'>進行中</option><option '+(p&&p.status==='停止'?'selected':'')+'>停止</option><option '+(p&&p.status==='完了'?'selected':'')+'>完了</option></select></label><label class="field"><span>開始日</span><input id="prjStart" type="date" value="'+escapeHtml(p?p.startDate:'')+'"></label><label class="field"><span>終了日</span><input id="prjEnd" type="date" value="'+escapeHtml(p?p.endDate:'')+'"></label><label class="field full"><span>備考</span><textarea id="prjNote" maxlength="500" rows="3">'+escapeHtml(p?p.note:'')+'</textarea></label></div><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="saveProjectFromModal(\''+(p?p.projectId:'')+'\')">保存</button></div></div></section>';
+ if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){showToast('管理者権限が必要です');return;}
+ const p=projectId&&state.authAdmin?(state.authAdmin.projects||[]).find(x=>x.projectId===projectId):null;
+ const r=ensureModal(),status=p&&p.status||'進行中';
+ r.innerHTML=`<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card ph-project-modal" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
+ <div class="modal-head"><div><small>プロジェクトマスタ</small><h2 id="projectModalTitle">${p?'案件情報を編集':'新しい案件を登録'}</h2><p class="ph-help">最初は案件名だけで登録できます。顧客・日付などは後から変更できます。</p></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>
+ <form id="projectMasterForm" data-project-id="${escapeHtml(p?p.projectId:'')}" onsubmit="event.preventDefault();saveProjectFromModal(this.dataset.projectId)">
+ <div class="ph-master-primary"><label class="field full"><span>案件名 <em>必須</em></span><input id="prjName" maxlength="120" required autocomplete="off" value="${escapeHtml(p?p.name:'')}" placeholder="例：社内業務システム開発"></label>
+ <label class="field"><span>顧客・依頼元</span><input id="prjClient" maxlength="100" value="${escapeHtml(p?p.client:'')}" placeholder="例：社内 / 株式会社〇〇"></label>
+ <label class="field"><span>状態</span><select id="prjStatus">${['進行中','停止','完了'].map(v=>`<option value="${v}" ${status===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
+ <details class="ph-master-more" data-form-section="project-master-more" ${p?'open':''}><summary>期間・備考を設定する（任意）</summary><div class="form-grid">
+ <label class="field"><span>開始日</span><input id="prjStart" type="date" value="${escapeHtml(p?p.startDate:'')}"></label>
+ <label class="field"><span>終了予定日</span><input id="prjEnd" type="date" value="${escapeHtml(p?p.endDate:'')}"></label>
+ <label class="field full"><span>備考・目的</span><textarea id="prjNote" maxlength="500" rows="3" placeholder="この案件の目的や注意点">${escapeHtml(p?p.note:'')}</textarea></label>
+ </div></details><p id="projectMasterError" class="ph-error" role="alert"></p>
+ <div class="modal-actions"><span></span><div><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button><button id="prjSaveButton" type="submit" class="primary-button">${p?'変更を保存':'登録して案件を開く'}</button></div></div></form></section>`;
 }
 function saveProjectFromModal(projectId){
-  const payload={projectId:projectId||'',name:document.getElementById('prjName').value,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:document.getElementById('prjStart').value,endDate:document.getElementById('prjEnd').value,note:document.getElementById('prjNote').value};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    closeModal();showToast('プロジェクトを保存しました');
-    invalidatePageCache('worklog','authAdmin');
-    if(state.data)state.data.projects=[];
-    if(state.page==='projects'&&typeof loadProjectHub==='function'){if(result&&result.projectId)projectHubUi.selected=result.projectId;projectHubInvalidate_();loadProjectHub({force:true});}
-    else loadAuthAdmin({force:true,scope:'projects'});
-  }).withFailureHandler(err=>handleApiError(err,'プロジェクトを保存できませんでした')).saveProject(state.sessionToken,payload);
+ const input=document.getElementById('prjName'),button=document.getElementById('prjSaveButton'),error=document.getElementById('projectMasterError');
+ if(!input||!button||button.disabled)return;
+ const name=input.value.trim(),start=document.getElementById('prjStart').value,end=document.getElementById('prjEnd').value;
+ if(!name){if(error)error.textContent='案件名を入力してください。';input.focus();return;}
+ if(start&&end&&start>end){if(error)error.textContent='終了予定日は開始日以降にしてください。';document.getElementById('prjEnd').focus();return;}
+ const payload={projectId:projectId||'',name,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:start,endDate:end,note:document.getElementById('prjNote').value};
+ button.disabled=true;button.textContent='保存しています…';if(error)error.textContent='';
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  if(!result||result.ok!==true){button.disabled=false;button.textContent='保存する';if(error)error.textContent='保存結果を確認できませんでした。更新して内容をご確認ください。';return;}
+  closeModal();showToast('プロジェクトを保存しました');
+  invalidatePageCache('worklog','authAdmin');
+  if(state.data)state.data.projects=[];
+  if(state.page==='projects'&&typeof loadProjectHub==='function'){
+   if(result.projectId)projectHubUi.selected=result.projectId;
+   projectHubUi.view='detail';projectHubUi.tab='overview';projectHubInvalidate_();loadProjectHub({force:true});
+  }else loadAuthAdmin({force:true,scope:'projects'});
+ }).withFailureHandler(err=>{
+  button.disabled=false;button.textContent=projectId?'変更を保存':'登録して案件を開く';
+  if(error)error.textContent=cleanApiErrorMessage(err,'プロジェクトを保存できませんでした。');
+ }).saveProject(state.sessionToken,payload);
 }
-
 function inlineMarkdown(text){
   let s=escapeHtml(text);
   s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
