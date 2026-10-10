@@ -2144,3 +2144,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 月別のplanIn/planOut/actualIn/actualOut はnull=未入力、0=入力済0円。月のどちらか一方が入力された場合、もう一方は0円で計算。月の両方が未入力の場合、以降の残高は不明とする。
 - 計画・実績・実績優先見込みを期首から累積し、最初の赤字見込み月を検出する。別期の期首残高は自動入力しない。
 - 1年分を単一シート行に保存、ScriptLock・改訂番号確認・送信識別子の再送厳密照合・書込み後の読み戻し・監査エラー通知を実施。テスト scripts/test_cashflow.mjs。
+
+### v0.21.0 UI接続と一時状態
+- AppCashFlow.html / StylesCashFlow.htmlをIndexへ追加し、AppFinance.htmlからcashFlowWorkspace権限に限って遷移する。serverのrequireAdminSession_は独立して必須。
+- resetFinanceUiによりlogout時に資金繰りのメモリ内草稿を破棄。API応答はセッション/年度/要求通番が一致するときだけ利用。
+- 画面でcashFlowCalc_を用い、計画/実績/実績優先見込みの12か月累積を表示し、SVGグラフを即時更新する。備考はescapeHtmlでエスケープ。
+- FMRotaryRPCの保存は同じrequestKeyで安全に再試行し、成功後は再読込で確認。失敗時は草稿を保持する。

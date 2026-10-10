@@ -4,6 +4,7 @@ const FINANCE_READ_TTL=300000;
 let financeVisual={query:'',status:'ALL',match:'ALL',month:''};
 let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,insightMode:false,insights:null,insightYear:new Date().getFullYear(),insightLoading:false,insightError:'',insightQuery:'',insightPayer:'',travelEstimate:null,invoiceIssuer:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 function resetFinanceUi(){
+  if(typeof resetCashFlowUi==='function')resetCashFlowUi();
   financeActiveForm=null;
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
   financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,insightMode:false,insights:null,insightYear:new Date().getFullYear(),insightLoading:false,insightError:'',insightQuery:'',insightPayer:'',travelEstimate:null,invoiceIssuer:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
@@ -793,6 +794,7 @@ function financeOverviewRows(kind){
 }
 function financePage(){
   if(!financeAccessAllowed())return pageHead('経理','この画面を表示する権限がありません。');
+  if(typeof cashFlowUi!=='undefined'&&cashFlowUi.open)return cashFlowPage_();
   if(financeUi.insightMode)return financeInsightsPage();
   const original=financeUi.overview, demo=!!financeUi.demo,d=financeDisplayedOverview_(),
     tab=financeUi.tab,ready=!!(d&&!d.setupRequired),totals=d&&d.totals||{};
@@ -844,6 +846,7 @@ function financePage(){
       '<div class="finance-hero-actions">'+
       '<button type="button" class="secondary-button" onclick="navigate(\'requests\')">自分の経費・出張を申請</button>'+
       '<button type="button" class="secondary-button" onclick="financeOpenInsights()">支出分析・旧台帳</button>'+
+      (state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace?'<button type="button" class="secondary-button" onclick="cashFlowOpen_()">年間資金繰り表</button>':'')+
       '<button type="button" class="secondary-button finance-demo-toggle" aria-pressed="'+(demo?'true':'false')+
       '" onclick="financeToggleDemo()">'+(demo?'実データに戻る':'サンプル表示')+'</button>'+
       '<button type="button" class="primary-button" onclick="openFinanceForm(\'receipt\')"'+
