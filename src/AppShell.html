@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,companyDocs:companyDocsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   const update=()=>{
     const previouslyFocused=document.activeElement;
@@ -121,6 +121,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
   resetFinanceUi();
   resetQuoteUi();
+  if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();
   invalidateMonthlyResultCache();
   state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
@@ -169,6 +170,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
   if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
+  if(state.page==='companyDocs')loadCompanyDocs();
 
   if(state.page==='monthly')loadMonthly();
   if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
