@@ -67,6 +67,14 @@ assert.equal(Number(call('getSomuWorkspace','token').assets[0].quantity),3);
 const doc=call('saveSomuDocument','token',{name:'架空書類',category:'規程',location:'共有',url:'https://example.com/doc',requestKey:'somu-test-key-004'});
 assert.equal(doc.ok,true);
 assert.throws(()=>call('saveSomuDocument','token',{name:'不正URL',url:'javascript:alert(1)',requestKey:'somu-test-key-005'}),/https/);
+// Edge cases: Japanese date display, rejected dates and department-vs-admin approval.
+const slashRow=['LON-DATE','AS-A','FA-001','架空利用者','1','2026/10/01','2026/10/09','','貸出中','','FM0001','','',''];
+assert.equal(call('somuRecord_','loan',slashRow).dueDate,'2026-10-09');
+assert.throws(()=>call('somuCount_','-1','数量',0,100),/整数/);
+assert.throws(()=>call('createSomuLoan','token',{assetId,borrower:'架空社員',quantity:1,loanDate:'2026-10-20',dueDate:'2026-10-10',requestKey:'somu-test-key-006'}),/以降/);
+const secondRequest=call('createSomuPurchase','token',{name:'架空文具',quantity:2,reason:'補充',requestKey:'somu-test-key-007'});
+employee={role:'USER',employeeId:'FM0088',name:'架空総務担当',department:'総務'};
+assert.throws(()=>call('advanceSomuPurchase','token',secondRequest.record.id,'APPROVE',''),/管理者のみ/);
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);
