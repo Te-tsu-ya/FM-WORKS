@@ -10,7 +10,12 @@ function documentArray_(obj){return DOCUMENT_KEYS.map(key=>obj[key]==null?'':obj
 function documentRows_(){const sh=documentSheet_('関連書類'),last=sh.getLastRow();return last<2?[]:sh.getRange(2,1,last-1,DOCUMENT_KEYS.length).getDisplayValues().map(documentObject_);}
 function documentFind_(id){const sh=documentSheet_('関連書類'),last=sh.getLastRow();if(last<2)throw new Error('書類が見つかりません。');const found=sh.getRange(2,1,last-1,1).createTextFinder(String(id)).matchEntireCell(true).findNext();if(!found)throw new Error('書類が見つかりません。');const rowNumber=found.getRow(),raw=sh.getRange(rowNumber,1,1,DOCUMENT_KEYS.length).getDisplayValues()[0];if(raw[0]!==id)throw new Error('書類が移動されました。もう一度お試しください。');return {sheet:sh,rowNumber,record:documentObject_(raw)};}
 function documentForUser_(user,record){if(!quoteIsAdmin_(user)&&String(record.ownerId)!==String(user.employeeId))throw new Error('この書類の閲覧権限がありません。');return record;}
-function documentListForUser_(user){if(!documentStorageStatus_().ready)return [];return documentRows_().filter(x=>quoteIsAdmin_(user)||x.ownerId===user.employeeId).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0,250).map(x=>{const {linesJson,...y}=x;return y;});}
+function documentListForUser_(user,storageAlreadyValidated){
+  if(!storageAlreadyValidated&&!documentStorageStatus_().ready)return [];
+  return documentRows_().filter(x=>quoteIsAdmin_(user)||x.ownerId===user.employeeId)
+    .sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0,250)
+    .map(x=>{const {linesJson,...y}=x;return y;});
+}
 function documentSnapshot_(record){let lines;try{lines=JSON.parse(record.linesJson);}catch(_){throw new Error('明細の読み込みに失敗しました。');}if(!Array.isArray(lines)||!lines.length||lines.length>QUOTE_MAX_LINES)throw new Error('明細の保存内容が不正です。');return {header:record,lines};}
 function getRelatedDocument(sessionToken,id){const user=quoteUser_(sessionToken);return documentSnapshot_(documentForUser_(user,documentFind_(String(id)).record));}
 function documentForm_(kind,p){documentType_(kind);const documentDate=financeDate_(p.documentDate,'発行日',true);let dueDate='',paidDate='';if(kind==='invoice')dueDate=financeDate_(p.dueDate,'支払期限',true);if(kind==='delivery')dueDate=financeDate_(p.dueDate,'納品日',true);if(kind==='receipt'){if(p.paidConfirmed!==true)throw new Error('領収書は入金を確認してから発行してください。');paidDate=financeDate_(p.paidDate,'入金日',true);if(paidDate>documentDate)throw new Error('入金日は発行日以前にしてください。');}return {documentDate,dueDate,paidDate,note:quoteText_(p.note,'備考',850,false)};}
