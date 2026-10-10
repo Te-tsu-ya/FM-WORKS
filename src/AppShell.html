@@ -120,6 +120,7 @@ function acceptLogin(result){
 function mountAuthenticatedApp(data,mustChangePin){
   resetLeaveDemoSession();
   resetFinanceUi();
+  if(typeof somuReset==='function')somuReset();
   resetQuoteUi();
   if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();
   invalidateMonthlyResultCache();
@@ -170,6 +171,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
   if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
+  if(state.page==='office'&&typeof somuLoad==='function')somuLoad(false);
   if(state.page==='companyDocs')loadCompanyDocs();
 
   if(state.page==='monthly')loadMonthly();
