@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.20.2
+**文書版:** 0.20.3
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.20.2`
+`APP.version = 0.20.3`
 
 DBスキーマ: 16。  
 認証スキーマ: 3。  
@@ -2130,3 +2130,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - If audit append fails after successful schema verification, the function returns {ok:true,changed:true,auditRecorded:false} and records a server warning. The ADMIN screen explicitly requests an audit-log check rather than suggesting the schema failed or inviting repeated migration.
 - scripts/test_schema_migration.mjs uses isolated fake sheets with no private records. It verifies unauthorized rejection, corrupt headers/backup failure with zero mutations, exact six-sheet creation, data preservation, audit ordering, repeat idempotence, audit failure signal, and safe recovery from a synthetic partial failure.
 - The CI workflow and the production deployment workflow both execute this contract test before allowing code publication. The live authenticated GAS execution and verified backend spreadsheet update remain separate acceptance evidence.
+
+## v0.20.3 工数の曖昧一致を保留
+- `projectHubWorklogOwners_` は現在名と旧名称から案件IDのSetを引く。
+- 1案件一致だけを計上し、0件を `unlinkedWorklogCount`、複数一致を `ambiguousWorklogCount` とする。
+- 案件詳細の実績と一覧の実績を同じ一意一致規則で集計する。
+- 一覧の警告に保留件数を表示。DB、古い工数、名前、アクセス権限を変更しない。
+- `scripts/test_project_hub.mjs` は競合する架空の旧名称で一覧・詳細・警告をテスト。

@@ -325,6 +325,7 @@ function projectHubPage(){
   if(data&&Array.isArray(data.advancedMissing)&&data.advancedMissing.length&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)intro+=`<aside class="ph-setup"><strong>プロジェクトの詳細管理を有効化できます</strong><p>作業別工数・添付・通知・予算を使うには、6つの管理シートをバックアップ付きで追加してください。既存の工数データは変更しません。</p><button type="button" class="secondary-button" onclick="setAdminTab('operation')">運用・労務でDB更新</button><small>${escapeHtml(data.advancedMissing.join('、'))}</small></aside>`;
  if(data&&data.setupRequired)intro+=`<aside class="ph-setup"><strong>案件データの保存先を準備してください</strong><p>管理者が「管理・設定 → 運用・労務 → DBスキーマ更新」でバックアップと更新を行います。</p><small>${escapeHtml((data.missing||[]).join('、'))}</small></aside>`;
  if(data&&data.unlinkedWorklogCount)intro+=`<details class="ph-link-warning"><summary>案件とのひも付けを確認する工数：${data.unlinkedWorklogCount}件</summary><p>現在の案件名・旧案件名に一致しない工数記録です。案件集計には含まれません。</p></details>`;
+ if(data&&data.ambiguousWorklogCount)intro+=`<details class="ph-link-warning"><summary>同名案件で集計を保留した工数：${Number(data.ambiguousWorklogCount)}件</summary><p>現在の案件名・過去の案件名が複数案件に一致しています。二重計上を防ぐため集計から除外しました。管理者が案件名を確認してください。</p></details>`;
  const error=ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}</p>`:'';
  if(view!=='detail'||!p){
   const allowed=view==='dashboard'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole;
