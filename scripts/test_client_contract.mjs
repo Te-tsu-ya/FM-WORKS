@@ -511,6 +511,65 @@ const result=vm.runInContext(`
     !document.getElementById('financeFormError').hidden&&
     !document.getElementById('financeSubmitButton').disabled);
   financeActiveForm=null;
+
+  // Risk-gate: all three entry forms must match the server's non-truncating limits.
+  financeActiveForm={kind:'expense',key:'FRONT-EXP-001',editId:'',source:{},changed:false};
+  expect('expense fields restrict input to exact server lengths',
+    financeFormField(FINANCE_FORM_FIELDS.expense.find(f=>f[0]==='vendor')).includes('maxlength="120"')&&
+    financeFormField(FINANCE_FORM_FIELDS.expense.find(f=>f[0]==='purpose')).includes('maxlength="500"'));
+  financeActiveForm={kind:'travel',key:'FRONT-TR-001',editId:'',source:{},changed:false};
+  expect('travel description and outcome have independently validated limits',
+    financeFormField(FINANCE_FORM_FIELDS.travel.find(f=>f[0]==='purpose')).includes('maxlength="600"')&&
+    financeFormField(FINANCE_FORM_FIELDS.travel.find(f=>f[0]==='outcome')).includes('maxlength="1000"'));
+  financeActiveForm={kind:'receipt',key:'FRONT-REC-001',editId:'',source:{},changed:false};
+  expect('finance receipt input is limited to the backend field length',
+    financeFormField(FINANCE_FORM_FIELDS.receipt.find(f=>f[0]==='invoiceNo')).includes('maxlength="32"')&&
+    financeFormField(FINANCE_FORM_FIELDS.receipt.find(f=>f[0]==='vendor')).includes('maxlength="120"'));
+  financeActiveForm=null;
+  resetCalls();financeUi.demo=true;
+  openFinanceForm('expense');
+  expect('sample mode forbids opening live employee expense entry',
+    financeActiveForm===null&&apiCalls.length===0);
+  financeActiveForm={kind:'expense',key:'FRONT-EXP-002',editId:'',source:{},changed:false};
+  submitFinanceForm();
+  expect('sample mode also rejects direct submit attempts without GAS RPC',apiCalls.length===0);
+  financeActiveForm=null;financeUi.demo=false;
+  financeUi.overview={setupRequired:false,expenses:[],travels:[],receipts:[],totals:{receipt:0}};
+  financeUi.at=0;financeUi.identity=financeIdentity();financeUi.revOverview=0;financeUi.loading=false;
+  resetCalls();loadFinanceOverview({force:true,silent:true});
+  expect('fresh finance overview starts a server request',financeUi.loading&&apiCalls.length===1);
+  const staleReceipt={id:'REC-RACE-001',creatorId:'FM0001',item:'保存済文具',amount:4500,
+    usedOn:'2026-10-10',vendor:'架空店舗',payer:'社員A',paid:'未'};
+  financeApplyServerSavedRecord_('receipt',{ok:true,id:staleReceipt.id,record:staleReceipt});
+  invokeServerSuccess({setupRequired:false,expenses:[],travels:[],receipts:[],totals:{receipt:0}});
+  expect('out-of-order finance read cannot erase newly saved receipt',
+    financeUi.overview.receipts[0].id===staleReceipt.id&&apiCalls.length===2&&financeUi.loading);
+  invokeServerSuccess({setupRequired:false,expenses:[],travels:[],receipts:[staleReceipt],
+    totals:{receipt:1},performance:{serverMs:12}});
+  expect('finance refresh resolves to current confirmed data after old response',
+    financeUi.overview.receipts[0].id===staleReceipt.id&&financeUi.loading===false);
+  financeUi.mine={setupRequired:false,expenses:[],travels:[]};
+  financeUi.mineAt=0;financeUi.revMine=0;financeUi.ownLoading=false;
+  resetCalls();loadMyFinanceItems({force:true,silent:true});
+  expect('own expense history request starts',financeUi.ownLoading&&apiCalls.length===1);
+  const ownSaved={id:'EXP-RACE-001',employeeId:'FM0001',employeeName:'社員A',status:'承認待ち',
+    vendor:'架空文具店',item:'文具',amount:3200,usedOn:'2026-10-10'};
+  financeApplyServerSavedRecord_('expense',{ok:true,id:ownSaved.id,record:ownSaved});
+  invokeServerSuccess({setupRequired:false,expenses:[],travels:[]});
+  expect('old employee history cannot erase confirmed expense while refresh is pending',
+    financeUi.mine.expenses[0].id===ownSaved.id&&apiCalls.length===2&&financeUi.ownLoading);
+  invokeServerSuccess({setupRequired:false,expenses:[ownSaved],travels:[]});
+  expect('post-write employee history eventually uses fresh server rows',
+    financeUi.mine.expenses[0].id===ownSaved.id&&!financeUi.ownLoading);
+  financeUi.overview={setupRequired:false,expenses:[pendingFake],travels:[],receipts:[],
+    receiptMatches:{[pendingFake.id]:{status:'MULTIPLE_CLAIMS',
+      label:'同じ証憑番号の申請が複数件（重複精算に注意）'}}};
+  financeUi.tab='expense';financeVisual={query:'',status:'ALL',match:'ISSUE',month:''};
+  expect('accounting dashboard displays duplicate-claim warning in filter and detail',
+    financeVisibleItems_('expense').length===1&&
+    financeOverviewRows('expense').includes('申請複数')&&
+    financeInspectorHtml_('expense',pendingFake).includes('重複精算に注意'));
+  financeVisual={query:'',status:'ALL',match:'ALL',month:''};
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));

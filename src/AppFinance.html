@@ -2,11 +2,11 @@
 /* FM WORKS v0.13.0 finance UI. No confidential data in persistent browser storage. */
 const FINANCE_READ_TTL=30000;
 let financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 function resetFinanceUi(){
   financeActiveForm=null;
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 }
 function financeIdentity(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
@@ -20,12 +20,16 @@ function loadFinanceOverview(options={}){
   if(!options.force&&financeUi.overview&&financeUi.identity===financeIdentity()&&
     now-financeUi.at<FINANCE_READ_TTL)return;
   if(financeUi.loading){if(options.force)financeUi.refreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.overview;
+  const identity=financeIdentity(),hadData=!!financeUi.overview,revision=financeUi.revOverview;
   financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
   if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
   const started=Date.now();
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview){
+      financeUi.loading=false;financeUi.refreshNeeded=false;
+      loadFinanceOverview({force:true,silent:true});return;
+    }
     financeUi.lastLatencyMs=Date.now()-started;
     if(!result||!Array.isArray(result.expenses)||!Array.isArray(result.travels)||!Array.isArray(result.receipts)){
       financeUi.loading=false;
@@ -40,6 +44,10 @@ function loadFinanceOverview(options={}){
     renderPageIfActive('office');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview){
+      financeUi.loading=false;financeUi.refreshNeeded=false;
+      loadFinanceOverview({force:true,silent:true});return;
+    }
     financeUi.lastLatencyMs=Date.now()-started;
     financeUi.error=cleanApiErrorMessage(error,'経理情報を取得できませんでした。');
     financeUi.loading=false;
@@ -54,11 +62,15 @@ function loadMyFinanceItems(options={}){
   if(!options.force&&financeUi.mine&&financeUi.identity===financeIdentity()&&
     now-financeUi.mineAt<FINANCE_READ_TTL)return;
   if(financeUi.ownLoading){if(options.force)financeUi.ownRefreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now();
+  const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
   financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
   if(!hadData&&!options.silent)renderPageIfActive('requests');
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine){
+      financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
+      loadMyFinanceItems({force:true,silent:true});return;
+    }
     financeUi.mineLatencyMs=Date.now()-started;
     if(!result||!Array.isArray(result.expenses)||!Array.isArray(result.travels)){
       financeUi.ownError='申請履歴の形式が不正です。';financeUi.ownLoading=false;
@@ -69,6 +81,10 @@ function loadMyFinanceItems(options={}){
     renderPageIfActive('requests');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine){
+      financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
+      loadMyFinanceItems({force:true,silent:true});return;
+    }
     financeUi.mineLatencyMs=Date.now()-started;
     financeUi.ownError=cleanApiErrorMessage(error,'経費・出張の履歴を取得できませんでした。');
     financeUi.ownLoading=false;
@@ -152,20 +168,32 @@ const FINANCE_FORM_FIELDS={
     ['note','備考','textarea',false]
   ]
 };
+
+// Client limits mirror Finance.gs validation; the server remains authoritative.
+const FINANCE_FIELD_LIMITS=Object.freeze({
+  expense:{vendor:120,item:200,category:60,purpose:500,paymentMethod:60,receiptRef:160},
+  travel:{destination:160,purpose:600,outcome:1000,lodgingArea:90,timeAllowance:80,
+    dailyCategory:60,note:500},
+  receipt:{category:60,vendor:120,invoiceNo:32,item:200,note:500,payer:120,
+    paymentMethod:80,receiptRef:160}
+});
+
 function financeFormField(entry,source={}){
   const key=entry[0],label=entry[1],kind=entry[2],required=entry[3],id='fin-'+key;
   const req=required?' required':'',common='id="'+id+'" name="'+escapeHtml(key)+'"'+req;
   const value=source[key]==null?'':String(source[key]);
+  const formType=financeActiveForm&&financeActiveForm.kind||'expense';
+  const max=Number((FINANCE_FIELD_LIMITS[formType]||{})[key]||(kind==='textarea'?1000:500));
   const caption=escapeHtml(label)+(required?" <em class='v15-required'>必須</em>":"");
   if(kind==='textarea')return '<label class="finance-field"><span>'+caption+'</span><textarea '+common+
-    ' rows="3" maxlength="1000">'+escapeHtml(value)+'</textarea></label>';
+    ' rows="3" maxlength="'+max+'">'+escapeHtml(value)+'</textarea></label>';
   if(kind==='distance'||kind==='paid'){
     const options=kind==='distance'?['未確認','30km以上','30km未満']:['未','済'];
     return '<label class="finance-field"><span>'+caption+'</span><select '+common+'>'+
       options.map(x=>'<option value="'+escapeHtml(x)+'"'+((value||options[0])===x?' selected':'')+'>'+escapeHtml(x)+'</option>').join('')+
       '</select></label>';
   }
-  const attrs=kind==='number'?' min="'+(required?'1':'0')+'" max="999999999" step="1"':' maxlength="500"';
+  const attrs=kind==='number'?' min="'+(required?'1':'0')+'" max="999999999" step="1"':(kind==='text'?' maxlength="'+max+'"':'');
   const today=state.data&&state.data.today||'';
   const actual=value||(kind==='date'?today:'');
   return '<label class="finance-field"><span>'+caption+'</span><input type="'+kind+'" '+common+
@@ -182,6 +210,7 @@ function financeOwnEditableItem_(kind,id){
 }
 function openFinanceForm(kind,editId=''){
   if(!FINANCE_FORM_FIELDS[kind]||financeUi.busy)return;
+  if(financeUi.demo){showToast('サンプル表示中は実データへ登録できません。経理画面で「実データに戻る」を選択してください。');return;}
   if(kind==='receipt'&&financeUi.demo){showToast('サンプル表示中は新規登録できません。実データに戻してください。');return;}
   if(kind==='receipt'&&!financeAccessAllowed()){showToast('経理の閲覧・記録権限が必要です');return;}
   if(!state.sessionToken)return;
@@ -290,6 +319,9 @@ function financeCancelEntry(){
 
 function financeApplyServerSavedRecord_(kind,result){
   if(!result||result.ok!==true||!result.id)return false;
+  // In-flight reads begun before the write must never replace the confirmed record.
+  financeUi.revOverview++;
+  if(kind==='expense'||kind==='travel')financeUi.revMine++;
   const entry=result.record;
   if(!entry||String(entry.id)!==String(result.id))return true;
   if(kind==='receipt'){
@@ -324,6 +356,7 @@ function financeMyActionFirstClient_(rows){
 
 function submitFinanceForm(){
   if(!financeActiveForm||financeUi.busy||!state.sessionToken)return;
+  if(financeUi.demo){showToast('サンプル表示中は実データを登録できません。');return;}
   const form=document.getElementById('financeEntryForm');
   if(!form||typeof form.checkValidity==='function'&&!form.checkValidity()){if(form&&form.reportValidity)form.reportValidity();return;}
   const kind=financeActiveForm.kind,fields=FINANCE_FORM_FIELDS[kind],payload={requestKey:financeActiveForm.key};
@@ -541,12 +574,12 @@ function financeSelectedItem_(kind){
 }
 function financeReviewClass_(match){
   const status=match&&match.status||'NO_REFERENCE';
-  return status==='MATCHED'?'matched':status==='AMOUNT_MISMATCH'||status==='MULTIPLE'?'attention':'unchecked';
+  return status==='MATCHED'?'matched':['AMOUNT_MISMATCH','MULTIPLE','MULTIPLE_CLAIMS'].includes(status)?'attention':'unchecked';
 }
 function financeMatchText_(match){
   const status=match&&match.status||'NO_REFERENCE';
   return {MATCHED:'金額一致',NO_REFERENCE:'番号なし',NO_RECORD:'記録未登録',
-    AMOUNT_MISMATCH:'金額差異',MULTIPLE:'番号重複',UNVERIFIED:'確認が必要'}[status]||'要確認';
+    AMOUNT_MISMATCH:'金額差異',MULTIPLE:'記録番号重複',MULTIPLE_CLAIMS:'申請複数',UNVERIFIED:'確認が必要'}[status]||'要確認';
 }
 function financeInspectorHtml_(kind,item){
   if(!item)return '<div class="finance-inspector-empty"><strong>表示する記録がありません</strong>'+
@@ -770,7 +803,8 @@ function financePage(){
         '1000件以上の確認は管理者にお問い合わせください。')+'</div>':'')+
       '<p class="finance-refresh-note">'+(demo?'サンプルは保存されません。':
         financeUi.at?'最終取得：'+escapeHtml(new Date(financeUi.at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}))+
-          (Number.isFinite(financeUi.lastLatencyMs)?' ／ 前回API応答 '+(financeUi.lastLatencyMs/1000).toFixed(2)+'秒':''):'未取得')+
+          (Number.isFinite(financeUi.lastLatencyMs)?' ／ 前回API応答 '+(financeUi.lastLatencyMs/1000).toFixed(2)+'秒':'')+
+      (d.performance&&Number.isFinite(d.performance.serverMs)?'（サーバー内処理 '+(d.performance.serverMs/1000).toFixed(2)+'秒）':''):'未取得')+
       ' 検索・絞り込み・選択は追加通信なしで動作します。</p></section>'+
     '<aside class="v15-finance-side"><section class="card finance-inspector" aria-label="選択した記録の詳細">'+
       '<div id="financeSelectedDetail" aria-live="polite">'+
@@ -812,6 +846,7 @@ function financeSubmitDecision(kind,id,decision){
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='処理結果を確認できませんでした。最新の情報を確認してください。';}
       if(action){action.disabled=false;action.textContent=decision==='APPROVE'?'申請を承認':'申請を差戻し';}return;}
+    financeUi.revOverview++;
     closeModal();showToast('処理しました');loadFinanceOverview({force:true});
   }).withFailureHandler(err=>{
     if(identity!==financeIdentity())return;
@@ -850,6 +885,7 @@ function financeSubmitSettlement(kind,id){
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='精算登録の結果を確認できませんでした。履歴を再確認してください。';}
       if(action){action.disabled=false;action.textContent='精算確認を登録';}return;}
+    financeUi.revOverview++;
     closeModal();showToast('精算済みに更新しました');loadFinanceOverview({force:true});
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
