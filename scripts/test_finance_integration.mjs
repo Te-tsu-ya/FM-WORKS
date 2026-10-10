@@ -20,7 +20,7 @@ const ctx=vm.createContext({
   LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   requireSession_:token=>{if(!members[token])throw Error('AUTH_REQUIRED');return {employee:members[token]}}
 });
-for(const file of ['src/Code.gs','src/Schema.gs','src/DataAccess.gs','src/Finance.gs']){
+for(const file of ['src/Code.gs','src/Schema.gs','src/DataAccess.gs','src/Finance.gs','src/FinanceAdvisor.gs']){
   vm.runInContext(fs.readFileSync(file,'utf8'),ctx,{filename:file});
 }
 const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx),models=vm.runInContext('FINANCE_MODELS',ctx);
@@ -78,6 +78,26 @@ ctx.mockDb={getSheetByName:name=>sheets[name]||null};
 ctx.mockAudits=audits;
 ctx.mockAuditSheet=auditSheet;
 ctx.auditAvailable=true;
+let invoiceApiId='',invoiceFetches=0;
+const oldLedger=new Sheet(['利用日','経費種別','取引先','適格請求書番号','商品名','利用金額','備考','支払者','支払方法','支払有無']);
+oldLedger.appendRow(['2026/09/12','2026年9月','架空備品店','T1234567890123','文具','¥1,200','検証','架空社員A','会社カード','済']);
+oldLedger.appendRow(['2026/10/02','2026年10月','架空交通社','T1234567890123','交通費','¥3,000','','架空社員B','現金','済']);
+oldLedger.appendRow(['2025/10/02','2025年10月','過去年の架空店','','備品','¥8,000','','架空社員A','現金','済']);
+let legacyWrites=0;
+const oldAppend=oldLedger.appendRow.bind(oldLedger);
+oldLedger.appendRow=function(row){legacyWrites++;return oldAppend(row)};
+ctx.PropertiesService={getScriptProperties:()=>({getProperty:k=>
+ k==='NTA_INVOICE_API_ID'?invoiceApiId:k==='FM_LEGACY_EXPENSE_SPREADSHEET_ID'?'':''
+})};
+ctx.SpreadsheetApp={openById:id=>{
+ if(id!=='1jLC5gBcNrimWz57E3GKUNjQAeTqRdYshQB6zwdAoWeI')throw Error('OTHER_SOURCE');
+ return {getSheetByName:name=>name==='経費'?oldLedger:null};
+}};
+ctx.UrlFetchApp={fetch:url=>{invoiceFetches++;return {
+ getResponseCode:()=>200,
+ getContentText:()=>JSON.stringify({announcement:[{registratedNumber:'T1234567890123',
+   name:'架空の照会結果',address:'架空住所',registrationDate:'2023-10-01'}]})
+}}}};
 vm.runInContext(`getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";
   appendAudit_=item=>{if(!auditAvailable)return false;mockAudits.push(item);
     mockAuditSheet.appendRow(['AUD-'+mockAudits.length,'2026-10-10 12:00:00',
@@ -85,6 +105,7 @@ vm.runInContext(`getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-D
       item.targetId||'',item.before||'',item.after||'',item.source||'',
       item.result||'',item.note||'']);return true;};`,ctx);
 const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest,resubmitFinanceRequest,financeReceiptCrossCheck_,financeNormalizeDateText_,financeOutstandingFirst_,financeMyActionFirst_,financeAmountDisplay_,assertDatabaseMigrationSafe_})',ctx);
+const advisor=vm.runInContext('({financeSpendingDigest_,financeTravelExplanation_,getFinanceTravelExplanation,financeInvoiceNumber_,lookupFinanceInvoiceIssuer,getFinanceSpendingInsights})',ctx);
 const expense={
  usedOn:'2026-10-08',vendor:'架空の販売店',item:'事務用品',category:'消耗品費',
  amount:'2500',purpose:'架空業務用品の購入',paymentMethod:'立替',
@@ -346,6 +367,57 @@ const unloggedSettlement=api.settleFinanceRequest('GENERAL','expense',unlogged.i
 ok('settlement explicitly reports audit failure for administrator review',
  unloggedSettlement.ok&&unloggedSettlement.auditRecorded===false&&unloggedSettlement.status==='精算済');
 ctx.auditAvailable=true;
+
+
+const ledgerReport=advisor.getFinanceSpendingInsights('ADMIN',{year:2026});
+ok('legacy expense report totals all 2026 purchases without combining current expense claims',
+ ledgerReport.ok&&ledgerReport.count===2&&ledgerReport.total===4200&&ledgerReport.months.length===2&&
+ ledgerReport.payers.length===2&&ledgerReport.records.length===2&&legacyWrites===0);
+const previousYear=advisor.getFinanceSpendingInsights('GENERAL',{year:2025});
+ok('legacy report year picker isolates earlier entries',previousYear.count===1&&previousYear.total===8000);
+denied('non-finance employee cannot query other peoples purchases',
+ ()=>advisor.getFinanceSpendingInsights('STAFF',{year:2026}),/権限/);
+denied('invalid spending report years are rejected',()=>advisor.getFinanceSpendingInsights('ADMIN',{year:1900}),/年/);
+const dayQuote=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',startsAt:'08:00',
+ endsAt:'17:00',oneWayKm:'120',nights:'0',lodgingArea:'なし'},'代表');
+ok('policy basis: representative 120 km day trip yields No.1 5,500 yen',
+ dayQuote.status==='REFERENCE'&&dayQuote.daily===5500&&dayQuote.total===5500&&dayQuote.steps[0].amount===5500);
+const shortTrip=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',startsAt:'06:30',
+ endsAt:'19:00',oneWayKm:'70',nights:'0',lodgingArea:'なし'},'代表');
+ok('under 100 km day trip excludes No.1 but can receive early departure allowance',
+ shortTrip.status==='REFERENCE'&&shortTrip.daily===3000&&shortTrip.total===3000);
+const legacyTrip=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',
+ startsAt:'08:30',endsAt:'16:00',distanceCategory:'30km以上',nights:'0'},'代表');
+ok('historical 30km flag is never interpreted as an eligible 100km day trip',
+ legacyTrip.status==='REVIEW_REQUIRED'&&legacyTrip.total===null);
+const lodged=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-02',
+ startsAt:'08:00',endsAt:'18:00',nights:'1',oneWayKm:'230',lodgingArea:'指定地域',
+ lodgingActual:'12000'},'代表');
+ok('overnight: documented 12,000 yen receipt plus 6,500 yen day allowance, not the 20,000 ceiling',
+ lodged.total===18500&&lodged.lodging===12000&&lodged.daily===6500);
+const tooExpensive=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-02',
+ startsAt:'08:00',endsAt:'18:00',nights:'1',oneWayKm:'230',lodgingArea:'指定地域',
+ lodgingActual:'25000'},'代表');
+ok('above-lodging-ceiling amount is flagged for manual approval',
+ tooExpensive.status==='REVIEW_REQUIRED'&&tooExpensive.total===null);
+const roleMismatch=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',
+ startsAt:'08:00',endsAt:'17:00',oneWayKm:'130',nights:'0'},'不明');
+ok('unknown personnel role cannot yield an invented numeric benefit',
+ roleMismatch.status==='REVIEW_REQUIRED'&&roleMismatch.total===null);
+denied('malformed invoice numbers rejected before third-party request',
+ ()=>advisor.lookupFinanceInvoiceIssuer('ADMIN','T1234'),/13桁/);
+const noKey=advisor.lookupFinanceInvoiceIssuer('ADMIN','T1234567890123');
+ok('invoice lookup without official API key is not simulated as a successful identification',
+ noKey.status==='UNCONFIGURED'&&invoiceFetches===0);
+invoiceApiId='1234567890123';
+const knownIssuer=advisor.lookupFinanceInvoiceIssuer('ADMIN','T1234567890123');
+ok('configured issuer lookup returns only data actually supplied by official API response',
+ knownIssuer.status==='FOUND'&&knownIssuer.name==='架空の照会結果'&&
+ invoiceFetches===1&&!('apiId' in knownIssuer));
+denied('ordinary staff cannot perform privileged official issuer lookups',
+ ()=>advisor.lookupFinanceInvoiceIssuer('STAFF','T1234567890123'),/権限/);
+ok('advisor left all original accounting and source data unchanged',
+ legacyWrites===0&&oldLedger.rows.length===4);
 
 sheets['経費記録'].rows[0][0]='不正な列見出し';
 ok('schema mismatch is detected',!api.financeStorageStatus_().ready);

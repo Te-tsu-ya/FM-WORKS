@@ -1924,3 +1924,12 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - クライアント：検索APIは入力後320ms遅延、返答のセッション・リクエスト識別を照合して古い応答を除外。文書詳細はID＋revisionでキャッシュ。60件ずつ段階描画する。
 - UI：3ペインGrid、1120px以下で2段階、760px以下でフォルダ・一覧・本文の切替。すべての本文・属性をHTMLエスケープし、外部リンクはHTTPSだけ許可。
 - QA：test_company_documents.mjs（既存16列アップグレード／権限／検索／CRUD）、test_company_documents_client.mjs（ブラウザ操作契約）、test_company_documents_viewport.mjs（Chromiumによる明暗・PC・タブレット・スマホ表示）。
+
+## 経理アドバイザーの実装（2026-10-10）
+
+- **src/FinanceAdvisor.gs**: read-only `getFinanceSpendingInsights(sessionToken,{year})`、`financeSpendingDigest_`、`financeTravelExplanation_`、`getFinanceTravelExplanation`、`lookupFinanceInvoiceIssuer`。保存APIは既存Finance.gsのまま。旧台帳へのWrite/Append/Deleteは行わない。
+- **支出分析データ境界**: スクリプトプロパティ `FM_LEGACY_EXPENSE_SPREADSHEET_ID`、未設定では共有済みの旧台帳IDを使用し、シート「経費」A:Jの見出し確認後に読み取り。使用日が対象年に属する全行を集計し、不正金額はskipとして件数を示す。年月（月別グループ）と支払者／取引先／品目の合計を返し、明細は最大160件の新しい順。サーバーキャッシュ有効期限120秒。承認トップではこのAPIを呼ばない。
+- **旅費の内訳**: 社内規程2025-12-01、役職別rate tableを基礎に片道100km・早朝7時前・夜間20時以降・宿泊実費と上限を個別検証。宿泊を伴い時間帯手当の適用日が不明な場合などは`REVIEW_REQUIRED`で総額`null`とし、担当者の承認前に確定しない。現行「出張報告」の列を追加せず、根拠の転記は既存`note`と`requestedAllowance`へ利用者の明示操作で行う。
+- **国税庁**: `NTA_INVOICE_API_ID`をスクリプトプロパティのみから取得（13桁）。ブラウザ・ログに秘匿IDを出さない。公式JSON`announcement[].registratedNumber`（原文のリソース名はregistratedNumber）を厳密照合し、`name`, `address`, `registrationDate`, `disposalDate`, `expireDate`等のみを返す。未設定／番号不正／取得失敗／未該当と成功を区別して扱う。公式情報の免責をUIに表示。
+- **src/AppFinance.html**: 経理トップの支出分析切替、経費記録の事業者照会、旅費申請画面に計算根拠を表示。**src/AppFinanceAdvisor.html**を専用の追加フロントモジュールとし、CSSを**src/StylesFinanceAdvisor.html**に分離。Index.htmlから読み込み。支出分析の人別検索や明細検索はページ内だけで処理し、不要なGAS通信を避ける。
+- **テスト**: in-memoryの旧台帳のみを読み取り、複数年・支払者別・アクセス権限、出張の100km境界・実費12,000円／上限20,000円・多泊条件・未確認を検証。国税庁APIはモックで`registratedNumber`を返し、未設定なら通信せず会社名を捏造しない。新しいUI表示・フロントRPC引数・操作後の権限制御を全既存回帰検証とともに実行する。

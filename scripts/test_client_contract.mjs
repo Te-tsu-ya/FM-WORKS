@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppSomu.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -648,6 +648,48 @@ const result=vm.runInContext(`
   closeModal=originalCloseModalEsc;
   modalHost.innerHTML='';
   modalHost.querySelector=()=>null;
+
+  // Expense analysis stays separate from existing bookkeeping and uses local-only filters.
+  financeUi.insightMode=true;financeUi.insightYear=2026;
+  financeUi.insights={ok:true,year:2026,total:4200,count:2,months:[
+    {name:'2026-09',amount:1200,count:1},{name:'2026-10',amount:3000,count:1}],
+    payers:[{name:'架空社員A',amount:1200,count:1},{name:'架空社員B',amount:3000,count:1}],
+    vendors:[{name:'架空備品店',amount:1200,count:1}],items:[{name:'文具',amount:1200,count:1}],
+    records:[{date:'2026-10-02',payer:'架空社員B',vendor:'架空交通社',item:'交通費',amount:3000,method:'現金',note:''},
+      {date:'2026-09-12',payer:'架空社員A',vendor:'架空備品店',item:'文具',amount:1200,method:'会社カード',note:''}]
+  };
+  expect('finance insights display a distinct read-only workspace with honest source accounting',
+    financePage().includes('支出の見える化')&&financePage().includes('旧台帳')&&
+    financePage().includes('4,200円')&&financePage().includes('支払者別'));
+  financeInsightPickPayer('架空社員A');
+  expect('payer drilldown filters item rows in-browser without a server request',
+    financeInsightRows().includes('架空備品店')&&!financeInsightRows().includes('架空交通社'));
+  financeUi.insightPayer='';financeUi.insightMode=false;financeUi.insights=null;
+  expect('normal finance approvals remain available after closing expense insight mode',
+    financePage().includes('経理記録の一覧'));
+  expect('travel evidence and official invoice lookup controls are visible in their correct forms',
+    financeTravelEvidencePanel().includes('計算式と支給根拠を確認')&&
+    financeInvoiceLookupPanel().includes('適格請求書番号'));
+  financeActiveForm={kind:'travel',key:'CLIENT-TRAVEL-20261010',editId:'',source:{},changed:false};
+  const tripNote=document.getElementById('fin-note');
+  const tripAllowance=document.getElementById('fin-requestedAllowance');
+  tripNote.value='既存の備考';tripAllowance.value='0';
+  financeUi.travelEstimate={status:'REFERENCE',total:18500,note:'[旅費試算2025-12-01/参考] 日当6,500円、宿泊実費12,000円'};
+  financeUseTravelEstimate();
+  expect('explicit user action records an auditable travel breakdown and proposed allowance',
+    tripNote.value.includes('既存の備考')&&tripNote.value.includes('旅費試算')&&
+    tripAllowance.value==='18500');
+  financeActiveForm=null;
+  resetCalls();
+  document.getElementById('fin-invoiceNo').value='T1234567890123';
+  financeLookupInvoice();
+  expect('issuer search uses authenticated server RPC rather than browser-side API keys',
+    apiCalls.length===1&&lastCall().name==='lookupFinanceInvoiceIssuer');
+  invokeServerSuccess({status:'UNCONFIGURED',number:'T1234567890123',message:'ID未設定'});
+  expect('unconfigured NTA integration does not hallucinate a business name',
+    document.getElementById('financeInvoiceResult').innerHTML.includes('ID未設定')&&
+    !document.getElementById('financeInvoiceResult').innerHTML.includes('公表された取引先名称'));
+  financeUi.invoiceIssuer=null;
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
