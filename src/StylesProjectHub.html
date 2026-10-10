@@ -194,4 +194,38 @@
 .ph-task-schedule-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 0 15px}
 .ph-task-schedule-fields .field{min-width:0}
 @media(max-width:620px){.ph-task-context{flex-direction:column;align-items:flex-start}.ph-task-quick{align-items:flex-start}.ph-task-schedule-fields{grid-template-columns:minmax(0,1fr)}}
+
+/* Project advanced workspace: cycle-safe planning, safe file transfers, admin costs */
+.ph-advanced{display:grid;gap:14px;max-width:100%}
+.ph-advanced>.ph-panel-heading h2{font-size:20px;margin:0}
+.ph-advanced-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr));gap:14px}
+.ph-adv-task{min-width:0}
+.ph-adv-task h3{font-size:16px;margin:0;overflow-wrap:anywhere}
+.ph-adv-deps{display:grid;gap:5px;border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:12px}
+.ph-adv-deps legend{font-size:13px;font-weight:700}
+.ph-adv-deps label{display:flex;gap:8px;align-items:start;padding:5px 1px;cursor:pointer;font-size:13px;line-height:1.6}
+.ph-adv-deps input{accent-color:#357ce7;margin-top:4px;flex-shrink:0}
+.ph-adv-upload,.ph-advanced-forms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:14px;margin:16px 0}
+.ph-adv-upload label,.ph-advanced-forms label{display:grid;gap:7px;font-size:13px}
+.ph-adv-upload input,.ph-adv-upload select,.ph-advanced-forms input,.ph-advanced-forms select,.ph-advanced-forms textarea{width:100%;min-width:0;box-sizing:border-box;padding:9px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;font:inherit}
+.ph-advanced-forms{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.ph-advanced-forms>div{display:grid;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.ph-advanced-forms h4{font-size:15px;margin:0}
+.ph-adv-files{display:grid;gap:9px;margin-top:16px}
+.ph-adv-file{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-width:0;padding:12px;border:1px solid var(--line);border-radius:9px}
+.ph-adv-file strong{font-size:13px;flex:1;min-width:150px;overflow-wrap:anywhere}
+.ph-adv-file span{font-size:12px;color:var(--muted)}
+.ph-advanced .ph-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:850px){.ph-adv-upload{grid-template-columns:minmax(0,1fr)}.ph-advanced .ph-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:580px){.ph-advanced-rows,.ph-advanced-forms{grid-template-columns:minmax(0,1fr)}.ph-advanced .ph-metrics{grid-template-columns:minmax(0,1fr)}}
+
+@media(max-width:700px){
+ .ph-advanced{gap:6px}
+ .ph-advanced>.ph-panel-heading{margin:0;padding:0;min-height:0;align-items:center}
+ .ph-advanced>.ph-panel-heading h2{font-size:16px;line-height:1.15}
+ .ph-advanced>.ph-panel-heading .ph-help{display:none}
+ .ph-advanced>.ph-panel-heading .secondary-button{padding:6px 10px;min-height:32px}
+ .ph-advanced>.ph-display-tabs{margin:2px 0 4px;padding-bottom:3px;gap:2px}
+ .ph-advanced>.ph-display-tabs button{padding:7px 9px;font-size:12px}
+}
 </style>

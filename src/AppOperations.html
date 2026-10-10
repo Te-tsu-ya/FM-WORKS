@@ -341,8 +341,9 @@ function attendancePage(){
 }
 
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
-const WORKLOG_QUICK_FIELDS=['wlQuickProject','wlQuickCategory','wlQuickStart','wlQuickEnd','wlQuickDescription'];
+const WORKLOG_QUICK_FIELDS=['wlQuickProject','wlQuickTask','wlQuickCategory','wlQuickStart','wlQuickEnd','wlQuickDescription'];
 const worklogQuickDrafts=new Map();
+const worklogSubmissionKeys=new Map();
 let worklogProjectIntent=null;
 function worklogDraftKey(date){return worklogWindowIdentity()+'|'+date;}
 function rememberWorklogQuickDraft(){
@@ -353,7 +354,7 @@ function rememberWorklogQuickDraft(){
   const draft={};
   for(const id of WORKLOG_QUICK_FIELDS){
     const field=document.getElementById(id);
-    if(!field)return;
+    if(!field){if(id==='wlQuickTask'){draft[id]='';continue;}return;}
     draft[id]=String(field.value||'');
   }
   const key=worklogDraftKey(date);
@@ -361,9 +362,9 @@ function rememberWorklogQuickDraft(){
   worklogQuickDrafts.set(key,draft);
   while(worklogQuickDrafts.size>20)worklogQuickDrafts.delete(worklogQuickDrafts.keys().next().value);
 }
-function queueProjectWorklogIntent(projectName,taskTitle=''){
+function queueProjectWorklogIntent(projectName,taskTitle='',taskId=''){
  if(!state.sessionToken||!state.data||!String(projectName||'').trim())return false;
- worklogProjectIntent={identity:worklogWindowIdentity(),date:state.data.today,project:String(projectName),task:String(taskTitle||'')};
+ worklogProjectIntent={identity:worklogWindowIdentity(),date:state.data.today,project:String(projectName),task:String(taskTitle||''),taskId:String(taskId||'')};
  return true;
 }
 function cancelProjectWorklogIntent_(){
@@ -382,6 +383,8 @@ function applyProjectWorklogIntent_(replaceExisting=false){
  const description=document.getElementById('wlQuickDescription');
  if(!description)return false;
  project.value=intent.project;
+ refreshWorklogTaskChoices_('wlQuickProject','wlQuickTask');
+ const taskField=document.getElementById('wlQuickTask');if(taskField&&intent.taskId)taskField.value=intent.taskId;
  if(intent.task)description.value=intent.task;
  rememberWorklogQuickDraft();
  worklogProjectIntent=null;
@@ -394,6 +397,26 @@ function worklogProjectIntentBanner_(){
  if(!intent||intent.identity!==worklogWindowIdentity()||state.page!=='worklog'||intent.date!==state.worklog.date)return '';
  return `<div class="worklog-quick-intent" id="worklogProjectIntentBanner" role="status"><div><strong>案件から工数を入力：${escapeHtml(intent.project)}</strong>${intent.task?`<small>作業：${escapeHtml(intent.task)}</small>`:''}<small>入力途中の内容がある場合、反映すると案件と作業内容だけを置き換えます。時刻は変更しません。</small></div><div><button type="button" class="primary-button compact" onclick="applyProjectWorklogIntent_(true)">フォームに反映</button><button type="button" class="secondary-button compact" onclick="cancelProjectWorklogIntent_()">使わない</button></div></div>`;
 }
+function worklogTaskChoices_(projectName){
+  return (state.worklog.taskOptions||[]).filter(t=>t.project===projectName);
+}
+function worklogTaskOptionsHtml_(projectName,selectedId=''){
+  return '<option value="">案件全体（作業未指定）</option>'+worklogTaskChoices_(projectName).map(t=>'<option value="'+escapeHtml(t.id)+'" '+(t.id===selectedId?'selected':'')+'>'+escapeHtml(t.title)+'</option>').join('');
+}
+function refreshWorklogTaskChoices_(projectId,taskId){
+  const project=document.getElementById(projectId),select=document.getElementById(taskId);
+  if(!project||!select)return;
+  const old=select.value;select.innerHTML=worklogTaskOptionsHtml_(project.value,old);
+  if(!Array.from(select.options).some(x=>x.value===old))select.value='';
+}
+function worklogRequestKey_(payload){
+ const fingerprint=JSON.stringify([payload.id||'',payload.date,payload.project,payload.taskId||'',payload.category,payload.start,payload.end,payload.description,payload.note||'']);
+ let key=worklogSubmissionKeys.get(fingerprint);
+ if(!key){key='WL-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,17);worklogSubmissionKeys.set(fingerprint,key);}
+ while(worklogSubmissionKeys.size>30)worklogSubmissionKeys.delete(worklogSubmissionKeys.keys().next().value);
+ return {fingerprint,key};
+}
+
 function restoreWorklogQuickDraft(){
   const date=state.worklog.renderedDate;
   if(!date||state.page!=='worklog')return;
@@ -410,7 +433,7 @@ function restoreWorklogQuickDraft(){
   }
   if(worklogProjectIntent)applyProjectWorklogIntent_(false);
 }
-function clearWorklogQuickDrafts(){worklogQuickDrafts.clear();worklogProjectIntent=null;state.worklog.renderedDate=null;}
+function clearWorklogQuickDrafts(){worklogQuickDrafts.clear();worklogSubmissionKeys.clear();worklogProjectIntent=null;state.worklog.renderedDate=null;}
 
 const worklogWindowCache=new Map();
 
@@ -447,6 +470,7 @@ function worklogStoreWindow(identity,range,data){
   const entry={
     identity:identity,start:range.start,end:range.end,at:Date.now(),
     items:Array.isArray(data&&data.items)?data.items:[],
+    taskOptions:Array.isArray(data&&data.taskOptions)?data.taskOptions:null,
     projects:Array.isArray(data&&data.projects)?data.projects:null
   };
   const key=identity+'|'+range.start+'|'+range.end;
@@ -467,6 +491,7 @@ function worklogShowCachedDay(date,entry){
   state.worklog.loading=false;
   state.worklog.error='';
   if(Array.isArray(entry.projects))state.data.projects=entry.projects;
+  if(Array.isArray(entry.taskOptions))state.worklog.taskOptions=entry.taskOptions;
   markPageCache('worklog',date);
 }
 
@@ -526,7 +551,7 @@ function loadWorklogs(options={}){
       if(state.page==='worklog')loadWorklogs({force:true});
       return;
     }
-    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null});
+    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null,taskOptions:null});
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM WORKS] worklog range '+(Date.now()-started)+'ms ('+range.start+' / '+range.end+')');
     const selected=state.worklog.date||state.data.today;
     const selectedCache=worklogCachedWindow(selected);
@@ -711,7 +736,7 @@ function worklogQuickForm(display){
     <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div>${display.sample?`<span class='worklog-sample-chip'>表示確認用</span>`:''}</header>
     ${worklogProjectIntentBanner_()}
     <div class='worklog-quick-grid'>
-      <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' ${sampleFallback?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label>
+      <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' onchange="refreshWorklogTaskChoices_('wlQuickProject','wlQuickTask')" ${sampleFallback?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label><label class='field full'><span>関連する作業（任意）</span><select id='wlQuickTask' ${sampleFallback?'disabled':''}>${worklogTaskOptionsHtml_(realProjects[0]&&realProjects[0].name||'')}</select><small>作業ごとの実績に紐付けます。過去工数は自動推定しません。</small></label>
       <label class='field full'><span>作業分類</span><input id='wlQuickCategory' list='wlCategorySuggestions' placeholder='設計 / 開発 / 会議 等'><datalist id='wlCategorySuggestions'><option value='設計'><option value='開発'><option value='テスト'><option value='資料作成'><option value='打合せ'><option value='顧客対応'></datalist></label>
       <label class='field'><span>開始</span><input id='wlQuickStart' type='time' value='${gap.start}'></label>
       <label class='field'><span>終了</span><input id='wlQuickEnd' type='time' value='${gap.end}'></label>
@@ -728,7 +753,7 @@ function saveQuickWorklog(){
   const payload={
     id:'',
     date:state.worklog.date||state.data.today,
-    project:get('wlQuickProject')?get('wlQuickProject').value:'',
+    project:get('wlQuickProject')?get('wlQuickProject').value:'',taskId:get('wlQuickTask')?get('wlQuickTask').value:'',
     category:get('wlQuickCategory')?get('wlQuickCategory').value:'',
     start:get('wlQuickStart')?get('wlQuickStart').value:'',
     end:get('wlQuickEnd')?get('wlQuickEnd').value:'',
@@ -739,6 +764,7 @@ function saveQuickWorklog(){
   if(!payload.description){showToast('作業内容を入力してください');return}
   if(!payload.start||!payload.end){showToast('開始・終了時刻を入力してください');return}
   if(worklogTimeToMinutes(payload.start)>=worklogTimeToMinutes(payload.end)){showToast('終了時刻は開始時刻より後にしてください');return}
+  const token=worklogRequestKey_(payload);payload.requestKey=token.key;
   state.busy=true;
   const actionButton=get('wlQuickSaveButton');
   if(actionButton){actionButton.disabled=true;actionButton.setAttribute('aria-busy','true')}
@@ -746,6 +772,7 @@ function saveQuickWorklog(){
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
     if(identity!==requestsIdentity())return;
     state.busy=false;
+    worklogSubmissionKeys.delete(token.fingerprint);
     worklogQuickDrafts.delete(worklogDraftKey(payload.date));
     if(state.worklog.renderedDate===payload.date)state.worklog.renderedDate=null;
     showToast('工数を登録しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
@@ -815,20 +842,23 @@ function openWorklogModal(id){
   var options=projects.map(function(p){
     return '<option value="'+escapeHtml(p.name)+'" '+(item&&item.project===p.name?'selected':'')+'>'+escapeHtml(p.name)+(p.status&&p.status!=='進行中'?'（'+escapeHtml(p.status)+'）':'')+'</option>';
   }).join('');
+  var selectedProject=item&&item.project||projects[0]&&projects[0].name||'';
+  var taskOptions=worklogTaskOptionsHtml_(selectedProject,item&&item.taskId||'');
   var r=ensureModal();
-  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>'+(item?'工数を編集':'工数を追加')+'</small><h2>'+fmtDate(date)+'</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト</span><select id="wlProject">'+(options||'<option value="">プロジェクトが未登録です</option>')+'</select></label><label class="field"><span>作業分類</span><input id="wlCategory" value="'+escapeHtml(item?item.category:'')+'" placeholder="開発 / 営業 / 会議 等"></label><label class="field"><span>日付</span><input id="wlDate" type="date" value="'+(item?item.date:date)+'"></label><label class="field"><span>開始</span><input id="wlStart" type="time" value="'+escapeHtml(item?item.start:'09:00')+'"></label><label class="field"><span>終了</span><input id="wlEnd" type="time" value="'+escapeHtml(item?item.end:'10:00')+'"></label><label class="field full"><span>作業内容</span><textarea id="wlDescription" rows="3" placeholder="実施した内容を入力">'+escapeHtml(item?item.description:'')+'</textarea></label><label class="field full"><span>備考</span><textarea id="wlNote" rows="2">'+escapeHtml(item?item.note:'')+'</textarea></label></div><div class="modal-actions"><span class="muted">'+(projects.length?'':'管理者がプロジェクトを登録してください。')+'</span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" '+(projects.length?'':'disabled')+' onclick="saveWorklogFromModal(\''+id+'\')">保存</button></div></div></section>';
+  r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>'+(item?'工数を編集':'工数を追加')+'</small><h2>'+fmtDate(date)+'</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="form-grid"><label class="field full"><span>プロジェクト</span><select id="wlProject" onchange="refreshWorklogTaskChoices_(this.id,&quot;wlTaskId&quot;)">'+(options||'<option value="">プロジェクトが未登録です</option>')+'</select></label><label class="field full"><span>関連する作業（任意）</span><select id="wlTaskId">'+taskOptions+'</select></label><label class="field"><span>作業分類</span><input id="wlCategory" value="'+escapeHtml(item?item.category:'')+'" placeholder="開発 / 営業 / 会議 等"></label><label class="field"><span>日付</span><input id="wlDate" type="date" value="'+(item?item.date:date)+'"></label><label class="field"><span>開始</span><input id="wlStart" type="time" value="'+escapeHtml(item?item.start:'09:00')+'"></label><label class="field"><span>終了</span><input id="wlEnd" type="time" value="'+escapeHtml(item?item.end:'10:00')+'"></label><label class="field full"><span>作業内容</span><textarea id="wlDescription" rows="3" placeholder="実施した内容を入力">'+escapeHtml(item?item.description:'')+'</textarea></label><label class="field full"><span>備考</span><textarea id="wlNote" rows="2">'+escapeHtml(item?item.note:'')+'</textarea></label></div><div class="modal-actions"><span class="muted">'+(projects.length?'':'管理者がプロジェクトを登録してください。')+'</span><div><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" '+(projects.length?'':'disabled')+' onclick="saveWorklogFromModal(\''+id+'\')">保存</button></div></div></section>';
 }
 function saveWorklogFromModal(id){
   if(state.busy)return;
   state.busy=true;
-  const payload={id:id,date:document.getElementById('wlDate').value,project:document.getElementById('wlProject').value,
+  const payload={id:id,date:document.getElementById('wlDate').value,project:document.getElementById('wlProject').value,taskId:document.getElementById('wlTaskId').value,
     category:document.getElementById('wlCategory').value,start:document.getElementById('wlStart').value,
     end:document.getElementById('wlEnd').value,description:document.getElementById('wlDescription').value,
     note:document.getElementById('wlNote').value};
+  const submission=worklogRequestKey_(payload);payload.requestKey=submission.key;
   const identity=requestsIdentity();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
     if(identity!==requestsIdentity())return;
-    state.busy=false;
+    state.busy=false;worklogSubmissionKeys.delete(submission.fingerprint);
     closeModal();state.worklog.date=payload.date;showToast('工数を保存しました');
     invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
   }).withFailureHandler(function(err){

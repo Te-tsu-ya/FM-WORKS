@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.19.1
+**文書版:** 0.20.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,9 +65,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.15.0`
+`APP.version = 0.20.0`
 
-DBスキーマ: 10。  
+DBスキーマ: 16。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -2104,3 +2104,14 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The existing editor form object retains title, ownerId, plannedHours, startDate, dueDate and revision for secure server-side equality checks even when fields are not rendered for a contributor. projectHubRememberDraft_ updates only controls that actually exist in the DOM.
 - projectHubTaskCompletion_ writes status=完了 and progress=100 into the client draft and rerenders. It makes zero write RPCs; projectHubSave_ remains the only explicit persistence action and retains requestKey, conflict handling and retry identity.
 - Browser tests cover an additional mobile new-task form. VM integration tests verify contributor input reduction, that immutable fields reach saveProjectHubRecord unchanged, no premature save and failed-save recovery. Existing projectHub and worklog schemas stay unchanged.
+
+
+## Project extensions, v16 (2026-10-10)
+
+- Schema.gs version 16 adds **プロジェクト工数対応**, **プロジェクト依存**, **プロジェクト添付**, **プロジェクト既読**, **プロジェクト原価**, **プロジェクト予算**; existing worklog/master/plan sheets are preserved. The administrator-only migration verifies a full backup before altering sheets; deployment does not migrate DB. A setupRequired banner is shown until migrated.
+- ProjectAdvanced.gs owns optional validated sheet access, per-project membership by current plan owner/task owners, cycle detection on adjacency lists, revision checks, worklog linking with request keys, Drive-backed private files, per-user notification receipts, manual expenses and budgets. Only ADMIN sees financial fields. File storage uses the Apps Script deployment owner's private Drive folder; downloads use session-checked RPC rather than publishing sharing links. Allowed MIME/extension pairs: PDF, PNG, JPEG, TXT, DOCX, XLSX, max 1.5MiB, magic header checks for PDF/images/Office ZIP header, not full malware scanning.
+- Worklog.gs accepts optional taskId and requestKey and maps existing data via a separate sheet; existing worklog table remains 15 columns with existing time overlap, permissions, monthly close checks and audit. The task ID must belong to the selected project. No backfill guesses on historical worklogs. On lost responses, requestKey + payload equality is the idempotency gate.
+- AppProjectHub.html invokes resetProjectAdvancedUi_() on session teardown. In-flight advanced RPC responses are discarded using the identity and UI-instance guard; admin-only budget and attachment metadata are not retained across logins.
+- AppOperations.html adds task selector to quick and modal worklog forms, safely stores pending task ID and preserves unsaved time/date/category details, keeping attempt keys between retries. AppProjectHub.html adds detailed management tab mounted through AppProjectAdvanced.html, which loads data only when selected.
+- Notifications.gs appends authorized deadline/memo alerts into the normal bell. AppShell.html routes user into the relevant project and marks the chosen notification read. Notifications list never returns Drive IDs, cost data or per-person worklogs.
+- Limits: DB must be explicitly migrated in an authenticated admin session; no browsing of the authenticated live GAS app from GitHub CI; user-specific browser proof, cross-browser testing on Windows/Mac, automated virus scanning, exact accounting profit/expense auto-match and critical-path scheduling are not established by this release. These stay open in Issue #72.

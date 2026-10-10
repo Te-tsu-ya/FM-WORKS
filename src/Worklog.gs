@@ -10,9 +10,9 @@ function getWorklogs(sessionToken, params) {
   const includeProjects=params.includeProjects!==false;
   const sheet = getDb_().getSheetByName('工数');
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { items: [], totalMinutes: 0, projects:includeProjects?getProjectsInternal_(false):[] };
+  if (lastRow < 2) return { items: [], totalMinutes: 0, projects:includeProjects?getProjectsInternal_(false):[],taskOptions:includeProjects&&typeof projectAdvancedTaskOptions_==='function'?projectAdvancedTaskOptions_(session.employee):[] };
 
-  const items = readRowsByDateRange_(sheet,2,15,start,end)
+  const items = (typeof projectAdvancedWorklogIds_==='function'?projectAdvancedWorklogIds_:items=>items)(readRowsByDateRange_(sheet,2,15,start,end)
     .filter(r => r[0] && r[12] !== '削除' && r[1] >= start && r[1] <= end && (employeeId === 'ALL' || r[2] === employeeId))
     .map(r => ({
       id: r[0], date: r[1], employeeId: r[2], name: r[3], project: r[4],
@@ -20,10 +20,10 @@ function getWorklogs(sessionToken, params) {
       minutes: Number(r[9] || 0), note: r[10] || '', createdAt: r[11] || '',
       status: r[12] || '有効', updatedAt: r[14] || r[11] || ''
     }))
-    .sort((a,b) => b.date.localeCompare(a.date) || (b.start||'').localeCompare(a.start||''));
+    .sort((a,b) => b.date.localeCompare(a.date) || (b.start||'').localeCompare(a.start||'')));
 
   logPerformance_('getWorklogs',perfStarted,PERFORMANCE_BUDGETS.worklogs,{items:items.length});
-  return { items: items, totalMinutes: items.reduce((sum,x)=>sum+x.minutes,0), projects:includeProjects?getProjectsInternal_(false):[] };
+  return { items: items, totalMinutes: items.reduce((sum,x)=>sum+x.minutes,0), projects:includeProjects?getProjectsInternal_(false):[],taskOptions:includeProjects&&typeof projectAdvancedTaskOptions_==='function'?projectAdvancedTaskOptions_(session.employee):[] };
 }
 
 function saveWorklog(sessionToken, payload) {
@@ -58,6 +58,7 @@ function saveWorklog(sessionToken, payload) {
     let existingProject = '';
     let existingEmployeeId = '';
     let auditBefore = '';
+    let previousRow = null;
 
 
     if (id) {
@@ -66,6 +67,7 @@ function saveWorklog(sessionToken, payload) {
       if (!found) throw new Error('編集対象の工数が見つかりません。');
       rowNumber = found.getRow();
       const existing = sheet.getRange(rowNumber, 1, 1, 15).getDisplayValues()[0];
+      previousRow=existing.slice();
       auditBefore = auditJson_({date:existing[1],employeeId:existing[2],project:existing[4],category:existing[5],description:existing[6],start:existing[7],end:existing[8],minutes:Number(existing[9]||0),note:existing[10],status:existing[12]});
       assertMonthOpenForDate_(existing[1],'工数を編集');
       if (existing[12] === '削除') throw new Error('削除済みの工数は編集できません。');
@@ -91,12 +93,38 @@ function saveWorklog(sessionToken, payload) {
       : employee.employeeId;
     const target = getEmployee_(targetEmployeeId);
     if (!target.active) throw new Error('在籍していない社員には工数を登録できません。');
+    const linkage=typeof projectAdvancedWorklogPrepare_==='function'?projectAdvancedWorklogPrepare_(payload,projectRecord,employee,id):{sheet:null,taskId:'',requestKey:''};
+    if(linkage.duplicateId){
+      const foundDuplicate=sheet.getRange(2,1,Math.max(1,sheet.getLastRow()-1),1).createTextFinder(linkage.duplicateId).matchEntireCell(true).findNext();
+      if(!foundDuplicate)throw new Error('重複送信の既存工数が見つかりません。管理者へ確認してください。');
+      const prior=sheet.getRange(foundDuplicate.getRow(),1,1,15).getDisplayValues()[0];
+      if(prior[12]==='削除'||prior[1]!==date||prior[2]!==target.employeeId||prior[4]!==project||
+          prior[5]!==category||prior[6]!==description||prior[7]!==start||prior[8]!==end||Number(prior[9])!==minutes||prior[10]!==note)
+        throw new Error('同じ送信識別子で異なる工数内容は登録できません。');
+      return {ok:true,id:linkage.duplicateId,duplicate:true};
+    }
     assertNoWorklogOverlap_(sheet, target.employeeId, date, start, end, id);
 
-    sheet.getRange(rowNumber, 1, 1, 15).setValues([[
+    const nextRow=[
       id, date, target.employeeId, target.name, project, category, description,
       start, end, minutes, note, createdAt, '有効', '', nowText
-    ]]);
+    ];
+    sheet.getRange(rowNumber,1,1,15).setValues([nextRow]);
+    if(linkage.sheet){
+      try{projectAdvancedWorklogCommit_(linkage,id,projectRecord,employee);}
+      catch(error){
+        // Sheets and the separate mapping sheet are not transactional.
+        // Restore edited rows; tombstone a new row so it cannot be counted twice.
+        try{
+          if(previousRow)sheet.getRange(rowNumber,1,1,15).setValues([previousRow]);
+          else sheet.getRange(rowNumber,13,1,3).setValues([['削除',nowText,nowText]]);
+          SpreadsheetApp.flush();
+        }catch(rollbackError){
+          throw new Error('工数関連付けと復旧の双方に失敗しました。再登録せず管理者に連絡してください: '+String(rollbackError.message||rollbackError));
+        }
+        throw new Error('作業への工数ひも付けに失敗し、工数変更を取り消しました。再試行してください: '+String(error.message||error));
+      }
+    }
 
     appendAudit_({
       employeeId: employee.employeeId, employeeName: employee.name,

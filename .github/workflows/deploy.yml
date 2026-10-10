@@ -54,6 +54,10 @@ jobs:
         run: node scripts/test_somu_client.mjs
       - name: Verify project aggregation, permissions and retry behavior
         run: node scripts/test_project_hub.mjs
+      - name: Verify task-linked worklogs, private attachments and financial permissions before deployment
+        run: node scripts/test_project_advanced.mjs
+      - name: Verify legacy worklog ownership and overlap before deployment
+        run: node scripts/test_worklog_integrity.mjs
       - name: Verify navigation cache and input preservation
         run: node scripts/test_business_workflows.mjs
       - name: Test light and dark modal dialog contrast before publication
