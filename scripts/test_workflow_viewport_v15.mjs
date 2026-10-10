@@ -30,7 +30,7 @@ const vendors=[
  {code:'SV-0002',name:'架空物流株式会社',invoice:'',address:'架空町'}
 ];
 function renderScreen(kind){
- const state={page:kind==='finance'?'finance':kind==='quote'?'quotes':'financeEntry',
+ const state={page:kind.startsWith('finance')?'finance':kind==='quote'?'quotes':'financeEntry',
   sessionToken:'SYNTHETIC_SESSION',data:{
    today:'2026-10-09',user:{employeeId:'FM-QA',name:'架空社員A',displayName:'架空社員A'},
    permissions:{adminConsole:true,officeWorkspace:true,financeWorkspace:true,quoteWorkspace:true}}};
@@ -39,13 +39,13 @@ function renderScreen(kind){
     '<div class="page-head"><h1>'+escapeHtml(title)+'</h1><p>'+escapeHtml(sub)+'</p></div>',
   financeYen:v=>(Number(v)||0).toLocaleString('ja-JP')+'円',
   svg:icon=>'<svg role="img" aria-label="'+escapeHtml(icon)+'" viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>'});
- if(['finance','expense','travel'].includes(kind)){
+ if(['finance','financeDemo','expense','travel'].includes(kind)){
   vm.runInContext(source('AppFinance'),cx,{filename:'AppFinance.html'});
-  if(kind==='finance'){
+  if(kind==='finance'||kind==='financeDemo'){
    cx.qaFinance={setupRequired:false,expenses:[sampleExpense],travels:[sampleTravel],
     receipts:[],totals:{expensePending:1,travelPending:1,expenseToSettle:0,
       travelToSettle:0,receipt:0,expenseHidden:0,travelHidden:0,receiptHidden:0}};
-   vm.runInContext('financeUi.overview=qaFinance;financeUi.tab="expense";',cx);
+   vm.runInContext('financeUi.overview=qaFinance;financeUi.tab="expense";financeUi.demo='+JSON.stringify(kind==='financeDemo')+';',cx);
    return vm.runInContext('financePage()',cx);
   }
   cx.qaKind=kind;
@@ -78,6 +78,8 @@ const output=path.join(root,'artifacts','workflow-v15');fs.mkdirSync(output,{rec
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-workflow-'));
 const cases=[
  [1366,768,'finance','light'],[390,844,'finance','dark'],
+  [1600,900,'financeDemo','light'],[1366,768,'financeDemo','dark'],
+  [390,844,'financeDemo','light'],[320,700,'financeDemo','dark'],
  [1366,768,'expense','light'],[390,844,'expense','light'],
  [1440,900,'travel','light'],[390,844,'travel','dark'],
  [1366,768,'quote','light'],[390,844,'quote','light'],
@@ -93,7 +95,14 @@ for(const [width,height,kind,theme] of cases){
  if(!page.includes("v15-workspace")||page.includes('ReferenceError:')){
   failed++;console.error('FAIL '+id+' missing unified content');continue;
  }
- if((kind==='expense'||kind==='travel')&&!page.includes('financeEntryForm')){
+ if(kind.startsWith('finance')&&(!page.includes('finance-ledger-table')||
+     !page.includes('financeSelectedDetail')||!page.includes('financeSetMonthFilter('))){
+   failed++;console.error('FAIL '+id+' finance ledger structure missing');continue;
+  }
+  if(kind==='financeDemo'&&!page.includes('サンプル表示中｜架空データ')){
+   failed++;console.error('FAIL '+id+' clearly-labeled synthetic data missing');continue;
+  }
+  if((kind==='expense'||kind==='travel')&&!page.includes('financeEntryForm')){
   failed++;console.error('FAIL '+id+' missing data entry form');continue;
  }
  const frame=path.join(temp,id+'-frame.html');
@@ -137,7 +146,7 @@ for(const [width,height,kind,theme] of cases){
   if(result.rootWidth<=0||result.rootWidth>result.contentWidth+2)errors.push('content width');
   if(!result.buttons)errors.push('no actions');
   if(['expense','travel'].includes(kind)&&result.inputs<6)errors.push('missing form fields');
-  if(kind==='finance'&&result.inputs<2)errors.push('missing search controls');
+  if(kind.startsWith('finance')&&result.inputs<3)errors.push('missing finance search controls');
   if(kind==='admin'&&result.inputs<3)errors.push('missing master form controls');
   if(result.shortestButton<25)errors.push('button below 25px');
   console.log((errors.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.1  
+**文書版:** 0.17.2  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1772,10 +1772,17 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 新設 `scripts/test_modal_theme.mjs`: 実際の AppQuotes.html / AppDocuments.html のダイアログ生成関数をVMで実行し、Styles.html + StylesWorkflowV15.html をChromiumでレンダリング。1366×768と390×844、light/dark、5種のモーダルを検証し、computedStyle色からWCAGコントラスト比4.5以上、モーダル枠の画面内配置、申請フッター色一致を検査する。
 - CI / mainデプロイの両方で、既存の業務テストに加えてモーダルの表示契約テストを必須化。CIではスクリーンショットを `fmworks-modal-theme-qa` の成果物として保存。元の見積Excel描画・DB構造・業務権限・採番ルールに変更を加えない。
 
-## v0.17.2 経理レビュー表示と競合防止（2026-10-10）
+## v0.17.2 デモデータ保存および動作確認UI（2026-10-10）
 
-- src/AppFinance.html のfinanceUiに種類別選択IDを保持し、financeSelectedItem_とfinanceInspectorHtml_で一覧・詳細を同期する。選択・検索はDOMを局所更新、GAS呼出しなし。
-- 証憑要確認はサーバー既存のreceiptMatchesと現在読込済みのexpensesを使う。総数はgetFinanceOverviewのtotalsを使う。
-- src/StylesWorkflowV15.html末尾のfinance専用CSSだけを変更する。Finance.gs/Schema.gs/書類発行機能と共通CSSは変更しない。
-- クライアントの所有者・状態の追加確認はUX向けガードであり、正式な認可は既存のGASサーバーで引き続き行う。
-- 架空データのクライアント契約試験・既存経理統合試験・レスポンシブChromium試験を完了条件とする。本番DBは触らない。
+- デモ見積レコードは全て既存見積ヘッダー・見積明細・取引先・採番の各シートに実体を保存する。デモIDはDEMO-QUOTE-接頭辞で分類し、取引先名・件名にも【デモ】を入れる。
+- AppQuotes.htmlのquoteOverview_は表示権限があるデモ下書き件数を表示し、書類履歴へ遷移できるようにする。AppDocuments.htmlでは該当見積にDEMOラベルを表示する。
+- スプレッドシートの保存値は再読込で検算。テストスクリプトでデモ表示導線と一覧ラベルの契約を検証。既存の見積PDF/Excel描画・採番・認可ロジックは変更しない。
+
+## v0.17.3 経理2ペイン・台帳・サンプル切替の技術設計（2026-10-10）
+
+- データソースと分離：AppFinance.htmlのfinanceUi.overviewはサーバーからの認可済みデータのみ。financeUi.demoDataは初回のサンプル切替時だけ架空データを生成するメモリキャッシュ。financeDisplayedOverview_()でどちらを表示するか選ぶが、実データの参照は書き換えず、ログアウト時のresetFinanceUiで両者を破棄する。サンプルにはDEMO- IDを付け、取引先・人名は架空表現を使用する。
+- 保護：サンプル中は右側の承認・差戻し・精算ボタンを表示せず、経費記録ボタンも無効化。financeApprovalDialog / financeSettlementDialog に加え、最終financeSubmitDecision / financeSubmitSettlementのガードでGAS送信を抑止。正式な経理権限・状態・自己承認拒否は従来のFinance.gsで実施する。サンプル切替にGoogle Sheets更新・WebStorage書込・DBシード処理はない。
+- UI：financeOverviewRowsはPC向けのセマンティックな表と、スマートフォン向けの記録カードを同じ閲覧データから構築。financeSelectRecordはdata-finance-idの選択状態とfinanceSelectedDetailだけ更新し通信しない。タブ・月・状態・照合を変えるとフィルタ状態を適用して再表示。入力中のキーワード検索は結果領域だけを置き換え、入力フォーカスを維持する。
+- 集計：現行getFinanceOverviewのtotalsで経費承認待ち、出張承認待ち、精算待ち（経費／出張内訳）、経費・出張・経費記録の総件数を計算。証憑要確認だけはexpensesの現行取得範囲に含まれるreceiptMatchesにより計算し、全件数と区別する。照合は会計仕訳の証明ではない旨を注記する。
+- 変更境界：src/AppFinance.html、src/StylesWorkflowV15.htmlの.finance-v0173限定スタイル、2設計書、test_client_contract.mjs、test_workflow_viewport_v15.mjsを変更する。Finance.gs、Schema.gs、AppQuotes.html、AppDocuments.html、Code.gs、共通Styles.htmlは変更しない。v0.17.2の見積デモ表示機能は保持する。
+- 検証：既存Node VM契約・架空経理統合テスト・文書同期テスト・Chromiumのライト/ダーク・1366×768/1600×900/390×844/320×700 viewportテストを実行。CIが失敗した場合はmainに取り込まず、実DBを変更しない。
