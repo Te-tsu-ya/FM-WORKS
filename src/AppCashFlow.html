@@ -13,6 +13,7 @@ function cashFlowDiscard_(next){
 }
 function cashFlowOpen_(){
  if(!cashFlowAllowed_())return;
+ if(financeUi.demo){showToast('資金繰り表は実データです。サンプル表示を解除してから開いてください。');return;}
  financeUi.insightMode=false;cashFlowUi.open=true;cashFlowUi.year=cashFlowUi.year||cashFlowThisYear_();
  renderPageIfActive('finance');cashFlowLoad_();
 }

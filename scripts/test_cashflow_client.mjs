@@ -10,7 +10,7 @@ const runner=(x={})=>new Proxy({}, {get(_obj,key){
 const escapeHtml=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const state={sessionToken:'ADMIN-TOKEN',page:'finance',data:{today:'2026-10-11',permissions:{adminConsole:true,cashFlowWorkspace:true},user:{employeeId:'A'}}};
 let renders=0,confirmCallback=null;
-const ctx=vm.createContext({state,financeUi:{insightMode:false},google:{script:{run:runner()}},renderPageIfActive:()=>renders++,escapeHtml,
+const ctx=vm.createContext({state,financeUi:{insightMode:false,demo:false},google:{script:{run:runner()}},renderPageIfActive:()=>renders++,showToast:()=>{},escapeHtml,
  financeIdentity:()=>state.sessionToken+'|'+state.data.user.employeeId,cleanApiErrorMessage:(err)=>err.message,
  pageHead:(name,desc)=>name+' '+desc,
  window:{},openConfirmDialog:(_t,_m,_confirm,cb)=>{confirmCallback=cb;},
@@ -18,7 +18,9 @@ const ctx=vm.createContext({state,financeUi:{insightMode:false},google:{script:{
 const source=fs.readFileSync('src/AppCashFlow.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 vm.runInContext(source,ctx);
 assert.equal(ctx.cashFlowAllowed_(),true);
-ctx.cashFlowOpen_();
+ctx.financeUi.demo=true;ctx.cashFlowOpen_();
+assert.equal(calls.length,0,'finance sample view cannot silently open a real financial editing screen');
+ctx.financeUi.demo=false;ctx.cashFlowOpen_();
 assert.equal(calls.length,1);
 assert.equal(calls[0].method,'getCashFlowYear');
 assert.equal(calls[0].args[1],2026);

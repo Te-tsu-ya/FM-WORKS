@@ -2151,3 +2151,4 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 画面でcashFlowCalc_を用い、計画/実績/実績優先見込みの12か月累積を表示し、SVGグラフを即時更新する。備考はescapeHtmlでエスケープ。
 - FMRotaryRPCの保存は同じrequestKeyで安全に再試行し、成功後は再読込で確認。失敗時は草稿を保持する。
 - 年度切替・戻る・再読み込みの入力破棄確認はFM WORKS共通の確認ダイアログを使用する。未保存の場合、キャンセルで入力を保持する。
+- `financeUi.demo===true` では資金繰り表への入口を無効化し、サーバー呼出を開始しない。サンプル画面と実データの誤混同を避ける。
