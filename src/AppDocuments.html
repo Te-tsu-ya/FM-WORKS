@@ -1,6 +1,6 @@
 <script>
 /* Related documents: conversion from a frozen quote; archive is its own page. */
-let docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',requestKey:''};
+let docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',requestKey:'',requestSeq:0,cacheIdentity:'',detailCache:new Map()};
 const DOC_LABELS={quote:'見積書',invoice:'請求書',delivery:'納品書',receipt:'領収書'};
 function documentRowsClient_(){
  const data=quoteUi.data||{},q=(data.quotes||[]).map(row=>({id:row.id,kind:'quote',number:row.number||'下書き',vendorName:row.vendorName||'',subject:row.subject||'',status:row.status,date:row.quoteDate,total:row.total,updatedAt:row.updatedAt,ownerName:row.ownerName,quoteId:row.id}));
@@ -10,8 +10,51 @@ function documentRowsClient_(){
 }
 function documentSetFilter(value){docUi.filter=Object.prototype.hasOwnProperty.call(DOC_LABELS,value)?value:'all';renderPageIfActive('documentHistory');}
 function documentSetQuery(value){docUi.query=String(value||'').slice(0,120);renderPageIfActive('documentHistory');const input=document.getElementById('docHistorySearch');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}}
-function documentOpenQuote(id){navigate('quotes');quoteOpen(id);}
-function documentOpenRecord(id){if(docUi.busy||!state.sessionToken)return;docUi.selectedId=String(id);docUi.loading=true;docUi.error='';renderPageIfActive('documentHistory');const identity=quoteIdentity_();google.script.run.withSuccessHandler(result=>{if(identity!==quoteIdentity_())return;docUi.loading=false;docUi.selected=result;renderPageIfActive('documentHistory');}).withFailureHandler(error=>{if(identity!==quoteIdentity_())return;docUi.loading=false;docUi.error=cleanApiErrorMessage(error,'書類を読み込めませんでした');renderPageIfActive('documentHistory');}).getRelatedDocument(state.sessionToken,String(id));}
+function documentOpenRecord(id){
+ if(docUi.busy||!state.sessionToken)return;
+ const key=String(id),identity=quoteIdentity_();
+ if(docUi.cacheIdentity!==identity){
+  docUi.cacheIdentity=identity;docUi.detailCache=new Map();
+  docUi.selected=null;docUi.selectedId='';docUi.loading=false;
+ }
+ // An in-flight selection of the same document must not create another RPC.
+ if(docUi.loading&&docUi.selectedId===key)return;
+ const rows=quoteUi.data&&quoteUi.data.relatedDocs||[];
+ const current=rows.find(row=>String(row.id)===key);
+ const revision=String(current&&current.updatedAt||'');
+ docUi.selectedId=key;docUi.error='';
+ const seq=++docUi.requestSeq,entry=docUi.detailCache.get(key);
+ if(entry&&revision&&entry.revision===revision){
+  docUi.detailCache.delete(key);docUi.detailCache.set(key,entry);
+  docUi.loading=false;docUi.selected=entry.details;
+  renderPageIfActive('documentHistory');
+  return;
+ }
+ // A new selection must never display the previously selected document.
+ docUi.selected=null;docUi.loading=true;renderPageIfActive('documentHistory');
+ const isCurrent=()=>identity===quoteIdentity_()&&seq===docUi.requestSeq&&docUi.selectedId===key;
+ google.script.run.withSuccessHandler(result=>{
+  if(!isCurrent())return;
+  docUi.loading=false;
+  if(!result||!result.header||String(result.header.id)!==key){
+   docUi.error='書類の詳細を確認できませんでした。更新して再試行してください。';
+   renderPageIfActive('documentHistory');return;
+  }
+  docUi.selected=result;
+  const latest=(quoteUi.data&&quoteUi.data.relatedDocs||[]).find(row=>String(row.id)===key);
+  if(revision&&latest&&String(latest.updatedAt||'')===revision){
+   docUi.detailCache.delete(key);
+   docUi.detailCache.set(key,{revision,details:result});
+   if(docUi.detailCache.size>12)docUi.detailCache.delete(docUi.detailCache.keys().next().value);
+  }
+  renderPageIfActive('documentHistory');
+ }).withFailureHandler(error=>{
+  if(!isCurrent())return;
+  docUi.loading=false;docUi.selected=null;
+  docUi.error=cleanApiErrorMessage(error,'書類を読み込めませんでした');
+  renderPageIfActive('documentHistory');
+ }).getRelatedDocument(state.sessionToken,key);
+}
 function documentPreviewHtml_(result){if(!result||!result.header)return '';const h=result.header,label=DOC_LABELS[h.kind]||'書類';let html=quotePreviewDocument_(Object.assign({},h,{quoteDate:h.documentDate,lines:result.lines}));html=html.replace('<h2>見積書</h2>','<h2>'+label+'</h2>');html=html.replace('見積番号：','書類番号：').replace('見積日：','発行日：');html=html.replace('お見積金額（税込）',h.kind==='invoice'?'ご請求金額（税込）':h.kind==='receipt'?'領収金額（税込）':'納品金額（税込）');const extra=h.kind==='receipt'?'入金確認日：'+escapeHtml(h.paidDate||''):h.kind==='invoice'?'お支払期限：'+escapeHtml(h.dueDate||''):'納品日：'+escapeHtml(h.dueDate||'');html=html.replace("<div class='qb-paper-condition'>","<div class='qb-paper-condition'><span>"+extra+"</span>");return html;}
 function documentSaveFile_(file){const decoded=atob(file.base64),bytes=new Uint8Array(decoded.length);for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);const url=URL.createObjectURL(new Blob([bytes],{type:file.mimeType})),a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 function documentDownload(id,format){if(docUi.busy||docUi.loading)return;docUi.busy=true;const identity=quoteIdentity_();google.script.run.withSuccessHandler(file=>{if(identity!==quoteIdentity_())return;docUi.busy=false;try{documentSaveFile_(file);showToast(file.name+' を保存しました');}catch(_){docUi.error='保存に失敗しました。再試行してください。';}renderPageIfActive('documentHistory');}).withFailureHandler(err=>{if(identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(err,'ファイルを取得できませんでした');renderPageIfActive('documentHistory');}).getRelatedDocumentFile(state.sessionToken,String(id),format);}
