@@ -63,13 +63,13 @@ function saveProject(sessionToken, payload) {
     const lastRow = sheet.getLastRow();
     let projectId = String(payload.projectId || '').trim();
     let rowNumber = 0;
-    let before = '';
+    let before = '',oldName='';
 
     if (lastRow >= 2) {
       const rows = sheet.getRange(2,1,lastRow-1,9).getDisplayValues();
       rows.forEach((r,idx) => {
         if (projectId && r[0] === projectId) {
-          rowNumber = idx + 2;
+          rowNumber = idx + 2;oldName=r[1];
           before = auditJson_({name:r[1],client:r[2],status:r[3],startDate:r[4],endDate:r[5],note:r[6]});
         }
         if ((!projectId || r[0] !== projectId) && String(r[1] || '').trim().toLowerCase() === name.toLowerCase()) {
@@ -78,7 +78,9 @@ function saveProject(sessionToken, payload) {
       });
     }
 
+    if(typeof projectHubValidateName_==='function')projectHubValidateName_(projectId,name);
     if (!projectId) projectId = nextProjectId_(sheet);
+    if(oldName&&oldName!==name&&typeof projectHubRememberRename_==='function')projectHubRememberRename_(projectId,oldName,name,admin);
     if (!rowNumber) rowNumber = Math.max(2, sheet.getLastRow() + 1);
     const nowText = toTimestamp_(new Date());
 
@@ -109,3 +111,4 @@ function nextProjectId_(sheet) {
   }
   return 'PRJ-' + String(max + 1).padStart(3,'0');
 }
+

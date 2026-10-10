@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.18.0
+**文書版:** 0.19.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2015,3 +2015,26 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 ### 運用状態の更新連携（2026-10-10）
 
 AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持する。2本の運用RPC結果を一時保持し、両方完了後に適用する。再取得予約があれば旧結果を破棄してforceで再取得する。セッショントークンとmaintenanceオブジェクトを照合し、古いセッション応答を無視する。明示更新・DB移行後・労務設定保存後はforceを使用する。
+
+## ProjectHub / DB v15（v0.19.0）
+
+`ProjectHub.gs`、`AppProjectHub.html`、`StylesProjectHub.html`に案件集約を分離する。Indexのinclude、AppCoreのNAV/route/保存後無効化、AppShellの初期routeと入力保持へ接続する。既存のプロジェクト9列・工数15列・見積列を変更しない。
+
+| 追加台帳 | 保存内容 |
+| --- | --- |
+| プロジェクト計画 | 案件ID、予算工数（分）、責任者、見積ID、受注情報、概要、旧名JSON、revision・更新者・送信識別子 |
+| プロジェクト作業 | 案件ID、担当、開始/期限、予定分、進捗、状態、メモ、revision・更新者・送信識別子 |
+| プロジェクト資料 | 案件ID、種別、本文、HTTPSリンク、共有/非表示、revision・更新者・送信識別子 |
+| プロジェクト共有 | 案件ID、種別、本文、投稿者名・ID・日時・送信識別子 |
+
+`getProjectHubWorkspace(token,force)`は案件一覧と集計・社員表示名・閲覧可能な発行済み見積を返す。一覧では資料本文と共有メモを読まない。詳細では案件ID列を先に読み、資料本文・共有メモは該当案件の連続行だけ取得する。`getProjectHubDetail(token,projectId,force)`は対象案件の作業・資料・共有と許可された工数明細を返す。未移行はsetupRequired、列不一致はエラー。工数の削除行を除外し、共通生データをScriptCacheに20秒保持する。saveWorklog/deleteWorklogはこのキャッシュを削除する。キャッシュ後にセッション権限を適用する。
+
+進捗 = Σ（作業予定分 × 作業進捗率）/ Σ作業予定分。日程目安は開始日から期限までの暦日直線補間を同じ重みで平均する。休日・実作業順序を含む工程予測ではない。予算工数未設定なら作業予定分合計を使い、計画がなければnullを返す。工数消化率 = 実績分 / 予算分。案件名・旧名はtrim/lowercaseで照合し、類似顧客名は照合しない。
+
+`saveProjectHubRecord(token,kind,payload)`はScriptLock内で認証・案件・編集権限を再検証する。予定時間は分に変換する。既存revision相違は拒否し、完全に同じ内容の再試行だけ成功扱いにする。新規保存のrequestKeyは作成者・案件・内容が一致する場合だけ重複扱いにする。記録保存後の監査失敗はauditRecorded=falseとして保存済みを明示する。資料本文はシート式注入を抑止し、HTMLはescapeHtmlで描画する。リンクはcompanyDocsUrl_でHTTPS検証する。
+
+案件名更新はProjects.gsから旧名を計画台帳に記録してからマスタを書き込む。未移行時の名称変更は連携を失わないため拒否する。旧名の他案件への再使用も拒否する。全社員の集約値は共有するが、個人明細は本人/直属メンバー/ADMIN、受注金額・見積は元見積の閲覧権限に従う。
+
+クライアントはセッション内Mapに一覧と案件詳細を5分保持する。タブ・検索はRPCなし。保存後無効化とforce更新で再読込し、serial・ユーザー識別・stateオブジェクトで遅延応答と別ログインの混入を防ぐ。メニュー移動と同一ページ再描画前にフォームを退避する。再読込/ログアウトで下書きは消去し、変更済みフォームのbeforeunloadを検知する。業務データをlocalStorageへ保存しない。
+
+検証：scripts/test_project_hub.mjs（実集約、保存/権限/重複/競合、クライアント通信・入力）とscripts/test_project_hub_viewport.mjs（PC/スマートフォン・明暗テーマ）をCIに追加する。DB移行は既存のバックアップ付きmigrateDatabaseToCurrentの明示操作に限定する。ライブ環境の対象DB設定と認証を確認できるまでは本番CRUD検証を完了としない。

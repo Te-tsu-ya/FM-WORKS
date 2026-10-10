@@ -1,6 +1,6 @@
 <script>
 function renderPage(transition=false){
-  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,companyDocs:companyDocsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
+  const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,projects:typeof projectHubPage==='function'?projectHubPage:homePage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,companyDocs:companyDocsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
   if(!content.dataset.compositionBound){
     content.dataset.compositionBound='true';
@@ -11,6 +11,7 @@ function renderPage(transition=false){
     if(content.dataset.composing==='true'){content.dataset.renderPending='true';return;}
     const samePage=content.dataset.renderedPage===state.page;
     if(samePage&&state.page==='financeEntry'&&typeof financeRememberEntry_==='function')financeRememberEntry_();
+    if(samePage&&state.page==='projects'&&typeof projectHubRememberDraft_==='function')projectHubRememberDraft_();
     const active=document.activeElement;
     const field=samePage&&active&&content.contains(active)?{
       id:active.id,name:active.name,label:active.getAttribute('aria-label'),
@@ -146,6 +147,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(typeof somuReset==='function')somuReset();
   resetQuoteUi();
   if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();
+  if(typeof resetProjectHubUi==='function')resetProjectHubUi();
   invalidateMonthlyResultCache();
   state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   state.officeUi={selected:'overview',recordId:'',query:'',status:'all'};
@@ -192,6 +194,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='schedule')loadSchedule({silent:true});
   if(state.page==='companyCalendar')loadCompanyCalendar();
   if(state.page==='worklog')loadWorklogs({silent:true});
+  if(state.page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
   if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
   if(state.page==='quotes')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
@@ -495,3 +498,4 @@ function bootstrap(){
 document.addEventListener('DOMContentLoaded',bootstrap);
 
 </script>
+
