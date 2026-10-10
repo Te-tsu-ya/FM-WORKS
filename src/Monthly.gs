@@ -222,19 +222,32 @@ function confirmMonthlyReview(sessionToken, yearMonth, note) {
 
     const sheet=getMonthlyReviewSheet_(true);
     const lastRow=sheet.getLastRow();
-    const values=lastRow>=2?sheet.getRange(2,1,lastRow-1,10).getDisplayValues():[];
-    const idx=values.findIndex(r=>r[0]===ym&&r[1]===employee.employeeId);
-    const rowNumber=idx>=0?idx+2:Math.max(2,lastRow+1);
+    // Search the employee ID column, then read only the matching month's row.
+    // The previous implementation downloaded all 10 columns for every employee.
+    let existingRow=0;
+    if(lastRow>=2){
+      const matches=sheet.getRange(2,2,lastRow-1,1)
+        .createTextFinder(employee.employeeId).matchEntireCell(true).findAll();
+      for(const candidate of matches){
+        const row=candidate.getRow();
+        if(sheet.getRange(row,1).getDisplayValue()===ym){
+          existingRow=row;
+          break;
+        }
+      }
+    }
+    const before=existingRow?sheet.getRange(existingRow,1,1,10).getDisplayValues()[0]:null;
+    const rowNumber=existingRow||Math.max(2,lastRow+1);
     const nowText=toTimestamp_(new Date());
     const latest=getLatestMonthlyDataUpdate_(employee.employeeId,ym);
-    const createdAt=idx>=0?(values[idx][8]||nowText):nowText;
+    const createdAt=before?(before[8]||nowText):nowText;
     const memo=safeSheetText_(note,500);
     sheet.getRange(rowNumber,1,1,10).setValues([[
       ym,employee.employeeId,employee.name,'CONFIRMED',nowText,employee.name,latest,memo,createdAt,nowText
     ]]);
     appendAudit_({
       employeeId:employee.employeeId,employeeName:employee.name,operation:'月次勤怠確認',
-      target:'月次確認',targetId:ym,before:idx>=0?(values[idx][3]||'PENDING'):'PENDING',
+      target:'月次確認',targetId:ym,before:before?(before[3]||'PENDING'):'PENDING',
       after:'CONFIRMED',source:'WEB',result:'SUCCESS',note:memo
     });
     SpreadsheetApp.flush();
