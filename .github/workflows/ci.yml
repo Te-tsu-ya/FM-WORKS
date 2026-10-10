@@ -44,6 +44,8 @@ jobs:
         run: node scripts/test_somu_growth.mjs
       - name: Verify general affairs client actions
         run: node scripts/test_somu_client.mjs
+      - name: Verify navigation cache and input preservation
+        run: node scripts/test_business_workflows.mjs
       - name: Install Japanese fonts for layout verification
         run: |
           sudo apt-get update -qq

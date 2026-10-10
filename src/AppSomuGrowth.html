@@ -44,18 +44,24 @@ function somuGrowthReset_(){somuGrowth={loaded:false,loading:false,data:null,err
 function somuGrowthData_(){return somuUi.demo?SOMU_GROWTH_DEMO:(somuGrowth.data||{contracts:[],facilities:[],tickets:[]});}
 function somuGrowthTab_(tab){return Object.prototype.hasOwnProperty.call(SOMU_GROWTH_CONFIG,tab);}
 function somuGrowthLoad(force){
- if(!somuCanUse()||somuUi.demo||somuGrowth.loading)return;
- if(somuGrowth.loaded&&!force&&Date.now()-somuGrowth.loadedAt<45000)return;
+ if(!somuCanUse()||somuUi.demo)return;
+ if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
+ if(somuGrowth.loading){if(force)somuGrowth.refreshNeeded=true;return;}
+ if(somuGrowth.loaded&&!force&&Date.now()-somuGrowth.loadedAt<300000)return;
  const identity=somuSessionIdentity(),wasLoaded=somuGrowth.loaded;
+ const serial=somuGrowth.serial=(somuGrowth.serial||0)+1;
  somuGrowth.loading=true;somuGrowth.error='';
  if(somuGrowthTab_(somuUi.tab)&&!wasLoaded&&state.page==='office')renderPageIfActive('office');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-  if(identity!==somuSessionIdentity())return;
-  somuGrowth.data=data;somuGrowth.loading=false;somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();
+  if(identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
+  somuGrowth.loading=false;
+  if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
+  somuGrowth.data=data;somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();
   if(state.page==='office'&&!somuUi.demo)renderPageIfActive('office');
  }).withFailureHandler(error=>{
-  if(identity!==somuSessionIdentity())return;
+  if(identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
   somuGrowth.loading=false;
+  if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
   if(!wasLoaded){somuGrowth.error=cleanApiErrorMessage(error,'総務の追加台帳を取得できませんでした。');somuGrowth.loaded=true;}
   else if(state.page==='office')showToast('追加台帳の再取得に失敗しました。前の表示を維持しています。');
   if(state.page==='office')renderPageIfActive('office');
@@ -216,6 +222,7 @@ function somuGrowthOpenForm_(tab,id){
   annualYen:'0',priority:'通常',category:conf.fields.find(x=>x[0]==='category')?.[5]?.[0]||'その他',
   renewal:'要確認',type:'オフィス設備'};
  const fields=conf.fields.map(([key,label,type,required,max,choices])=>{
+  label+=required?' <em class="v15-required">必須</em>':'';
   const value=record[key]??defaults[key]??'';
   const attr=required?' required':'';
   if(type==='select')return '<label class="field"><span>'+label+'</span><select id="somug-'+key+'"'+attr+'>'+
@@ -243,6 +250,7 @@ function somuGrowthClose_(){if(somuUi.busy)return;window.somuGrowthActiveForm=nu
 function somuGrowthSubmit_(){
  const f=window.somuGrowthActiveForm;
  if(!f||somuUi.busy||somuUi.demo)return;
+ const form=document.getElementById('somugForm');if(form&&form.reportValidity&&!form.reportValidity())return;
  const conf=SOMU_GROWTH_CONFIG[f.tab],payload={id:f.id,revision:f.record.revision,requestKey:f.requestKey};
  conf.fields.forEach(([key])=>{const e=document.getElementById('somug-'+key);payload[key]=e?e.value:'';});
  const save=document.getElementById('somugSave'),error=document.getElementById('somugError');
@@ -251,11 +259,12 @@ function somuGrowthSubmit_(){
   if(error){error.textContent='通知期限は満了日以前にしてください。';error.hidden=false;}return;
  }
  somuUi.busy=true;
+ const freeze=value=>{if(form&&form.querySelectorAll)form.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=value);};freeze(true);
  if(save){save.disabled=true;save.textContent='保存中…';}
  const identity=somuSessionIdentity();
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
-  somuUi.busy=false;
+  somuUi.busy=false;freeze(false);
   if(!result||!result.ok){
     if(error){error.textContent='保存結果を確認できませんでした。';error.hidden=false;}
     if(save){save.disabled=false;save.textContent='保存する';}
@@ -277,7 +286,7 @@ function somuGrowthSubmit_(){
   }
  }).withFailureHandler(err=>{
   if(identity!==somuSessionIdentity())return;
-  somuUi.busy=false;
+  somuUi.busy=false;freeze(false);
   if(handleApiError(err,'保存できませんでした'))return;
   if(error){error.textContent=cleanApiErrorMessage(err,'保存できませんでした');error.hidden=false;}
   if(save){save.disabled=false;save.textContent='保存する';}

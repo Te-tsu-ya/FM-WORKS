@@ -132,7 +132,7 @@ for(const [width,height,kind,theme] of cases){
   'inputs=[...root.querySelectorAll("input,textarea,select")],'+
   'info={width:innerWidth,height:innerHeight,htmlWidth:document.documentElement.scrollWidth,'+
   'rootWidth:root.getBoundingClientRect().width,contentWidth:content.getBoundingClientRect().width,'+
-  'buttons:buttons.length,inputs:inputs.length,'+
+  'buttons:buttons.length,inputs:inputs.length,fieldGroups:root.querySelectorAll("fieldset.business-field-group").length,'+
   'shortestButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
   'if(root.classList.contains("finance-v0173")){'+
    'const meter=root.querySelector(".finance-priority-stats");'+
@@ -165,6 +165,7 @@ for(const [width,height,kind,theme] of cases){
   if(result.rootWidth<=0||result.rootWidth>result.contentWidth+2)errors.push('content width');
   if(!result.buttons)errors.push('no actions');
   if(['expense','travel'].includes(kind)&&result.inputs<6)errors.push('missing form fields');
+  if(['expense','travel'].includes(kind)&&result.fieldGroups<2)errors.push('missing grouped entry steps');
   if(kind.startsWith('finance')&&result.inputs<(kind==='financeInsights'?2:3))errors.push('missing finance search controls');
   if(kind==='admin'&&result.inputs<3)errors.push('missing master form controls');
    if(kind.startsWith('finance')&&kind!=='financeInsights'&&width>=1200&&result.metricColumns!==4)errors.push('desktop finance KPIs are not one row');

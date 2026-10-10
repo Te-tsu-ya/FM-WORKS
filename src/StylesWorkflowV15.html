@@ -805,4 +805,26 @@
  .finance-v0173 .finance-priority-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
+
+/* 2026-10-10 business workflows: input area first, details on demand. */
+.business-field-group{grid-column:1/-1;min-width:0;border:0;border-bottom:1px solid var(--line);padding:0 0 20px;margin:0 0 18px}
+.business-field-group legend{font-size:15px;font-weight:700;padding:0 0 14px;line-height:1.6}
+.business-field-group>.finance-form-grid{gap:16px}
+.business-optional{grid-column:1/-1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:6px 0 12px;background:var(--panel-soft,var(--surface))}
+.business-optional summary{cursor:pointer;font-size:13px;font-weight:650;line-height:1.6;padding:3px 0}
+.business-optional[open]>.finance-form-grid,.business-optional[open]>.qb-info-grid{margin-top:16px}
+.business-resume{margin-bottom:12px}
+.quote-builder .qb-layout{grid-template-columns:minmax(0,1fr)}
+.quote-builder .qb-preview-column{display:none}
+.quote-builder.business-preview-open .qb-preview-column{display:block;position:static}
+.quote-builder .qb-mobile-total{display:grid;gap:8px}
+.quote-builder .business-vendor-search{grid-column:1/-1}
+.quote-builder .qb-info-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.quote-builder .qb-section-title-actions{flex-wrap:wrap}
+.quote-builder .qb-field input,.quote-builder .qb-field select,.quote-builder .qb-cell input,.finance-field input,.finance-field select{min-height:42px}
+.quote-builder .qb-header-actions{flex-wrap:wrap}
+.business-optional summary:focus-visible{outline:3px solid var(--blue);outline-offset:4px}
+@media(min-width:1600px){.quote-builder.business-preview-open .qb-layout{grid-template-columns:minmax(0,1fr) minmax(320px,360px)}}
+@media(max-width:760px){.quote-builder .qb-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.business-field-group>.finance-form-grid{grid-template-columns:minmax(0,1fr)}.business-field-group legend{font-size:14px}.quote-builder .qb-field-subject,.quote-builder .doc-inline-vendor{grid-column:1/-1}}
+
 </style>

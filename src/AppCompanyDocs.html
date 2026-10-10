@@ -54,7 +54,7 @@ function loadCompanyDocs(force=false){
   let ui=companyDocsUi;
   if(ui.identity&&ui.identity!==identity){resetCompanyDocsUi();ui=companyDocsUi;}
   if(ui.loading){if(force)ui.reloadRequested=true;return;}
-  if(!force&&ui.data&&ui.identity===identity&&Date.now()-ui.loadedAt<60000)return;
+  if(!force&&ui.data&&ui.identity===identity&&Date.now()-ui.loadedAt<300000)return;
   ui.identity=identity;ui.loading=true;ui.error='';
   if(!ui.data)companyDocsRender_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{

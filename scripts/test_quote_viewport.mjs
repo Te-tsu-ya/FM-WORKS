@@ -68,7 +68,9 @@ for(const [width,height,kind,theme] of cases){
   'buttons=[...shell.querySelectorAll("button")],all=[...shell.querySelectorAll(".quote-line")];'+
   'const info={w:innerWidth,h:innerHeight,scrollWidth:document.documentElement.scrollWidth,'+
   'shellWidth:shell.getBoundingClientRect().width,toolbarHeight:toolbar.getBoundingClientRect().height,'+
-  'lines:all.length,buttons:buttons.length,smallButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
+  'lines:all.length,buttons:buttons.length,editorWidth:shell.querySelector(".qb-edit-column")?.getBoundingClientRect().width||0,'+
+  'previewVisible:!!shell.querySelector(".qb-preview-column")?.getBoundingClientRect().height,'+
+  'smallButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
   'parent.postMessage({kind:"QUOTE_QA",info},"*");</script></body></html>';
  const frame=path.join(tmp,id+'-inner.html');fs.writeFileSync(frame,inner);
  const host='<html><head><meta charset="utf-8"><script>'+
@@ -91,6 +93,7 @@ for(const [width,height,kind,theme] of cases){
   if(metrics.shellWidth<=0)reasons.push('empty screen');
   if(metrics.buttons<1)reasons.push('no actionable control');
   if(kind==='edit'&&metrics.lines!==3)reasons.push('editable line count');
+  if(kind==='edit'&&(metrics.previewVisible||metrics.editorWidth<metrics.shellWidth*.85))reasons.push('entry area must have full width by default');
   if(metrics.smallButton<26)reasons.push('button too small');
   console.log((reasons.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(metrics)+(reasons.length?' '+reasons.join(','):''));
   if(reasons.length)bad++;

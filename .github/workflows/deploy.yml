@@ -52,6 +52,8 @@ jobs:
         run: node scripts/test_somu_growth.mjs
       - name: Verify general affairs client actions
         run: node scripts/test_somu_client.mjs
+      - name: Verify navigation cache and input preservation
+        run: node scripts/test_business_workflows.mjs
       - name: Test light and dark modal dialog contrast before publication
         run: node scripts/test_modal_theme.mjs
       - name: Install clasp

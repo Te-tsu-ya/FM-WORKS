@@ -4,7 +4,7 @@ function loadAttendancePreview(options={}){
   const month=state.data.today.slice(0,7),employeeId=state.data.user.employeeId;
   const key=month+'|'+employeeId,session=state.sessionToken;
   const preview=state.attendancePreview||(state.attendancePreview={data:null,key:'',at:0,loading:false,error:''});
-  if(!options.force&&preview.data&&preview.key===key&&(Date.now()-Number(preview.at||0))<120000)return;
+  if(!options.force&&preview.data&&preview.key===key&&(Date.now()-Number(preview.at||0))<300000)return;
   // The attendance monthly preview and the detailed monthly tab share one GAS result.
   const cache=monthlyCachedResult_(month,employeeId);
   if(!options.force&&cache&&(Date.now()-cache.at)<MONTHLY_RESULT_TTL){
@@ -448,7 +448,7 @@ function loadWorklogs(options={}){
   if(!state.worklog.date)state.worklog.date=state.data.today;
   const date=state.worklog.date,identity=worklogWindowIdentity();
   const cached=worklogCachedWindow(date);
-  const fresh=!!(cached&&(Date.now()-cached.at)<120000);
+  const fresh=!!(cached&&(Date.now()-cached.at)<300000);
   if(cached){
     const switchedDay=state.worklog.loadedDate!==date;
     worklogShowCachedDay(date,cached);
@@ -497,7 +497,7 @@ function loadWorklogs(options={}){
     if(selectedCache){
       worklogShowCachedDay(selected,selectedCache);
       renderPageIfActive('worklog');
-      if((Date.now()-selectedCache.at)>=120000&&state.page==='worklog'){
+      if((Date.now()-selectedCache.at)>=300000&&state.page==='worklog'){
         loadWorklogs({force:true,silent:true});
       }
     }else if(state.page==='worklog'){
@@ -820,7 +820,7 @@ function scheduleRange(){
   if(s.view==='week')return {start:startOfWeek(s.date),end:endOfWeek(s.date)};
   return {start:s.date,end:s.date};
 }
-const SCHEDULE_WINDOW_TTL=180000;
+const SCHEDULE_WINDOW_TTL=300000;
 const SCHEDULE_RETRY_COOLDOWN=30000;
 const SCHEDULE_MAX_WINDOWS=6;
 const scheduleWindowCache=new Map();
@@ -1434,6 +1434,8 @@ function ensureModal(){
   return r;
 }
 function closeModal(){
+  if(typeof somuUi!=='undefined'&&somuUi.busy&&
+     (document.getElementById('somuForm')||document.getElementById('somugForm'))){showToast('保存処理が終わるまでお待ちください');return;}
   const r=document.getElementById('modalRoot');if(r)r.innerHTML='';
   const target=modalReturnFocus;modalReturnFocus=null;
   if(target&&document.contains(target))requestAnimationFrame(()=>target.focus());

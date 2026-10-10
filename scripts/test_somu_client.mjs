@@ -117,7 +117,7 @@ evaluate("somuUi.query='';somuUi.loadedAt=Date.now()");
 const beforeLocalCache=calls.length;
 evaluate("somuLoad(false)");
 assert.equal(calls.length,beforeLocalCache,'fresh local data makes reentry without any RPC');
-evaluate("somuUi.loadedAt=Date.now()-46000");
+evaluate("somuUi.loadedAt=Date.now()-301000");
 const previousData=evaluate("somuUi.data");
 evaluate("somuLoad(false)");
 assert.equal(calls.at(-1).api,'getSomuWorkspace');

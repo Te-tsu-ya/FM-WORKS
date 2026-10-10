@@ -59,9 +59,30 @@ function ensureLeaveLedgerOpening_(employee, actor) {
   return {configured:true,balance:state.balance,basisDate:employee.leaveBasisDate,source:'LEDGER',entries:1};
 }
 
+
+function findLeaveLedgerRequestPosting_(employeeId,requestId,type) {
+  if(!requestId)return null;
+  return getLeaveLedgerRows_(employeeId)
+    .find(r=>r.requestId===requestId&&r.type===type)||null;
+}
+function syncLeaveMasterFromLedger_(employee) {
+  const state=getLeaveLedgerState_(employee);
+  if(!state.configured)throw new Error('有給台帳の残日数が確認できません。管理者へ連絡してください。');
+  // If the posting succeeded but the employee-master write previously failed,
+  // repair from the latest ledger balance, not a potentially outdated posting.
+  getDb_().getSheetByName(DB.sheets.employees).getRange(employee.rowNumber,11).setValue(state.balance);
+  return state.balance;
+}
+
 function consumeLeaveBalance_(employee, days, requestId, actor) {
-  const state=ensureLeaveLedgerOpening_(employee,actor);
   const amount=normalizeLeaveDays_(days);
+  const previous=findLeaveLedgerRequestPosting_(employee.employeeId,requestId,'USE');
+  if(previous){
+    if(Math.abs(Number(previous.days)+amount)>0.00001)
+      throw new Error('過去の有給消化記録と日数が一致しません。管理者へ連絡してください。');
+    return syncLeaveMasterFromLedger_(employee);
+  }
+  const state=ensureLeaveLedgerOpening_(employee,actor);
   const next=leaveBalanceAfterDelta_(state.balance,-amount);
   appendLeaveLedgerRow_(employee,employee.leaveBasisDate,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),'USE',-amount,next,requestId,actor,'承認済み休暇申請');
   getDb_().getSheetByName(DB.sheets.employees).getRange(employee.rowNumber,11).setValue(next);
@@ -69,14 +90,19 @@ function consumeLeaveBalance_(employee, days, requestId, actor) {
 }
 
 function restoreLeaveBalance_(employee, days, requestId, actor, note) {
-  const state=ensureLeaveLedgerOpening_(employee,actor);
   const amount=normalizeLeaveDays_(days);
+  const previous=findLeaveLedgerRequestPosting_(employee.employeeId,requestId,'RESTORE');
+  if(previous){
+    if(Math.abs(Number(previous.days)-amount)>0.00001)
+      throw new Error('過去の有給返却記録と日数が一致しません。管理者へ連絡してください。');
+    return syncLeaveMasterFromLedger_(employee);
+  }
+  const state=ensureLeaveLedgerOpening_(employee,actor);
   const next=leaveBalanceAfterDelta_(state.balance,amount);
   appendLeaveLedgerRow_(employee,employee.leaveBasisDate,Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),'RESTORE',amount,next,requestId,actor,note||'承認済み休暇申請の取消');
   getDb_().getSheetByName(DB.sheets.employees).getRange(employee.rowNumber,11).setValue(next);
   return next;
 }
-
 function recordLeaveBalanceAdminChange_(employeeId, name, basisDate, oldConfigured, oldBalance, newConfigured, newBalance, actor) {
   if(!newConfigured)return;
   const employee={employeeId:employeeId,name:name,leaveBasisDate:basisDate,leaveBalanceConfigured:!!oldConfigured,leaveBalance:Number(oldBalance||0)};
