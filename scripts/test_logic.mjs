@@ -1,3 +1,4 @@
+import './test_request_indexing.mjs';
 import './test_worklog_integrity.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
