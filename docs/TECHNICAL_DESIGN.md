@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.5  
+**文書版:** 0.17.6  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1815,3 +1815,11 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 実本番スプレッドシートへの書き込みは行わず、公開後の認証環境で書込／再読込／監査ログを照合する受け入れ確認を残す。ゼロ秒通信は保証しない。
 
 - 追加の操作性QA：実ブラウザ内で架空経理記録の選択、検索入力、フォーカス保持、対象月フィルター、出張タブ切替、表示詳細の正当性、サンプル操作中のGAS通信禁止をPCとスマホ幅で検査する。
+
+## v0.17.6 見積ワークスペースのシート参照再利用（2026-10-10）
+
+- `quoteStorageStatus_(validatedSheets)` は全4シートの存在とDB_SCHEMA_SPECSの一致を検証し、検証済みSheet参照を任意の出力引数へ記録する。従来の引数なし呼出しは変更せず利用できる。
+- `getQuoteWorkspace` は同一呼出し内で取得した検証済み `validated.vendor/header/sequence` を `quoteRows_(model,validatedSheet)` に渡し、ヘッダーの重複検査を省略する。検証で不一致があればデータ一覧を返さない。
+- `documentListForUser_(user,storageAlreadyValidated)` は呼出し元が `documentStorageStatus_` の結果を確認したときに限り二重検査を省く。実際のデータ読取で `documentSheet_` が引き続きヘッダーを検査する。個別APIの従来動作も保持する。
+- `logPerformance_('quoteWorkspace',...)` は経過時間と見積・書類・取引先件数を記録する。Sheet参照はサーバーリクエストを跨いで保存しない。
+- `scripts/test_quote_integration.mjs` は1回の正常ワークスペース取得時のヘッダー7回と、不正な取引先シートヘッダーの拒否、帳票全体の回帰を検証する。APP.versionは0.17.6に整合。

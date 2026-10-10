@@ -32,13 +32,15 @@ function quoteModelSheet_(model){
     throw new Error(def.sheet+'の見出しが一致しません。管理者に確認してください。');
   return sh;
 }
-function quoteStorageStatus_(){
+function quoteStorageStatus_(validatedSheets){
   const missing=[];
   Object.keys(QUOTE_MODEL).forEach(k=>{
     const name=QUOTE_MODEL[k].sheet,sh=getDb_().getSheetByName(name);
     if(!sh){missing.push(name);return;}
-    if(schemaHeaderIssues_(sh.getRange(1,1,1,QUOTE_MODEL[k].keys.length).getDisplayValues()[0],
-          DB_SCHEMA_SPECS[name]).length)missing.push(name+'（列不一致）');
+    const issues=schemaHeaderIssues_(sh.getRange(1,1,1,QUOTE_MODEL[k].keys.length).getDisplayValues()[0],
+      DB_SCHEMA_SPECS[name]);
+    if(issues.length)missing.push(name+'（列不一致）');
+    else if(validatedSheets)validatedSheets[k]=sh;
   });
   return {ready:!missing.length,missing};
 }
@@ -49,8 +51,10 @@ function quoteRowObject_(model,values){
 function quoteRowArray_(model,data){
   return QUOTE_MODEL[model].keys.map(k=>data[k]==null?'':data[k]);
 }
-function quoteRows_(model){
-  const sh=quoteModelSheet_(model),length=QUOTE_MODEL[model].keys.length,last=sh.getLastRow();
+function quoteRows_(model,validatedSheet){
+  const definition=QUOTE_MODEL[model];
+  if(!definition)throw new Error('見積データ種別が不正です。');
+  const sh=validatedSheet||quoteModelSheet_(model),length=definition.keys.length,last=sh.getLastRow();
   if(last<2)return [];
   return sh.getRange(2,1,last-1,length).getDisplayValues().map(r=>quoteRowObject_(model,r));
 }
@@ -145,18 +149,23 @@ function quoteForUser_(user,header){
   return header;
 }
 function getQuoteWorkspace(sessionToken){
-  const user=quoteUser_(sessionToken),status=quoteStorageStatus_();
+  const started=Date.now(),user=quoteUser_(sessionToken),validated={};
+  const status=quoteStorageStatus_(validated);
   const docsReady=typeof documentStorageStatus_==='function'&&documentStorageStatus_().ready;
   if(!status.ready)return {setupRequired:true,missing:status.missing,vendors:[],quotes:[],relatedDocs:[],documentsSetupRequired:!docsReady,canConfigure:quoteIsAdmin_(user)};
-  const vendors=quoteRows_('vendor').filter(x=>x.active==='有効')
+  // These sheet handles were validated inside this same request. Never cache across logins or executions.
+  const vendors=quoteRows_('vendor',validated.vendor).filter(x=>x.active==='有効')
     .map(({code,name,invoice,address,industry})=>({code,name,invoice,address,industry}));
-  const headers=quoteRows_('header').filter(h=>quoteVisible_(user,h));
+  const headers=quoteRows_('header',validated.header).filter(h=>quoteVisible_(user,h));
   headers.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const codes=quoteRows_('sequence').filter(x=>x.verified==='確認済').map(x=>x.vendorCode);
-  return {setupRequired:false,vendors,quotes:headers.slice(0,200),
-    relatedDocs:docsReady?documentListForUser_(user):[],documentsSetupRequired:!docsReady,
+  const codes=quoteRows_('sequence',validated.sequence).filter(x=>x.verified==='確認済').map(x=>x.vendorCode);
+  const result={setupRequired:false,vendors,quotes:headers.slice(0,200),
+    relatedDocs:docsReady?documentListForUser_(user,true):[],documentsSetupRequired:!docsReady,
     sequencesReady:codes,canConfigure:quoteIsAdmin_(user),
     total:headers.length,displayLimit:200};
+  if(typeof logPerformance_==='function')
+    logPerformance_('quoteWorkspace',started,1200,{quoteCount:result.quotes.length,documentCount:result.relatedDocs.length,vendorCount:vendors.length});
+  return result;
 }
 function getQuote(sessionToken,id){
   const user=quoteUser_(sessionToken),header=quoteForUser_(user,quoteFind_('header',id).data);

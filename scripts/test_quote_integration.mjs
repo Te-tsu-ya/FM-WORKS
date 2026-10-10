@@ -16,6 +16,7 @@ class Sheet{
  deleteRow(n){this.singleDeleteCalls=(this.singleDeleteCalls||0)+1;this.rows.splice(n-1,1)}
  deleteRows(start,count){this.bulkDeleteCalls=(this.bulkDeleteCalls||0)+1;this.rows.splice(start-1,count)}
  getRange(row,col,height=1,width=1){const self=this;
+  if(row===1&&height===1)self.headerReadCalls=(self.headerReadCalls||0)+1;
   const data=()=>Array.from({length:height},(_,r)=>Array.from({length:width},(_,c)=>(self.rows[row+r-1]||[])[col+c-1]??''));
   return {getValues:data,getDisplayValues:()=>data().map(a=>a.map(String)),
    createTextFinder:value=>({matchEntireCell(){return this},findNext(){const found=self.rows.findIndex((r,i)=>i>0&&String(r[col-1])===String(value));return found<0?null:{getRow:()=>found+1}}}),
@@ -200,6 +201,21 @@ ok('growing existing draft appends only extra lines in one batch and preserves n
  detailSheet.rows.length===7&&detailSheet.rows[2][2]==='他見積の内容'&&
  detailSheet.rows[4][2]==='別の見積'&&detailSheet.writeCalls===3&&detailSheet.bulkDeleteCalls===0);
 detailSheet.rows=previousDetailRows;
+
+// Validate the real first-request schema checks but skip duplicate checks within that request.
+const headerReads=()=>Object.values(sheets).reduce((total,sh)=>total+(sh.headerReadCalls||0),0);
+const beforeWorkspaceHeaders=headerReads();
+const quickWorkspace=api.getQuoteWorkspace('STAFF');
+const checkedHeaderCount=headerReads()-beforeWorkspaceHeaders;
+ok('one quote workspace request validates 4 quote and 3 related-document headers, not 12',
+ checkedHeaderCount===7&&quickWorkspace.quotes.length===1&&quickWorkspace.relatedDocs.length===3&&quickWorkspace.vendors.length===2);
+const vendorSheet=sheets['見積取引先'],originalVendorHeader=vendorSheet.rows[0].slice();
+vendorSheet.rows[0]=['壊れた見出し',...originalVendorHeader.slice(1)];
+const invalidWorkspace=api.getQuoteWorkspace('STAFF');
+ok('workspace still detects malformed schema and does not expose invalid quote data',
+ invalidWorkspace.setupRequired===true&&invalidWorkspace.quotes.length===0&&
+ invalidWorkspace.missing.some(m=>m.includes('見積取引先')));
+vendorSheet.rows[0]=originalVendorHeader;
 
 console.log('QUOTE TESTS: '+pass+' passed, '+fail+' failed');
 if(fail)process.exitCode=1;
