@@ -132,11 +132,12 @@ function openProjectModal(projectId){
 }
 function saveProjectFromModal(projectId){
   const payload={projectId:projectId||'',name:document.getElementById('prjName').value,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:document.getElementById('prjStart').value,endDate:document.getElementById('prjEnd').value,note:document.getElementById('prjNote').value};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     closeModal();showToast('プロジェクトを保存しました');
     invalidatePageCache('worklog','authAdmin');
     if(state.data)state.data.projects=[];
-    loadAuthAdmin({force:true,scope:'projects'});
+    if(state.page==='projects'&&typeof loadProjectHub==='function'){if(result&&result.projectId)projectHubUi.selected=result.projectId;projectHubInvalidate_();loadProjectHub({force:true});}
+    else loadAuthAdmin({force:true,scope:'projects'});
   }).withFailureHandler(err=>handleApiError(err,'プロジェクトを保存できませんでした')).saveProject(state.sessionToken,payload);
 }
 

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.18.0',
+  version: '0.19.0',
   locale: 'ja-JP'
 });
 
@@ -1157,3 +1157,4 @@ function healthCheck(sessionToken) {
     timestamp: new Date().toISOString()
   };
 }
+

@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/FinanceAdvisor.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Somu.gs','src/SomuGrowth.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesFinanceAdvisor.html','src/StylesCompanyDocs.html','src/StylesSomu.html','src/StylesSomuGrowth.html','src/AppSomu.html','src/AppSomuGrowth.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
+  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/FinanceAdvisor.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/ProjectHub.gs','src/StylesProjectHub.html','src/Docs.gs','src/GeneratedDocs.gs','src/Somu.gs','src/SomuGrowth.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesFinanceAdvisor.html','src/StylesCompanyDocs.html','src/StylesSomu.html','src/StylesSomuGrowth.html','src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_somu_growth.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs','src/RotaryEngine.html','src/AppRotaryIntegration.html','src/StylesRotaryLoader.html','scripts/test_rotary_integration.mjs','scripts/test_rotary_viewport.mjs'
 ];
 let failed = false;
@@ -15,7 +15,7 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['RotaryEngine.html','AppRotaryIntegration.html','AppSomu.html','AppSomuGrowth.html','AppCompanyDocs.html','AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppFinanceAdvisor.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['RotaryEngine.html','AppRotaryIntegration.html','AppSomu.html','AppSomuGrowth.html','AppProjectHub.html','AppCompanyDocs.html','AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppFinanceAdvisor.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
 const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesFinanceAdvisor.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesCompanyDocs.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomu.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesRotaryLoader.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomuGrowth.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
@@ -73,7 +73,7 @@ for(const marker of ['.fmr-root.fmr-page','.fmr-root.fmr-region']){
  if(!rotaryStyles.includes(marker)){console.error('Rotary loader CSS missing: '+marker);failed=true;}
 }
 const coveredSources=['AppCore','AppShell','AppOperations','AppPeopleMonthly','AppQuotes',
- 'AppDocuments','AppCompanyDocs','AppSomu','AppSomuGrowth','AppFinance','AppFinanceAdvisor','AppAdmin'];
+ 'AppDocuments','AppCompanyDocs','AppSomu','AppSomuGrowth','AppProjectHub','AppFinance','AppFinanceAdvisor','AppAdmin'];
 for(const moduleName of coveredSources){
  const source=fs.readFileSync(path.join(root,'src',moduleName+'.html'),'utf8');
  if(!source.includes("FMRotaryRPC():google.script.run")){
@@ -376,7 +376,7 @@ if (!serverCode.includes('function auditJson_(') ||
   failed = true;
 }
 
-for (const marker of ['const DB_SCHEMA_VERSION = 14','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+for (const marker of ['const DB_SCHEMA_VERSION = 15','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
   if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
@@ -753,7 +753,7 @@ if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people','fin
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['companyDocs','社内文書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['projects','プロジェクト','i-briefcase'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['companyDocs','社内文書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",
@@ -1788,3 +1788,4 @@ if (!manifest.webapp || manifest.webapp.access !== 'MYSELF' || manifest.webapp.e
 }
 if (failed) process.exit(1);
 console.log('FM WORKS scaffold validation passed.');
+

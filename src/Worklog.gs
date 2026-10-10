@@ -104,6 +104,7 @@ function saveWorklog(sessionToken, payload) {
       before: auditBefore, after: auditJson_({date:date,employeeId:target.employeeId,project:project,category:category,description:description,start:start,end:end,minutes:minutes,note:note,status:'有効'}),
       source: 'WEB', result: 'SUCCESS', note: target.name
     });
+    if(typeof projectHubInvalidateWorklogs_==='function')projectHubInvalidateWorklogs_();
     SpreadsheetApp.flush();
     return { ok: true, id: id };
   });
@@ -136,6 +137,7 @@ function deleteWorklog(sessionToken, worklogId) {
       before: values[1] + ' ' + values[4] + ' ' + values[9] + '分', after: '削除',
       source: 'WEB', result: 'SUCCESS', note: ''
     });
+    if(typeof projectHubInvalidateWorklogs_==='function')projectHubInvalidateWorklogs_();
     SpreadsheetApp.flush();
     return { ok: true };
   });
@@ -170,3 +172,4 @@ function timeRangeMinutes_(start, end) {
   const b = end.split(':').map(Number);
   return (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]);
 }
+

@@ -44,6 +44,8 @@ jobs:
         run: node scripts/test_somu_growth.mjs
       - name: Verify general affairs client actions
         run: node scripts/test_somu_client.mjs
+      - name: Verify project aggregation, permissions and retry behavior
+        run: node scripts/test_project_hub.mjs
       - name: Verify navigation cache and input preservation
         run: node scripts/test_business_workflows.mjs
       - name: Install Japanese fonts for layout verification
@@ -51,6 +53,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
           fc-cache -f
+      - name: Verify project desktop and mobile layouts
+        run: node scripts/test_project_hub_viewport.mjs
+      - name: Upload project layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-project-layout-qa
+          path: artifacts/project-hub/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify rotary loader animation and responsive overlays in Chromium
         run: node scripts/test_rotary_viewport.mjs
       - name: Upload rotary loader QA screenshots
@@ -131,3 +143,4 @@ jobs:
           path: artifacts/home-layout/*.png
           if-no-files-found: warn
           retention-days: 14
+
