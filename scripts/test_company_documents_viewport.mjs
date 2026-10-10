@@ -85,7 +85,10 @@ for(const c of cases){
       'gridWidth:grid.getBoundingClientRect().width,panels:visible.length,'+
       'panelsInContent:visible.every(n=>n.getBoundingClientRect().width<=content.getBoundingClientRect().width+2),'+
       'search:!!document.querySelector(".company-doc-search input"),rows:document.querySelectorAll(".company-doc-row").length,'+
-      'body:!!document.querySelector(".company-doc-body"),editor:!!document.querySelector(".company-doc-editor")};'+
+      'body:!!document.querySelector(".company-doc-body"),editor:!!document.querySelector(".company-doc-editor"),'+
+      'statusColors:(()=>{const cls=["is-published","is-draft"],o={};for(const c of cls){'+
+      'const el=document.querySelector(".company-doc-status."+c);'+
+      'o[c]=el?{fg:getComputedStyle(el).color,bg:getComputedStyle(el).backgroundColor}:null;}return o;})()};'+
       'parent.postMessage({kind:"FM_DOC_QA",metrics},"*");});</script></body></html>';
   const frame=path.join(tmp,name+'-frame.html');fs.writeFileSync(frame,inner);
   const host='<html><head><script>addEventListener("message",e=>{if(e.data?.kind==="FM_DOC_QA")'+
@@ -102,6 +105,26 @@ for(const c of cases){
     const match=dom.match(/<output[^>]*id="result"[^>]*data-qa="([^"]+)"/);
     if(!match)throw Error('Missing Chromium viewport metrics');
     const v=JSON.parse(decodeURIComponent(match[1])),bad=[];
+    const toRgb=text=>{
+      const raw=String(text||'');
+      if(!raw.startsWith('rgb(')&&!raw.startsWith('rgba('))return null;
+      const values=raw.slice(raw.indexOf('(')+1,raw.indexOf(')')).split(',').slice(0,3).map(v=>Number(v.trim()));
+      return values.length===3&&values.every(Number.isFinite)?values:null;
+    };
+    const luminance=color=>{
+      const rgb=toRgb(color);
+      if(!rgb)return null;
+      const parts=rgb.map(x=>{
+        const v=x/255;
+        return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4);
+      });
+      return parts[0]*.2126+parts[1]*.7152+parts[2]*.0722;
+    };
+    const ratio=(fg,bg)=>{
+      const a=luminance(fg),b=luminance(bg);
+      if(a===null||b===null)return 0;
+      return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+    };
     if(Math.abs(v.width-c.w)>2||Math.abs(v.height-c.h)>2)bad.push('viewport');
     if(v.scrollWidth>v.width+2)bad.push('horizontal-overflow');
     if(v.pageWidth>v.contentWidth+2||v.gridWidth>v.contentWidth+2)bad.push('content-overflow');
@@ -111,6 +134,12 @@ for(const c of cases){
     if(c.step==='list'&&v.rows<1)bad.push('document-list');
     if(c.step==='detail'&&!v.body)bad.push('document-body');
     if(c.step==='editor'&&!v.editor)bad.push('document-editor');
+    if(c.theme==='dark'){
+      for(const stateName of ['is-published','is-draft']){
+        const pair=v.statusColors&&v.statusColors[stateName];
+        if(!pair||ratio(pair.fg,pair.bg)<4.5)bad.push('contrast-'+stateName);
+      }
+    }
     console.log((bad.length?'FAIL ':'PASS ')+name+' '+JSON.stringify(v)+(bad.length?' '+bad.join(','):''));
     if(bad.length)failures++;
   }catch(error){failures++;console.error('FAIL '+name+' '+String(error.message||error));}

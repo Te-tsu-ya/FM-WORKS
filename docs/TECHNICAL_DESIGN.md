@@ -1924,3 +1924,15 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - クライアント：検索APIは入力後320ms遅延、返答のセッション・リクエスト識別を照合して古い応答を除外。文書詳細はID＋revisionでキャッシュ。60件ずつ段階描画する。
 - UI：3ペインGrid、1120px以下で2段階、760px以下でフォルダ・一覧・本文の切替。すべての本文・属性をHTMLエスケープし、外部リンクはHTTPSだけ許可。
 - QA：test_company_documents.mjs（既存16列アップグレード／権限／検索／CRUD）、test_company_documents_client.mjs（ブラウザ操作契約）、test_company_documents_viewport.mjs（Chromiumによる明暗・PC・タブレット・スマホ表示）。
+
+
+### 社内文書・横断検索と安全性の品質ゲート（2026-10-10）
+
+- companyDocsSetQuery：検索入力開始時に folderId='all' に戻し、必要なときだけ画面再描画後に入力欄のフォーカスを復元する。通常の入力更新は一覧DOMだけを書き換える。
+- searchCompanyDocumentBodies：空白区切りの複数語を重複排除し、Range.createTextFinder(term).matchCase(false).useRegularExpression(false).findAll() を語ごとに実行。結果の行番号集合の共通部分を求め、権限を再チェックし文書IDのみ最大250件返す。
+- 編集UI：dirty フラグを入力変更時に設定し、保存後に解消。キャンセルと画面遷移時はモーダル確認を要求する。AppCore.navigateから会社文書モジュールの companyDocsConfirmLeave_ を呼ぶ。ブラウザ再読み込みはbeforeunloadガードで確認する。
+- 安全なイベント属性：companyDocsInlineId_ は JSON.stringify した値全体をHTMLエスケープ。サーバーも companyDocsValidId_ で想定外IDを除外する。
+- 視認性：darkテーマの公開・下書きバッジは明示RGB色を採用し、Chromium viewport QAで getComputedStyle によりforeground/backgroundを取得しコントラスト比4.5以上を検証する。
+
+- 複合語検索は業務フォルダやタグ等の軽量メタデータと、本文TextFinderの一致行番号を語ごとに和集合にしてから、語間の共通部分を計算する。権限外の文書は事前・返却前の双方で除外する。
+- companyDocsDropHiddenSelection_ が絞り込み後の不一致プレビューを解除する。AppShell.performLogout も companyDocsConfirmLogout_ を経由し、未保存文書の破棄を明示確認する。

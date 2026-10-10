@@ -36,6 +36,9 @@ function companyDocsManager_(employee){
   const department=String(employee&&employee.department||'').replace(/\s+/g,'').replace(/[／/]/g,'・');
   return department.split('・').some(part=>/^総務(?:部|課|室|担当|チーム)?$/.test(part));
 }
+function companyDocsValidId_(value){
+  return /^CD-[A-Za-z0-9-]{12,100}$/.test(String(value||''));
+}
 function companyDocsLeaf_(id){
   return COMPANY_DOC_FOLDERS.some(f=>f.id===id&&!!f.parentId);
 }
@@ -146,7 +149,7 @@ function getCompanyDocuments(sessionToken){
   const rows=count>0?sheet.getRange(2,1,count,15).getDisplayValues():[];
   const index=(!needsUpgrade&&count>0)?sheet.getRange(2,17,count,2).getDisplayValues():[];
   const items=rows.map((row,i)=>{
-    if(row[12]||(!canManage&&String(row[5])!=='公開'))return null;
+    if(row[12]||!companyDocsValidId_(row[0])||(!canManage&&String(row[5])!=='公開'))return null;
     return companyDocsRow_(row.concat(['',index[i]&&index[i][0]||'',index[i]&&index[i][1]||'']),false);
   }).filter(Boolean).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id));
   return Object.assign(base,{setupRequired:false,needsUpgrade,items});
@@ -164,22 +167,52 @@ function searchCompanyDocumentBodies(sessionToken,keyword){
   const employee=requireSession_(sessionToken).employee;
   const q=String(keyword||'').trim();
   if(q.length<2||q.length>80)return {ok:true,matchedIds:[],truncated:false};
+  const terms=[...new Set(q.split(/\s+/).filter(Boolean))];
+  if(terms.length>8)throw new Error('検索語は最大8語まで指定してください。');
   const sheet=companyDocsSheet_(true);
   if(!sheet||sheet.getLastRow()<2)return {ok:true,matchedIds:[],truncated:false};
   const count=sheet.getLastRow()-1;
-  // TextFinder performs the body scan in Sheets. Body content is never sent to the browser.
-  const found=sheet.getRange(2,16,count,1).createTextFinder(q).matchCase(false).findAll();
-  if(!found.length)return {ok:true,matchedIds:[],truncated:false};
-  const matchedRows=new Set(found.map(cell=>cell.getRow()));
   const meta=sheet.getRange(2,1,count,15).getDisplayValues();
-  const canManage=companyDocsManager_(employee),matchedIds=[];
+  const index=companyDocsIndexReady_(sheet)?sheet.getRange(2,17,count,2).getDisplayValues():[];
+  const canManage=companyDocsManager_(employee);
+  const allowedIndexes=[];
+  const searchableMeta=[];
   for(let i=0;i<meta.length;i++){
-    if(!matchedRows.has(i+2)||meta[i][12])continue;
-    if(!canManage&&meta[i][5]!=='公開')continue;
-    matchedIds.push(String(meta[i][0]));
-    if(matchedIds.length>=250)break;
+    const row=meta[i];
+    if(row[12]||!companyDocsValidId_(row[0])||(!canManage&&row[5]!=='公開'))continue;
+    allowedIndexes.push(i);
+    const folderId=index[i]&&String(index[i][0]||'')||'other/general';
+    const folder=COMPANY_DOC_FOLDERS.find(f=>f.id===folderId);
+    const parent=folder&&COMPANY_DOC_FOLDERS.find(f=>f.id===folder.parentId);
+    searchableMeta[i]=[row[1],row[2],row[3],folderId,
+      folder&&folder.name||'',parent&&parent.name||'',index[i]&&index[i][1]||'']
+      .join(' ').toLocaleLowerCase('ja-JP');
   }
-  return {ok:true,matchedIds,truncated:matchedIds.length>=250};
+  if(!allowedIndexes.length)return {ok:true,matchedIds:[],truncated:false};
+  const bodyRange=sheet.getRange(2,16,count,1);
+  let matchedRows=null;
+  for(const term of terms){
+    // Search each word in the same document across metadata and body.
+    // Treat punctuation literally: a user search must never become a regex.
+    const bodyHits=bodyRange.createTextFinder(term).matchCase(false)
+      .useRegularExpression(false).findAll();
+    const positions=new Set(bodyHits.map(cell=>cell.getRow()));
+    const lower=term.toLocaleLowerCase('ja-JP');
+    for(const i of allowedIndexes){
+      if(searchableMeta[i].includes(lower))positions.add(i+2);
+    }
+    if(matchedRows===null)matchedRows=positions;
+    else matchedRows=new Set([...matchedRows].filter(row=>positions.has(row)));
+    if(!matchedRows.size)return {ok:true,matchedIds:[],truncated:false};
+  }
+  const matchedIds=[];
+  for(const i of allowedIndexes){
+    if(!matchedRows.has(i+2))continue;
+    matchedIds.push(String(meta[i][0]));
+    if(matchedIds.length>250)
+      return {ok:true,matchedIds:matchedIds.slice(0,250),truncated:true};
+  }
+  return {ok:true,matchedIds,truncated:false};
 }
 function initializeCompanyDocuments(sessionToken){
   const employee=requireAdminSession_(sessionToken).employee;

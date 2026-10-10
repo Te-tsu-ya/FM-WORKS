@@ -181,4 +181,14 @@
  .company-doc-row-right small{display:none}
  .company-doc-row-main strong{font-size:12px}
 }
+
+.company-doc-unsaved{color:#b64b1c;background:color-mix(in srgb,#ed9b23 10%,var(--surface));
+  border:1px solid color-mix(in srgb,#ed9b23 32%,var(--line));padding:10px 12px;
+  border-radius:9px;font-size:12px;font-weight:750;margin:0}
+.company-doc-unsaved[hidden]{display:none}
+html[data-theme="dark"] .company-doc-unsaved{color:#ffd59d;background:#41301d;border-color:#805c2c}
+html[data-theme="dark"] .company-doc-status.is-published{
+  color:#a8f0d2;background:#153d32;border:1px solid #38765f}
+html[data-theme="dark"] .company-doc-status.is-draft{
+  color:#ffdb9f;background:#45331e;border:1px solid #795a2f}
 </style>
