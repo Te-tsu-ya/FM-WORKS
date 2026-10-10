@@ -7,24 +7,31 @@ function cashFlowThisYear_(){
  const s=String(state.data&&state.data.today||new Date().toISOString().slice(0,10)),m=/^(\d{4})-(\d{2})/.exec(s);
  return m?Number(m[1])+(Number(m[2])===12?1:0):new Date().getFullYear();
 }
-function cashFlowDiscard_(){return !cashFlowUi.dirty||window.confirm('保存されていない内容があります。破棄して移動しますか？');}
+function cashFlowDiscard_(next){
+ if(!cashFlowUi.dirty){next();return;}
+ openConfirmDialog('未保存の変更','保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
+}
 function cashFlowOpen_(){
  if(!cashFlowAllowed_())return;
  financeUi.insightMode=false;cashFlowUi.open=true;cashFlowUi.year=cashFlowUi.year||cashFlowThisYear_();
  renderPageIfActive('finance');cashFlowLoad_();
 }
 function cashFlowClose_(){
- if(!cashFlowDiscard_())return;
- cashFlowUi.open=false;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.seq++;
- renderPageIfActive('finance');
+ cashFlowDiscard_(()=>{
+  cashFlowUi.open=false;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.seq++;
+  renderPageIfActive('finance');
+ });
 }
 function cashFlowChangeYear_(value){
  const y=Number(value),input=document.getElementById('cfYear');
- if(!Number.isInteger(y)||y<2000||y>2100||!cashFlowDiscard_()){if(input)input.value=String(cashFlowUi.year);return;}
+ if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
  if(y===cashFlowUi.year)return;
- cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;
- cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
- renderPageIfActive('finance');cashFlowLoad_();
+ cashFlowDiscard_(()=>{
+  cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;
+  cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
+  renderPageIfActive('finance');cashFlowLoad_();
+ });
+ if(input)input.value=String(cashFlowUi.year);
 }
 function cashFlowLoad_(force=false){
  const ui=cashFlowUi;if(!ui.open||!cashFlowAllowed_()||ui.loading||ui.busy)return;
@@ -43,8 +50,9 @@ function cashFlowLoad_(force=false){
  }).getCashFlowYear(token,year);
 }
 function cashFlowReload_(){
- if(!cashFlowDiscard_())return;
- cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowLoad_(true);
+ cashFlowDiscard_(()=>{
+  cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowLoad_(true);
+ });
 }
 function cashFlowInt_(value,negative=false){
  if(value==null||String(value).trim()==='')return null;
