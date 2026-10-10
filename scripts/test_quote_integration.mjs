@@ -1,3 +1,4 @@
+import './test_document_history.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 let pass=0,fail=0;const ok=(s,c)=>{(c?pass++:fail++);console.log((c?'PASS ':'FAIL ')+s)};

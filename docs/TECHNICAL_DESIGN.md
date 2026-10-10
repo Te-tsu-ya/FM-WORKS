@@ -1790,3 +1790,11 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 ### v0.17.3 スクリーンショット検証による調整
 
 - scripts/test_workflow_viewport_v15.mjs の iframe 内で finance-priority-stats の computedStyle.gridTemplateColumns を計測し、PC（1200px以上）は4列、スマホ（760px以下）は2列を必須化する。スクリーンショットで確認された1366px時の2段化を防止する。
+
+## v0.17.4 書類履歴の非同期読み込み・短期メモリキャッシュ（2026-10-10）
+
+- `AppDocuments.html:documentOpenRecord` は `quoteIdentity_`（sessionToken＋社員ID）と単調増加する `docUi.requestSeq`、`selectedId` でレスポンスをガードする。現在選択中でない結果・失敗は破棄し、読み込み中は旧書類の明細を非表示にする。
+- `docUi.detailCache: Map` は書類IDに対する `updatedAt` と詳細スナップショットを最大12件保存する。詳細の再選択が同一 revision ならRPC不要。更新された行・不明な行はキャッシュを使わずサーバーから再取得する。別セッションの `quoteIdentity_` でキャッシュを破棄する。
+- 取得結果の `header.id` が要求IDと一致することもクライアントで検査する。これは防御的検査であり、認証・認可の代替にはしない。
+- 新設 `scripts/test_document_history.mjs` は、遅延レスポンス、遅延エラー、ダブルクリック、一覧更新、別ユーザーへの切替、異なるIDの応答、通信失敗後の再取得をNode VMで再現。既存の `scripts/test_quote_integration.mjs` から読み込み、CI・Deploy双方の書類発行ゲートに含める。
+
