@@ -187,6 +187,9 @@ assert.equal(calls.at(-1).args[1].name,'案件テスト','registration trims pro
 assert.equal(fieldNodes.prjSaveButton.disabled,true,'duplicate submission blocked while saving');
 calls.at(-1).failure(Error('network'));
 assert.equal(fieldNodes.prjSaveButton.disabled,false,'failed save restores the form');
+const invalidSchedule={...detail,tasks:[{...detail.tasks[0],startDate:'2026-99-99',dueDate:'2026-10-31'}]};
+assert.doesNotThrow(()=>client.projectHubTaskTimeline_(invalidSchedule),'malformed imported schedule cannot crash timeline');
+assert.ok(client.projectHubTaskTimeline_(invalidSchedule).includes('開始予定日'),'invalid schedule is treated as unscheduled');
 console.log('PASS project UX: tasks board/timeline/list, effort split, document filters, shared memo filters, simple master form and failed save recovery');
 
 console.log('PASS project client: cached tabs/routes, escaped documents, retained failed forms, stable retries, stale-response and session isolation');

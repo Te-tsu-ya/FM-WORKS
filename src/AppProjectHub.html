@@ -105,7 +105,7 @@ function projectHubTaskBoard_(d){
  }).join('')}</div>`;
 }
 function projectHubTaskTimeline_(d){
- const tasks=d.tasks||[],isDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||'')),day=v=>Date.parse(v+'T00:00:00Z');
+ const tasks=d.tasks||[],day=v=>Date.parse(v+'T00:00:00Z'),isDate=v=>{const text=String(v||'');const ms=day(text);return /^\d{4}-\d{2}-\d{2}$/.test(text)&&Number.isFinite(ms)&&new Date(ms).toISOString().slice(0,10)===text;};
  const dated=tasks.filter(t=>isDate(t.startDate)&&isDate(t.dueDate)&&t.startDate<=t.dueDate),undated=tasks.filter(t=>!dated.includes(t));
  if(!dated.length)return `<p class="ph-empty">工程表を表示するには、作業の開始予定日と期限を入力してください。</p>${undated.length?projectHubTaskList_(d,undated):''}`;
  const start=Math.min(...dated.map(t=>day(t.startDate))),end=Math.max(...dated.map(t=>day(t.dueDate))),span=Math.max(86400000,end-start);

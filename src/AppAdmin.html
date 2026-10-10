@@ -160,6 +160,7 @@ function saveProjectFromModal(projectId){
   }else loadAuthAdmin({force:true,scope:'projects'});
  }).withFailureHandler(err=>{
   button.disabled=false;button.textContent=projectId?'変更を保存':'登録して案件を開く';
+  if(typeof handleApiError==='function'&&handleApiError(err,'プロジェクトを保存できませんでした。'))return;
   if(error)error.textContent=cleanApiErrorMessage(err,'プロジェクトを保存できませんでした。');
  }).saveProject(state.sessionToken,payload);
 }
