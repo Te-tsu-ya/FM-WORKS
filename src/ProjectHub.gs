@@ -19,8 +19,8 @@ function projectHubStorage_(){
  return {ready:missing.length===0,missing,sheets};
 }
 function projectHubRows_(kind,sh,projectId){
- if(!sh||sh.getLastRow()<2)return [];
- const keys=PROJECT_HUB_MODELS[kind].keys,n=sh.getLastRow()-1;
+ if(!sh)return [];
+ const keys=PROJECT_HUB_MODELS[kind].keys,n=sh.getLastRow()-1;if(n<1)return [];
  const convert=(rows,start)=>rows.map((r,index)=>{const o={_row:start+index};keys.forEach((k,i)=>o[k]=r[i]||'');return o;}).filter(r=>r[keys[0]]);
  if(!projectId)return convert(sh.getRange(2,1,n,keys.length).getDisplayValues(),2);
  // Index the project column first; fetch document bodies only for this project.
@@ -36,8 +36,7 @@ function projectHubRead_(force,detail){
   if(detail){result.resources=projectHubRows_('resource',storage.sheets.resource,detail).filter(x=>x.status!=='非表示');result.updates=projectHubRows_('update',storage.sheets.update,detail);}
   else{const sh=storage.sheets.resource,n=sh.getLastRow()-1;if(n>0){const ids=sh.getRange(2,1,n,2).getDisplayValues(),status=sh.getRange(2,7,n,1).getDisplayValues();result.resources=ids.map((r,i)=>({id:r[0],projectId:r[1],status:status[i][0]})).filter(r=>r.id&&r.status!=='非表示');}}
  }
- const key='fm:projectHub:worklog:v1';let rows=force?null:cacheJsonGet_(key);
- if(!rows){const sh=getDb_().getSheetByName('工数');rows=sh&&sh.getLastRow()>1?sh.getRange(2,2,sh.getLastRow()-1,12).getDisplayValues():[];cacheJsonPut_(key,rows,20);}
+ const rows=projectHubWorklogRows_(force).map(r=>r.slice(1,13));
  result.worklogs=rows.filter(r=>r[11]!=='削除'&&Number.isFinite(Number(r[8]))&&Number(r[8])>0);
  return result;
 }
@@ -213,7 +212,14 @@ function saveProjectHubRecord(sessionToken,kind,payload){
   return {ok:true,id:record.id||record.projectId,revision:record.revision,auditRecorded};
  });
 }
-function projectHubInvalidateWorklogs_(){cacheRemove_('fm:projectHub:worklog:v1');}
+function projectHubWorklogRows_(force){
+ const key='fm:projectHub:worklog:v2',cached=force?null:cacheJsonGetLarge_(key);
+ if(Array.isArray(cached))return cached;
+ const sh=getDb_().getSheetByName('工数'),last=sh?sh.getLastRow():0;
+ const rows=last>1?sh.getRange(2,1,last-1,15).getDisplayValues():[];
+ cacheJsonPutLarge_(key,rows,20);return rows;
+}
+function projectHubInvalidateWorklogs_(){cacheRemove_('fm:projectHub:worklog:v2');}
 function projectHubRememberRename_(projectId,oldName,newName,admin){
  const storage=projectHubStorage_();if(!storage.ready)throw new Error('工数との連携を保つため、案件名を変更する前にバックアップ付きDB更新を行ってください。');
  const rows=projectHubRows_('plan',storage.sheets.plan);if(rows.some(p=>p.projectId!==projectId&&projectHubAliases_(p).includes(newName)))throw new Error('過去の別案件名と同じ名前は使えません。');

@@ -22,7 +22,7 @@ const loaded={ok:true,setupRequired:false,year:2026,monthly:emptyMonthly,
 const status=[];
 let renders=0,confirmAction=null;
 const ctx=vm.createContext({state,financeUi:{demo:false},cashFlowUi,google:{script:{run:runner()}},
- cashFlowAllowed_:()=>state.data.permissions.cashFlowWorkspace,
+ cashFlowAllowed_:()=>state.data.permissions.cashFlowWorkspace,cashFlowDiscard_:fn=>fn(),
  renderPageIfActive:()=>renders++,cleanApiErrorMessage:e=>e.message,escapeHtml,
  pageHead:(a,b)=>a+' '+b,cashFlowLoad_:()=>{},cashFlowYen_:v=>v===null?'—':String(v)+'円',
  cashFlowChartHtml_:()=>'<svg></svg>',cashFlowClose_:()=>{},

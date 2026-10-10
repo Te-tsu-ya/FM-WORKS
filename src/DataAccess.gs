@@ -30,9 +30,16 @@ function regexEscape_(value){
   return String(value==null?'':value).replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
 }
 
+// Cache entries must never follow a switch between staging and production DBs.
+function databaseCacheKey_(key){return 'fm:db:'+getDatabaseSpreadsheetId_()+':'+String(key||'');}
+function utf8Bytes_(text){
+  let bytes=0;
+  for(const ch of String(text)){const cp=ch.codePointAt(0);bytes+=cp<128?1:cp<2048?2:cp<65536?3:4;}
+  return bytes;
+}
 function cacheJsonGet_(key){
   try{
-    const raw=CacheService.getScriptCache().get(String(key||''));
+    const raw=CacheService.getScriptCache().get(databaseCacheKey_(key));
     return raw?JSON.parse(raw):null;
   }catch(e){
     console.warn('cache get failed',key,e);
@@ -43,8 +50,8 @@ function cacheJsonGet_(key){
 function cacheJsonPut_(key,value,ttlSeconds){
   try{
     const raw=JSON.stringify(value);
-    if(raw.length>90000)return false;
-    CacheService.getScriptCache().put(String(key||''),raw,Math.max(1,Number(ttlSeconds||60)));
+    if(utf8Bytes_(raw)>90000)return false;
+    CacheService.getScriptCache().put(databaseCacheKey_(key),raw,Math.max(1,Number(ttlSeconds||60)));
     return true;
   }catch(e){
     console.warn('cache put failed',key,e);
@@ -53,7 +60,34 @@ function cacheJsonPut_(key,value,ttlSeconds){
 }
 
 function cacheRemove_(key){
-  try{CacheService.getScriptCache().remove(String(key||''));}catch(e){console.warn('cache remove failed',key,e);}
+  try{CacheService.getScriptCache().remove(databaseCacheKey_(key));}catch(e){console.warn('cache remove failed',key,e);}
+}
+
+// Immutable generations keep a concurrent reader from mixing old/new chunks.
+// Any missing part is a cache miss; partial business records are never returned.
+function cacheJsonGetLarge_(key){
+  const value=cacheJsonGet_(key);
+  if(!value||value._fmChunks!==1)return value;
+  try{
+    if(!/^[A-Za-z0-9-]+$/.test(value.generation)||!Number.isInteger(value.count)||value.count<1||value.count>80)return null;
+    const prefix=databaseCacheKey_(key)+':'+value.generation+':';
+    const keys=Array.from({length:value.count},(_,i)=>prefix+i);
+    const parts=CacheService.getScriptCache().getAll(keys);
+    if(keys.some(k=>typeof parts[k]!=='string'))return null;
+    return JSON.parse(keys.map(k=>parts[k]).join(''));
+  }catch(e){console.warn('large cache get failed',key,e);return null;}
+}
+function cacheJsonPutLarge_(key,value,ttlSeconds){
+  try{
+    const raw=JSON.stringify(value),bytes=utf8Bytes_(raw);
+    if(bytes<=90000)return cacheJsonPut_(key,value,ttlSeconds);
+    if(bytes>4800000){cacheRemove_(key);return false;}
+    const generation=Utilities.getUuid(),prefix=databaseCacheKey_(key)+':'+generation+':',parts={};let part='',size=0,count=0;
+    for(const ch of raw){const n=utf8Bytes_(ch);if(size+n>60000){parts[prefix+count++]=part;part='';size=0;}part+=ch;size+=n;}
+    parts[prefix+count++]=part;
+    CacheService.getScriptCache().putAll(parts,Math.max(1,Number(ttlSeconds||60)));
+    return cacheJsonPut_(key,{_fmChunks:1,generation,count},ttlSeconds);
+  }catch(e){cacheRemove_(key);console.warn('large cache put failed',key,e);return false;}
 }
 
 // Cache only a row-number hint. Authentication, permissions, PIN fields,

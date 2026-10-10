@@ -1,10 +1,10 @@
 <script>
 /* v0.22: transient admin-only bank statement + scheduled-cash planner. */
-let cfbUi={active:true,year:0,loaded:null,loading:false,busy:false,seq:0,error:'',notice:'',tab:'overview',
+let cfbUi={active:true,year:0,at:0,loaded:null,loading:false,busy:false,seq:0,error:'',notice:'',tab:'overview',
  accountForm:null,planForm:null,closeMonth:'',closeKey:'',
  csvRows:null,csvName:'',csvMap:null,csvAccountId:'',preview:null,importing:false,importIndex:0,importAdded:0,importSkipped:0};
 function cfbReset_(){
- cfbUi={active:true,year:0,loaded:null,loading:false,busy:false,seq:cfbUi.seq+1,error:'',notice:'',tab:'overview',
+ cfbUi={active:true,year:0,at:0,loaded:null,loading:false,busy:false,seq:cfbUi.seq+1,error:'',notice:'',tab:'overview',
   accountForm:null,planForm:null,closeMonth:'',closeKey:'',csvRows:null,csvName:'',csvMap:null,csvAccountId:'',preview:null,
   importing:false,importIndex:0,importAdded:0,importSkipped:0};
 }
@@ -19,27 +19,32 @@ function cfbRpc_(method,params,onSuccess,onFailure){
 }
 function cfbLoad_(force){
  if(cfbUi.demo)return;
- if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.loading||cfbUi.importing)return;
- const year=cashFlowUi.year,token=state.sessionToken,seq=++cfbUi.seq;
- if(!force&&cfbUi.loaded&&cfbUi.year===year)return;
+ if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.importing)return;
+ if(cfbUi.loading){if(force)cfbUi.refreshNeeded=true;return;}
+ const year=cashFlowUi.year;
+ if(!force&&cfbUi.loaded&&cfbUi.year===year&&Date.now()-(cfbUi.at||0)<300000)return;
+ const seq=++cfbUi.seq;
  cfbUi.year=year;cfbUi.loading=true;cfbUi.error='';renderPageIfActive('finance');
  cfbRpc_('getCashFlowBankWorkspace',year,data=>{
   if(seq!==cfbUi.seq||year!==cashFlowUi.year||!cashFlowUi.open)return;
   cfbUi.loading=false;
+  if(cfbUi.refreshNeeded){cfbUi.refreshNeeded=false;cfbLoad_(true);return;}
   if(!data||data.ok!==true){cfbUi.error='資金管理のデータを取得できません。';renderPageIfActive('finance');return;}
-  cfbUi.loaded=data;cfbUi.closeMonth=data.closing&&data.closing.through||'';
+  cfbUi.loaded=data;cfbUi.at=Date.now();cfbUi.closeMonth=data.closing&&data.closing.through||'';
   cfbUi.csvAccountId=cfbUi.csvAccountId||data.accounts&&data.accounts[0]&&data.accounts[0].id||'';
   renderPageIfActive('finance');
  },error=>{
   if(seq!==cfbUi.seq||year!==cashFlowUi.year||!cashFlowUi.open)return;
-  cfbUi.loading=false;cfbUi.error=cleanApiErrorMessage(error,'資金管理データを読み込めませんでした。');renderPageIfActive('finance');
+  cfbUi.loading=false;if(cfbUi.refreshNeeded){cfbUi.refreshNeeded=false;cfbLoad_(true);return;}cfbUi.error=cleanApiErrorMessage(error,'資金管理データを読み込めませんでした。');renderPageIfActive('finance');
  });
 }
 function cfbReload_(){
  if(cfbUi.demo){openConfirmDialog('架空データの初期化','操作中の架空データを最初の状態に戻します。','最初から試す',()=>cfbDemoActivate_(cashFlowUi.year));return;}
- cfbUi.loaded=null;cfbUi.error='';cfbUi.planForm=null;cfbUi.accountForm=null;cfbUi.preview=null;cfbUi.csvRows=null;cfbUi.csvMap=null;
- cfbLoad_(true);
- cashFlowLoad_(true);
+ if(cfbUi.busy||cfbUi.importing||cashFlowUi.busy){showToast('保存・取り込みが終わるまでお待ちください。');return;}
+ cashFlowDiscard_(()=>{
+  cfbUi.loaded=null;cfbUi.error='';cfbUi.planForm=null;cfbUi.accountForm=null;cfbUi.preview=null;cfbUi.csvRows=null;cfbUi.csvMap=null;
+  cashFlowUi.dirty=false;cashFlowUi.key='';cfbLoad_(true);cashFlowLoad_(true);
+ });
 }
 function cfbSection_(name){
  if(!['overview','schedules','banks'].includes(name)||cfbUi.busy||cfbUi.importing)return;

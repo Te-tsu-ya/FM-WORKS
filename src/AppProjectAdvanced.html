@@ -2,21 +2,32 @@
 /* Protected workspaces: finance and private file data never enter the normal portfolio payload. */
 let projectAdvancedUi={id:'',identity:'',data:null,at:0,mode:'dependencies',loading:false,busy:false,error:'',costAttempt:null,fileAttempt:null,confirmRemove:null};
 function resetProjectAdvancedUi_(){projectAdvancedUi={id:'',identity:'',data:null,at:0,mode:'dependencies',loading:false,busy:false,error:'',costAttempt:null,fileAttempt:null,confirmRemove:null};}
+function projectAdvancedInvalidate_(){
+ const ui=projectAdvancedUi;ui.at=0;ui.data=null;ui.serial=(ui.serial||0)+1;
+ if(ui.loading)ui.refreshNeeded=true;
+}
 function projectAdvancedLoad_(force=false){
  const id=projectHubUi.selected,identity=projectHubIdentity_();
  if(!id||!state.sessionToken)return;
+ if(projectAdvancedUi.id!==id||projectAdvancedUi.identity!==identity)resetProjectAdvancedUi_();
  const ui=projectAdvancedUi;
  if(!force&&ui.id===id&&ui.identity===identity&&ui.data&&Date.now()-ui.at<120000)return;
- if(ui.loading)return;
- ui.id=id;ui.identity=identity;ui.loading=true;ui.error='';const started=Date.now();
+ if(ui.loading){if(force)ui.refreshNeeded=true;return;}
+ ui.id=id;ui.identity=identity;ui.loading=true;ui.error='';const started=Date.now(),serial=ui.serial||0;
+ const finish=()=>{
+  if(ui!==projectAdvancedUi||identity!==projectHubIdentity_()||ui.id!==id)return false;
+  ui.loading=false;
+  if(serial!==(ui.serial||0)||ui.refreshNeeded){ui.refreshNeeded=false;if(state.page==='projects'&&projectHubUi.selected===id&&projectHubUi.tab==='advanced')projectAdvancedLoad_(true);return false;}
+  return true;
+ };
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-  if(ui!==projectAdvancedUi||identity!==projectHubIdentity_()||ui.id!==id)return;
+  if(!finish())return;
   if(typeof projectHubTimingRecord_==='function')projectHubTimingRecord_('詳細管理',started,!!result&&!result.setupRequired);
-  ui.loading=false;ui.data=result;ui.at=Date.now();renderPageIfActive('projects');
+  ui.data=result;ui.at=Date.now();renderPageIfActive('projects');
  }).withFailureHandler(err=>{
-  if(identity!==projectHubIdentity_()||ui.id!==id)return;
+  if(!finish())return;
   if(typeof projectHubTimingRecord_==='function')projectHubTimingRecord_('詳細管理',started,false);
-  ui.loading=false;ui.error=cleanApiErrorMessage(err,'案件の拡張データを取得できませんでした。');renderPageIfActive('projects');
+  ui.error=cleanApiErrorMessage(err,'案件の拡張データを取得できませんでした。');renderPageIfActive('projects');
  }).getProjectAdvanced(state.sessionToken,id);
 }
 

@@ -32,6 +32,8 @@ jobs:
         run: node scripts/validate.mjs
       - name: Verify cached-row security and sheet I/O
         run: node scripts/test_data_access_performance.mjs
+      - name: Verify large workspace cache, linked data and asynchronous navigation
+        run: node scripts/test_workspace_loading.mjs
       - name: Run logic tests
         run: node scripts/test_logic.mjs
       - name: Run client contract tests

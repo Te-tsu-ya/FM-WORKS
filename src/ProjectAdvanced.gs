@@ -15,20 +15,21 @@ function projectAdvancedSheet_(name,optional){
  return sheet;
 }
 
-function projectAdvancedRows_(name,optional){
- const sheet=projectAdvancedSheet_(name,optional);
- if(!sheet||sheet.getLastRow()<2)return [];
+function projectAdvancedRows_(name,optional,checkedSheet){
+ const sheet=checkedSheet||projectAdvancedSheet_(name,optional);
+ const last=sheet?sheet.getLastRow():0;if(last<2)return [];
  const width=DB_SCHEMA_SPECS[name].length;
- return sheet.getRange(2,1,sheet.getLastRow()-1,width).getDisplayValues().map((r,i)=>{r._row=i+2;return r;}).filter(r=>r[0]);
+ return sheet.getRange(2,1,last-1,width).getDisplayValues().map((r,i)=>{r._row=i+2;return r;}).filter(r=>r[0]);
 }
 
 function projectAdvancedNeed_(sessionToken,projectId,manage){
  const user=requireSession_(sessionToken).employee;
  const project=getProjectsInternal_(true).find(p=>p.projectId===String(projectId||''));
  if(!project)throw new Error('案件が見つかりません。');
- const plans=projectHubRows_('plan',projectHubStorage_().sheets.plan,project.projectId);
+ const storage=projectHubStorage_();
+ const plans=projectHubRows_('plan',storage.sheets.plan,project.projectId);
  const plan=plans[0]||{};
- const tasks=projectHubRows_('task',projectHubStorage_().sheets.task,project.projectId).filter(t=>t.status!=='非表示');
+ const tasks=projectHubRows_('task',storage.sheets.task,project.projectId).filter(t=>t.status!=='非表示');
  const manager=projectHubCanManage_(user,plan);
  const member=manager||tasks.some(t=>t.ownerId===user.employeeId);
  if(!member)throw new Error('この案件の詳細資料を扱う権限がありません。案件責任者に担当設定を依頼してください。');
@@ -36,10 +37,10 @@ function projectAdvancedNeed_(sessionToken,projectId,manage){
  return {user,project,plan,tasks,manager,member};
 }
 
-function projectAdvancedReady_(){
+function projectAdvancedReady_(sheets){
  const names=['プロジェクト工数対応','プロジェクト依存','プロジェクト添付','プロジェクト既読','プロジェクト原価','プロジェクト予算'];
  const missing=[];
- names.forEach(n=>{try{if(!projectAdvancedSheet_(n,true))missing.push(n);}catch(err){missing.push(n+'（列不一致）');}});
+ names.forEach(n=>{try{const sheet=projectAdvancedSheet_(n,true);if(!sheet)missing.push(n);else if(sheets)sheets[n]=sheet;}catch(err){missing.push(n+'（列不一致）');}});
  return {ready:missing.length===0,missing};
 }
 
@@ -68,10 +69,10 @@ function projectAdvancedDetectCycle_(map){
 
 function getProjectAdvanced(sessionToken,projectId){
  const ctx=projectAdvancedNeed_(sessionToken,projectId,false);
- const status=projectAdvancedReady_();
+ const sheets={},status=projectAdvancedReady_(sheets),read=name=>projectAdvancedRows_(name,false,sheets[name]);
  if(!status.ready)return {setupRequired:true,missing:status.missing,canManage:ctx.manager,isAdmin:ctx.user.role==='ADMIN'};
- const deps=projectAdvancedRows_('プロジェクト依存',false).filter(r=>r[1]===ctx.project.projectId);
- const docs=projectAdvancedRows_('プロジェクト添付',false).filter(r=>r[1]===ctx.project.projectId&&r[8]!=='削除');
+ const deps=read('プロジェクト依存').filter(r=>r[1]===ctx.project.projectId);
+ const docs=read('プロジェクト添付').filter(r=>r[1]===ctx.project.projectId&&r[8]!=='削除');
  const depsByTask=new Map(deps.map(r=>[r[0],{prerequisites:projectAdvancedJsonList_(r[2]),revision:Number(r[3]||0)}]));
  const taskMap=new Map(ctx.tasks.map(t=>[t.id,t]));
  const graph=ctx.tasks.map(t=>{
@@ -82,11 +83,11 @@ function getProjectAdvanced(sessionToken,projectId){
  });
  const latestDocs=docs.map(r=>({id:r[0],projectId:r[1],resourceId:r[2],name:r[3],mime:r[4],bytes:Number(r[5]||0),version:Number(r[7]||1),createdAt:r[9],createdBy:r[10]})).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const response={setupRequired:false,canManage:ctx.manager,isAdmin:ctx.user.role==='ADMIN',dependencies:graph,attachments:latestDocs,
-  taskEffort:projectAdvancedTaskEffort_(ctx.project.projectId,ctx.tasks),filesAccess:'案件責任者・案件の作業担当者・管理者のみ'};
+  taskEffort:projectAdvancedTaskEffort_(ctx.project.projectId,ctx.tasks,sheets['プロジェクト工数対応'],ctx.project,ctx.plan),filesAccess:'案件責任者・案件の作業担当者・管理者のみ'};
  if(ctx.user.role==='ADMIN'){
-  const budget=projectAdvancedRows_('プロジェクト予算',false).find(r=>r[0]===ctx.project.projectId);
+  const budget=read('プロジェクト予算').find(r=>r[0]===ctx.project.projectId);
   response.budget=budget?{amount:Number(budget[1]||0),note:budget[2],revision:Number(budget[3]||0)}:{amount:null,note:'',revision:0};
-  response.costs=projectAdvancedRows_('プロジェクト原価',false).filter(r=>r[1]===ctx.project.projectId&&r[7]!=='削除')
+  response.costs=read('プロジェクト原価').filter(r=>r[1]===ctx.project.projectId&&r[7]!=='削除')
     .map(r=>({id:r[0],date:r[2],kind:r[3],note:r[4],amount:Number(r[5]||0),revision:Number(r[6]||0)}));
   const orderValue=ctx.plan.orderValue===''||ctx.plan.orderValue==null?null:Number(ctx.plan.orderValue);
   const sum=response.costs.reduce((total,r)=>total+r.amount,0);
@@ -97,17 +98,19 @@ function getProjectAdvanced(sessionToken,projectId){
  return response;
 }
 
-function projectAdvancedTaskEffort_(projectId,tasks){
- const refs=projectAdvancedRows_('プロジェクト工数対応',true).filter(r=>r[1]===projectId&&r[2]);
+function projectAdvancedTaskEffort_(projectId,tasks,checkedSheet,project,plan){
+ const refs=projectAdvancedRows_('プロジェクト工数対応',true,checkedSheet).filter(r=>r[1]===projectId&&r[2]);
  if(!refs.length)return [];
- const sheet=getDb_().getSheetByName('工数');
- if(!sheet||sheet.getLastRow()<2)return [];
+ project=project||getProjectsInternal_(true).find(p=>p.projectId===projectId);
+ if(!project)return [];
+ if(!plan)plan=projectHubRows_('plan',projectHubStorage_().sheets.plan,projectId)[0]||{};
+ const names=new Set([project.name,...projectHubAliases_(plan)].map(projectHubName_));
  const linked=new Map(refs.map(r=>[r[0],r[2]]));
- const rows=sheet.getRange(2,1,sheet.getLastRow()-1,13).getDisplayValues();
+ const rows=projectHubWorklogRows_(false);
  const totals=new Map(tasks.map(t=>[t.id,0]));
  rows.forEach(r=>{
   const taskId=linked.get(r[0]);
-  if(!taskId||r[12]==='削除'||!totals.has(taskId))return;
+  if(!taskId||r[12]==='削除'||!totals.has(taskId)||!names.has(projectHubName_(r[4])))return;
   const val=Number(r[9]||0);
   if(Number.isFinite(val)&&val>0)totals.set(taskId,totals.get(taskId)+val);
  });
@@ -277,10 +280,11 @@ function projectAdvancedWorklogPrepare_(payload,project,actor,recordId){
  }
  if(taskId){
   if(!project.projectId)throw new Error('関連先の案件IDが見つかりません。');
-  const data=projectHubRows_('task',projectHubStorage_().sheets.task,String(project.projectId));
+  const storage=projectHubStorage_();
+  const data=projectHubRows_('task',storage.sheets.task,String(project.projectId));
   const task=data.find(t=>t.id===taskId&&t.status!=='非表示');
   if(!task)throw new Error('選択した作業は案件に存在しません。');
-  const plan=projectHubRows_('plan',projectHubStorage_().sheets.plan,String(project.projectId))[0]||{};
+  const plan=projectHubRows_('plan',storage.sheets.plan,String(project.projectId))[0]||{};
   if(actor.role!=='ADMIN'&&plan.ownerId!==actor.employeeId&&task.ownerId!==actor.employeeId)
     throw new Error('担当外の作業には工数を関連付けできません。案件全体の工数として記録してください。');
  }

@@ -25,7 +25,7 @@ function projectHubTimingPanel_(){
 
 function resetProjectHubUi(){projectHubTimingSamples.length=0;if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
 function projectHubIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
-function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();}
+function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();if(typeof projectAdvancedInvalidate_==='function')projectAdvancedInvalidate_();}
 function loadProjectHub(options={}){
  if(!state.sessionToken||!state.data)return;
  if(projectHubUi.loading){if(options.force)projectHubUi.refreshNeeded=true;return;}
@@ -65,7 +65,7 @@ function projectHubLoadDetail_(id,force=false){
  }).getProjectHubDetail(state.sessionToken,id,force);
 }
 function projectHubSelect_(id){
- if(projectHubUi.busy)return;
+ if(projectHubUi.busy||typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)return;
  if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
  projectHubRememberDraft_();
  projectHubUi.selected=id;projectHubUi.view='detail';projectHubUi.tab='overview';projectHubUi.pickerOpen=false;projectHubUi.error='';
