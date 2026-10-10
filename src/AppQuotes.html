@@ -1,7 +1,7 @@
 <script>
 /* FM WORKS v0.14.0 - quotations for every authenticated employee.
    All client calculations are previews; all amounts/permissions are validated on server. */
-const QUOTE_UI_TTL=45000;
+const QUOTE_UI_TTL=300000;
 let quoteUi={data:null,at:0,identity:'',loading:false,refreshNeeded:false,busy:false,error:'',
   mode:'list',id:'',editor:null,search:'',filter:'all',details:null,dirty:false,key:''};
 function quoteIdentity_(){
@@ -36,7 +36,7 @@ function loadQuoteWorkspace(options={}){
     }
     if(!data||!Array.isArray(data.vendors)||!Array.isArray(data.quotes)||!Array.isArray(data.relatedDocs)){
       quoteUi.error='見積・書類一覧の応答を確認できませんでした。もう一度更新してください。';
-      renderPageIfActive('quotes');renderPageIfActive('documentHistory');
+      quoteRenderWorkspace_();renderPageIfActive('documentHistory');
       if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
       return;
     }
@@ -44,7 +44,7 @@ function loadQuoteWorkspace(options={}){
     if(quoteUi.pendingVendorCode&&quoteUi.editor&&data.vendors.some(v=>v.code===quoteUi.pendingVendorCode)){
       quoteUi.editor.vendorCode=quoteUi.pendingVendorCode;quoteUi.dirty=true;quoteUi.pendingVendorCode='';
     }
-    renderPageIfActive('quotes');renderPageIfActive('documentHistory');
+    quoteRenderWorkspace_();renderPageIfActive('documentHistory');
     if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
   }).withFailureHandler(error=>{
     if(identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
@@ -55,9 +55,13 @@ function loadQuoteWorkspace(options={}){
       return;
     }
     quoteUi.error=cleanApiErrorMessage(error,'見積一覧を読み込めませんでした。');
-    renderPageIfActive('quotes');renderPageIfActive('documentHistory');
+    quoteRenderWorkspace_();renderPageIfActive('documentHistory');
     if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
   }).getQuoteWorkspace(state.sessionToken);
+}
+function quoteRenderWorkspace_(){
+  if(state.page==='quotes'&&quoteUi.mode==='edit'&&quoteUi.dirty){quoteUpdateIssueButton_();quotePaintSaveStatus_();return;}
+  renderPageIfActive('quotes');
 }
 function quoteSetupStorage_(){
   if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
@@ -136,6 +140,7 @@ function quoteEmptyEditor_(){
 }
 function quoteNew(){
   if(quoteUi.busy)return;
+  if(quoteUi.editor&&quoteUi.dirty){quoteUi.mode='edit';renderPageIfActive('quotes');showToast('入力途中の見積を再開しました');return;}
   if(!quoteUi.data||quoteUi.data.setupRequired){
     showToast('取引先マスタまたはDBの初期設定が必要です。');return;
   }
@@ -178,7 +183,7 @@ function quoteDiscard(){
 function quoteUpdateField(name,value){
   if(!quoteUi.editor||quoteUi.busy)return;
   if(!['vendorCode','quoteDate','subject','delivery','payment','expires','contact','bank','note'].includes(name))return;
-  quoteUi.editor[name]=String(value);quoteUi.dirty=true;
+  quoteUi.editor[name]=String(value);quoteUi.dirty=true;quoteUpdateIssueButton_();quotePaintSaveStatus_();
   if(name==='vendorCode'){
     const vendor=quoteVendor_(),node=document.getElementById('quoteVendorPreview');
     if(node)node.textContent=vendor?('ベンダー：'+vendor.code+' ／ '+vendor.name+
@@ -193,9 +198,45 @@ function quoteUpdateLine(index,name,value){
   if(!['description','quantity','unit','price','noteOnly'].includes(name))return;
   row[name]=name==='noteOnly'?!!value:String(value);
   quoteUi.dirty=true;
-  quotePaintTotals_();
+  quotePaintSaveStatus_();quotePaintTotals_();
   quoteUpdateIssueButton_();
   quoteRefreshPreview_();
+}
+function quoteTogglePreview_(){
+  quoteUi.previewVisible=!quoteUi.previewVisible;renderPageIfActive('quotes');
+}
+function quoteFilterVendors_(value){
+  const select=document.getElementById('quoteVendorSelect');if(!select)return;
+  const query=String(value||'').trim().toLocaleLowerCase('ja-JP');
+  Array.from(select.options).forEach(option=>{option.hidden=!!option.value&&option.value!==select.value&&!option.textContent.toLocaleLowerCase('ja-JP').includes(query)});
+}
+function quotePasteDialog_(){
+  if(quoteUi.busy||!quoteUi.editor)return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card' role='dialog' aria-modal='true' aria-label='Excelから見積明細を追加'><div class='modal-head'><h2>Excelから明細を追加</h2><button type='button' class='icon-button' aria-label='閉じる' onclick='closeModal()'>×</button></div><p>Excelの「品名・数量・単位・単価」の4列をコピーして貼り付けてください。見出し行は含めず、現在の明細に追加します。</p><label class='qb-field'><span>明細（4列）</span><textarea id='quotePasteText' rows='7' placeholder='例：ホームページ保守　1　式　30,000'></textarea></label><p id='quotePasteError' role='alert'></p><div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button><button type='button' class='primary-button' onclick='quoteApplyPaste_()'>明細に追加</button></div></section>";
+}
+function quoteParsePaste_(text){
+  return String(text||'').trim().split(/\r?\n/).filter(line=>line.trim()).map((line,index)=>{
+    const cells=line.split('\t').map(x=>x.trim());
+    if(cells.length!==4||!cells[0])throw Error((index+1)+'行目：品名・数量・単位・単価の4列にしてください');
+    const number=value=>Number(value.replace(/[,￥¥]/g,''));
+    const quantity=number(cells[1]),price=number(cells[3]);
+    if(!cells[1]||!cells[3]||!Number.isFinite(quantity)||quantity<=0||quantity>100000||!Number.isFinite(price)||!Number.isInteger(price)||Math.abs(price)>9999999999)
+      throw Error((index+1)+'行目：数量と単価を数値で確認してください');
+    if(cells[0].length>240||cells[2].length>20)throw Error((index+1)+'行目：品名または単位が長すぎます');
+    return {description:cells[0],quantity:quantity,unit:cells[2]||'式',price:price,noteOnly:false};
+  });
+}
+function quoteApplyPaste_(){
+  if(quoteUi.busy||!quoteUi.editor)return;
+  try{
+    const rows=quoteParsePaste_(document.getElementById('quotePasteText').value);
+    const current=quoteUi.editor.lines||[];
+    const existing=current.filter(row=>String(row.description||'').trim()||Number(row.price)!==0||Number(row.quantity)!==1||row.noteOnly);
+    if(!rows.length)throw Error('明細を貼り付けてください');
+    if(existing.length+rows.length>21)throw Error('追加後の明細は21行以内にしてください');
+    quoteUi.editor.lines=existing.concat(rows);quoteUi.dirty=true;closeModal();renderPageIfActive('quotes');
+    showToast(rows.length+'行を追加しました');
+  }catch(error){const target=document.getElementById('quotePasteError');if(target)target.textContent=error.message;}
 }
 function quoteAddLine(){
   if(!quoteUi.editor||quoteUi.editor.lines.length>=21)return;
@@ -242,9 +283,12 @@ function quotePaintTotals_(){
     }
   });
 }
+function quotePaintSaveStatus_(){
+  const node=document.getElementById('quoteSaveStatus');if(node)node.textContent=quoteUi.dirty?'● 未保存の変更あり':'✓ 保存済みの下書き';
+}
 function quoteUpdateIssueButton_(){
   const button=document.getElementById('quoteIssueButton');
-  if(button)button.disabled=quoteUi.dirty||!quoteUi.editor||!quoteUi.editor.id||
+  if(button)button.disabled=quoteUi.busy||quoteUi.dirty||!quoteUi.editor||!quoteUi.editor.id||
       !quoteUi.data||(quoteUi.data.sequencesReady||[]).indexOf(quoteUi.editor.vendorCode)===-1;
 }
 function quoteEditorPayload_(){
@@ -257,6 +301,9 @@ function quoteEditorPayload_(){
 }
 function quoteSaveDraft(){
   if(quoteUi.busy||!quoteUi.editor)return;
+  const incomplete=(quoteUi.editor.lines||[]).find(row=>!String(row.description||'').trim()&&
+    (Number(row.price)!==0||Number(row.quantity)!==1||row.noteOnly));
+  if(incomplete){showToast('金額・数量を入力した行には品名・内容も入力してください');return;}
   const obj=quoteEditorPayload_();
   if(!obj.vendorCode){showToast('取引先を選択してください');return;}
   if(!obj.lines.length){showToast('明細を1行以上入力してください');return;}
@@ -596,20 +643,19 @@ function quoteEditor_(){
   const totals=quoteTotals_(e.lines||[]);
   const fields=[
     ['quoteDate','見積日','date'],['subject','件名','text'],
-    ['delivery','納期','text'],['payment','支払条件','text'],
-    ['expires','有効期限','text'],['contact','担当者','text'],
-    ['bank','振込先','text']
+    ['contact','担当者','text']
   ];
   const inputField=([key,label,type])=>
     "<label class='qb-field qb-field-"+key+"'><span>"+escapeHtml(label)+"</span>"+
       "<input type='"+type+"' name='"+key+"' value='"+quoteFormValue_(e[key])+"' "+
       "oninput='quoteUpdateField(this.name,this.value)' maxlength='200'></label>";
-  return ["<div class='quote-layout v15-workspace v15-quote-editor quote-builder'>",
+  return ["<div class='quote-layout v15-workspace v15-quote-editor quote-builder"+(quoteUi.previewVisible?' business-preview-open':'')+"'>",
     "<div class='qb-header quote-toolbar'><div><button type='button' class='quote-back' onclick='quoteBack()'>← 書類作成へ戻る</button>",
       "<p class='v15-kicker'>FM WORKS / 書類作成 / 共通入力</p><h1>",saved?'見積書を編集':'見積書の新規作成',"</h1>",
       "<p class='qb-header-description'>必要な内容を1回だけ入力します。見積書の発行後は同じ明細から請求書・納品書・領収書を作成できます。</p>",
     "</div><div class='qb-header-actions'><span id='quoteSaveStatus' class='qb-save-status'>",
       quoteUi.dirty?'● 未保存の変更あり':saved?'✓ 保存済みの下書き':'● 新規作成中',"</span>",
+      "<button type='button' class='secondary-button' onclick='quoteTogglePreview_()' aria-pressed='"+!!quoteUi.previewVisible+"'>"+(quoteUi.previewVisible?'プレビューを閉じる':'プレビューを表示')+"</button>",
       "<button type='button' class='secondary-button' onclick='quoteSaveDraft()' ",(quoteUi.busy?'disabled':''),">",
       quoteUi.busy?'処理中…':'下書き保存',"</button>",
       "<button type='button' class='primary-button' id='quoteIssueButton' onclick='quoteIssue()' ",
@@ -620,19 +666,23 @@ function quoteEditor_(){
       "<div class='qb-section-title'><span class='qb-section-index'>01</span><div><h2>基本情報</h2>",
       "<p>取引先、件名、見積条件を設定します。</p></div></div>",
       "<div class='qb-info-grid'>",
-      "<div class='doc-inline-vendor'><label class='qb-field qb-field-vendor'><span>取引先 <em>必須</em></span><select aria-label='取引先' onchange='quoteUpdateField(\"vendorCode\",this.value)'>",
+      "<label class='qb-field business-vendor-search'><span>取引先を検索</span><input type='search' id='quoteVendorSearch' placeholder='会社名・コードで候補を絞る' oninput='quoteFilterVendors_(this.value)' autocomplete='off'></label>",
+      "<div class='doc-inline-vendor'><label class='qb-field qb-field-vendor'><span>取引先 <em>必須</em></span><select id='quoteVendorSelect' aria-label='取引先' onchange='quoteUpdateField(\"vendorCode\",this.value)'>",
       "<option value=''>取引先を選択してください</option>",
       (quoteUi.data&&quoteUi.data.vendors||[]).map(x=>"<option value='"+escapeHtml(x.code)+"'"+
         (x.code===e.vendorCode?' selected':'')+">"+escapeHtml(x.name)+"（"+escapeHtml(x.code)+"）</option>").join(''),
       "</select></label><button type='button' class='secondary-button' onclick='quoteQuickVendorDialog_()'>＋ 取引先を登録</button></div>",
       "<div class='qb-field qb-number-field'><span>見積番号</span><strong>",escapeHtml(e.number||'正式発行時に自動採番'),"</strong></div>",
       fields.map(inputField).join(''),"</div>",
+      "<details class='business-optional qb-conditions' data-form-section='quote-conditions'><summary>納期・支払条件・有効期限・振込先を変更</summary><div class='qb-info-grid'>",
+      [['delivery','納期','text'],['payment','支払条件','text'],['expires','有効期限','text'],['bank','振込先','text']].map(inputField).join(''),"</div></details>",
       "<p class='quote-vendor-preview' id='quoteVendorPreview'>",vendor?escapeHtml('取引先コード：'+vendor.code+' ／ '+vendor.name+
       (vendor.invoice?' ／ インボイス番号：'+vendor.invoice:'')):'取引先を選択してください。',"</p>",
     "</section>",
     "<section class='card qb-edit-card qb-lines-card' aria-label='見積明細'>",
       "<div class='qb-section-title qb-section-title-actions'><span class='qb-section-index'>02</span>",
       "<div><h2>見積明細</h2><p>数量×単価を自動計算。最大21行、値引きはマイナス単価で入力できます。</p></div>",
+      "<button type='button' class='secondary-button' onclick='quotePasteDialog_()'>Excelから貼り付け</button>",
       "<button type='button' class='secondary-button' onclick='quoteAddLine()' ",
       ((e.lines||[]).length>=21?'disabled':''),">＋ 行を追加</button></div>",
       "<div class='qb-grid-scroll' role='region' aria-label='見積明細の編集表' tabindex='0'>",

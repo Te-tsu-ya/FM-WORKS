@@ -17,18 +17,20 @@ function financeInsightsYear(value){
   financeUi.insightYear=year;financeUi.insights=null;financeUi.insightLoading=false;financeUi.insightQuery='';financeUi.insightPayer='';
   financeLoadInsights();
 }
-function financeLoadInsights(){
+function financeLoadInsights(force=false){
   if(!financeAccessAllowed()||!state.sessionToken||financeUi.insightLoading)return;
   const identity=financeIdentity(),year=financeUi.insightYear;
+  if(!force&&financeUi.insights&&financeUi.insightLoadedYear===year&&Date.now()-Number(financeUi.insightAt||0)<300000)return;
+  const serial=financeUi.insightSerial=(financeUi.insightSerial||0)+1;
   financeUi.insightLoading=true;financeUi.insightError='';
   renderPageIfActive('finance');
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-    if(identity!==financeIdentity()||year!==financeUi.insightYear)return;
-    financeUi.insightLoading=false;financeUi.insights=data&&data.ok?data:null;
+    if(identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
+    financeUi.insightLoading=false;financeUi.insights=data&&data.ok?data:null;financeUi.insightAt=Date.now();financeUi.insightLoadedYear=year;
     financeUi.insightError=data&&!data.ok?data.message||'集計できませんでした。':'';
     renderPageIfActive('finance');
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity()||year!==financeUi.insightYear)return;
+    if(identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
     financeUi.insightLoading=false;
     financeUi.insightError=cleanApiErrorMessage(error,'旧経費台帳を取得できませんでした。');
     renderPageIfActive('finance');
@@ -119,7 +121,7 @@ function financeInsightsPage(){
     '<p>誰が・いつ・どこで・何を購入したか。社内の支出を振り返るための画面です。</p></div>'+
     '<div class="finance-hero-actions"><button type="button" class="secondary-button" onclick="financeCloseInsights()">← 経理に戻る</button>'+
     '<label class="finance-advisor-year">対象年<select aria-label="支出分析の対象年" onchange="financeInsightsYear(this.value)">'+years+'</select></label>'+
-    '<button type="button" class="secondary-button" onclick="financeLoadInsights()"'+
+    '<button type="button" class="secondary-button" onclick="financeLoadInsights(true)"'+
     (financeUi.insightLoading?' disabled':'')+'>再集計</button></div></header>'+
     '<div class="finance-advisor-note" role="note">旧「事務所で必要なもの」→「経費」を読み取り専用で参照します。'+
     'FM WORKSの新規経費記録と単純合算していません。税理士の試算表・確定した勘定科目とは異なります。</div>'+
@@ -170,13 +172,14 @@ function financeApplyInvoiceIssuer(){
   el.value=record.name;showToast('公表された取引先名称を反映しました。');
 }
 function financeTravelEvidencePanel(){
+  const source=financeActiveForm&&financeActiveForm.source||{};
   return '<section class="finance-travel-proof" aria-label="旅費の計算根拠">'+
     '<div class="finance-travel-proof-heading"><div><h3>旅費の計算根拠</h3>'+
     '<p>社内旅費規程（2025.12.1）に基づく参考計算です。金額の理由を確認できます。</p></div></div>'+
     '<div class="finance-travel-proof-inputs">'+
-    '<label>片道距離（km）<input type="number" id="financeOneWayKm" min="0" max="30000" step="1" placeholder="例：120"></label>'+
-    '<label>宿泊の領収書実費（円）<input type="number" id="financeLodgingActual" min="0" step="1" placeholder="宿泊する場合のみ"></label></div>'+
-    '<p class="finance-advisor-note">試算用の追加項目は自動保存されません。「備考へ根拠を転記」で計算結果を申請内容に残せます。</p>'+
+    '<label>片道距離（km）<input type="number" id="financeOneWayKm" value="'+escapeHtml(source.financeOneWayKm||'')+'" min="0" max="30000" step="1" placeholder="例：120"></label>'+
+    '<label>宿泊の領収書実費（円）<input type="number" id="financeLodgingActual" value="'+escapeHtml(source.financeLodgingActual||'')+'" min="0" step="1" placeholder="宿泊する場合のみ"></label></div>'+
+    '<p class="finance-advisor-note">「備考へ根拠を転記」で計算結果を申請内容に残せます。</p>'+
     '<button type="button" class="secondary-button" onclick="financeExplainTravel()">計算式と支給根拠を確認</button>'+
     '<div id="financeTravelExplanation" role="status" aria-live="polite" class="finance-travel-result"></div></section>';
 }
@@ -188,11 +191,17 @@ function financeExplainTravel(){
   });
   payload.oneWayKm=(document.getElementById('financeOneWayKm')||{}).value||'';
   payload.lodgingActual=(document.getElementById('financeLodgingActual')||{}).value||'';
+  const active=financeActiveForm,signature=JSON.stringify(payload);
+  const currentSignature=()=>{
+    const current={};FINANCE_FORM_FIELDS.travel.forEach(([key])=>current[key]=(document.getElementById('fin-'+key)||{}).value||'');
+    current.oneWayKm=(document.getElementById('financeOneWayKm')||{}).value||'';current.lodgingActual=(document.getElementById('financeLodgingActual')||{}).value||'';
+    return JSON.stringify(current);
+  };
   const id=financeIdentity(),result=document.getElementById('financeTravelExplanation');
   financeUi.travelEstimate=null;
   if(result)result.textContent='旅費規程と入力内容を照合しています…';
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-    if(id!==financeIdentity()||!financeActiveForm||financeActiveForm.kind!=='travel')return;
+    if(id!==financeIdentity()||financeActiveForm!==active||currentSignature()!==signature)return;
     financeUi.travelEstimate=data;
     const target=document.getElementById('financeTravelExplanation');
     if(!target)return;
@@ -207,7 +216,7 @@ function financeExplainTravel(){
       (data.total!==null?'<button type="button" class="primary-button" onclick="financeUseTravelEstimate()">計算根拠を備考へ転記</button>':'')+
       '<p>支給額は承認者が最終確認します。実費の二重計上に注意してください。</p>';
   }).withFailureHandler(error=>{
-    if(id!==financeIdentity())return;
+    if(id!==financeIdentity()||financeActiveForm!==active||currentSignature()!==signature)return;
     if(result)result.textContent=cleanApiErrorMessage(error,'旅費計算を確認できませんでした。');
   }).getFinanceTravelExplanation(state.sessionToken,payload);
 }

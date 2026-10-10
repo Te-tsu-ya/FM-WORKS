@@ -60,6 +60,10 @@ let currentRoute=null;
 function refresh(zone){
  const loader=loaders[zone];if(!loader)return;
  const map=pending[zone];
+ if(zone==='region'&&map.size){
+   const readsOnly=Array.from(map.values()).every(info=>/^(get|list|find|search|healthCheck)/i.test(info.method));
+   loader.root.classList[readsOnly?'add':'remove']('fmr-read-status');
+ }
  if(zone==='page'&&bootstrap){
    // Startup is held until the first actual authentication/config result arrives.
    if(map.size)loader.sub.textContent='サーバーと通信しています…';
@@ -152,10 +156,16 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
    const finish=error=>{if(ended)return;ended=true;if(tracking)tracking.settle(task,error)};
    try{
      let runner=raw.withSuccessHandler((...values)=>{
-       try{if(typeof success==='function')return success(...values)}
+       try{
+         if(typeof global.invalidateBusinessViewsAfterWrite==='function')global.invalidateBusinessViewsAfterWrite(prop,values[0]);
+         if(typeof success==='function')return success(...values)
+       }
        finally{finish(null)}
      }).withFailureHandler((error,...rest)=>{
-       try{if(typeof failure==='function')return failure(error,...rest)}
+       try{
+         if(/AUTH_REQUIRED|SESSION_EXPIRED/.test(String(error&&error.message||error))&&typeof global.handleApiError==='function')global.handleApiError(error);
+         if(typeof failure==='function')return failure(error,...rest)
+       }
        finally{finish(error||new Error('GAS request failed'))}
      });
      if(hasUserObject)runner=runner.withUserObject(userObject);

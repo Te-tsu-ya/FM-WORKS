@@ -433,7 +433,7 @@ function refreshAppData(callback){
 }
 
 // In-memory, session-scoped month result cache. Never put employee summaries in localStorage.
-const MONTHLY_RESULT_TTL=120000;
+const MONTHLY_RESULT_TTL=300000;
 const MONTHLY_CACHE_MAX=10;
 const monthlyResultCache=new Map();
 const monthlyPendingRequests=new Map();

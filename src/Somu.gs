@@ -157,22 +157,23 @@ function somuAudit_(employee,action,kind,id,before,after){
     operation:action,target:'総務'+kind,targetId:id,before:auditJson_(before),
     after:auditJson_(after),source:'WEB',result:'SUCCESS',note:''});
 }
-function getSomuWorkspace(token,forceFresh){
+function getSomuWorkspace(token,forceFresh,includeGrowth){
   const started=Date.now();
   // The session and permissions are checked even on a hot shared cache hit.
   const employee=somuOperator_(token),canApprove=employee.role==='ADMIN';
+  const enrich=snapshot=>includeGrowth?Object.assign({},snapshot,{growth:getSomuGrowthData(token,forceFresh)}):snapshot;
   const cached=forceFresh?null:somuGetCachedSnapshot_();
   if(cached){
     if(typeof logPerformance_==='function')
       logPerformance_('getSomuWorkspace',started,1200,{source:'SCRIPT_CACHE',rows:cached.rowCount||0});
-    return Object.assign({},cached,{canApprove:canApprove,today:somuToday_()});
+    return enrich(Object.assign({},cached,{canApprove:canApprove,today:somuToday_()}));
   }
   const status=somuStorageStatus_();
   if(!status.ready){
     if(typeof logPerformance_==='function')
       logPerformance_('getSomuWorkspace',started,1200,{source:'SETUP_REQUIRED'});
-    return {setupRequired:true,missing:status.missing,
-      assets:[],loans:[],purchases:[],documents:[],canApprove:canApprove,today:somuToday_()};
+    return enrich({setupRequired:true,missing:status.missing,
+      assets:[],loans:[],purchases:[],documents:[],canApprove:canApprove,today:somuToday_()});
   }
   const db=getDb_();
   // The 4 header checks above are reused. Avoid repeating a header read
@@ -189,7 +190,7 @@ function getSomuWorkspace(token,forceFresh){
   if(typeof logPerformance_==='function')
     logPerformance_('getSomuWorkspace',started,1200,
       {source:'SHEETS',cacheStored:cachedSuccessfully,rows:result.rowCount});
-  return Object.assign({},result,{canApprove:canApprove,today:somuToday_()});
+  return enrich(Object.assign({},result,{canApprove:canApprove,today:somuToday_()}));
 }
 function somuAssetFields_(p){
   const code=somuText_(p.code,'管理番号',55,true);

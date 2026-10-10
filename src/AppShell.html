@@ -2,7 +2,21 @@
 function renderPage(transition=false){
   const fn={home:homePage,attendance:attendancePage,worklog:worklogPage,schedule:schedulePage,companyCalendar:companyCalendarPage,requests:requestsPage,financeEntry:financeEntryPage,quotes:quotePage,documentHistory:documentHistoryPage,companyDocs:companyDocsPage,office:officePage,finance:financePage,people:peoplePage,monthly:monthlyPage,admin:adminPage}[state.page]||homePage;
   const content=document.getElementById('content');
+  if(!content.dataset.compositionBound){
+    content.dataset.compositionBound='true';
+    content.addEventListener('compositionstart',()=>{content.dataset.composing='true'});
+    content.addEventListener('compositionend',()=>{content.dataset.composing='false';if(content.dataset.renderPending==='true'){content.dataset.renderPending='false';setTimeout(()=>renderPage(),0)}});
+  }
   const update=()=>{
+    if(content.dataset.composing==='true'){content.dataset.renderPending='true';return;}
+    const samePage=content.dataset.renderedPage===state.page;
+    if(samePage&&state.page==='financeEntry'&&typeof financeRememberEntry_==='function')financeRememberEntry_();
+    const active=document.activeElement;
+    const field=samePage&&active&&content.contains(active)?{
+      id:active.id,name:active.name,label:active.getAttribute('aria-label'),
+      start:active.selectionStart,end:active.selectionEnd
+    }:null;
+    const openSections=samePage?Array.from(content.querySelectorAll('details[data-form-section]')).map(x=>[x.dataset.formSection,x.open]):[];
     const previouslyFocused=document.activeElement;
     const canRestoreFocus=state.page==='worklog'&&previouslyFocused&&['worklogPrevDate','worklogToday','worklogNextDate','worklogDatePicker',...WORKLOG_QUICK_FIELDS].includes(previouslyFocused.id);
     const focusId=canRestoreFocus?previouslyFocused.id:'';
@@ -11,6 +25,14 @@ function renderPage(transition=false){
     content.classList.toggle('attendance-one-screen',state.page==='attendance');
     content.classList.toggle('worklog-one-screen',state.page==='worklog');
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
+    content.dataset.renderedPage=state.page;
+    openSections.forEach(([key,open])=>{const el=Array.from(content.querySelectorAll('details[data-form-section]')).find(x=>x.dataset.formSection===key);if(el)el.open=open;});
+    if(typeof quoteUi!=='undefined'&&quoteUi.busy&&state.page==='quotes')content.querySelectorAll('.quote-builder input,.quote-builder textarea,.quote-builder select,.quote-builder button').forEach(x=>x.disabled=true);
+    if(field){
+      const next=Array.from(content.querySelectorAll('input,select,textarea,button')).find(x=>
+        field.id?x.id===field.id:field.name?x.name===field.name:field.label?x.getAttribute('aria-label')===field.label:false);
+      if(next&&!next.disabled){next.focus({preventScroll:true});if(typeof next.setSelectionRange==='function'&&field.start!==null)try{next.setSelectionRange(field.start,field.end)}catch(_){} }
+    }
     if(state.page==='worklog')restoreWorklogQuickDraft();
     else state.worklog.renderedDate=null;
     if(focusId){const next=document.getElementById(focusId);if(next&&typeof next.focus==='function')next.focus({preventScroll:true})}
@@ -118,6 +140,7 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  Object.keys(pageCache).forEach(key=>delete pageCache[key]);pendingLoads.clear();
   resetLeaveDemoSession();
   resetFinanceUi();
   if(typeof somuReset==='function')somuReset();

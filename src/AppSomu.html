@@ -7,22 +7,30 @@ const SOMU_DEMO=Object.freeze({
  purchases:[{id:'P1',name:'HDMIケーブル',quantity:10,estimatedPrice:800,neededOn:'2026-10-15',reason:'在庫補充',status:'申請中',requesterId:'OTHER',requesterName:'架空社員B'},{id:'P2',name:'コピー用紙',quantity:5,estimatedPrice:650,neededOn:'2026-10-20',reason:'消耗品補充',status:'承認済',requesterId:'OTHER',requesterName:'架空社員C'}],
  documents:[{id:'S1',name:'備品貸出申請書',category:'申請書',location:'共有ドライブ / 総務',status:'有効',expiresOn:''}]
 });
-function somuReset(){somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',demo:false,loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
+function somuReset(){somuTabState_.clear();window.somuActiveForm=null;somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',demo:false,loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
 function somuSessionIdentity(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function somuCanUse(){return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace&&state.sessionToken);}
 function somuData(){return somuUi.demo?SOMU_DEMO:(somuUi.data||{assets:[],loans:[],purchases:[],documents:[]});}
-const SOMU_CLIENT_FRESH_MS=45000;
+const SOMU_CLIENT_FRESH_MS=300000;
 function somuLoad(force){
- if(!somuCanUse()||somuUi.loading)return;
+ if(!somuCanUse())return;
+ if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
  // Local in-memory snapshot makes return navigation instantaneous.
  if(somuUi.loaded&&!force&&Date.now()-somuUi.loadedAt<SOMU_CLIENT_FRESH_MS)return;
  const identity=somuSessionIdentity(),started=Date.now(),hadData=!!(somuUi.loaded&&somuUi.data);
  somuUi.loading=true;somuUi.error='';
+ if(typeof somuGrowth!=='undefined'){somuGrowth.loading=true;somuGrowth.serial=(somuGrowth.serial||0)+1;somuGrowth.refreshNeeded=false;}
  // Keep the previous cards and selected row visible during silent refresh.
  if(!hadData&&state.page==='office')renderPageIfActive('office');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(identity!==somuSessionIdentity())return;
-  somuUi.loading=false;somuUi.loaded=true;somuUi.data=data;somuUi.loadedAt=Date.now();
+  somuUi.loading=false;
+  if(typeof somuGrowth!=='undefined')somuGrowth.loading=false;
+  if(somuUi.refreshNeeded){somuUi.refreshNeeded=false;somuLoad(true);return;}
+  somuUi.loaded=true;somuUi.data=data;somuUi.loadedAt=Date.now();
+  if(data&&data.growth&&typeof somuGrowth!=='undefined'){
+    somuGrowth.data=data.growth;somuGrowth.loaded=true;somuGrowth.loading=false;somuGrowth.loadedAt=Date.now();somuGrowth.error='';
+  }
   if(typeof console!=='undefined'&&console.info)
     console.info('FM_SOMU_LOAD',JSON.stringify({elapsedMs:Date.now()-started,rows:data&&data.rowCount||0,refresh:hadData}));
   if(state.page==='office'&&!somuUi.demo)renderPageIfActive('office');
@@ -30,6 +38,8 @@ function somuLoad(force){
  }).withFailureHandler(err=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.loading=false;
+  if(typeof somuGrowth!=='undefined')somuGrowth.loading=false;
+  if(somuUi.refreshNeeded){somuUi.refreshNeeded=false;somuLoad(true);return;}
   const message=cleanApiErrorMessage(err,'総務データを読み込めませんでした。');
   if(hadData){
     // Network trouble must never blank an already usable workspace.
@@ -38,10 +48,11 @@ function somuLoad(force){
     somuUi.error=message;somuUi.loaded=true;
     if(state.page==='office')renderPageIfActive('office');
   }
- }).getSomuWorkspace(state.sessionToken,!!force);
+ }).getSomuWorkspace(state.sessionToken,!!force,true);
 }
 function somuReload(){somuUi.demo=false;somuLoad(true);}
-function somuTab(tab){if(!['home','assets','loans','purchases','documents','contracts','facilities','tickets'].includes(tab))return;somuUi.tab=tab;somuUi.filter='all';somuUi.query='';somuUi.selected='';somuUi.listLimit=60;if(typeof somuGrowthTab_==='function'&&somuGrowthTab_(tab))somuGrowthLoad(false);renderPageIfActive('office');}
+const somuTabState_=new Map();
+function somuTab(tab){if(!['home','assets','loans','purchases','documents','contracts','facilities','tickets'].includes(tab))return;somuTabState_.set(somuUi.tab,{filter:somuUi.filter,query:somuUi.query,selected:somuUi.selected,listLimit:somuUi.listLimit});somuUi.tab=tab;Object.assign(somuUi,somuTabState_.get(tab)||{filter:'all',query:'',selected:'',listLimit:60});if(typeof somuGrowthTab_==='function'&&somuGrowthTab_(tab))somuGrowthLoad(false);renderPageIfActive('office');}
 function somuSearch(value){somuUi.query=String(value||'').slice(0,120);somuUi.listLimit=60;somuRefreshLists();}
 function somuFilter(value){somuUi.filter=String(value||'all');somuUi.listLimit=60;somuRefreshLists();}
 function somuPick(id){somuUi.selected=String(id);somuRefreshLists();}
@@ -121,6 +132,7 @@ function somuDetailMarkup_(kind,x){
   const mine=String(x.requesterId)===String(state.data&&state.data.user&&state.data.user.employeeId);
   if(x.status==='申請中'&&somuData().canApprove&&!mine)actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'APPROVE\')">承認する</button><button class="secondary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'RETURN\')">差戻す</button>';
   if(x.status==='承認済')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'ORDER\')">発注済みにする</button>';
+  if(x.status==='入荷済')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuRegisterReceivedPurchase_(this.dataset.id)">備品台帳に登録</button>';
   if(x.status==='発注済')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'RECEIVE\')">入荷済みにする</button>';
   if(x.status==='差戻し'&&mine)actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuOpenForm(\'purchase\',this.dataset.id)">修正して再申請</button>';
  }
@@ -166,14 +178,15 @@ function somuOpenForm(kind,id,selectedAssetId){
  document:[['name','書類名','text',true],['category','分類','text'],['location','保管場所','text'],['url','保管リンク（https）','url'],['expiresOn','期限','date'],['status','状態','select',false,['有効','保管終了']],['note','備考','textarea']]
  }[kind];
  const html=fields.map(([key,label,type,required,choices])=>{
+  label+=required?' <em class="v15-required">必須</em>':'';
   let value=old[key]??({quantity:1,minimum:0,estimatedPrice:0,loanDate:state.data.today,dueDate:state.data.today,status:'利用中'}[key]??'');
   if(type==='asset'){
    const assets=(somuData().assets||[]).filter(a=>a.status!=='廃止');
    return '<label class="field"><span>'+label+'</span><select id="somu-'+key+'" required>'+assets.map(a=>'<option value="'+escapeHtml(a.id)+'" '+(a.id===selectedAssetId?'selected':'')+'>'+escapeHtml(a.code+' · '+a.name)+'</option>').join('')+'</select></label>';
   }
   if(type==='select')return '<label class="field"><span>'+label+'</span><select id="somu-'+key+'">'+choices.map(o=>'<option '+(o===value?'selected':'')+'>'+o+'</option>').join('')+'</select></label>';
-  if(type==='textarea')return '<label class="field full"><span>'+label+'</span><textarea id="somu-'+key+'" rows="3">'+escapeHtml(value)+'</textarea></label>';
-  return '<label class="field"><span>'+label+'</span><input id="somu-'+key+'" type="'+type+'" '+(required?'required':'')+' '+(type==='number'?'min="0" step="1"':'')+' value="'+escapeHtml(value)+'"></label>';
+  if(type==='textarea')return '<label class="field full"><span>'+label+'</span><textarea id="somu-'+key+'" rows="3" '+(required?'required':'')+'>'+escapeHtml(value)+'</textarea></label>';
+  return '<label class="field"><span>'+label+'</span><input id="somu-'+key+'" type="'+type+'" '+(required?'required':'')+' '+(type==='number'?'min="'+(key==='quantity'&&kind!=='asset'?'1':'0')+'" step="1"':'')+' value="'+escapeHtml(value)+'"></label>';
  }).join('');
  const title={asset:'備品',loan:'貸出',purchase:'購買申請',document:'社内書類'}[kind];
  const isResubmit=kind==='purchase'&&!!id;
@@ -181,13 +194,26 @@ function somuOpenForm(kind,id,selectedAssetId){
  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card somu-modal" role="dialog" aria-modal="true" aria-labelledby="somuModalTitle"><div class="modal-head"><h2 id="somuModalTitle">'+(isResubmit?'差戻し内容を修正：':id?'編集：':'新規登録：')+title+'</h2><button class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><form id="somuForm" onsubmit="event.preventDefault();somuSubmit()"><div class="somu-form-fields">'+html+'</div><p id="somuFormError" class="somu-form-error" role="alert" hidden></p><div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button><button id="somuSaveButton" class="primary-button" type="submit">保存する</button></div></form></section>';
  window.somuActiveForm={kind:kind,id:id||'',old:old,key:somuUuid(),fields:fields,isResubmit:isResubmit};
 }
+function somuRegisterReceivedPurchase_(id){
+ if(somuUi.demo||somuUi.busy)return;
+ const purchase=(somuData().purchases||[]).find(x=>String(x.id)===String(id)&&x.status==='入荷済');
+ if(!purchase)return;
+ const linked=(somuData().assets||[]).find(x=>String(x.note||'').includes('[購買:'+purchase.id+']'));
+ if(linked){somuTab('assets');somuPick(linked.id);showToast('この購買に対応する備品は登録済みです');return;}
+ somuOpenForm('asset');
+ const values={name:purchase.name,quantity:purchase.quantity,note:'[購買:'+purchase.id+'] '+(purchase.reason||'')};
+ Object.entries(values).forEach(([key,value])=>{const node=document.getElementById('somu-'+key);if(node)node.value=String(value||'')});
+ showToast('品名・数量を引き継ぎました。管理番号と保管場所を確認して保存してください');
+}
 function somuSubmit(){
  const f=window.somuActiveForm;if(!f||somuUi.busy||somuUi.demo)return;
+ const form=document.getElementById('somuForm');if(form&&form.reportValidity&&!form.reportValidity())return;
  const payload={id:f.id,requestKey:f.key,revision:f.old.revision,updatedAt:f.old.updatedAt};
  for(const [key] of f.fields){const el=document.getElementById('somu-'+key);payload[key]=el?el.value:'';}
  const api=f.isResubmit?'resubmitSomuPurchase':{asset:'saveSomuAsset',loan:'createSomuLoan',purchase:'createSomuPurchase',document:'saveSomuDocument'}[f.kind];
  const args=f.isResubmit?[state.sessionToken,f.id,payload]:[state.sessionToken,payload];
  somuUi.busy=true;
+ if(form&&form.querySelectorAll)form.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=true);
  const button=document.getElementById('somuSaveButton');if(button){button.disabled=true;button.textContent='保存中…';}
  const identity=somuSessionIdentity();
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
@@ -202,6 +228,7 @@ function somuSubmit(){
  })[api](...args);
 }
 function somuFormFailure_(message){
+ const form=document.getElementById('somuForm');if(form&&form.querySelectorAll)form.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=false);
  const el=document.getElementById('somuFormError');if(el){el.textContent=message;el.hidden=false;}
  const button=document.getElementById('somuSaveButton');if(button){button.disabled=false;button.textContent='保存する';}
 }

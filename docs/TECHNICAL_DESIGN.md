@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.9  
+**文書版:** 0.18.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1992,3 +1992,21 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 成功コールバック実行後にcomplete、失敗コールバック実行後にfailを通知。タイムアウト疑似エラーは作らない。長時間通信は説明文を表示する。
 - 通常のGAS通信では進捗％を指定せず不確定表示、実進捗が取得できる他処理のみsetProgressを利用できる。
 - scripts/test_rotary_integration.mjsとscripts/test_rotary_viewport.mjsをCIおよび公開前検証に組み込む。
+
+## v0.18.0 入力保全・読取再利用・再試行整合性
+
+- AppCoreのPAGE_CACHE_TTL、AppOperationsの対象期間キャッシュ、AppPeopleMonthlyの結果キャッシュ、見積・経理・総務・社内文書の読取期限を300000msに揃える。キー・セッション識別・権限検査は既存仕様を維持する。localStorageへ業務記録は保存しない。
+- FMRotaryRPCの成功ハンドラの前にinvalidateBusinessViewsAfterWriteを実行し、見積/経理/総務の読取期限とホーム/勤怠の関連キャッシュを失効させる。経理は読取revisionと分析serialも更新し、保存前に開始した応答を排除する。保存コールバックは確認済みレコードの反映と再取得を引き続き担当する。
+- AppRotaryIntegrationはget/list/find/search/healthCheckのみが動作中のregionへfmr-read-statusを付与する。StylesRotaryLoaderで固定位置の小さなpointer-events:none表示に切り替える。完了アニメーション中も同じ表示を維持し、全画面表示への一瞬の切替を防ぐ。認証pageと変更操作regionは従来方式。認証失効は共通エラーハンドラへ渡す。
+- AppShellはcompositionstart/endによってIME変換中のinnerHTML差替えを延期する。同一ページでは入力欄の識別子と選択範囲、details[data-form-section]の状態を復元する。経理入力はAppFinance.financeRememberEntry_でsourceへ転記し、画面切替前にも保持する。旅費試算の補助入力もsourceへ保持するがサーバー提出payloadの項目は増やさない。試算の応答はフォーム参照と送信時入力signatureが一致した場合のみ採用する。
+- AppQuotesは未保存editorを一覧取得から分離して描画を保全する。quoteUpdateFieldで発行ボタンを即時無効化する。quoteParsePaste_はTSV4列を一括検証してから編集モデルへ追加し、検証失敗時は元の明細を保持する。StylesWorkflowV15の追記は既存画面へ限定して適用する。
+- Somu.getSomuWorkspace(token,forceFresh,includeGrowth)の第3引数trueでgetSomuGrowthDataの結果をgrowthへ同梱する。2引数の既存呼出しは基本4台帳のみという互換性を保持する。サーバーキャッシュは従来の基本/追加の別キーのまま、同梱前に各APIがセッションと総務権限を検査する。初回取得中に追加タブを選んでも追加RPCを発生させない。追加台帳の読取serialによって旧単独取得が新しい同梱結果を上書きしない。
+- 総務タブ状態はMapで保持し、somuReset時に消去する。入荷から備品登録へは入力補助として転記し、備考に[購買:ID]を記録する。取得済み一覧で同じ記録を検出した場合は該当備品へ移動する。全履歴の一意な購買関連付けをDB制約として保証するものではない。
+- LeaveLedgerはemployeeId/requestId/type（USE・RESTORE）で既存記録を確認する。再試行では日数一致を検査し、最新の台帳残数から社員マスタを修復する。Requestsは台帳/修正打刻を適用してから承認状態を保存する。打刻の申請IDマーカーで再appendを防ぐ。途中副作用のある申請を差戻し・取消、返却済み途中取消を却下する操作を拒否する。Google Sheets間の書込は原子的なトランザクションではなく、失敗後に同じ判断で再実行することで回復する設計。
+- 検査は既存統合・権限・I/O・画面検査を維持する。scripts/test_business_workflows.mjsをCI/公開前に追加。scripts/test_leave_transaction_retries.mjsをtest_logicから実行する。既存Chromium検査へ見積の入力幅優先と経費/出張の項目グループを追加し、既存の画面数で確認する。
+- 運用上の残確認：実GASへのGoogle認証、既存DBのschema14の適用状況、原本Excelの印刷一致、実権限での業務一巡。検査結果と公開状態はPRで追跡し、接続不可を成功扱いしない。
+
+- 画像レビューで旧4列時代のgrid-column:span指定が3列の基本情報を縦に引き延ばしていたため、取引先2列/番号1列、主要入力各1列へ明示的に上書きする。見積の余白を圧縮し、test_quote_viewportの既存PC編集ケースを1366×768へ変更してfirstLineTop+38<=heightを検査する。検査画面数は増やさない。
+
+- 1366×768の実測でfirstLineTop=772.8pxだったため、1200px以上では取引先検索・取引先選択・番号を各1列の同一行へ配置し、基本情報の行数をさらに削減する。
+- 既定DBのmetadataと設定B6の読取結果はDB_VERSION=12、総務7シートなし。経費記録17列、精算申請20列、出張報告の先頭26列、見積ヘッダーの先頭26列、明細7列、取引先7列は期待見出しと一致した。実行中GASの環境/DB上書き設定は未確認のため、既定DBを実稼働DBと断定しない。DB変更は行っていない。既存migrateDatabaseToCurrentは管理者セッション・ScriptLock・見出し事前検査・バックアップ・事後schema検査・監査を備え、実接続先確認後に利用する。

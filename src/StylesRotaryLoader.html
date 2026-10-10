@@ -39,4 +39,15 @@ html[data-theme="dark"] .fmr-action{background:#244366;color:#d4e9ff;border-colo
 @media(prefers-reduced-motion:reduce){.fmr-root,.fmr-fill{transition:none}}
 .search-wrap>.fmr-root.fmr-inline{position:absolute;right:8px;top:9px;z-index:96;width:24px;height:24px;min-height:0;min-width:0}
 .search-wrap>.fmr-root.fmr-inline .fmr-visual{width:23px;height:23px}
+
+/* A read never intercepts clicks. The rotary engine remains visible in a small status card. */
+.fmr-root.fmr-region.fmr-read-status{position:fixed;inset:auto 18px 18px auto;width:min(330px,calc(100vw - 36px));padding:9px 14px;border:1px solid var(--fmr-border);border-radius:14px;background:var(--fmr-surface);box-shadow:0 4px 18px rgba(20,50,85,.14);pointer-events:none!important;z-index:90}
+.fmr-read-status .fmr-content{width:100%;display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:10px;text-align:left}
+.fmr-read-status .fmr-visual{width:44px;height:44px;grid-row:1/4}
+.fmr-read-status .fmr-message{margin:0;font-size:12px;line-height:1.6}
+.fmr-read-status .fmr-submessage{margin:0;min-height:0;font-size:11px}
+.fmr-read-status .fmr-slow{grid-column:2;margin-top:2px}
+html[data-theme="dark"] .fmr-read-status{--fmr-surface:#15263b}
+@media(max-width:760px){.fmr-root.fmr-region.fmr-read-status{bottom:calc(78px + env(safe-area-inset-bottom));right:12px;width:min(300px,calc(100vw - 24px))}}
+
 </style>
