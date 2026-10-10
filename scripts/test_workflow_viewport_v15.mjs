@@ -161,5 +161,81 @@ for(const [width,height,kind,theme] of cases){
    '--virtual-time-budget=1800',pathToFileURL(hostFile).href],{timeout:45000,stdio:'ignore'});}catch(_){}
  }catch(error){failed++;console.error('FAIL '+id+' '+String(error.message||error));}
 }
+
+/* Real Chromium DOM interaction probe: no GAS network and no persistent data. */
+function verifyFinanceClicks(width,height){
+  const stateSource="const state={page:'finance',sessionToken:'FAKE_SESSION',data:{today:'2026-10-10',"+
+    "user:{employeeId:'FM-QA'},permissions:{financeWorkspace:true}}};";
+  const boot=String.raw`
+  const problems=[];
+  const apiCalls=[];
+  function check(name,value){if(!value)problems.push(name);}
+  function escapeHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function svg(){return '<svg aria-hidden="true"></svg>';}
+  function showToast(){}
+  function pageHead(title){return '<h1>'+escapeHtml(title)+'</h1>';}
+  function cleanApiErrorMessage(){return '検証用エラー';}
+  function renderPageIfActive(page){if(page===state.page)document.getElementById('content').innerHTML=financePage();}
+  const google={script:{run:new Proxy({}, {get(_target,name){return (...args)=>{apiCalls.push({name,args});return this;};}})}};
+  `;
+  const verify=String.raw`
+  try{
+    financeUi.demo=true;
+    renderPageIfActive('finance');
+    check('demo banner',document.querySelector('.finance-demo-banner')!==null);
+    const pickSelector=innerWidth<=760?'.finance-mobile-record-list .finance-record-pick[data-id="DEMO-EXP-002"]':
+      '.finance-ledger-table .finance-record-pick[data-id="DEMO-EXP-002"]';
+    const chosen=document.querySelector(pickSelector);
+    check('selectable row exists',!!chosen);
+    if(chosen)chosen.click();
+    check('row click updates inspector',financeUi.selectedIds.expense==='DEMO-EXP-002'&&
+      document.getElementById('financeSelectedDetail').textContent.includes('8,560円'));
+    const search=document.getElementById('financeSearchInput');
+    search.focus();search.value='架空社員F';
+    search.dispatchEvent(new Event('input',{bubbles:true}));
+    check('search filters visible rows',financeVisibleItems_('expense').length===1);
+    check('search retains keyboard focus',document.activeElement===search);
+    const month=document.querySelector('.finance-ledger-filters input[type="month"]');
+    month.value='2026-09';month.dispatchEvent(new Event('change',{bubbles:true}));
+    check('month filter updates displayed rows',financeVisibleItems_('expense').length===0);
+    const travel=[...document.querySelectorAll('.finance-kind-tabs button')].find(n=>n.textContent.includes('出張報告'));
+    check('travel tab exists',!!travel);if(travel)travel.click();
+    check('tab clicks switch dataset',financeUi.tab==='travel'&&financeVisibleItems_('travel').length===3);
+    const travelPick=document.querySelector(innerWidth<=760?
+      '.finance-mobile-record-list .finance-record-pick[data-id="DEMO-TR-002"]':
+      '.finance-ledger-table .finance-record-pick[data-id="DEMO-TR-002"]');
+    check('travel row exists',!!travelPick);if(travelPick)travelPick.click();
+    check('travel inspector shows correct selected record',
+      document.getElementById('financeSelectedDetail').textContent.includes('架空支店'));
+    financeSubmitDecision('expense','DEMO-EXP-001','APPROVE');
+    financeSubmitSettlement('expense','DEMO-EXP-003');
+    check('demo never touches GAS',apiCalls.length===0);
+    financeToggleDemo();
+    check('exiting demo removes fabricated content',
+      !financeUi.demo&&!document.getElementById('content').textContent.includes('架空支店'));
+  }catch(e){problems.push('runtime '+(e&&e.message||String(e)));}
+  document.getElementById('qaFinance').setAttribute('data-result',encodeURIComponent(JSON.stringify({
+    success:problems.length===0,issues:problems,apiCalls:apiCalls.length
+  })));
+  `;
+  const html='<!doctype html><html lang="ja"><head><meta charset="utf-8">'+css+'</head>'+
+    '<body><div class="app-shell"><aside class="sidebar"><strong>FM WORKS</strong></aside>'+
+    '<main class="workspace"><div id="content" class="content"></div><output id="qaFinance"></output></main></div>'+
+    '<script>'+stateSource+boot+source('AppFinance')+verify+'</script></body></html>';
+  const file=path.join(temp,'finance-clicks-'+width+'x'+height+'.html');
+  fs.writeFileSync(file,html);
+  const dom=execFileSync(chrome,['--headless=new','--disable-gpu','--no-sandbox','--disable-dev-shm-usage',
+    '--window-size='+Math.max(600,width)+','+(height+100),'--dump-dom',pathToFileURL(file).href],
+    {encoding:'utf8',timeout:45000,maxBuffer:7*1024*1024,stdio:['ignore','pipe','ignore']});
+  const match=dom.match(/id="qaFinance"[^>]*data-result="([^"]+)"/);
+  if(!match)throw Error('Finance interaction probe did not complete');
+  const data=JSON.parse(decodeURIComponent(match[1]));
+  console.log((data.success?'PASS ':'FAIL ')+'finance browser interactions '+width+'x'+height+' '+JSON.stringify(data));
+  if(!data.success)failed++;
+}
+for(const [width,height] of [[1366,768],[390,844]]){
+ try{verifyFinanceClicks(width,height);}catch(error){failed++;console.error('FAIL finance clicks '+width+'x'+height+' '+String(error.message||error));}
+}
+
 console.log('UNIFIED WORKFLOW V15 VIEWPORTS: '+(cases.length-failed)+'/'+cases.length+' passed');
 if(failed)process.exitCode=1;

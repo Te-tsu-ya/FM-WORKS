@@ -25,7 +25,7 @@ for(const file of ['src/Code.gs','src/Schema.gs','src/Finance.gs']){
 }
 const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx),models=vm.runInContext('FINANCE_MODELS',ctx);
 class Sheet{
- constructor(headers){this.rows=[headers.slice()]}
+ constructor(headers){this.rows=[headers.slice()];this.stats={displayCells:0,displayCalls:0,headerReads:0}}
  getLastRow(){return this.rows.length}
  appendRow(values){this.rows.push(values.slice())}
  getRange(row,col,height=1,width=1){
@@ -35,7 +35,7 @@ class Sheet{
   }));
   return {
     getValues:get,
-    getDisplayValues:()=>get().map(r=>r.map(v=>v instanceof Date?v.toISOString().slice(0,10):String(v))),
+    getDisplayValues:()=>{sheet.stats.displayCalls++;sheet.stats.displayCells+=height*width;if(row===1)sheet.stats.headerReads++;return get().map(r=>r.map(v=>v instanceof Date?v.toISOString().slice(0,10):String(v)))},
     setValues:values=>{for(let r=0;r<height;r++){const idx=row+r-1;
       sheet.rows[idx]=sheet.rows[idx]||[];
       for(let c=0;c<width;c++)sheet.rows[idx][col+c-1]=values[r][c];
@@ -81,6 +81,10 @@ ok('self-service creates owned pending expense',saved.ok&&sheets['経費精算�
  sheets['経費精算申請'].rows[1][2]==='FM9011'&&sheets['経費精算申請'].rows[1][12]==='承認待ち');
 const retry=api.submitFinanceExpense('STAFF',expense);
 ok('retry is idempotent',retry.duplicate&&retry.id===saved.id&&sheets['経費精算申請'].rows.length===2);
+ok('confirmed expense is returned from server, without resubmission secret',
+  saved.record&&saved.record.id===saved.id&&saved.record.status==='承認待ち'&&
+  saved.record.amount===2500&&!('requestKey' in saved.record)&&
+  retry.record.id===saved.id);
 denied('another user cannot reuse a submission key',()=>api.submitFinanceExpense('ACCOUNTING',expense),/重複/);
 const mine=api.getMyFinanceItems('STAFF'),notMine=api.getMyFinanceItems('ACCOUNTING');
 ok('users can only see own finance submissions',mine.expenses.length===1&&notMine.expenses.length===0);
@@ -115,6 +119,9 @@ const revisionRetry=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
  ...travel,outcome:'差戻しを修正した出張報告',requestKey:'test-20261008-travel-B'
 });
 ok('resubmission retry is idempotent',revisionRetry.duplicate&&revisionRetry.id===trip.id);
+ok('resubmission provides confirmed updated values for immediate UI feedback',
+  revised.record&&revised.record.outcome==='差戻しを修正した出張報告'&&
+  !('requestKey' in revised.record));
 denied('pending trip cannot be edited through resubmit endpoint',
  ()=>api.resubmitFinanceRequest('STAFF','travel',trip.id,{
   ...travel,requestKey:'test-20261008-travel-C'}),/差戻/);
@@ -170,6 +177,8 @@ const owned=api.submitFinanceExpense('ACCOUNTING',{...expense,requestKey:'test-2
 denied('accountant cannot approve own request',()=>api.reviewFinanceRequest('ACCOUNTING','expense',owned.id,'APPROVE',''),/自分自身/);
 const rec=api.saveFinanceReceipt('GENERAL',receipt);
 ok('GA can register business receipt',rec.ok&&sheets['経費記録'].rows[1][11]==='架空総務');
+ok('receipts provide server-acknowledged record, not an unconfirmed local draft',
+  rec.record&&rec.record.id===rec.id&&rec.record.amount===1000&&rec.record.paid==='済');
 const summary=api.getFinanceOverview('ADMIN');
 ok('authorized user sees all 3 record families',summary.expenses.length===2&&
  summary.travels.length===1&&summary.receipts.length===1);
@@ -182,6 +191,54 @@ denied('travel arriving before departure rejected',()=>api.submitFinanceTravel('
 const formula=api.submitFinanceExpense('STAFF',{
  ...expense,vendor:'=HYPERLINK("x")',requestKey:'test-20261008-expense-C'});
 ok('formula-looking input is escaped in a Sheet',String(sheets['経費精算申請'].rows.find(x=>x[0]===formula.id)[5]).startsWith("'="));
+
+/* 500+ fabricated rows: verify API payload bounded and local owner reads economical. */
+const addRecord=(kind,record)=>models[kind].keys.map(key=>record[key]==null?'':record[key]);
+for(let i=0;i<320;i++){
+  sheets['経費精算申請'].rows.push(addRecord('expense',{
+    id:'BULK-'+i,employeeId:'FM-OTHER-'+i,employeeName:'架空担当者'+i,
+    createdAt:'2026-10-09 16:00:'+String(i%60).padStart(2,'0'),
+    usedOn:'2026-10-09',vendor:'架空企業',item:'検証用備品',amount:'100',
+    status:i<180?'承認待ち':'精算済',receiptRef:'TEST-'+i
+  }));
+}
+sheets['経費精算申請'].rows.push(addRecord('expense',{
+  id:'SPLIT-VISIBLE',employeeId:'FM-OTHER-A',employeeName:'架空社員',
+  createdAt:'2026-10-10 10:00:00',usedOn:'2026-10-10',
+  receiptRef:'BULK-SPLIT',amount:'1500',status:'承認待ち'
+}));
+sheets['経費精算申請'].rows.push(addRecord('expense',{
+  id:'SPLIT-HIDDEN',employeeId:'FM-OTHER-B',employeeName:'架空社員',
+  createdAt:'2026-10-01 10:00:00',usedOn:'2026-10-01',
+  receiptRef:'BULK-SPLIT',amount:'1000',status:'精算済'
+}));
+sheets['経費記録'].rows.push(addRecord('receipt',{
+  id:'BULK-RECEIPT',creatorId:members.GENERAL.employeeId,
+  createdAt:'2026-10-10 11:00:00',usedOn:'2026-10-10',
+  receiptRef:'BULK-SPLIT',amount:'2500'
+}));
+for(const sheet of Object.values(sheets)){
+  sheet.stats.displayCalls=0;sheet.stats.displayCells=0;sheet.stats.headerReads=0;
+}
+const large=api.getFinanceOverview('ADMIN',{limit:160});
+ok('large overview bounds transferred receipt matches to visible expense IDs',
+  large.expenses.length===160&&Object.keys(large.receiptMatches).length===160);
+ok('large overview still totals all rows instead of mistaking visible count for total',
+  large.totals.expense===sheets['経費精算申請'].rows.length-1&&large.totals.expenseHidden>0);
+ok('hidden split claims are included in a selected claim reconciliation',
+  large.receiptMatches['SPLIT-VISIBLE']?.status==='MATCHED');
+ok('overview reads all 3 sheet headers once, with no second redundant header pass',
+  Object.values(sheets).every(sheet=>sheet.stats.headerReads===1));
+for(const sheet of Object.values(sheets)){
+  sheet.stats.displayCalls=0;sheet.stats.displayCells=0;sheet.stats.headerReads=0;
+}
+const focused=api.getMyFinanceItems('STAFF');
+ok('only the logged-in employee records are returned with large shared sheets',
+  focused.expenses.length===2&&focused.travels.length===1);
+ok('personal history reads the owner column and only the matching records',
+  sheets['経費精算申請'].stats.displayCells<1100&&
+  sheets['経費精算申請'].stats.displayCalls<=4);
+
 sheets['経費記録'].rows[0][0]='不正な列見出し';
 ok('schema mismatch is detected',!api.financeStorageStatus_().ready);
 denied('misconfigured Sheet rejects writes',()=>api.saveFinanceReceipt('GENERAL',{
