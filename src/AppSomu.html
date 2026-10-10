@@ -1,16 +1,10 @@
 <script>
 /* Dedicated General Affairs UI: never persist business data in the browser. */
-let somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',demo:false,loadedAt:0,listLimit:60};
-const SOMU_DEMO=Object.freeze({
- assets:[{id:'D1',code:'FM-PC-001',name:'デモ用ノートPC',category:'PC',maker:'架空メーカー',model:'Test-14',location:'総務キャビネット',quantity:3,minimum:1,status:'利用中',revision:1},{id:'D2',code:'FM-MON-002',name:'デモ用モニター',category:'周辺機器',location:'会議室A',quantity:2,minimum:1,status:'利用中',revision:1},{id:'D3',code:'FM-CAB-003',name:'HDMIケーブル',category:'消耗品',location:'倉庫',quantity:4,minimum:5,status:'利用中',revision:1}],
- loans:[{id:'L1',assetId:'D1',assetCode:'FM-PC-001',borrower:'架空社員A',quantity:1,loanDate:'2026-10-01',dueDate:'2026-10-08',status:'貸出中'},{id:'L2',assetId:'D2',assetCode:'FM-MON-002',borrower:'架空社員B',quantity:1,loanDate:'2026-10-02',dueDate:'2026-10-30',status:'貸出中'}],
- purchases:[{id:'P1',name:'HDMIケーブル',quantity:10,estimatedPrice:800,neededOn:'2026-10-15',reason:'在庫補充',status:'申請中',requesterId:'OTHER',requesterName:'架空社員B'},{id:'P2',name:'コピー用紙',quantity:5,estimatedPrice:650,neededOn:'2026-10-20',reason:'消耗品補充',status:'承認済',requesterId:'OTHER',requesterName:'架空社員C'}],
- documents:[{id:'S1',name:'備品貸出申請書',category:'申請書',location:'共有ドライブ / 総務',status:'有効',expiresOn:''}]
-});
-function somuReset(){somuTabState_.clear();window.somuActiveForm=null;somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',demo:false,loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
+let somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',loadedAt:0,listLimit:60};
+function somuReset(){somuTabState_.clear();window.somuActiveForm=null;somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
 function somuSessionIdentity(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function somuCanUse(){return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace&&state.sessionToken);}
-function somuData(){return somuUi.demo?SOMU_DEMO:(somuUi.data||{assets:[],loans:[],purchases:[],documents:[]});}
+function somuData(){return (somuUi.data||{assets:[],loans:[],purchases:[],documents:[]});}
 const SOMU_CLIENT_FRESH_MS=300000;
 function somuLoad(force){
  if(!somuCanUse())return;
@@ -33,7 +27,7 @@ function somuLoad(force){
   }
   if(typeof console!=='undefined'&&console.info)
     console.info('FM_SOMU_LOAD',JSON.stringify({elapsedMs:Date.now()-started,rows:data&&data.rowCount||0,refresh:hadData}));
-  if(state.page==='office'&&!somuUi.demo)renderPageIfActive('office');
+  if(state.page==='office')renderPageIfActive('office');
   if(somuUi.tab==='home'&&typeof somuGrowthLoad==='function'&&typeof scheduleBackgroundTask==='function')scheduleBackgroundTask(()=>somuGrowthLoad(false),550);
  }).withFailureHandler(err=>{
   if(identity!==somuSessionIdentity())return;
@@ -50,7 +44,7 @@ function somuLoad(force){
   }
  }).getSomuWorkspace(state.sessionToken,!!force,true);
 }
-function somuReload(){somuUi.demo=false;somuLoad(true);}
+function somuReload(){somuLoad(true);}
 const somuTabState_=new Map();
 function somuTab(tab){if(!['home','assets','loans','purchases','documents','contracts','facilities','tickets'].includes(tab))return;somuTabState_.set(somuUi.tab,{filter:somuUi.filter,query:somuUi.query,selected:somuUi.selected,listLimit:somuUi.listLimit});somuUi.tab=tab;Object.assign(somuUi,somuTabState_.get(tab)||{filter:'all',query:'',selected:'',listLimit:60});if(typeof somuGrowthTab_==='function'&&somuGrowthTab_(tab))somuGrowthLoad(false);renderPageIfActive('office');}
 function somuSearch(value){somuUi.query=String(value||'').slice(0,120);somuUi.listLimit=60;somuRefreshLists();}
@@ -128,7 +122,7 @@ function somuDetailMarkup_(kind,x){
  let actions='';
  if(kind==='assets')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuOpenForm(\'asset\',this.dataset.id)">編集</button><button class="secondary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuOpenForm(\'loan\',\'\',this.dataset.id)">貸出する</button>';
  if(kind==='loans'&&x.status==='貸出中')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuReturn(this.dataset.id)">返却を登録</button>';
- if(kind==='purchases'&&!somuUi.demo){
+ if(kind==='purchases'){
   const mine=String(x.requesterId)===String(state.data&&state.data.user&&state.data.user.employeeId);
   if(x.status==='申請中'&&somuData().canApprove&&!mine)actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'APPROVE\')">承認する</button><button class="secondary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'RETURN\')">差戻す</button>';
   if(x.status==='承認済')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuPurchaseAction(this.dataset.id,\'ORDER\')">発注済みにする</button>';
@@ -137,7 +131,6 @@ function somuDetailMarkup_(kind,x){
   if(x.status==='差戻し'&&mine)actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuOpenForm(\'purchase\',this.dataset.id)">修正して再申請</button>';
  }
  if(kind==='documents')actions='<button class="primary-button" data-id="'+escapeHtml(x.id)+'" onclick="somuOpenForm(\'document\',this.dataset.id)">編集</button>'+(x.url?'<a target="_blank" rel="noopener noreferrer" href="'+escapeHtml(x.url)+'" class="secondary-button">保管リンクを開く</a>':'');
- if(somuUi.demo)actions='<span class="somu-demo-note">デモ中：保存・承認・返却処理はできません</span>';
  return '<div class="somu-detail-head"><h2>'+escapeHtml(somuSummary_(kind,x)[0])+'</h2>'+somuStatus_(x.status)+'</div><dl class="somu-detail-fields">'+fields+'</dl><div class="somu-detail-actions">'+actions+'</div>';
 }
 function somuRecords_(kind){
@@ -146,7 +139,7 @@ function somuRecords_(kind){
  if(!somuUi.selected&&rows.length)somuUi.selected=String(rows[0].id);
  const selected=rows.find(x=>String(x.id)===somuUi.selected)||rows[0];
  return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+rows.length+'件</p></div>'+
- (!somuUi.demo?'<button class="primary-button" onclick="somuOpenForm(\''+({assets:'asset',loans:'loan',purchases:'purchase',documents:'document'})[kind]+'\')">＋ 新規登録</button>':'')+'</div>'+
+ ('<button class="primary-button" onclick="somuOpenForm(\''+({assets:'asset',loans:'loan',purchases:'purchase',documents:'document'})[kind]+'\')">＋ 新規登録</button>')+'</div>'+
  '<div class="somu-filters"><label><span class="visually-hidden">総務記録を検索</span><input aria-label="総務記録を検索" id="somuQuery" placeholder="番号・品名・担当者で検索" value="'+escapeHtml(somuUi.query)+'" oninput="somuSearch(this.value)"></label><label><span class="visually-hidden">状態を絞り込む</span><select aria-label="状態を絞り込む" onchange="somuFilter(this.value)">'+filterOptions.map(([value,label])=>'<option value="'+value+'" '+(somuUi.filter===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label></div>'+
  '<div id="somuList" class="somu-items">'+somuListMarkup_(kind,rows)+'</div></section><section class="card somu-record-detail" aria-label="選択した記録の詳細"><div id="somuDetail">'+somuDetailMarkup_(kind,selected)+'</div></section></div>';
 }
@@ -155,19 +148,18 @@ function somuPage(){
  if(!somuUi.loaded)return '<div class="v15-workspace v15-general-affairs"><header class="v15-page-hero"><div><h1>総務</h1><p>備品・貸出・購買・書類を準備しています。</p></div></header><div class="card somu-empty" role="status">総務データを読み込んでいます…</div></div>';
  if(somuUi.error)return '<div class="v15-workspace v15-general-affairs"><header class="v15-page-hero"><h1>総務</h1></header><div class="card somu-empty" role="alert">'+escapeHtml(somuUi.error)+' <button onclick="somuReload()" class="primary-button">再読み込み</button></div></div>';
  const d=somuData();
- if(d.setupRequired&&!somuUi.demo)return '<div class="v15-workspace v15-general-affairs"><header class="v15-page-hero"><div><h1>総務</h1><p>備品・購買・貸出・書類の管理</p></div></header><div class="card somu-empty"><strong>総務DBの初期設定が必要です</strong><p>管理者が「管理・設定 → 運用・労務」からバックアップ付きDB更新を実行してください。</p><p>未作成：'+escapeHtml((d.missing||[]).join('、'))+'</p><button type="button" class="secondary-button" onclick="somuDemo(true)">架空データで画面を確認</button><button type="button" class="secondary-button" onclick="somuReload()">DBの状態を再確認</button>' + (state.data&&state.data.permissions&&state.data.permissions.adminConsole?'<button type="button" class="primary-button" onclick="setAdminTab(\'operation\')">管理画面でDBを更新</button>':'') + '<p>サンプルは実データに保存されません。</p></div></div>';
+ if(d.setupRequired)return '<div class="v15-workspace v15-general-affairs"><header class="v15-page-hero"><div><h1>総務</h1><p>備品・購買・貸出・書類の管理</p></div></header><div class="card somu-empty"><strong>総務DBの初期設定が必要です</strong><p>管理者が「管理・設定 → 運用・労務」からバックアップ付きDB更新を実行してください。</p><p>未作成：'+escapeHtml((d.missing||[]).join('、'))+'</p><button type="button" class="secondary-button" onclick="somuReload()">DBの状態を再確認</button>' + (state.data&&state.data.permissions&&state.data.permissions.adminConsole?'<button type="button" class="primary-button" onclick="setAdminTab(\'operation\')">管理画面でDBを更新</button>':'') + '</div></div>';
  const active=somuUi.tab;
- return '<div class="v15-workspace v15-general-affairs somu-workspace"><header class="somu-heading"><div><div class="v15-kicker">FM WORKS / 管理業務</div><h1>総務</h1><p>会社の資産・契約・設備・社内手続きを、一つの場所で管理</p></div><div class="somu-top-actions">'+(somuUi.demo?'<span class="somu-demo-note">架空データ・本番には保存されません</span><button class="secondary-button" onclick="somuDemo(false)">デモ終了</button>':'<button class="secondary-button" onclick="somuDemo(true)">操作サンプルを見る</button><button class="secondary-button" onclick="somuReload()">更新</button>')+'</div></header>'+
+ return '<div class="v15-workspace v15-general-affairs somu-workspace"><header class="somu-heading"><div><div class="v15-kicker">FM WORKS / 管理業務</div><h1>総務</h1><p>会社の資産・契約・設備・社内手続きを、一つの場所で管理</p></div><div class="somu-top-actions"><button class="secondary-button" onclick="somuReload()">更新</button></div></header>'+
  (d.truncated?'<div class="somu-warning" role="status">台帳の表示上限に達しました。全件表示ではありません。管理者にご確認ください。</div>':'')+
  (typeof somuGrowthNavigation_==='function'?somuGrowthNavigation_():'<nav class="somu-tabs" aria-label="総務機能"><button type="button" onclick="somuTab(\'home\')">総務ホーム</button></nav>')+
  (active==='home'&&typeof somuGrowthHome_==='function'?somuGrowthHome_():
   typeof somuGrowthTab_==='function'&&somuGrowthTab_(active)?somuGrowthRecords_(active):
   active==='home'?somuHome_():somuRecords_(active))+'</div>';
 }
-function somuDemo(enabled){somuUi.demo=!!enabled;somuUi.tab='home';somuUi.query='';somuUi.filter='all';somuUi.selected='';renderPageIfActive('office');}
 function somuUuid(){return 'somu-'+Date.now()+'-'+Math.random().toString(36).slice(2,12);}
 function somuOpenForm(kind,id,selectedAssetId){
- if(somuUi.demo||somuUi.busy)return;
+ if(somuUi.busy)return;
  const plural={asset:'assets',loan:'loans',purchase:'purchases',document:'documents'}[kind];
  if(!plural)return;
  const old=(somuData()[plural]||[]).find(x=>String(x.id)===String(id))||{};
@@ -195,7 +187,7 @@ function somuOpenForm(kind,id,selectedAssetId){
  window.somuActiveForm={kind:kind,id:id||'',old:old,key:somuUuid(),fields:fields,isResubmit:isResubmit};
 }
 function somuRegisterReceivedPurchase_(id){
- if(somuUi.demo||somuUi.busy)return;
+ if(somuUi.busy)return;
  const purchase=(somuData().purchases||[]).find(x=>String(x.id)===String(id)&&x.status==='入荷済');
  if(!purchase)return;
  const linked=(somuData().assets||[]).find(x=>String(x.note||'').includes('[購買:'+purchase.id+']'));
@@ -206,7 +198,7 @@ function somuRegisterReceivedPurchase_(id){
  showToast('品名・数量を引き継ぎました。管理番号と保管場所を確認して保存してください');
 }
 function somuSubmit(){
- const f=window.somuActiveForm;if(!f||somuUi.busy||somuUi.demo)return;
+ const f=window.somuActiveForm;if(!f||somuUi.busy)return;
  const form=document.getElementById('somuForm');if(form&&form.reportValidity&&!form.reportValidity())return;
  const payload={id:f.id,requestKey:f.key,revision:f.old.revision,updatedAt:f.old.updatedAt};
  for(const [key] of f.fields){const el=document.getElementById('somu-'+key);payload[key]=el?el.value:'';}
@@ -233,11 +225,11 @@ function somuFormFailure_(message){
  const button=document.getElementById('somuSaveButton');if(button){button.disabled=false;button.textContent='保存する';}
 }
 function somuReturn(id){
- if(somuUi.demo||somuUi.busy)return;
+ if(somuUi.busy)return;
  somuActionDialog_('RETURN_LOAN',id);
 }
 function somuPurchaseAction(id,action){
- if(somuUi.demo||somuUi.busy||!['APPROVE','RETURN','ORDER','RECEIVE'].includes(action))return;
+ if(somuUi.busy||!['APPROVE','RETURN','ORDER','RECEIVE'].includes(action))return;
  somuActionDialog_(action,id);
 }
 function somuActionDialog_(action,id){
@@ -257,7 +249,7 @@ function somuActionDialog_(action,id){
 function somuCancelDecision(){somuUi.pendingAction=null;closeModal();}
 function somuCommitDecision(){
  const current=somuUi.pendingAction;
- if(!current||somuUi.busy||somuUi.demo)return;
+ if(!current||somuUi.busy)return;
  const reasonNode=document.getElementById('somuDecisionReason');
  const reason=reasonNode?String(reasonNode.value||'').trim():'';
  if(current.action==='RETURN'&&!reason){

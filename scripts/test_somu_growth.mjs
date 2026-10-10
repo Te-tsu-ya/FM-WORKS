@@ -155,9 +155,7 @@ assert.equal(rpc.filter(x=>x.api==='saveSomuGrowthRecord').length,1);
 succeeded({ok:true,record:{...c.record,id:'CTR-CREATED',name:'架空更新契約'}});
 assert.equal(ev('somuUi.busy'),false);
 assert.equal(rpc.at(-1).api,'getSomuGrowthData');
-ev('somuDemo(true)');
-const beforeDemo=rpc.length;
-ev("somuGrowthOpenForm_('contracts')");
-assert.equal(rpc.length,beforeDemo);
-assert.match(ev('somuPage()'),/架空データ/);
+assert.doesNotMatch(fs.readFileSync("src/AppSomuGrowth.html","utf8"),/SOMU_GROWTH_DEMO|somuUi\.demo/);
+assert.doesNotMatch(ev('somuPage()'),/操作サンプル|デモ終了/);
 console.log('PASS SOMU Growth: migration isolation, contract/facility/ticket CRUD, permissions, locks, deduplication, renewals UI');
+

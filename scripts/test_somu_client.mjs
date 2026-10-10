@@ -91,12 +91,10 @@ assert.equal(call.args[1],'PUR-001');
 assert.equal(call.args[2].quantity,'2');
 success({ok:true,record:{id:'PUR-001',status:'申請中'}});
 success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:true});
-evaluate("somuDemo(true)");
-const count=calls.length;
-evaluate("somuOpenForm('asset')");
-assert.equal(calls.length,count,'demo does not write');
-// Render a large (synthetic) inventory with at most 60 nodes per screen, without server calls.
-evaluate("somuDemo(false)");
+// Production menu has no separate sample mode or disabled sample actions.
+assert.doesNotMatch(source,/somuDemo|SOMU_DEMO|somuUi\.demo/);
+assert.doesNotMatch(evaluate("somuPage()"),/操作サンプル|デモ終了|架空データで画面を確認/);
+// Render a large synthetic inventory with at most 60 nodes, without server calls.
 const largeAssets=Array.from({length:305},(_,i)=>({
  id:'AST-'+i,code:'TEST-'+String(i).padStart(4,'0'),name:'架空備品'+i,location:'倉庫',
  quantity:2,minimum:0,status:'利用中',revision:1,updatedAt:'2026-10-10 10:00:00'
@@ -131,4 +129,5 @@ assert.equal(calls.at(-1).args[1],true,'explicit reload bypasses server cache');
 failure({message:'Synthetic network outage'});
 assert.equal(evaluate("somuUi.loaded"),true,'failed refresh keeps existing dataset');
 assert.ok(evaluate("somuUi.data"));
-console.log('PASS SOMU client: saves, lending, return reason, demo, 60-row paging, local cache and resilient refresh');
+console.log('PASS SOMU client: saves, lending, return reason, normal storage, 60-row paging, local cache and resilient refresh');
+

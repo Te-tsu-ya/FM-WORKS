@@ -29,22 +29,12 @@ const SOMU_GROWTH_CONFIG={
    labels:{subject:'件名',category:'分類',priority:'優先度',requesterName:'依頼者',assignee:'対応担当',
      dueOn:'対応期限',description:'内容',status:'状態',resolvedOn:'完了日',note:'対応メモ',updatedAt:'最終更新'}}
 };
-const SOMU_GROWTH_DEMO={
- ready:true,today:'2026-10-10',
- contracts:[{id:'D-CT-1',name:'架空クラウド保守契約',category:'保守',vendor:'架空提供会社',expiresOn:'2026-11-15',
-   noticeOn:'2026-10-20',renewal:'自動更新あり',annualYen:120000,owner:'架空担当A',status:'有効'},
-  {id:'D-CT-2',name:'架空複合機リース',vendor:'架空リース会社',expiresOn:'2027-02-01',noticeOn:'2027-01-01',status:'有効'}],
- facilities:[{id:'D-FC-1',code:'FM-CAR-01',name:'架空社用車',type:'車両',location:'駐車場',owner:'架空担当B',nextCheckOn:'2026-10-18',status:'稼働中'},
-   {id:'D-FC-2',code:'FM-AC-02',name:'会議室エアコン',type:'オフィス設備',location:'会議室',status:'稼働中'}],
- tickets:[{id:'D-TK-1',subject:'会議室の備品確認',category:'設備・修理',priority:'高',
-   requesterName:'架空担当A',assignee:'架空担当B',dueOn:'2026-10-14',description:'架空の依頼です',status:'未着手'}]
-};
 let somuGrowth={loaded:false,loading:false,data:null,error:'',loadedAt:0};
 function somuGrowthReset_(){somuGrowth={loaded:false,loading:false,data:null,error:'',loadedAt:0};window.somuGrowthActiveForm=null;}
-function somuGrowthData_(){return somuUi.demo?SOMU_GROWTH_DEMO:(somuGrowth.data||{contracts:[],facilities:[],tickets:[]});}
+function somuGrowthData_(){return (somuGrowth.data||{contracts:[],facilities:[],tickets:[]});}
 function somuGrowthTab_(tab){return Object.prototype.hasOwnProperty.call(SOMU_GROWTH_CONFIG,tab);}
 function somuGrowthLoad(force){
- if(!somuCanUse()||somuUi.demo)return;
+ if(!somuCanUse())return;
  if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
  if(somuGrowth.loading){if(force)somuGrowth.refreshNeeded=true;return;}
  if(somuGrowth.loaded&&!force&&Date.now()-somuGrowth.loadedAt<300000)return;
@@ -57,7 +47,7 @@ function somuGrowthLoad(force){
   somuGrowth.loading=false;
   if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
   somuGrowth.data=data;somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();
-  if(state.page==='office'&&!somuUi.demo)renderPageIfActive('office');
+  if(state.page==='office')renderPageIfActive('office');
  }).withFailureHandler(error=>{
   if(identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
   somuGrowth.loading=false;
@@ -174,7 +164,7 @@ function somuGrowthDetailMarkup_(tab,record){
  const details=Object.entries(labels).map(([key,label])=>'<div><dt>'+escapeHtml(label)+'</dt><dd>'+
   escapeHtml(record[key]===undefined||record[key]===''?'—':record[key])+'</dd></div>').join('');
  const link=tab==='contracts'&&record.url?'<a class="secondary-button" href="'+escapeHtml(record.url)+'" target="_blank" rel="noopener noreferrer">原本リンクを開く</a>':'';
- const button=somuUi.demo?'<span class="somu-demo-note">デモ中のため、保存操作はできません。</span>':
+ const button=
   '<button type="button" class="primary-button" data-id="'+escapeHtml(String(record.id))+'" data-kind="'+tab+
     '" onclick="somuGrowthOpenForm_(this.dataset.kind,this.dataset.id)">内容を編集</button>';
  return '<div class="somu-detail-head"><h2>'+escapeHtml(somuGrowthTitle_(tab,record))+'</h2>'+somuStatus_(record.status)+
@@ -190,13 +180,13 @@ function somuGrowthRefreshLists_(){
  if(count)count.textContent=rows.length+'件';
 }
 function somuGrowthRecords_(tab){
- if(!somuUi.demo&&!somuGrowth.loaded){
+ if(!somuGrowth.loaded){
   return '<div class="card somu-empty" role="status">総務台帳を読み込んでいます…</div>';
  }
- if(somuGrowth.error&&!somuUi.demo)return '<div class="card somu-empty" role="alert">'+
+ if(somuGrowth.error)return '<div class="card somu-empty" role="alert">'+
   escapeHtml(somuGrowth.error)+' <button type="button" class="primary-button" onclick="somuGrowthReload_()">再読込</button></div>';
  const data=somuGrowthData_();
- if(!data.ready&&!somuUi.demo)return '<section class="card somu-empty somu-growth-setup"><strong>追加の総務台帳を準備してください</strong>'+
+ if(!data.ready)return '<section class="card somu-empty somu-growth-setup"><strong>追加の総務台帳を準備してください</strong>'+
   '<p>契約・施設・総務依頼は、管理者のバックアップ付きDB更新後に利用できます。</p><p>未作成：'+
   escapeHtml((data.missing||[]).join('、'))+'</p><button type="button" class="secondary-button" onclick="somuGrowthReload_()">状態を再確認</button>'+
   (state.data&&state.data.permissions&&state.data.permissions.adminConsole?
@@ -208,7 +198,7 @@ function somuGrowthRecords_(tab){
  return '<div class="somu-records somu-growth-records"><section class="card somu-record-list"><div class="somu-panel-head">'+
   '<div><div class="somu-eyebrow">MASTER REGISTER</div><h2>'+config.title+'</h2><p>'+config.intro+
   '</p><p id="somuCount">'+rows.length+'件</p></div>'+
-  (somuUi.demo?'':'<button type="button" class="primary-button" onclick="somuGrowthOpenForm_(\''+tab+'\')">＋ 新規登録</button>')+
+  ('<button type="button" class="primary-button" onclick="somuGrowthOpenForm_(\''+tab+'\')">＋ 新規登録</button>')+
   '</div><div class="somu-filters"><label><span class="visually-hidden">台帳を検索</span><input id="somuQuery" aria-label="台帳を検索" placeholder="名前・担当者などで検索" value="'+
    escapeHtml(somuUi.query)+'" oninput="somuSearch(this.value)"></label><label><span class="visually-hidden">状態で絞り込み</span><select aria-label="状態で絞り込み" onchange="somuFilter(this.value)">'+
    filters.map(([val,name])=>'<option value="'+val+'" '+(val===somuUi.filter?'selected':'')+'>'+name+'</option>').join('')+
@@ -216,7 +206,7 @@ function somuGrowthRecords_(tab){
    '<section class="card somu-record-detail" aria-label="選択中の詳細"><div id="somuDetail">'+somuGrowthDetailMarkup_(tab,selected)+'</div></section></div>';
 }
 function somuGrowthOpenForm_(tab,id){
- if(somuUi.busy||somuUi.demo||!somuGrowthData_().ready||!SOMU_GROWTH_CONFIG[tab])return;
+ if(somuUi.busy||!somuGrowthData_().ready||!SOMU_GROWTH_CONFIG[tab])return;
  const conf=SOMU_GROWTH_CONFIG[tab],record=(somuGrowthData_()[tab]||[]).find(x=>String(x.id)===String(id))||{};
  const defaults={status:tab==='contracts'?'有効':tab==='facilities'?'稼働中':'未着手',
   annualYen:'0',priority:'通常',category:conf.fields.find(x=>x[0]==='category')?.[5]?.[0]||'その他',
@@ -249,7 +239,7 @@ function somuGrowthOpenForm_(tab,id){
 function somuGrowthClose_(){if(somuUi.busy)return;window.somuGrowthActiveForm=null;closeModal();}
 function somuGrowthSubmit_(){
  const f=window.somuGrowthActiveForm;
- if(!f||somuUi.busy||somuUi.demo)return;
+ if(!f||somuUi.busy)return;
  const form=document.getElementById('somugForm');if(form&&form.reportValidity&&!form.reportValidity())return;
  const conf=SOMU_GROWTH_CONFIG[f.tab],payload={id:f.id,revision:f.record.revision,requestKey:f.requestKey};
  conf.fields.forEach(([key])=>{const e=document.getElementById('somug-'+key);payload[key]=e?e.value:'';});
@@ -272,7 +262,7 @@ function somuGrowthSubmit_(){
   }
   window.somuGrowthActiveForm=null;
   closeModal();showToast(result.duplicate?'登録済みの記録を確認しました':'保存しました');
-  if(!somuUi.demo){
+  {
     // Confirmed records may be shown instantly, but always refresh from the authoritative DB.
     const tab=f.tab,existing=somuGrowth.data&&somuGrowth.data[tab];
     if(Array.isArray(existing)&&result.record){
