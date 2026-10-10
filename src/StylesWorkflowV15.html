@@ -819,12 +819,22 @@
 .quote-builder.business-preview-open .qb-preview-column{display:block;position:static}
 .quote-builder .qb-mobile-total{display:grid;gap:8px}
 .quote-builder .business-vendor-search{grid-column:1/-1}
-.quote-builder .qb-info-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.quote-builder .qb-info-grid{grid-template-columns:minmax(150px,.8fr) minmax(0,1.6fr) minmax(150px,.8fr);gap:10px}
+.quote-builder .doc-inline-vendor{grid-column:span 2}
+.quote-builder .qb-field-quoteDate,.quote-builder .qb-field-subject,.quote-builder .qb-field-contact,.quote-builder .qb-number-field{grid-column:span 1}
+.quote-builder .qb-edit-card{padding:14px}
+.quote-builder .qb-section-title{margin-bottom:10px}
+.quote-builder .business-optional{margin-top:8px}
+.quote-builder .qb-header{padding:14px 18px}
+.quote-builder .qb-header .v15-kicker{display:none}
+.quote-builder .qb-header .quote-back{min-height:32px;padding:6px 10px}
+.quote-builder .qb-conditions>summary{padding:8px 12px}
+.quote-builder .quote-vendor-preview{margin-top:8px}
 .quote-builder .qb-section-title-actions{flex-wrap:wrap}
 .quote-builder .qb-field input,.quote-builder .qb-field select,.quote-builder .qb-cell input,.finance-field input,.finance-field select{min-height:42px}
 .quote-builder .qb-header-actions{flex-wrap:wrap}
 .business-optional summary:focus-visible{outline:3px solid var(--blue);outline-offset:4px}
 @media(min-width:1600px){.quote-builder.business-preview-open .qb-layout{grid-template-columns:minmax(0,1fr) minmax(320px,360px)}}
-@media(max-width:760px){.quote-builder .qb-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.business-field-group>.finance-form-grid{grid-template-columns:minmax(0,1fr)}.business-field-group legend{font-size:14px}.quote-builder .qb-field-subject,.quote-builder .doc-inline-vendor{grid-column:1/-1}}
+@media(max-width:760px){.quote-builder .qb-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.business-field-group>.finance-form-grid{grid-template-columns:minmax(0,1fr)}.business-field-group legend{font-size:14px}.quote-builder .qb-field-subject,.quote-builder .doc-inline-vendor,.quote-builder .qb-number-field{grid-column:1/-1}}
 
 </style>

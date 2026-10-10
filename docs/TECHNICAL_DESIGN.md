@@ -2005,3 +2005,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - LeaveLedgerはemployeeId/requestId/type（USE・RESTORE）で既存記録を確認する。再試行では日数一致を検査し、最新の台帳残数から社員マスタを修復する。Requestsは台帳/修正打刻を適用してから承認状態を保存する。打刻の申請IDマーカーで再appendを防ぐ。途中副作用のある申請を差戻し・取消、返却済み途中取消を却下する操作を拒否する。Google Sheets間の書込は原子的なトランザクションではなく、失敗後に同じ判断で再実行することで回復する設計。
 - 検査は既存統合・権限・I/O・画面検査を維持する。scripts/test_business_workflows.mjsをCI/公開前に追加。scripts/test_leave_transaction_retries.mjsをtest_logicから実行する。既存Chromium検査へ見積の入力幅優先と経費/出張の項目グループを追加し、既存の画面数で確認する。
 - 運用上の残確認：実GASへのGoogle認証、既存DBのschema14の適用状況、原本Excelの印刷一致、実権限での業務一巡。検査結果と公開状態はPRで追跡し、接続不可を成功扱いしない。
+
+- 画像レビューで旧4列時代のgrid-column:span指定が3列の基本情報を縦に引き延ばしていたため、取引先2列/番号1列、主要入力各1列へ明示的に上書きする。見積の余白を圧縮し、test_quote_viewportの既存PC編集ケースを1366×768へ変更してfirstLineTop+38<=heightを検査する。検査画面数は増やさない。

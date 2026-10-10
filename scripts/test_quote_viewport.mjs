@@ -51,7 +51,7 @@ const target=path.join(root,'artifacts','quote-layout');fs.mkdirSync(target,{rec
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-quote-'));
 const cases=[
  [1366,768,'list','light'],[390,844,'list','light'],
- [1440,900,'edit','light'],[390,844,'edit','light'],
+ [1366,768,'edit','light'],[390,844,'edit','light'],
  [1366,768,'detail','light'],[390,844,'detail','dark'],
  [1366,768,'history','light'],[390,844,'history','dark']
 ];
@@ -70,6 +70,7 @@ for(const [width,height,kind,theme] of cases){
   'shellWidth:shell.getBoundingClientRect().width,toolbarHeight:toolbar.getBoundingClientRect().height,'+
   'lines:all.length,buttons:buttons.length,editorWidth:shell.querySelector(".qb-edit-column")?.getBoundingClientRect().width||0,'+
   'previewVisible:!!shell.querySelector(".qb-preview-column")?.getBoundingClientRect().height,'+
+  'firstLineTop:shell.querySelector(".quote-line")?.getBoundingClientRect().top||0,'+
   'smallButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
   'parent.postMessage({kind:"QUOTE_QA",info},"*");</script></body></html>';
  const frame=path.join(tmp,id+'-inner.html');fs.writeFileSync(frame,inner);
@@ -94,6 +95,7 @@ for(const [width,height,kind,theme] of cases){
   if(metrics.buttons<1)reasons.push('no actionable control');
   if(kind==='edit'&&metrics.lines!==3)reasons.push('editable line count');
   if(kind==='edit'&&(metrics.previewVisible||metrics.editorWidth<metrics.shellWidth*.85))reasons.push('entry area must have full width by default');
+  if(kind==='edit'&&width>=1200&&metrics.firstLineTop+38>height)reasons.push('first editable row must be visible without scrolling');
   if(metrics.smallButton<26)reasons.push('button too small');
   console.log((reasons.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(metrics)+(reasons.length?' '+reasons.join(','):''));
   if(reasons.length)bad++;
@@ -105,3 +107,4 @@ for(const [width,height,kind,theme] of cases){
 }
 console.log('QUOTE VIEWPORT TESTS: '+(cases.length-bad)+'/'+cases.length+' passed');
 if(bad)process.exitCode=1;
+
