@@ -44,6 +44,14 @@ function projectHubRead_(force,detail){
 function projectHubName_(value){return String(value||'').trim().toLowerCase();}
 function projectHubAliases_(plan){try{const a=JSON.parse(plan&&plan.aliases||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'):[];}catch(_){return [];}}
 function projectHubCanManage_(u,plan){return u.role==='ADMIN'||!!(plan&&plan.ownerId&&plan.ownerId===u.employeeId);}
+function projectHubWorklogOwners_(projects,plans){
+ const result=new Map();
+ projects.forEach(p=>{
+  const names=new Set([p.name,...projectHubAliases_(plans.get(p.projectId))].map(projectHubName_).filter(Boolean));
+  names.forEach(name=>{const ids=result.get(name)||new Set();ids.add(p.projectId);result.set(name,ids);});
+ });
+ return result;
+}
 function projectHubMetrics_(project,plan,tasks,worklogs,today){
  const weights=tasks.map(t=>Math.max(0,Number(t.plannedMinutes)||0)),taskBudget=weights.reduce((a,b)=>a+b,0);
  const plannedMinutes=Number(plan&&plan.plannedMinutes)||taskBudget||null;
@@ -68,19 +76,18 @@ function projectHubQuoteOptions_(u){
 }
 function getProjectHubWorkspace(sessionToken,force){
  const u=requireSession_(sessionToken).employee,r=projectHubRead_(!!force),today=projectHubToday_();
- const plans=new Map(),tasks=new Map(),resourceCounts=new Map(),names=new Map(),logBuckets=new Map();
+ const plans=new Map(),tasks=new Map(),resourceCounts=new Map(),logBuckets=new Map();
  r.plans.forEach(p=>{if(!plans.has(p.projectId))plans.set(p.projectId,p);});
  r.tasks.forEach(t=>{const list=tasks.get(t.projectId)||[];list.push(t);tasks.set(t.projectId,list);});
  r.resources.forEach(doc=>resourceCounts.set(doc.projectId,(resourceCounts.get(doc.projectId)||0)+1));
- r.projects.forEach(p=>{
-  const keys=new Set([p.name,...projectHubAliases_(plans.get(p.projectId))].map(projectHubName_));
-  keys.forEach(key=>{const owners=names.get(key)||new Set();owners.add(p.projectId);names.set(key,owners);});
- });
- let unlinkedWorklogCount=0;
+ const names=projectHubWorklogOwners_(r.projects,plans);
+ let unlinkedWorklogCount=0,ambiguousWorklogCount=0;
  r.worklogs.forEach(w=>{
   const owners=names.get(projectHubName_(w[3]));
   if(!owners||!owners.size){unlinkedWorklogCount++;return;}
-  owners.forEach(id=>{const bucket=logBuckets.get(id)||[];bucket.push(w);logBuckets.set(id,bucket);});
+  if(owners.size!==1){ambiguousWorklogCount++;return;}
+  const id=owners.values().next().value,bucket=logBuckets.get(id)||[];
+  bucket.push(w);logBuckets.set(id,bucket);
  });
  const dateValid=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
  const projects=r.projects.map(p=>{
@@ -92,7 +99,7 @@ function getProjectHubWorkspace(sessionToken,force){
    myOpenTasks:myTasks.length,myOverdueTasks:myTasks.filter(t=>dateValid(t.dueDate)&&t.dueDate<today).length,nextTaskDueDate:dueDates[0]||''};
  });
  const employees=getEmployees_();
- const result={projects,today,setupRequired:!r.storage.ready,missing:r.storage.missing,canCreate:u.role==='ADMIN',unlinkedWorklogCount,
+ const result={projects,today,setupRequired:!r.storage.ready,missing:r.storage.missing,canCreate:u.role==='ADMIN',unlinkedWorklogCount,ambiguousWorklogCount,
   employees:employees.map(e=>({employeeId:e.employeeId,name:e.displayName||e.name})),quoteOptions:projectHubQuoteOptions_(u)};
  if(u.role==='ADMIN'){
   const upgradeSheets=['プロジェクト工数対応','プロジェクト依存','プロジェクト添付','プロジェクト既読','プロジェクト原価','プロジェクト予算'];
@@ -120,7 +127,8 @@ function getProjectHubDetail(sessionToken,projectId,force){
  const canManage=projectHubCanManage_(u,plan),quotes=projectHubQuoteOptions_(u),quote=quotes.find(x=>x.id===plan.quoteId)||null;
  const canSeeOrderValue=u.role==='ADMIN'||!!quote;
  if(!canSeeOrderValue)delete plan.orderValue;
- const names=[p.name,...projectHubAliases_(plan)],logs=r.worklogs.filter(w=>names.map(projectHubName_).includes(projectHubName_(w[3]))),employees=getEmployees_();
+ const names=projectHubWorklogOwners_(r.projects,new Map(r.plans.map(record=>[record.projectId,record])));
+ const logs=r.worklogs.filter(w=>{const owners=names.get(projectHubName_(w[3]));return !!owners&&owners.size===1&&owners.has(p.projectId);}),employees=getEmployees_();
  const canViewPerson=id=>u.employeeId===id||u.role==='ADMIN'||u.role==='MANAGER'&&employees.some(e=>e.employeeId===id&&e.managerId===u.employeeId);
  const tasks=r.tasks.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.ownerId===u.employeeId}));
  const resources=r.resources.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.createdBy===u.employeeId}));
