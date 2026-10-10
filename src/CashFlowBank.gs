@@ -40,8 +40,8 @@ function cfpSheet_(kind,optional){
   throw Error(model.sheet+' のヘッダーが一致しません。');
  return sh;
 }
-function cfpRows_(kind,optional){
- const model=CFP[kind],sh=cfpSheet_(kind,optional);
+function cfpRows_(kind,optional,checkedSheet){
+ const model=CFP[kind],sh=checkedSheet||cfpSheet_(kind,optional);
  if(!sh)return null;
  const last=sh.getLastRow(),cols=model.keys.length;
  return {sheet:sh,rows:last<2?[]:sh.getRange(2,1,last-1,cols).getDisplayValues().map((row,i)=>{
@@ -209,9 +209,10 @@ function saveCashFlowClosedThrough(token,payload){
 function getCashFlowBankWorkspace(token,fiscalYear){
  requireAdminSession_(token);
  const year=cashFlowYear_(fiscalYear),months=cashFlowMonths_(year),data={ok:true,year,setupRequired:false,accounts:[],plans:[],transactions:[],monthly:[],closing:{through:'',revision:0}};
- const setup=Object.keys(CFP).some(k=>!cfpSheet_(k,true))||!cashFlowSheet_(true);
+ const sheets={};Object.keys(CFP).forEach(k=>sheets[k]=cfpSheet_(k,true));
+ const setup=Object.keys(CFP).some(k=>!sheets[k])||!cashFlowSheet_(true);
  if(setup){data.setupRequired=true;return data;}
- const accountRows=cfpRows_('account',false).rows,planRows=cfpRows_('plan',false).rows,txRows=cfpRows_('tx',false).rows,close=cfpRows_('close',false).rows;
+ const accountRows=cfpRows_('account',false,sheets.account).rows,planRows=cfpRows_('plan',false,sheets.plan).rows,txRows=cfpRows_('tx',false,sheets.tx).rows,close=cfpRows_('close',false,sheets.close).rows;
  data.accounts=accountRows.map(a=>({id:a.id,bank:a.bank,branch:a.branch,name:a.name,last4:a.last4,
    active:a.active==='TRUE',revision:Number(a.revision),updatedAt:a.updatedAt}));
  data.plans=planRows.map(p=>({id:p.id,title:p.title,direction:p.direction,amount:Number(p.amount),accountId:p.accountId,

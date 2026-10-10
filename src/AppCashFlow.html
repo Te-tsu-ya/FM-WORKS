@@ -1,7 +1,7 @@
 <script>
 /* v0.21 annual fiscal cashflow; amounts never use browser persistent storage. */
-let cashFlowUi={open:false,year:0,seq:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};
-function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};}
+let cashFlowUi={open:false,year:0,seq:0,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};
+function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};}
 function cashFlowAllowed_(){return !!(state.sessionToken&&state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace&&state.data.permissions.adminConsole);}
 function cashFlowThisYear_(){
  const s=String(state.data&&state.data.today||new Date().toISOString().slice(0,10)),m=/^(\d{4})-(\d{2})/.exec(s);
@@ -15,49 +15,58 @@ function cashFlowOpen_(){
  if(!cashFlowAllowed_())return;
  if(financeUi.demo){showToast('資金繰り表は実データです。サンプル表示を解除してから開いてください。');return;}
  financeUi.insightMode=false;cashFlowUi.open=true;cashFlowUi.year=cashFlowUi.year||cashFlowThisYear_();
- renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(true);
+ renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(false);
 }
 function cashFlowClose_(){
- if(typeof cfbUi!=='undefined'&&cfbUi.importing){showToast('銀行明細の取り込みが終わるまでお待ちください。');return;}
+ if(cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込みが終わるまでお待ちください。');return;}
  cashFlowDiscard_(()=>{
-  if(typeof cfbReset_==='function')cfbReset_();
-  cashFlowUi.open=false;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.seq++;
+  const bank=typeof cfbUi!=='undefined'?cfbUi:null,demo=!!(bank&&bank.demo);
+  if(typeof cfbReset_==='function'){
+   cfbReset_();if(bank&&!demo){cfbUi.loaded=bank.loaded;cfbUi.year=bank.year;cfbUi.at=bank.at;cfbUi.tab=bank.tab;cfbUi.active=bank.active;}
+  }
+  if(demo){cashFlowUi.data=null;cashFlowUi.at=0;}
+  const record=cashFlowUi.data&&cashFlowUi.data.record;
+  cashFlowUi.open=false;cashFlowUi.loading=false;cashFlowUi.refreshNeeded=false;cashFlowUi.draft=record?{openingBalance:record.openingBalance,revision:record.revision,months:record.months.map(x=>({...x}))}:null;
+  cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.seq++;
   renderPageIfActive('finance');
  });
 }
 function cashFlowChangeYear_(value){
- if(typeof cfbUi!=='undefined'&&cfbUi.importing){showToast('銀行明細取込中は年度を切替できません。');return;}
+ if(cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込み中は年度を切替できません。');return;}
  const y=Number(value),input=document.getElementById('cfYear');
  if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
  if(y===cashFlowUi.year)return;
  if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(y));return;}
  cashFlowDiscard_(()=>{
-  cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;
+  cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;cashFlowUi.refreshNeeded=false;
   cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
-  if(typeof cfbUi!=='undefined'){cfbUi.loaded=null;cfbUi.closeKey='';cfbUi.csvRows=null;cfbUi.preview=null;cfbUi.seq++;}
+  if(typeof cfbReset_==='function')cfbReset_();
   renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(true);
  });
  if(input)input.value=String(cashFlowUi.year);
 }
 function cashFlowLoad_(force=false){
  const ui=cashFlowUi;if(typeof cfbUi!=='undefined'&&cfbUi.demo)return;
- if(!ui.open||!cashFlowAllowed_()||ui.loading||ui.busy)return;
- if(!force&&ui.data&&ui.data.fiscalYear===ui.year)return;
+ if(!ui.open||!cashFlowAllowed_()||ui.busy)return;
+ if(ui.loading){if(force)ui.refreshNeeded=true;return;}
+ if(!force&&ui.data&&ui.data.fiscalYear===ui.year&&(ui.dirty||Date.now()-(ui.at||0)<300000))return;
  const token=state.sessionToken,year=ui.year,seq=++ui.seq;
  ui.loading=true;ui.error='';renderPageIfActive('finance');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
   ui.loading=false;
+  if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}
   if(!result||result.ok!==true){ui.error='取得したデータが正しくありません。';renderPageIfActive('finance');return;}
-  ui.data=result;ui.draft={openingBalance:result.record.openingBalance,revision:result.record.revision,months:result.record.months.map(x=>({...x}))};
+  ui.data=result;ui.at=Date.now();ui.draft={openingBalance:result.record.openingBalance,revision:result.record.revision,months:result.record.months.map(x=>({...x}))};
   ui.dirty=false;ui.key='';renderPageIfActive('finance');
  }).withFailureHandler(err=>{
   if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
-  ui.loading=false;ui.error=cleanApiErrorMessage(err,'資金繰り表を読み込めませんでした。');renderPageIfActive('finance');
+  ui.loading=false;if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}ui.error=cleanApiErrorMessage(err,'資金繰り表を読み込めませんでした。');renderPageIfActive('finance');
  }).getCashFlowYear(token,year);
 }
 function cashFlowReload_(){
  if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(cashFlowUi.year));return;}
+ if(typeof cfbReload_==='function'){cfbReload_();return;}
  cashFlowDiscard_(()=>{
   cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowLoad_(true);
  });

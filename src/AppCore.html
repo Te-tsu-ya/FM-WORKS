@@ -41,13 +41,14 @@ function invalidateBusinessViewsAfterWrite(method,result){
     invalidatePageCache('homeOverview');
     if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
   }
-  if(/^(saveWorklog|deleteWorklog|saveProject|saveProjectHubRecord|saveQuoteDraft|issueQuote|migrateDatabaseToCurrent)$/.test(method)&&typeof projectHubInvalidate_==='function')projectHubInvalidate_();
+  if(/^(saveWorklog|deleteWorklog|saveProject|saveProjectHubRecord|saveProjectDependencies|uploadProjectAttachment|deleteProjectAttachment|saveProjectBudget|saveProjectCost|deleteProjectCost|saveQuoteDraft|issueQuote|migrateDatabaseToCurrent)$/.test(method)&&typeof projectHubInvalidate_==='function')projectHubInvalidate_();
   if(method==='migrateDatabaseToCurrent'){
     Object.keys(pageCache).forEach(key=>delete pageCache[key]);
     if(typeof quoteUi!=='undefined')quoteUi.at=0;
     if(typeof financeUi!=='undefined'){financeUi.at=0;financeUi.mineAt=0;}
     if(typeof somuUi!=='undefined')somuUi.loadedAt=0;
     if(typeof somuGrowth!=='undefined')somuGrowth.loadedAt=0;
+    if(typeof resetCashFlowUi==='function')resetCashFlowUi();
   }
 }
 function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
@@ -383,7 +384,10 @@ function navigate(page){
   if(page!==state.page&&((typeof quoteUi!=='undefined'&&quoteUi.busy)||
      (typeof financeUi!=='undefined'&&financeUi.busy)||
      (typeof somuUi!=='undefined'&&somuUi.busy)||
-     (typeof projectHubUi!=='undefined'&&projectHubUi.busy))){showToast('保存処理が終わるまでお待ちください');return;}
+     (typeof projectHubUi!=='undefined'&&projectHubUi.busy)||
+     (typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)||
+     (typeof cashFlowUi!=='undefined'&&cashFlowUi.busy)||
+     (typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)))){showToast('保存処理が終わるまでお待ちください');return;}
   if(state.page==='projects'&&typeof projectHubRememberDraft_==='function')projectHubRememberDraft_();
   if(state.page==='financeEntry'&&typeof financeRememberEntry_==='function')financeRememberEntry_();
   // Do not silently discard an unsaved company document when switching modules.
