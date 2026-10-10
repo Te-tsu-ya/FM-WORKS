@@ -364,7 +364,13 @@ function submitFinanceForm(){
   const method=financeActiveForm.editId?'resubmitFinanceRequest':
     {expense:'submitFinanceExpense',travel:'submitFinanceTravel',receipt:'saveFinanceReceipt'}[kind];
   const activeForm=financeActiveForm;
-  const identity=financeIdentity();financeUi.busy=true;
+  const identity=financeIdentity();
+  // Freeze the entire input while one server write is pending. Otherwise the
+  // user could edit values after the payload was sent and think they were saved.
+  const frozen=Array.from(form.querySelectorAll('input,select,textarea,button')).map(el=>({el,disabled:el.disabled}));
+  const restore=()=>frozen.forEach(({el,disabled})=>{el.disabled=disabled;});
+  financeUi.busy=true;
+  frozen.forEach(({el})=>{el.disabled=true;});
   const button=document.getElementById('financeSubmitButton');if(button){button.disabled=true;button.textContent='登録しています…';}
   const err=document.getElementById('financeFormError');if(err)err.hidden=true;
   google.script.run.withSuccessHandler(result=>{
@@ -374,6 +380,7 @@ function submitFinanceForm(){
       const message='サーバーから登録完了を確認できませんでした。履歴を更新してから再試行してください。';
       const node=document.getElementById('financeFormError');
       if(node){node.textContent=message;node.hidden=false;}
+      restore();
       if(button){button.disabled=false;button.textContent=activeForm.editId?'修正して再申請する':'登録する';}
       return;
     }
@@ -389,6 +396,7 @@ function submitFinanceForm(){
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
+    restore();
     const node=document.getElementById('financeFormError');
     if(node){node.textContent=cleanApiErrorMessage(error,'登録できませんでした。');node.hidden=false;}
     const b=document.getElementById('financeSubmitButton');
@@ -687,7 +695,7 @@ function financeOverviewRows(kind){
     const picker='<button type="button" class="finance-record-pick" data-kind="'+escapeHtml(kind)+
       '" data-id="'+escapeHtml(x.id)+'" aria-pressed="'+(active?'true':'false')+
       '" aria-label="'+escapeHtml(String(person||'')+'の'+String(description||'')+'の詳細を表示')+
-      '" onclick="financeSelectRecord(this.dataset.kind,this.dataset.id)">'+
+      '" onclick="event.stopPropagation();financeSelectRecord(this.dataset.kind,this.dataset.id)">'+
       financeDateDisplay(financeDateForItem(kind,x))+'</button>';
     return {desktop:'<tr class="finance-ledger-row" '+attrs+
         ' onclick="financeSelectRecord(this.dataset.kind,this.dataset.id)">'+

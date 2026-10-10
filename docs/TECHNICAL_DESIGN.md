@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.6  
+**文書版:** 0.17.7  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1824,6 +1824,13 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `logPerformance_('quoteWorkspace',...)` は経過時間と見積・書類・取引先件数を記録する。Sheet参照はサーバーリクエストを跨いで保存しない。
 - `scripts/test_quote_integration.mjs` は1回の正常ワークスペース取得時のヘッダー7回と、不正な取引先シートヘッダーの拒否、帳票全体の回帰を検証する。APP.versionは0.17.6に整合。
 
+## v0.17.7 書類詳細のセッション破棄と一覧更新キュー（2026-10-10）
+
+- `resetQuoteUi()` から `resetDocumentUi()` を呼び、文書詳細、`Map` キャッシュ、選択ID、busy/loadingを全消去する。既存の `clearLocalSession()`・`mountAuthenticatedApp()` から実行される。描画側でも `docUi.cacheIdentity===quoteIdentity_()` とログイン済み状態を検査する。
+- `loadQuoteWorkspace(options)` は読み込み中の `force` を `refreshNeeded=true` に記録し、先行通信の完了後に最後の1回を再取得する。古いレスポンスの描画を回避し、配列構造不一致で旧正常データを破棄しない。
+- 取引先単体追加、貼付インポート、採番設定は `quoteIdentity_` でログイン元の遅延コールバックを拒否する。
+- 新規 `scripts/test_quote_session.mjs` にて、連続force・通信失敗・異常データ・書類詳細の別ログイン混入・遅延応答をVMで模擬。既存 `test_quote_integration.mjs` に組み込んで全CIとGAS公開前チェックへ適用する。
+
 ## v0.17.6 経理の非同期応答・データ整合性・大容量読取の設計追加（2026-10-10）
 
 - `Finance.gs:financeText_`: `safeSheetText_` の文字数上限による黙ったトリミングを禁止し、入力文字数を先に検証してエラーとする。APIが許容する最大文字数は `AppFinance.html:FINANCE_FIELD_LIMITS` へ反映。
@@ -1833,3 +1840,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `AppFinance.html`: overview／mineの読込開始時に画面の書込世代番号を保持し、保存・承認・精算の成功時に世代番号を進める。開始後に状態が変わった旧取得結果は破棄して最新を再読込する。サンプルモードは経理記録だけでなく経費精算と出張報告の登録フォームにも適用し、送信関数で最終的な遮断を行う。
 - `getFinanceOverview` は `performance.serverMs` のみ追加返却し、ユーザー画面では既存のネットワーク込みの計測 `financeUi.lastLatencyMs` と別表示。個人情報や認証情報は計測値に含めない。
 - CIは `scripts/test_finance_integration.mjs`／`scripts/test_client_contract.mjs` で登録内容一致、長文、重複申請、行番号照合、書込中と古いレスポンスの順不同を検証する。実本番データへの書き込み、監査ログの偽造、本人承認を伴う試験は行わない。
+
+- AppFinance.html の submitFinanceForm は実際のフォームの input/select/textarea/button を元の disabled 状態ごと記録し、書込中は凍結する。失敗や確認不能時に restore() で復旧し、保存成功時は画面遷移で破棄する。PC台帳の日付ボタンのクリックは伝播停止し、親行からの重複処理を抑止する。

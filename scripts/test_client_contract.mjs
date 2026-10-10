@@ -570,6 +570,32 @@ const result=vm.runInContext(`
     financeOverviewRows('expense').includes('申請複数')&&
     financeInspectorHtml_('expense',pendingFake).includes('重複精算に注意'));
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
+
+  // A pending finance write freezes fields. On failure they are usable again,
+  // with the same idempotency key, and repeated clicks do not issue extra RPC.
+  resetCalls();
+  financeUi.busy=false;financeUi.demo=false;
+  const lastSubmitForm=document.getElementById('financeEntryForm');
+  const vendorInput=document.getElementById('fin-vendor');
+  const submitButton=document.getElementById('financeSubmitButton');
+  vendorInput.disabled=false;submitButton.disabled=false;
+  lastSubmitForm.querySelectorAll=()=>[vendorInput,submitButton];
+  financeActiveForm={kind:'expense',key:'SAFE-RETRY-KEY-20261010',editId:'',source:{},changed:false};
+  submitFinanceForm();
+  expect('pending finance write freezes editable controls',
+    financeUi.busy&&vendorInput.disabled&&submitButton.disabled);
+  submitFinanceForm();
+  expect('double-submit during a pending write produces only one RPC',apiCalls.length===1);
+  invokeServerFailure(new Error('意図的な通信エラー'));
+  expect('failed finance write restores all controls without losing the retry key',
+    !financeUi.busy&&!vendorInput.disabled&&!submitButton.disabled&&
+    financeActiveForm.key==='SAFE-RETRY-KEY-20261010');
+  lastSubmitForm.querySelectorAll=()=>[];
+  financeActiveForm=null;
+  financeUi.overview={setupRequired:false,expenses:[pendingFake],travels:[],receipts:[]};
+  financeUi.tab='expense';financeVisual={query:'',status:'ALL',match:'ALL',month:''};
+  expect('desktop ledger selection button does not double-fire from its parent row',
+    financeOverviewRows('expense').includes('event.stopPropagation();financeSelectRecord('));
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
