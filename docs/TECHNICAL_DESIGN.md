@@ -1933,3 +1933,6 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 編集UI：dirty フラグを入力変更時に設定し、保存後に解消。キャンセルと画面遷移時はモーダル確認を要求する。AppCore.navigateから会社文書モジュールの companyDocsConfirmLeave_ を呼ぶ。ブラウザ再読み込みはbeforeunloadガードで確認する。
 - 安全なイベント属性：companyDocsInlineId_ は JSON.stringify した値全体をHTMLエスケープ。サーバーも companyDocsValidId_ で想定外IDを除外する。
 - 視認性：darkテーマの公開・下書きバッジは明示RGB色を採用し、Chromium viewport QAで getComputedStyle によりforeground/backgroundを取得しコントラスト比4.5以上を検証する。
+
+- 複合語検索は業務フォルダやタグ等の軽量メタデータと、本文TextFinderの一致行番号を語ごとに和集合にしてから、語間の共通部分を計算する。権限外の文書は事前・返却前の双方で除外する。
+- companyDocsDropHiddenSelection_ が絞り込み後の不一致プレビューを解除する。AppShell.performLogout も companyDocsConfirmLogout_ を経由し、未保存文書の破棄を明示確認する。

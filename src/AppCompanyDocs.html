@@ -126,6 +126,13 @@ function companyDocsSelect(id,mobile=true){
     companyDocsRender_();
   }).getCompanyDocument(state.sessionToken,id);
 }
+function companyDocsDropHiddenSelection_(){
+  const ui=companyDocsUi;
+  if(!ui.selectedId||ui.editing)return false;
+  if(companyDocsVisibleItems_().some(item=>item.id===ui.selectedId))return false;
+  ui.selectedId='';ui.detail=null;ui.loadingDetail=false;ui.detailSerial++;
+  return true;
+}
 function companyDocsSetQuery(value){
   const ui=companyDocsUi,query=String(value||'').slice(0,80);
   ui.query=query;ui.limit=60;ui.remoteQuery='';ui.remoteIds=null;ui.searchError='';
@@ -137,11 +144,12 @@ function companyDocsSetQuery(value){
   const globalReset=!!term&&ui.folderId!=='all';
   if(globalReset)ui.folderId='all';
   ui.searching=term.length>=2;
+  const clearedSelection=companyDocsDropHiddenSelection_();
   const onMobile=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&
     window.matchMedia('(max-width: 760px)').matches;
   const mobileSwitch=onMobile&&!!term&&ui.mobileStep==='folders';
   if(mobileSwitch)ui.mobileStep='list';
-  if(mobileSwitch||globalReset){
+  if(mobileSwitch||globalReset||clearedSelection){
     companyDocsRender_();
     const input=document.getElementById('companyDocsSearch');
     if(input){
@@ -166,8 +174,14 @@ function companyDocsSetQuery(value){
     }).searchCompanyDocumentBodies(state.sessionToken,term);
   },320);
 }
-function companyDocsSetCategory(value){companyDocsUi.category=value;companyDocsUi.limit=60;companyDocsRender_();}
-function companyDocsSetStatus(value){companyDocsUi.status=value;companyDocsUi.limit=60;companyDocsRender_();}
+function companyDocsSetCategory(value){
+  companyDocsUi.category=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
+function companyDocsSetStatus(value){
+  companyDocsUi.status=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
 function companyDocsSetSort(value){companyDocsUi.sort=value;companyDocsRender_();}
 function companyDocsMore(){companyDocsUi.limit+=60;companyDocsRender_();}
 function companyDocsClearFilters(){
@@ -326,7 +340,8 @@ function companyDocsDraftField(key,value){
 function companyDocsConfirmLeave_(targetPage){
   const ui=companyDocsUi;
   if(ui.busy)return false;
-  if(!ui.editing||!ui.dirty)return true;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
   const modal=ensureModal();
   modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
     '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の変更">'+
@@ -340,6 +355,25 @@ function companyDocsLeaveNow_(targetPage){
   closeModal();
   companyDocsFinishCancelEdit_();
   navigate(targetPage);
+}
+function companyDocsConfirmLogout_(){
+  const ui=companyDocsUi;
+  if(ui.busy)return false;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の社内文書">'+
+    '<div class="modal-head"><h2>社内文書の変更が未保存です</h2></div>'+
+    '<p>ログアウトすると、未保存の変更が失われます。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsLogoutNow_()">破棄してログアウト</button></div></section>';
+  return false;
+}
+function companyDocsLogoutNow_(){
+  closeModal();
+  companyDocsFinishCancelEdit_();
+  performLogout();
 }
 function companyDocsBeforeUnload_(event){
   if(companyDocsUi.editing&&companyDocsUi.dirty){
@@ -428,6 +462,7 @@ function companyDocsEditor_(){
     '<div class="company-doc-detail-heading"><div><span class="company-doc-eyebrow">DOCUMENT EDITOR</span>'+
     '<h2>'+(d.id?'社内文書の編集':'社内文書の新規登録')+'</h2></div></div>'+
     (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p>':'')+
+    '<p id="companyDocsUnsaved" class="company-doc-unsaved" '+(ui.dirty?'':'hidden')+'>未保存の変更があります</p>'+
     '<label>文書名 <span class="company-doc-required">必須</span><input required maxlength="120" value="'+companyDocsSafeAttr_(d.title)+
       '" oninput="companyDocsDraftField(\'title\',this.value)" placeholder="例：備品貸出マニュアル"></label>'+
     '<div class="company-doc-form-pair"><label>業務フォルダ <span class="company-doc-required">必須</span><select required onchange="companyDocsDraftField(\'folderId\',this.value)">'+
@@ -447,7 +482,6 @@ function companyDocsEditor_(){
     '<label>参照リンク（HTTPS）<input type="url" maxlength="2000" value="'+companyDocsSafeAttr_(d.url)+
       '" oninput="companyDocsDraftField(\'url\',this.value)" placeholder="https://..."></label>'+
     '<div class="company-doc-editor-note">文書本文はテキスト形式です。PDF・Word添付は今後の機能拡張対象です。</div>'+
-    '<p id="companyDocsUnsaved" class="company-doc-unsaved" '+(ui.dirty?'':'hidden')+'>未保存の変更があります</p>'+
     '<div class="company-doc-form-actions"><button type="button" class="secondary-button" onclick="companyDocsCancelEdit()" '+
       (ui.busy?'disabled':'')+'>キャンセル</button><button type="submit" class="primary-button" '+(ui.busy?'disabled':'')+'>'+
       (ui.busy?'保存中…':'変更を保存')+'</button></div></form>';

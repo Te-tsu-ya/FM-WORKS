@@ -123,6 +123,8 @@ employee=staff;
 assert.equal(call('getCompanyDocuments','SESSION').items.length,0,'draft is private');
 assert.throws(()=>call('getCompanyDocument','SESSION',created.document.id),/権限/);
 assert.deepEqual(Array.from(call('searchCompanyDocumentBodies','SESSION','テスト本文').matchedIds),[]);
+assert.equal(call('searchCompanyDocumentBodies','SESSION','備品 テスト本文').matchedIds.length,0,
+  'draft metadata and body must stay private');
 assert.throws(()=>call('saveCompanyDocument','SESSION',payload),/権限/);
 employee=somu;
 assert.equal(call('getCompanyDocuments','SESSION').items.length,1,'sōmu may view drafts');
@@ -141,6 +143,10 @@ assert.equal(call('getCompanyDocument','SESSION',created.document.id).document.b
 assert.equal(call('searchCompanyDocumentBodies','SESSION','テスト本文').matchedIds.length,1,'published body searchable');
 assert.equal(call('searchCompanyDocumentBodies','SESSION','一般 テスト本文').matchedIds.length,1,
   'space-separated words match anywhere in the same document, not only as one phrase');
+assert.equal(call('searchCompanyDocumentBodies','SESSION','備品 テスト本文').matchedIds.length,1,
+  'one word in the title and another in the body must match the same document');
+assert.equal(call('searchCompanyDocumentBodies','SESSION','備品').matchedIds.length,1,
+  'metadata-only keyword matches even when it is absent from the body');
 assert.equal(call('searchCompanyDocumentBodies','SESSION','一般 存在しない用語').matchedIds.length,0,
   'every search term must appear in the same body');
 assert.throws(()=>call('searchCompanyDocumentBodies','SESSION','一 二 三 四 五 六 七 八 九'),/最大8語/);

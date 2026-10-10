@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source=fs.readFileSync('src/AppCompanyDocs.html','utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-const calls=[],elements={},modal={innerHTML:''},toasts=[],navigations=[];
+const calls=[],elements={},modal={innerHTML:''},toasts=[],navigations=[];let logouts=0;
 let nextSuccess=null,nextFailure=null;
 const runner={withSuccessHandler(fn){nextSuccess=fn;return proxy;},
   withFailureHandler(fn){nextFailure=fn;return proxy;}};
@@ -37,7 +37,7 @@ const ctx=vm.createContext({
   document:{getElementById:id=>elements[id]||(elements[id]={innerHTML:'',textContent:'',hidden:false,focus(){this.focused=true;},setSelectionRange(){}})},
   google:{script:{run:proxy}},escapeHtml,renderPageIfActive:()=>{},
   ensureModal:()=>modal,closeModal:()=>{},showToast:message=>toasts.push(message),
-  navigate:page=>navigations.push(page),
+  navigate:page=>navigations.push(page),performLogout:()=>{logouts++;},
   cleanApiErrorMessage:e=>String(e&&e.message||e),Date,Math,Number,String,Array,Object,Set,RegExp,
   setTimeout:fn=>{fn();return 1;},clearTimeout:()=>{}
 });
@@ -132,6 +132,21 @@ run("companyDocsDraftField('summary','再編集')");
 run("companyDocsLeaveNow_('home')");
 assert.equal(navigations.at(-1),'home');
 assert.equal(run('companyDocsUi.dirty'),false);
+// Logout must not discard an unsaved company document.
+run("companyDocsStartEdit("+JSON.stringify(items[0].id)+")");
+run("companyDocsDraftField('summary','ログアウト前の変更')");
+assert.equal(run('companyDocsConfirmLogout_()'),false);
+assert.ok(modal.innerHTML.includes('ログアウト'));
+assert.equal(logouts,0);
+run('companyDocsLogoutNow_()');
+assert.equal(logouts,1,'confirmed logout resumes');
+assert.equal(run('companyDocsUi.dirty'),false);
+// Filter changes must remove an outdated preview.
+run('companyDocsUi.selectedId='+JSON.stringify(items[0].id)+';companyDocsUi.detail=companyDocsUi.details[companyDocsUi.selectedId];');
+run("companyDocsSetCategory('マニュアル')");
+assert.equal(run('companyDocsUi.selectedId'),'');
+assert.equal(run('companyDocsUi.detail'),null);
+run("companyDocsSetCategory('all')");
 run('companyDocsUi.data={...companyDocsUi.data,canManage:false,canInitialize:false,items:companyDocsUi.data.items.filter(x=>x.status==="公開")};companyDocsUi.selectedId="";companyDocsUi.detail=null;companyDocsUi.folderId="all";');
 markup=run('companyDocsPage()');
 assert.ok(!markup.includes('＋ 文書登録'),'normal users have no create action');
