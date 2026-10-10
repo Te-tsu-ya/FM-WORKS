@@ -338,17 +338,31 @@ function projectHubOpenPlan_(){projectHubOpenEditor_('plan');}function projectHu
 function projectHubField_(key,value){if(!projectHubUi.editor||projectHubUi.busy)return;projectHubUi.editor.form[key]=value;projectHubUi.editor.changed=true;if(key==='quoteId'&&projectHubUi.editor.kind==='plan')renderPageIfActive('projects');}
 function projectHubRememberDraft_(){if(!projectHubUi.editor||projectHubUi.busy)return;const form=document.getElementById('projectHubForm');if(form)form.querySelectorAll('[data-ph-field]').forEach(el=>projectHubUi.editor.form[el.dataset.phField]=el.value);}
 function projectHubCancelEditor_(){if(projectHubUi.busy)return;const discard=()=>{projectHubUi.editor=null;renderPageIfActive('projects');};if(projectHubUi.editor&&projectHubUi.editor.changed)openConfirmDialog('入力を取り消す','保存していない入力を破棄します。','入力を破棄',discard,true);else discard();}
-function projectHubInput_(key,label,type='text',required=false,disabled=false){const f=projectHubUi.editor.form;return `<label class="field"><span>${escapeHtml(label)} ${required?'<em>必須</em>':''}</span><input id="ph-${key}" data-ph-field="${key}" type="${type}" value="${escapeHtml(f[key]??'')}" ${required?'required':''} ${disabled?'disabled':''} ${type==='number'?'step="any" min="0"':''} oninput="projectHubField_(this.dataset.phField,this.value)"></label>`;}
+function projectHubInput_(key,label,type='text',required=false,disabled=false){const f=projectHubUi.editor.form;return `<label class="field"><span>${escapeHtml(label)} ${required?'<em>必須</em>':''}</span><input id="ph-${key}" data-ph-field="${key}" type="${type}" value="${escapeHtml(f[key]??'')}" ${required?'required':''} ${disabled?'disabled':''} ${type==='number'?'step="any" min="0"'+(key==='progress'?' max="100"':''):''} oninput="projectHubField_(this.dataset.phField,this.value)"></label>`;}
 function projectHubSelectField_(key,label,options,disabled=false){const f=projectHubUi.editor.form;return `<label class="field"><span>${escapeHtml(label)}</span><select id="ph-${key}" data-ph-field="${key}" onchange="projectHubField_(this.dataset.phField,this.value)" ${disabled?'disabled':''}>${options.map(([v,l])=>`<option value="${escapeHtml(v)}" ${String(f[key]??'')===String(v)?'selected':''}>${escapeHtml(l)}</option>`).join('')}</select></label>`;}
 function projectHubTextArea_(key,label,rows=4){return `<label class="field ph-full"><span>${escapeHtml(label)}</span><textarea id="ph-${key}" data-ph-field="${key}" rows="${rows}" oninput="projectHubField_(this.dataset.phField,this.value)">${escapeHtml(projectHubUi.editor.form[key]||'')}</textarea></label>`;}
+function projectHubTaskCompletion_(){
+ const editor=projectHubUi.editor;
+ if(!editor||editor.kind!=='task'||projectHubUi.busy)return;
+ editor.form.progress='100';editor.form.status='完了';editor.changed=true;
+ renderPageIfActive('projects');
+}
 function projectHubEditor_(){
  const e=projectHubUi.editor,d=projectHubDetail_()||e.context,people=[['','未設定'],...projectHubUi.data.employees.map(p=>[p.employeeId,p.name])],title={plan:'計画・受注情報',task:e.form.id?'作業の進捗を更新':'作業計画を追加',resource:'案件資料を登録・編集',update:'共有メモを投稿'}[e.kind];let fields='';
  if(e.kind==='plan'){
   const quotes=[['','未設定'],...projectHubUi.data.quoteOptions.map(q=>[q.id,q.number+' / '+q.subject])];if(e.form.quoteId&&!quotes.some(x=>x[0]===e.form.quoteId))quotes.push([e.form.quoteId,'ひも付け済み（閲覧権限が必要）']);
   fields=projectHubInput_('plannedHours','案件全体の予定工数（時間）','number')+projectHubSelectField_('ownerId','案件責任者',people,!(state.data.permissions&&state.data.permissions.adminConsole))+projectHubSelectField_('quoteId','正式発行済みの見積',quotes)+projectHubSelectField_('orderStatus','受注状態',['未登録','商談中','受注済','保留','終了'].map(x=>[x,x]))+projectHubInput_('receivedOn','受注日','date')+projectHubInput_('orderNo','受注番号')+(state.data.user.role==='ADMIN'||projectHubUi.data.quoteOptions.some(q=>q.id===e.form.quoteId)?projectHubInput_('orderValue','受注金額（税込・円）','number'):'')+`<div class="ph-full"><button type="button" class="secondary-button" onclick="projectHubCopyQuote_()">選んだ見積の金額を転記</button><p class="ph-help">受注日は実際の受注を確認して入力します。</p></div>`+projectHubTextArea_('note','案件の目的・概要');
  }else if(e.kind==='task'){
-  const restricted=!d.canManage;
-  fields=projectHubInput_('title','作業名','text',true,restricted)+projectHubSelectField_('ownerId','担当者',people,restricted)+projectHubInput_('plannedHours','予定工数（時間）','number',true,restricted)+projectHubInput_('startDate','開始予定日','date',false,restricted)+projectHubInput_('dueDate','期限','date',false,restricted)+projectHubInput_('progress','完成度（0〜100％）','number',true)+projectHubSelectField_('status','状態',['未着手','進行中','確認待ち','完了','保留'].map(x=>[x,x]))+projectHubTextArea_('note','完了したこと・残っていること');
+  const restricted=!d.canManage,options=['未着手','進行中','確認待ち','完了','保留'].map(x=>[x,x]);
+  const owner=people.find(p=>p[0]===e.form.ownerId),summary='<div class="ph-full ph-task-context"><strong>'+escapeHtml(e.form.title||'作業')+'</strong><span>担当：'+escapeHtml(owner?owner[1]:'未設定')+'</span><span>期限：'+escapeHtml(e.form.dueDate||'未設定')+'</span><span>予定：'+projectHubHours_(e.form.plannedMinutes)+'</span><p class="ph-help">この作業の担当者は進捗・状態・メモだけを変更できます。計画の変更は案件責任者へ依頼してください。</p></div>';
+  const progress=projectHubInput_('progress','完成度（0〜100％）','number',true);
+  const status=projectHubSelectField_('status','作業の状態',options);
+  const quick='<div class="ph-full ph-task-quick"><button type="button" class="secondary-button" onclick="projectHubTaskCompletion_()">完了（100％）に設定</button><span class="ph-help">「保存する」を押すまでDBは更新されません。</span></div>';
+  if(restricted){
+   fields=summary+progress+status+quick+projectHubTextArea_('note','完了したこと・残っていること');
+  }else{
+   fields=projectHubInput_('title','作業名','text',true)+projectHubSelectField_('ownerId','担当者',people)+projectHubInput_('plannedHours','予定工数（時間）','number',true)+progress+status+quick+'<details class="ph-full ph-task-schedule" data-form-section="ph-task-schedule" '+(e.form.id?'':'open')+'><summary>開始予定日・期限を設定する</summary><div class="ph-task-schedule-fields">'+projectHubInput_('startDate','開始予定日','date')+projectHubInput_('dueDate','期限','date')+'</div></details>'+projectHubTextArea_('note','完了したこと・残っていること');
+  }
  }else if(e.kind==='resource'){
   fields=projectHubInput_('title','資料名','text',true)+projectHubSelectField_('resourceKind','種類',['要件定義書','技術設計書','議事録','契約・受注','成果物','その他'].map(x=>[x,x]))+projectHubInput_('url','原本へのHTTPSリンク','url')+`<div class="ph-full"><button type="button" class="secondary-button" onclick="projectHubUseTemplate_()">種類に合ったひな形を入れる</button><p class="ph-help">本文・リンクはこの案件の社員共有資料として保存されます。</p></div>`+projectHubTextArea_('body','資料本文（25,000文字まで）',16);
  }else fields=projectHubSelectField_('updateKind','共有の種類',['共有','進捗','相談','決定事項'].map(x=>[x,x]))+projectHubTextArea_('body','共有内容・次の対応',8);

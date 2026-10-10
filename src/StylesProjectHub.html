@@ -180,4 +180,18 @@
 .ph-workload-table{min-width:620px!important}
 .ph-workload-table td,.ph-workload-table th{padding:12px 14px}
 @media(max-width:700px){.ph-workload-panel .ph-help{line-height:1.6}.ph-portfolio-text .ph-my-work{font-size:11px}}
+
+/* Progressive task editor for contributors and project owners. */
+.ph-task-context{display:flex;flex-wrap:wrap;align-items:center;gap:9px 16px;background:rgba(67,132,221,.065);border:1px solid var(--line);padding:16px;border-radius:12px}
+.ph-task-context strong{flex-basis:100%;font-size:17px;overflow-wrap:anywhere}
+.ph-task-context>span{font-size:12px;color:var(--muted)}
+.ph-task-context .ph-help{width:100%;margin:4px 0 0}
+.ph-task-quick{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:5px}
+.ph-task-quick button{min-height:42px}
+.ph-task-quick .ph-help{flex:1;min-width:180px}
+.ph-task-schedule{border:1px solid var(--line);border-radius:12px;padding:0 14px}
+.ph-task-schedule>summary{padding:13px 2px;font-weight:700;font-size:13px;cursor:pointer}
+.ph-task-schedule-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 0 15px}
+.ph-task-schedule-fields .field{min-width:0}
+@media(max-width:620px){.ph-task-context{flex-direction:column;align-items:flex-start}.ph-task-quick{align-items:flex-start}.ph-task-schedule-fields{grid-template-columns:minmax(0,1fr)}}
 </style>

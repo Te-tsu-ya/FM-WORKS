@@ -2096,3 +2096,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The administrator-only employeeWorkload field is calculated from existing task records for projects with status=進行中. It groups by ownerId (including an explicit unassigned bucket) and includes openTasks, overdueTasks, plannedMinutes. No employee worklog rows, personal attendance records, financial amounts or actual overtime are included. The server omits the field for non-admin users entirely.
 - AppProjectHub adds a local '自分の作業' filter and per-project own task chip, plus a management planning-assignment table. The table is not an availability/overload calculation and must not be described as an actual effort load.
 - The existing project/worklog data cache, date validation, active project checks, name-alias grouping, and permission checks remain in force. No DB migration or new API endpoint.
+
+
+## v0.19.6 Compact assignee task editor
+
+- AppProjectHub.projectHubEditor_ branches by existing canManage scope. Assignees see a read-only task summary plus progress/status/note; managers retain all original planning fields, with start/due dates grouped under details[data-form-section].
+- The existing editor form object retains title, ownerId, plannedHours, startDate, dueDate and revision for secure server-side equality checks even when fields are not rendered for a contributor. projectHubRememberDraft_ updates only controls that actually exist in the DOM.
+- projectHubTaskCompletion_ writes status=完了 and progress=100 into the client draft and rerenders. It makes zero write RPCs; projectHubSave_ remains the only explicit persistence action and retains requestKey, conflict handling and retry identity.
+- Browser tests cover an additional mobile new-task form. VM integration tests verify contributor input reduction, that immutable fields reach saveProjectHubRecord unchanged, no premature save and failed-save recovery. Existing projectHub and worklog schemas stay unchanged.
