@@ -1492,6 +1492,120 @@ const result=vm.runInContext(`
 
   state.page='home';
 
+  // v0.17.8: stale callbacks must not mutate a newly authenticated employee's state.
+  const mockEmployeeData=id=>({
+    today:'2026-10-10',
+    user:{employeeId:id,name:'架空テストユーザー',displayName:'試験'},
+    attendance:{state:'off',workLocation:'出社',history:[]},
+    permissions:{requestApprove:false,financeWorkspace:false},
+    projects:[{name:'案件A',status:'進行中'}]
+  });
+  state.sessionToken='PUNCH_A';state.data=mockEmployeeData('FM0002');
+  state.page='home';state.workLocation='出社';state.busy=false;
+  resetCalls();performPunch('出勤');
+  const earlierPunchCall=lastCall();
+  state.sessionToken='PUNCH_B';state.data=mockEmployeeData('FM0003');
+  state.workLocation='外出';state.busy=false;
+  invokeServerSuccess({attendance:{state:'working',workLocation:'在宅'},serverTime:'2026-10-10T01:00:00Z'});
+  expect('late punch completion never overwrites another user attendance',
+    earlierPunchCall&&earlierPunchCall.method==='recordPunch'&&
+    state.data.attendance.state==='off'&&state.workLocation==='外出'&&state.busy===false);
+
+  state.sessionToken='LOCATION_A';state.data=mockEmployeeData('FM0002');
+  state.workLocation='出社';state.busy=false;
+  resetCalls();changeWorkLocation('在宅');
+  const earlierLocationCall=lastCall();
+  state.sessionToken='LOCATION_B';state.data=mockEmployeeData('FM0003');
+  state.workLocation='外出';state.busy=false;
+  invokeServerFailure(new Error('AUTH_REQUIRED'));
+  expect('late old-session failure never logs out new employee',
+    earlierLocationCall&&earlierLocationCall.method==='recordWorkLocationChange'&&
+    state.sessionToken==='LOCATION_B'&&state.data.user.employeeId==='FM0003'&&state.workLocation==='外出');
+
+  document.getElementById('reqType').value='有給';
+  document.getElementById('reqStart').value='2026-10-10';
+  document.getElementById('reqEnd').value='2026-10-10';
+  document.getElementById('reqReason').value='テスト';
+  document.getElementById('reqContent').value='テスト';
+  state.sessionToken='LEAVE_A';state.data=mockEmployeeData('FM0002');
+  resetCalls();refreshRequestPreview();
+  const leaveRequest=lastCall();
+  const previewBefore=document.getElementById('requestPreview').innerHTML;
+  state.sessionToken='LEAVE_B';state.data=mockEmployeeData('FM0003');
+  invokeServerSuccess({leaveBalanceConfigured:true,requestedDays:1,projectedBalance:999});
+  expect('old employee leave balance cannot appear in new employee request form',
+    leaveRequest&&leaveRequest.method==='previewRequest'&&
+    document.getElementById('requestPreview').innerHTML===previewBefore&&
+    !document.getElementById('requestPreview').innerHTML.includes('999'));
+
+  state.sessionToken='CORRECTION_A';state.data=mockEmployeeData('FM0002');
+  resetCalls();loadCorrectionPunchOptions();
+  const punchOptionsRequest=lastCall();
+  const punchOptionsBefore=document.getElementById('reqOriginalPunch').innerHTML;
+  state.sessionToken='CORRECTION_B';state.data=mockEmployeeData('FM0003');
+  invokeServerSuccess([{id:'PRIVATE-PUNCH-ID',timestamp:'2026-10-10 09:00',action:'出勤',workLocation:'出社'}]);
+  expect('old employee punch history cannot appear in new correction selector',
+    punchOptionsRequest&&punchOptionsRequest.method==='getPunchesForDate'&&
+    document.getElementById('reqOriginalPunch').innerHTML===punchOptionsBefore&&
+    !document.getElementById('reqOriginalPunch').innerHTML.includes('PRIVATE-PUNCH-ID'));
+
+  state.sessionToken='WORKLOG_A';state.data=mockEmployeeData('FM0002');
+  state.worklog={date:'2026-10-10',renderedDate:'2026-10-10',items:[],loading:false};
+  state.busy=false;
+  document.getElementById('wlQuickProject').value='案件A';
+  document.getElementById('wlQuickCategory').value='開発';
+  document.getElementById('wlQuickStart').value='09:00';
+  document.getElementById('wlQuickEnd').value='10:00';
+  document.getElementById('wlQuickDescription').value='試験';
+  resetCalls();saveQuickWorklog();
+  const quickSaveRequest=lastCall();
+  state.sessionToken='WORKLOG_B';state.data=mockEmployeeData('FM0003');
+  state.busy=false;
+  const worklogCallsBefore=apiCalls.length;
+  invokeServerSuccess({ok:true});
+  expect('old employee quick-worklog completion does not refresh new employee screen',
+    quickSaveRequest&&quickSaveRequest.method==='saveWorklog'&&
+    apiCalls.length===worklogCallsBefore&&state.worklog.renderedDate==='2026-10-10'&&state.busy===false);
+
+  state.sessionToken='MODAL_A';state.data=mockEmployeeData('FM0002');
+  state.worklog.date='2026-10-10';
+  ['wlDate','wlProject','wlCategory','wlStart','wlEnd','wlDescription','wlNote'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('wlDate').value='2026-10-09';
+  resetCalls();saveWorklogFromModal('W-1');saveWorklogFromModal('W-1');
+  const modalSaveRequests=apiCalls.filter(x=>x.method==='saveWorklog');
+  const modalSaveRequest=lastCall();
+  state.sessionToken='MODAL_B';state.data=mockEmployeeData('FM0003');
+  invokeServerSuccess({ok:true});
+  expect('old employee modal worklog save does not replace current worklog date',
+    modalSaveRequest&&modalSaveRequest.method==='saveWorklog'&&modalSaveRequests.length===1&&
+    state.worklog.date==='2026-10-10');
+
+  state.sessionToken='LOGOUT_A';state.data=mockEmployeeData('FM0002');state.busy=true;
+  clearLocalSession();
+  expect('logout clears in-progress busy flag for next login',state.busy===false&&state.sessionToken===null);
+
+  // Late logout completion must not interrupt the next successfully authenticated user.
+  state.sessionToken='LOGOUT_OLD';state.data=mockEmployeeData('FM0002');
+  document.getElementById('app').hidden=false;
+  resetCalls();performLogout();
+  const olderLogout=lastCall();
+  state.sessionToken='LOGIN_NEW';state.data=mockEmployeeData('FM0003');
+  document.getElementById('app').hidden=false;
+  invokeServerSuccess({ok:true});
+  expect('old logout success cannot hide app after a different user logs in',
+    olderLogout&&olderLogout.method==='logout'&&state.sessionToken==='LOGIN_NEW'&&
+    state.data.user.employeeId==='FM0003'&&document.getElementById('app').hidden===false);
+
+  state.sessionToken='LOGOUT_FAILURE';state.data=mockEmployeeData('FM0002');
+  resetCalls();performLogout();
+  const failedLogout=lastCall();
+  state.sessionToken='LOGIN_AFTER_FAILURE';state.data=mockEmployeeData('FM0005');
+  document.getElementById('app').hidden=false;
+  invokeServerFailure(new Error('old logout network failure'));
+  expect('old logout error cannot interrupt next authenticated user',
+    failedLogout&&failedLogout.method==='logout'&&state.sessionToken==='LOGIN_AFTER_FAILURE'&&
+    document.getElementById('app').hidden===false);
+
   return {failures};
 })()
 `,context);

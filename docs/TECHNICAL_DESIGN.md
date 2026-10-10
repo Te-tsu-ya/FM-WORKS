@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.7  
+**文書版:** 0.17.8  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1878,3 +1878,13 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - v0.18.1: Somu.gs に resubmitSomuPurchase を追加。ScriptLockの中で requesterId == 操作者を確認し、差戻し状態だけ新しいrequestKeyで更新。既存の差戻し理由はnoteとして残し、更新前後の状態を監査ログへ記録する。誤った本人以外の同一requestKey再使用も拒否する。
 - AppSomu.html は差戻し本人に「修正して再申請」を表示し、既存モーダルの入力を再利用する。再申請は (sessionToken,id,payload) API契約、通常新規申請は従来どおり (sessionToken,payload)。DB_VERSIONと既存データ形式は変更しない。
 - 総務DB未移行時の管理者用ボタンは setAdminTab('operation') を通じて既存のバックアップ付きマイグレーションUIへ移動する。画面のローカル検索/ソートはGASへ追加リクエストしない。
+
+## v0.17.8 工数所有者の保存不変条件と非同期セッション境界（2026-10-10）
+
+- `saveWorklog` の管理者編集時、`payload.employeeId` がない場合は既存行の社員IDを保存先に採用し、社員マスタでアクティブ状態を検査する。新規登録は従来どおり本人。既存レコードのアクセス権チェックは維持。
+- `assertNoWorklogOverlap_` では `readRowsByDateRange_(sheet,2,15,date,date)` による対象日付の行だけを使う。複数行・境界時間・他社員・削除済みの判定を `test_worklog_integrity.mjs` で検証する。
+- `changeWorkLocation`、`performPunch` では元セッショントークンを成功・失敗ハンドラで照合する。`clearLocalSession` は `state.busy=false` とする。
+- `saveQuickWorklog`、`saveWorklogFromModal`、`deleteWorklogItem`、`refreshRequestPreview`、`loadCorrectionPunchOptions` は `requestsIdentity()` をコールバック時に検証し、旧社員の画面情報を新社員へ混在させない。
+- 既存クライアントVMテストにログイン変更の遅延応答確認を追加し、勤怠・工数・申請の回帰テストを通す。
+
+- `performLogout` のGAS完了ハンドラは現セッション/初期化済みユーザーの有無を再確認する。旧セッションのlogout応答は新ログイン画面へ `showLogin()` を適用しない。成功/失敗の両系統をVMで検証する（遅延ログアウト応答）。
