@@ -1,0 +1,42 @@
+<style>
+/* Adapted from the user-supplied FM-WORKS-Rotary-Loader-Production.zip.
+   Scoped to avoid clashes with existing FM WORKS screens. */
+.fmr-root{--fmr-ink:#345677;--fmr-subtle:#637e9e;--fmr-surface:#f3f8fd;--fmr-border:rgba(69,112,158,.17);--fmr-blue:#2a8cf0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;text-align:center;color:var(--fmr-ink);box-sizing:border-box;pointer-events:none;visibility:hidden;opacity:0;transition:opacity .16s ease,visibility 0s linear .16s}
+.fmr-root *,.fmr-root *::before,.fmr-root *::after{box-sizing:border-box}
+.fmr-root.fmr-visible{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .16s ease,visibility 0s}
+.fmr-root.fmr-page{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(circle at 50% 39%,#fbfdff 0%,#f2f7fe 55%,#ecf4fd 100%)}
+.fmr-root.fmr-region{position:absolute;inset:0;z-index:50;display:grid;place-items:center;padding:14px 12px;background:rgba(247,250,254,.96);border-radius:inherit}
+.fmr-root.fmr-inline{position:relative;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;padding:0;background:transparent;min-height:24px;min-width:24px}
+.fmr-content{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;width:min(100%,310px);min-width:0}
+.fmr-visual{position:relative;display:grid;place-items:center;width:172px;height:172px;filter:drop-shadow(0 9px 15px rgba(27,79,140,.1))}
+.fmr-region .fmr-visual{width:134px;height:134px}.fmr-inline .fmr-content{width:auto}.fmr-inline .fmr-visual{width:24px;height:24px;filter:none}
+.fmr-engine-svg{width:100%;height:100%;display:block;overflow:visible}
+.fmr-pad{fill:#83b7df;stroke:#f7fcff;stroke-width:.08}
+.fmr-message{margin:12px 0 0;font-size:15px;line-height:1.75;letter-spacing:.015em;font-weight:650;color:var(--fmr-ink);overflow-wrap:anywhere}
+.fmr-submessage{margin:3px 0 0;line-height:1.6;min-height:19px;font-size:11px;color:var(--fmr-subtle)}
+.fmr-progress{display:none;align-items:center;gap:9px;margin-top:13px;width:190px}
+.fmr-progress.fmr-has-progress{display:flex}
+.fmr-track{height:4px;background:#dce9f6;border-radius:999px;flex:1;overflow:hidden}
+.fmr-fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#5ebcff,#247ae4);transition:width .15s ease-out}
+.fmr-progress-value{width:40px;font-size:11px;font-variant-numeric:tabular-nums;color:#386c9e;font-weight:700}
+.fmr-slow{display:none;margin-top:8px;font-size:11px;color:#647e9b}.fmr-slow.fmr-show{display:block}
+.fmr-actions{display:flex;gap:9px;justify-content:center;margin-top:12px}
+.fmr-action{appearance:none;border:1px solid rgba(45,122,205,.26);background:#e9f3ff;border-radius:9px;padding:9px 16px;font:inherit;font-size:12px;font-weight:700;color:#2369b4;cursor:pointer}
+.fmr-action:hover{background:#dfedfc}.fmr-action:focus-visible{outline:3px solid #277add;outline-offset:3px}
+.fmr-error .fmr-message{color:#9c3e4a}.fmr-error .fmr-engine-svg{filter:saturate(.45)}.fmr-error .fmr-visual{opacity:.62}
+.fmr-success .fmr-submessage{color:#24835b}
+.fmr-inline .fmr-message,.fmr-inline .fmr-submessage,.fmr-inline .fmr-progress,.fmr-inline .fmr-slow,.fmr-inline .fmr-actions{display:none!important}
+.fmr-region.fmr-compact-region .fmr-visual{width:62px;height:62px}.fmr-region.fmr-compact-region .fmr-message{margin-top:5px;font-size:12px}
+html[data-theme="dark"] .fmr-root{--fmr-ink:#e1efff;--fmr-subtle:#afc2db}
+html[data-theme="dark"] .fmr-root.fmr-page{background:radial-gradient(circle at 50% 38%,#1a2d45 0%,#111e31 57%,#0b1624 100%)}
+html[data-theme="dark"] .fmr-root.fmr-region{background:rgba(15,26,42,.97)}
+html[data-theme="dark"] .fmr-slow{color:#abc2df}
+html[data-theme="dark"] .fmr-track{background:#304966}
+html[data-theme="dark"] .fmr-progress-value{color:#add5ff}
+html[data-theme="dark"] .fmr-error .fmr-message{color:#ffc3cc}
+html[data-theme="dark"] .fmr-action{background:#244366;color:#d4e9ff;border-color:#5e88b1}
+@media(max-width:520px){.fmr-page .fmr-visual{width:156px;height:156px}.fmr-page .fmr-message{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.fmr-root,.fmr-fill{transition:none}}
+.search-wrap>.fmr-root.fmr-inline{position:absolute;right:8px;top:9px;z-index:96;width:24px;height:24px;min-height:0;min-width:0}
+.search-wrap>.fmr-root.fmr-inline .fmr-visual{width:23px;height:23px}
+</style>

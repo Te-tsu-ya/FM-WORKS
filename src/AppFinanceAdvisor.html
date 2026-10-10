@@ -22,7 +22,7 @@ function financeLoadInsights(){
   const identity=financeIdentity(),year=financeUi.insightYear;
   financeUi.insightLoading=true;financeUi.insightError='';
   renderPageIfActive('finance');
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     if(identity!==financeIdentity()||year!==financeUi.insightYear)return;
     financeUi.insightLoading=false;financeUi.insights=data&&data.ok?data:null;
     financeUi.insightError=data&&!data.ok?data.message||'集計できませんでした。':'';
@@ -142,7 +142,7 @@ function financeLookupInvoice(){
   }
   if(target)target.textContent='国税庁の公表情報を照会中…';
   financeUi.invoiceIssuer=null;
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(id!==financeIdentity())return;
     const now=String((document.getElementById('fin-invoiceNo')||{}).value||'').replace(/[\s　-]/g,'').toUpperCase();
     if(now!==result.number)return;
@@ -191,7 +191,7 @@ function financeExplainTravel(){
   const id=financeIdentity(),result=document.getElementById('financeTravelExplanation');
   financeUi.travelEstimate=null;
   if(result)result.textContent='旅費規程と入力内容を照合しています…';
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     if(id!==financeIdentity()||!financeActiveForm||financeActiveForm.kind!=='travel')return;
     financeUi.travelEstimate=data;
     const target=document.getElementById('financeTravelExplanation');

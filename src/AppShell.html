@@ -107,7 +107,7 @@ function submitLogin(event){
   }
   if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
   setLoginBusy(true);
-  const runner=google.script.run.withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
+  const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
   if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport,remember);
   else runner.login(id,pin,clientInfo(),remember);
 }
@@ -151,6 +151,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='office'&&!(data.permissions&&data.permissions.officeWorkspace))state.page='home';
   if(state.page==='finance'&&!(data.permissions&&data.permissions.financeWorkspace))state.page='home';
   if(state.page==='financeEntry')state.page='requests';
+  if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.route(state.page);
   document.getElementById('loginShell').hidden=true;
   document.body.classList.remove('login-mode');
   document.getElementById('app').hidden=false;
@@ -188,7 +189,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   scheduleBackgroundTask(()=>loadNotifications(),2400);
   if(data.permissions&&data.permissions.adminConsole&&state.page==='admin'&&state.adminTab==='operation'){
     scheduleBackgroundTask(()=>{
-      google.script.run.withSuccessHandler(result=>{
+      (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
         if(result&&!result.skipped&&state.page==='admin'&&state.adminTab==='operation')loadMaintenance({force:true,silent:true});
       }).withFailureHandler(()=>{}).ensureDailyBackup(state.sessionToken);
     },6000);
@@ -202,7 +203,7 @@ function loadAuthenticatedApp(mustChangePin,initialData){
     return;
   }
   setLoading();
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     mountAuthenticatedApp(data,mustChangePin);
   }).withFailureHandler(err=>{
     clearLocalSession();
@@ -291,7 +292,7 @@ function initTopbarInteractions(){
 
 function performGlobalSearch(query){
   if(!state.sessionToken)return;
-  google.script.run
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
     .withSuccessHandler(renderSearchResults)
     .withFailureHandler(err=>handleApiError(err,'検索できませんでした'))
     .searchApp(state.sessionToken,query);
@@ -325,7 +326,7 @@ function openSearchResult(index){
 
 function loadNotifications(){
   if(!state.sessionToken)return;
-  google.script.run
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
     .withSuccessHandler(data=>{
       const dot=document.getElementById('notificationDot');
       if(dot)dot.hidden=!(data&&data.count);
@@ -388,7 +389,7 @@ function performLogout(){
     if(state.sessionToken||state.data)return;
     showLogin('ログアウトしました。');
   };
-  google.script.run.withSuccessHandler(completed).withFailureHandler(completed).logout(token);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(completed).withFailureHandler(completed).logout(token);
 }
 
 function openChangePinModal(force=false){
@@ -409,7 +410,7 @@ function openChangePinModal(force=false){
 function submitOwnPinChange(force){
   const current=document.getElementById('currentPin').value,newPin=document.getElementById('newPin').value,confirmPin=document.getElementById('newPinConfirm').value;
   if(newPin!==confirmPin){showToast('確認用PINが一致しません');return}
-  google.script.run.withSuccessHandler(()=>{closeModal();showToast('PINを変更しました')}).withFailureHandler(err=>{if(!handleApiError(err,'PINを変更できませんでした')&&force){} }).changeOwnPin(state.sessionToken,current,newPin);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{closeModal();showToast('PINを変更しました')}).withFailureHandler(err=>{if(!handleApiError(err,'PINを変更できませんでした')&&force){} }).changeOwnPin(state.sessionToken,current,newPin);
 }
 
 function openPinHelpModal(){
@@ -431,13 +432,13 @@ function openPinHelpModal(){
 function submitPinHelp(){
   const id=document.getElementById('helpEmployeeId').value.trim().toUpperCase();
   const note=document.getElementById('helpNote').value;
-  google.script.run.withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
     .withFailureHandler(()=>{closeModal();showToast('案内先の管理者へ直接ご連絡ください')})
     .requestPinHelp(id,note,clientInfo());
 }
 
 function loadPublicLoginConfig(message=''){
-  google.script.run.withSuccessHandler(config=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(config=>{
     state.publicConfig=config;
     showLogin(message);
   }).withFailureHandler(()=>showLogin(message||'FM WORKSの初期情報を読み込めませんでした。')).getPublicAuthConfig();
@@ -457,7 +458,7 @@ function bootstrap(){
 
   if(state.sessionToken){
     setLoading();
-    google.script.run.withSuccessHandler(result=>{
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
       loadAuthenticatedApp(!!result.mustChangePin,result&&result.initialData||null);
     }).withFailureHandler(()=>{
       clearLocalSession();

@@ -24,7 +24,7 @@ function loadFinanceOverview(options={}){
   financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
   if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
   const started=Date.now();
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
     if(revision!==financeUi.revOverview){
       financeUi.loading=false;financeUi.refreshNeeded=false;
@@ -65,7 +65,7 @@ function loadMyFinanceItems(options={}){
   const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
   financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
   if(!hadData&&!options.silent)renderPageIfActive('requests');
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
     if(revision!==financeUi.revMine){
       financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
@@ -400,7 +400,7 @@ function submitFinanceForm(){
   frozen.forEach(({el})=>{el.disabled=true;});
   const button=document.getElementById('financeSubmitButton');if(button){button.disabled=true;button.textContent='登録しています…';}
   const err=document.getElementById('financeFormError');if(err)err.hidden=true;
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true||!result.id){
@@ -879,7 +879,7 @@ function financeSubmitDecision(kind,id,decision){
   const identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='処理しています…';}
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
@@ -919,7 +919,7 @@ function financeSubmitSettlement(kind,id){
   const identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='確認を登録しています…';}
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');

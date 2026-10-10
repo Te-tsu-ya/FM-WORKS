@@ -20,7 +20,7 @@ function somuLoad(force){
  somuUi.loading=true;somuUi.error='';
  // Keep the previous cards and selected row visible during silent refresh.
  if(!hadData&&state.page==='office')renderPageIfActive('office');
- google.script.run.withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.loading=false;somuUi.loaded=true;somuUi.data=data;somuUi.loadedAt=Date.now();
   if(typeof console!=='undefined'&&console.info)
@@ -190,7 +190,7 @@ function somuSubmit(){
  somuUi.busy=true;
  const button=document.getElementById('somuSaveButton');if(button){button.disabled=true;button.textContent='保存中…';}
  const identity=somuSessionIdentity();
- google.script.run.withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;
   if(!result||result.ok!==true){somuFormFailure_('保存結果を確認できませんでした。');return;}
@@ -244,7 +244,7 @@ function somuCommitDecision(){
 }
 function somuAction_(api,args,message){
  const identity=somuSessionIdentity();somuUi.busy=true;
- google.script.run.withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;
   if(!result||result.ok!==true){showToast('処理結果を確認できませんでした');return;}

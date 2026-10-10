@@ -32,6 +32,8 @@ jobs:
         run: node scripts/test_finance_integration.mjs
       - name: Test employee estimates and formal issuance
         run: node scripts/test_quote_integration.mjs
+      - name: Test rotary loader lifecycle and all GAS entrypoints
+        run: node scripts/test_rotary_integration.mjs
       - name: Verify company document CRUD and access rules
         run: node scripts/test_company_documents.mjs
       - name: Verify company document navigation and editing
@@ -47,6 +49,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
           fc-cache -f
+      - name: Verify rotary loader animation and responsive overlays in Chromium
+        run: node scripts/test_rotary_viewport.mjs
+      - name: Upload rotary loader QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-rotary-loader-qa
+          path: artifacts/rotary-loader/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify company document desktop and mobile layouts in Chromium
         run: node scripts/test_company_documents_viewport.mjs
       - name: Upload company document layout screenshots
