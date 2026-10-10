@@ -628,7 +628,7 @@ const result=vm.runInContext(`
   const modalHost=document.getElementById('modalRoot');
   modalHost.innerHTML='<section data-finance-modal="true"></section>';
   modalHost.querySelector=financeModal.querySelector;
-  const originalCloseModal=closeModal;
+  const originalCloseModalEsc=closeModal;
   let modalEscCloses=0;
   closeModal=()=>{modalEscCloses++;};
   financeUi.busy=true;
@@ -639,7 +639,7 @@ const result=vm.runInContext(`
   document.financeKeydownListener({key:'Escape',target:document.body,preventDefault(){}});
   expect('Escape closes finance confirmation after server finishes',
     modalEscCloses===1);
-  closeModal=originalCloseModal;
+  closeModal=originalCloseModalEsc;
   modalHost.innerHTML='';
   modalHost.querySelector=()=>null;
   const safeOffice=officePage();
