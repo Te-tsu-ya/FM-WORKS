@@ -75,6 +75,27 @@ assert.throws(()=>call('createSomuLoan','token',{assetId,borrower:'架空社員'
 const secondRequest=call('createSomuPurchase','token',{name:'架空文具',quantity:2,reason:'補充',requestKey:'somu-test-key-007'});
 employee={role:'USER',employeeId:'FM0088',name:'架空総務担当',department:'総務'};
 assert.throws(()=>call('advanceSomuPurchase','token',secondRequest.record.id,'APPROVE',''),/管理者のみ/);
+// A returned purchasing request may only be corrected and resubmitted by its creator.
+employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者A',department:'総務'};
+assert.equal(call('advanceSomuPurchase','token',secondRequest.record.id,'RETURN','数量と理由を確認').record.status,'差戻し');
+assert.throws(()=>call('resubmitSomuPurchase','token',secondRequest.record.id,
+  {name:'不正な代理申請',quantity:3,reason:'代理',requestKey:'somu-test-key-008'}),/他の社員/);
+employee={role:'ADMIN',employeeId:'FM0002',name:'架空管理者B',department:'総務'};
+const corrected={name:'架空文具 改訂',quantity:3,estimatedPrice:1100,reason:'必要量の明記',requestKey:'somu-test-key-008'};
+const resubmitted=call('resubmitSomuPurchase','token',secondRequest.record.id,corrected);
+assert.equal(resubmitted.record.status,'申請中');
+assert.equal(resubmitted.record.quantity,3);
+assert.equal(resubmitted.record.approvedBy,'');
+assert.equal(call('resubmitSomuPurchase','token',secondRequest.record.id,corrected).duplicate,true);
+assert.match(call('somuFind_','purchase',secondRequest.record.id).item.note,/数量と理由を確認/);
+employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者A',department:'総務'};
+assert.equal(call('advanceSomuPurchase','token',secondRequest.record.id,'APPROVE','').record.status,'承認済');
+employee={role:'ADMIN',employeeId:'FM0002',name:'架空管理者B',department:'総務'};
+assert.throws(()=>call('resubmitSomuPurchase','token',secondRequest.record.id,
+  {name:'上書き拒否',quantity:5,reason:'不正',requestKey:'somu-test-key-009'}),/差戻された/);
+assert.throws(()=>call('createSomuLoan','token',{
+  assetId,borrower:'別社員',quantity:1,loanDate:'2026-10-10',dueDate:'2026-10-20',
+  requestKey:'somu-test-key-001'}),/送信識別子の重複/);
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);

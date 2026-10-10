@@ -1874,3 +1874,7 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `AppFinance.html`: `financeTrackAuditResult_`が`auditRecorded===false`のみを検出し、保存済みの事実と監査未確認の事実を併記して、対象IDつきの常設警告を表示。読み込み時のエラー／キャッシュ更新と独立した画面状態に保存する。ログアウトでは`resetFinanceUi()`が警告を破棄する。
 - `AppFinance.html`と`AppShell.html`: 通信中の経理モーダルを`data-finance-modal`で識別し、共通Esc処理が経理処理中だけ閉じる動作を止める。背景クリックと閉じる／キャンセルボタンの既存`financeCloseModalIfIdle()`と同じ原則に合わせる。
 - 自動テスト：成功／監査失敗をメモリ上のSheetsで再現し、保存済みデータと監査の結果が独立して返ること、警告が継続表示されること、共通Escキー操作が処理中のみ禁止になることを検証する。実本番DBへの書込は行わない。
+
+- v0.18.1: Somu.gs に resubmitSomuPurchase を追加。ScriptLockの中で requesterId == 操作者を確認し、差戻し状態だけ新しいrequestKeyで更新。既存の差戻し理由はnoteとして残し、更新前後の状態を監査ログへ記録する。誤った本人以外の同一requestKey再使用も拒否する。
+- AppSomu.html は差戻し本人に「修正して再申請」を表示し、既存モーダルの入力を再利用する。再申請は (sessionToken,id,payload) API契約、通常新規申請は従来どおり (sessionToken,payload)。DB_VERSIONと既存データ形式は変更しない。
+- 総務DB未移行時の管理者用ボタンは setAdminTab('operation') を通じて既存のバックアップ付きマイグレーションUIへ移動する。画面のローカル検索/ソートはGASへ追加リクエストしない。

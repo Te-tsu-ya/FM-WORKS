@@ -181,7 +181,11 @@ function createSomuLoan(token,payload){
   const purpose=somuText_(p.purpose,'使用目的',300,false);
   return withScriptLock_(function(){
     const duplicate=somuByRequestKey_('loan',key);
-    if(duplicate)return {ok:true,duplicate:true,record:somuPublic_('loan',duplicate)};
+    if(duplicate){
+      if(String(duplicate.creatorId)!==String(actor.employeeId))
+        throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+      return {ok:true,duplicate:true,record:somuPublic_('loan',duplicate)};
+    }
     const asset=somuFind_('asset',assetId).item;
     if(asset.status==='廃止')throw new Error('廃止した備品は貸し出せません。');
     const open=somuOpenLoans_(assetId).reduce((sum,item)=>sum+Number(item.quantity||0),0);
@@ -206,9 +210,9 @@ function returnSomuLoan(token,id){
     return {ok:true,record:somuPublic_('loan',item)};
   },20000);
 }
-function createSomuPurchase(token,payload){
-  const actor=somuOperator_(token),p=payload||{},key=somuRequestKey_(p.requestKey);
-  const fields={
+function somuPurchaseFields_(p){
+  p=p||{};
+  return {
     name:somuText_(p.name,'購入品目',160,true),
     quantity:somuCount_(p.quantity,'希望数量',1,99999),
     estimatedPrice:somuCount_(p.estimatedPrice||'0','概算単価',0,9999999),
@@ -217,9 +221,17 @@ function createSomuPurchase(token,payload){
     assetId:somuText_(p.assetId,'対象備品ID',80,false),
     note:somuText_(p.note,'備考',500,false)
   };
+}
+function createSomuPurchase(token,payload){
+  const actor=somuOperator_(token),p=payload||{},key=somuRequestKey_(p.requestKey);
+  const fields=somuPurchaseFields_(p);
   return withScriptLock_(function(){
     const duplicate=somuByRequestKey_('purchase',key);
-    if(duplicate)return {ok:true,duplicate:true,record:somuPublic_('purchase',duplicate)};
+    if(duplicate){
+      if(String(duplicate.requesterId)!==String(actor.employeeId))
+        throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+      return {ok:true,duplicate:true,record:somuPublic_('purchase',duplicate)};
+    }
     if(fields.assetId)somuFind_('asset',fields.assetId);
     const now=somuNow_(),item=Object.assign({},fields,{
       id:createId_('PUR'),requesterId:actor.employeeId,requesterName:actor.name,
@@ -229,6 +241,38 @@ function createSomuPurchase(token,payload){
     somuNew_('purchase',item);
     somuAudit_(actor,'購買申請','購買',item.id,'',{name:item.name,quantity:item.quantity,status:item.status});
     return {ok:true,record:somuPublic_('purchase',item)};
+  },20000);
+}
+/** Only the original applicant can correct and resubmit a returned purchase.
+ * Approved, ordered and received records are immutable from this endpoint.
+ */
+function resubmitSomuPurchase(token,id,payload){
+  const actor=somuOperator_(token),p=payload||{},key=somuRequestKey_(p.requestKey),fields=somuPurchaseFields_(p);
+  return withScriptLock_(function(){
+    const target=somuFind_('purchase',id),old=target.item;
+    if(String(old.requesterId)!==String(actor.employeeId))
+      throw new Error('他の社員の購買申請は再申請できません。');
+    if(old.status==='申請中'&&String(old.requestKey)===key)
+      return {ok:true,duplicate:true,record:somuPublic_('purchase',old)};
+    if(old.status!=='差戻し')throw new Error('差戻された購買申請だけを再申請できます。');
+    if(String(old.requestKey)===key)
+      throw new Error('再申請には新しい送信識別子が必要です。');
+    const collision=somuByRequestKey_('purchase',key);
+    if(collision&&String(collision.id)!==String(old.id))
+      throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+    if(fields.assetId)somuFind_('asset',fields.assetId);
+    const now=somuNow_();
+    const item=Object.assign({},old,fields,{
+      status:'申請中',approvedBy:'',approvedAt:'',orderedOn:'',receivedOn:'',
+      updatedAt:now,requestKey:key,
+      // Preserve the original return reason in the audit trail / note.
+      note:String(old.note||'')
+    });
+    somuWrite_('purchase',target,item);
+    somuAudit_(actor,'購買再申請','購買',id,
+      {status:old.status,name:old.name,quantity:old.quantity},
+      {status:item.status,name:item.name,quantity:item.quantity});
+    return {ok:true,duplicate:false,record:somuPublic_('purchase',item)};
   },20000);
 }
 function advanceSomuPurchase(token,id,action,reason){
@@ -269,7 +313,11 @@ function saveSomuDocument(token,payload){
   return withScriptLock_(function(){
     if(!id){
       const duplicate=somuByRequestKey_('document',key);
-      if(duplicate)return {ok:true,duplicate:true,record:somuPublic_('document',duplicate)};
+      if(duplicate){
+        if(String(duplicate.creatorId)!==String(actor.employeeId))
+          throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+        return {ok:true,duplicate:true,record:somuPublic_('document',duplicate)};
+      }
     }
     const target=id?somuFind_('document',id):null,old=target&&target.item;
     if(old&&String(old.updatedAt)!==String(p.updatedAt))throw new Error('別の担当者が書類を更新しました。再読込してください。');

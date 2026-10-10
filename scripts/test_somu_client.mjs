@@ -74,6 +74,24 @@ success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApp
 evaluate("somuUi.data={setupRequired:false,assets:[{id:'AS-1',code:'FA-001',name:'架空PC',status:'利用中',quantity:3,minimum:1},{id:'AS-2',code:'FA-002',name:'架空モニター',status:'利用中',quantity:1,minimum:0}],loans:[],purchases:[],documents:[]}");
 evaluate("somuOpenForm('loan','','AS-2')");
 assert.match(modal.innerHTML,/value="AS-2" selected/,'chosen asset must remain selected');
+evaluate(`somuUi.data.purchases=[{id:'PUR-001',name:'架空文具',quantity:1,estimatedPrice:500,reason:'補充',
+  requesterId:'FM0001',requesterName:'架空社員',status:'差戻し',updatedAt:'2026-10-10 10:00:00',note:'差戻し理由: 数量を確認'}]`);
+const returnedMarkup=evaluate("somuDetailMarkup_('purchases',somuData().purchases[0])");
+assert.match(returnedMarkup,/修正して再申請/);
+evaluate("somuOpenForm('purchase','PUR-001')");
+assert.match(modal.innerHTML,/差戻し内容を修正/);
+get('somu-name').value='架空文具（改訂）';
+get('somu-quantity').value='2';
+get('somu-estimatedPrice').value='600';
+get('somu-reason').value='必要数量を修正';
+evaluate("somuSubmit()");
+call=calls.at(-1);
+assert.equal(call.api,'resubmitSomuPurchase');
+assert.equal(call.args[0],'SYNTHETIC_TOKEN');
+assert.equal(call.args[1],'PUR-001');
+assert.equal(call.args[2].quantity,'2');
+success({ok:true,record:{id:'PUR-001',status:'申請中'}});
+success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:true});
 evaluate("somuDemo(true)");
 const count=calls.length;
 evaluate("somuOpenForm('asset')");
