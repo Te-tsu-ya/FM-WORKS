@@ -6,7 +6,10 @@ const SOMU_MODELS=Object.freeze({
   asset:{sheet:'総務備品',keys:['id','code','name','category','maker','model','location','quantity','minimum','status','note','createdAt','updatedAt','updatedBy','revision']},
   loan:{sheet:'総務貸出',keys:['id','assetId','assetCode','borrower','quantity','loanDate','dueDate','returnedAt','status','purpose','creatorId','createdAt','updatedAt','requestKey']},
   purchase:{sheet:'総務購買',keys:['id','name','quantity','estimatedPrice','neededOn','reason','requesterId','requesterName','status','assetId','orderedOn','receivedOn','note','createdAt','updatedAt','requestKey','approvedBy','approvedAt']},
-  document:{sheet:'総務書類',keys:['id','name','category','location','url','expiresOn','note','status','creatorId','createdAt','updatedAt','requestKey']}
+  document:{sheet:'総務書類',keys:['id','name','category','location','url','expiresOn','note','status','creatorId','createdAt','updatedAt','requestKey']},
+  contract:{sheet:'総務契約',keys:['id','name','category','vendor','contractNo','startedOn','expiresOn','noticeOn','renewal','annualYen','owner','url','status','note','createdAt','updatedAt','createdBy','updatedBy','revision','requestKey']},
+  facility:{sheet:'総務施設設備',keys:['id','code','name','type','location','owner','vendor','lastCheckedOn','nextCheckOn','status','note','createdAt','updatedAt','createdBy','updatedBy','revision','requestKey']},
+  ticket:{sheet:'総務依頼',keys:['id','subject','category','priority','requesterName','assignee','dueOn','description','status','resolvedOn','note','createdAt','updatedAt','createdBy','updatedBy','revision','requestKey']}
 });
 function somuOperator_(token){
   const employee=requireSession_(token).employee;
@@ -51,6 +54,7 @@ function somuSnapshotCacheKey_(){
 }
 function somuInvalidateSnapshot_(){
   if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
+  if(typeof somuGrowthInvalidateCache_==='function')somuGrowthInvalidateCache_();
 }
 function somuGetCachedSnapshot_(){
   if(typeof cacheJsonGet_!=='function')return null;
@@ -70,7 +74,7 @@ function somuPutCachedSnapshot_(snapshot){
 }
 function somuStorageStatus_(){
   const db=getDb_(),missing=[];
-  Object.keys(SOMU_MODELS).forEach(kind=>{
+  ['asset','loan','purchase','document'].forEach(kind=>{
     const m=SOMU_MODELS[kind],expected=DB_SCHEMA_SPECS[m.sheet],sheet=db.getSheetByName(m.sheet);
     if(!expected||!sheet){missing.push(m.sheet);return;}
     if(schemaHeaderIssues_(sheet.getRange(1,1,1,expected.length).getDisplayValues()[0],expected).length)
@@ -89,7 +93,7 @@ function somuSheet_(kind){
 function somuRecord_(kind,row){
   const o={};somuModel_(kind).keys.forEach((key,i)=>{o[key]=row[i]==null?'':row[i];});
   // Japanese Sheets may display date cells with slashes; keep ISO for filters and deadlines.
-  ['loanDate','dueDate','returnedAt','neededOn','orderedOn','receivedOn','expiresOn'].forEach(key=>{
+  ['loanDate','dueDate','returnedAt','neededOn','orderedOn','receivedOn','expiresOn','startedOn','noticeOn','lastCheckedOn','nextCheckOn','resolvedOn'].forEach(key=>{
     if(!Object.prototype.hasOwnProperty.call(o,key))return;
     const raw=String(o[key]||'').trim();
     const match=raw.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/);

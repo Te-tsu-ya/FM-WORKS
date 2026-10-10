@@ -1,0 +1,49 @@
+<style>
+/* FM WORKS General Affairs v0.19: deliberate operational hierarchy, not a separate brand */
+.somu-tab-groups{display:flex;align-items:stretch;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 0 2px;scrollbar-width:thin}
+.somu-nav-section{display:flex;align-items:center;gap:6px;white-space:nowrap;flex:none;padding:0 9px 0 0;border-right:1px solid var(--line)}
+.somu-nav-section:last-child{border-right:0}
+.somu-nav-caption{color:var(--muted);font-size:10px;letter-spacing:.02em;font-weight:700}
+.somu-nav-actions{display:flex;align-items:center;gap:2px}
+.somu-tab-groups button{font-size:12px;padding:10px 10px;min-height:44px}
+.somu-eyebrow{font-size:10px;letter-spacing:.10em;color:var(--muted);font-weight:750;line-height:1.2;margin-bottom:7px}
+.somu-command-stats{gap:10px}
+.somu-command-stats .somu-kpi{min-height:87px;padding:10px 13px;border-top:2px solid var(--line)}
+.somu-command-stats .somu-kpi.danger{border-top-color:#d22d45}
+.somu-command-stats .somu-kpi.warning{border-top-color:#ad7100}
+.somu-command-stats .somu-kpi strong{font-size:24px}
+.somu-hub-grid{grid-template-columns:minmax(0,1.42fr) minmax(285px,.93fr);gap:12px}
+.somu-hub-grid .somu-panel{min-width:0}
+.somu-hub-grid .somu-panel-head h2{font-size:17px}
+.somu-hub-grid .somu-panel{padding:14px 16px}
+.somu-hub-grid .somu-panel-head{margin-bottom:8px}
+.somu-focus-row{min-height:44px;padding:6px 10px}
+.somu-inline-note{display:block;margin-top:12px;font-size:11px;color:var(--muted)}
+.somu-hub-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.somu-hub-shortcuts button{position:relative;min-height:60px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;padding:8px 28px 8px 12px;flex-wrap:nowrap}
+.somu-hub-shortcuts strong{font-size:13px}
+.somu-hub-shortcuts button small{color:var(--muted);font-size:11px}
+.somu-hub-shortcuts button span{display:block;position:absolute;top:50%;right:10px;transform:translateY(-50%);width:auto;font-size:0;color:var(--blue)}
+.somu-hub-shortcuts button span::after{content:'›';font-size:19px;font-weight:700}
+.somu-library-link{background:none;border:0;border-top:1px solid var(--line);width:100%;padding:13px 4px 2px;text-align:left;color:var(--blue);font-size:12px;font-weight:750;min-height:44px;margin-top:13px}
+.somu-renewals-panel{padding:15px 19px}
+.somu-renewals-panel .somu-panel-head{margin-bottom:7px}
+.somu-renewals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.somu-renewal-row{background:var(--surface2);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:8px;padding:12px;text-align:left;color:var(--text);min-height:78px}
+.somu-renewal-row strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.somu-renewal-row small{display:block;font-size:11px;color:var(--muted);padding-top:4px}
+.somu-renewal-row>span:last-child{font-size:11px;font-weight:700;color:var(--blue)}
+.somu-nothing{font-size:12px;color:var(--muted);margin:8px 0}
+.somu-growth-records .somu-panel-head{align-items:flex-start}
+.somu-growth-records .somu-panel-head p{max-width:38ch;line-height:1.4}
+.somu-growth-records .somu-list-item{min-height:88px}
+.somu-growth-setup{display:flex;flex-direction:column;align-items:center;gap:10px}
+.somu-growth-setup p{max-width:65ch}
+.somu-workspace button:hover:not(:disabled){transition:border-color .12s ease,background-color .12s ease}
+.somu-workspace .somu-growth-item:focus-visible,.somu-workspace .somu-library-link:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+@media(max-width:1160px){.somu-hub-grid{grid-template-columns:1fr}.somu-nav-caption{display:none}.somu-nav-section{padding-right:6px}}
+@media(max-width:760px){.somu-command-stats .somu-kpi{min-height:92px;padding:11px 12px}.somu-command-stats .somu-kpi strong{font-size:23px}.somu-hub-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.somu-renewals{grid-template-columns:1fr}.somu-renewal-row{min-height:65px}.somu-renewals-panel{padding:13px}.somu-tab-groups button{padding:10px 12px}}
+@media(max-width:380px){.somu-hub-shortcuts{grid-template-columns:1fr 1fr}.somu-hub-shortcuts button{padding:9px 10px}}
+@media(prefers-reduced-motion:reduce){.somu-workspace button:hover:not(:disabled){transition:none}}
+</style>
