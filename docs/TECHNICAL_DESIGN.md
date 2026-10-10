@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.20.3
+**文書版:** 0.21.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,9 +65,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.20.3`
+`APP.version = 0.21.0`
 
-DBスキーマ: 16。  
+DBスキーマ: 17。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -2137,3 +2137,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 案件詳細の実績と一覧の実績を同じ一意一致規則で集計する。
 - 一覧の警告に保留件数を表示。DB、古い工数、名前、アクセス権限を変更しない。
 - `scripts/test_project_hub.mjs` は競合する架空の旧名称で一覧・詳細・警告をテスト。
+
+## v0.21.0 年間資金繰りの保存・計算
+- DB v17 追加シートは「資金繰り年間」。1行＝決算年度、期首現預金残高、12か月分のJSON、改訂番号、日時、更新者、送信識別子。既存台帳は変更せず、認証済ADMINによるバックアップ付きSchema移行で追加する。
+- CashFlow.gsの公開API getCashFlowYear / saveCashFlowYear はいずれも requireAdminSession_ を先頭に配置。financeWorkspaceとは独立して機密アクセスを制御。
+- 月別のplanIn/planOut/actualIn/actualOut はnull=未入力、0=入力済0円。月のどちらか一方が入力された場合、もう一方は0円で計算。月の両方が未入力の場合、以降の残高は不明とする。
+- 計画・実績・実績優先見込みを期首から累積し、最初の赤字見込み月を検出する。別期の期首残高は自動入力しない。
+- 1年分を単一シート行に保存、ScriptLock・改訂番号確認・送信識別子の再送厳密照合・書込み後の読み戻し・監査エラー通知を実施。テスト scripts/test_cashflow.mjs。

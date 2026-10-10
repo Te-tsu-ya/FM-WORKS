@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.20.3',
+  version: '0.21.0',
   locale: 'ja-JP'
 });
 
@@ -588,6 +588,7 @@ function getPermissions_(employee) {
     quoteWorkspace: true, // Every authenticated employee may create, save, and issue own estimates.
     officeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
     financeWorkspace: role === 'ADMIN' || financeDepartmentAllowed_(employee && employee.department),
+    cashFlowWorkspace: role === 'ADMIN',
     employeeAdmin: role === 'ADMIN',
     requestApprove: role === 'ADMIN' || role === 'MANAGER',
     monthlyTeamView: role === 'ADMIN' || role === 'MANAGER',
