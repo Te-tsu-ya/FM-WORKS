@@ -44,6 +44,8 @@ jobs:
         run: node scripts/test_company_documents.mjs
       - name: Verify general affairs storage and permissions
         run: node scripts/test_somu_integration.mjs
+      - name: Verify general affairs client actions
+        run: node scripts/test_somu_client.mjs
       - name: Test light and dark modal dialog contrast before publication
         run: node scripts/test_modal_theme.mjs
       - name: Install clasp

@@ -36,6 +36,8 @@ jobs:
         run: node scripts/test_company_documents.mjs
       - name: Verify general affairs storage and permissions
         run: node scripts/test_somu_integration.mjs
+      - name: Verify general affairs client actions
+        run: node scripts/test_somu_client.mjs
       - name: Verify general affairs responsive interface in Chromium
         run: node scripts/test_somu_viewport.mjs
       - name: Upload general affairs QA screenshots
