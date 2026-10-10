@@ -85,7 +85,7 @@ assert.throws(()=>save('E','task',{...updateTask,progress:80}),/別の人/);
 assert.equal(ctx.projectHubMetrics_({status:'進行中'},{},[],[], '2026-10-10').progress,null);
 const completed=save('M','task',{...task,title:'誤登録',progress:100,status:'完了',requestKey:key()});save('M','task',{...task,id:completed.id,title:'誤登録',progress:100,status:'非表示',revision:1,requestKey:key()});assert.ok(!ctx.getProjectHubDetail('A','PRJ-001').tasks.some(t=>t.id===completed.id),'completed erroneous task can be hidden');
 const keep=sheets['プロジェクト資料'];delete sheets['プロジェクト資料'];assert.equal(ctx.getProjectHubWorkspace('E').setupRequired,true);assert.equal(ctx.getProjectHubWorkspace('E').projects[0].actualMinutes,60);assert.throws(()=>save('A','plan',plan),/DB更新/);sheets['プロジェクト資料']=keep;
-keep.rows[0][0]='不一致';assert.throws(()=>ctx.getProjectHubWorkspace('E'),/列構成/);keep.rows[0][0]=specs['プロジェクト資料'][0];
+const originalProjectResourceHeader=keep.rows[0][0];keep.rows[0][0]='不一致';assert.throws(()=>ctx.getProjectHubWorkspace('E'),/列構成/);keep.rows[0][0]=originalProjectResourceHeader;
 
 // Large workspace regression: index projects, aliases, tasks and worklogs without changing totals.
 const preservedProjectRows=sheets['プロジェクト'].rows.slice();
