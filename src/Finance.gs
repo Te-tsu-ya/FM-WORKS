@@ -18,9 +18,12 @@ function requireFinanceOperator_(token){
   return employee;
 }
 function financeText_(value,label,limit,required){
-  const s=safeSheetText_(value,limit||200);
-  if(required&&!s)throw new Error(label+'を入力してください。');
-  return s;
+  const raw=String(value==null?'':value).trim();
+  const maximum=Number(limit||200);
+  if(required&&!raw)throw new Error(label+'を入力してください。');
+  // Do not silently truncate financial records. Reject overlong values before any write.
+  if(raw.length>maximum)throw new Error(label+'は'+maximum+'文字以内で入力してください。');
+  return safeSheetText_(raw,maximum);
 }
 function financeAmount_(value,label,required){
   const raw=String(value==null?'':value).trim();
@@ -123,13 +126,43 @@ function financeRows_(kind,employeeId,limit,verified){
   return rows.slice(0,Math.max(1,Math.min(200,Number(limit)||80)));
 }
 function financeFindRow_(kind,id){
-  const sheet=financeSheet_(kind),last=sheet.getLastRow(),cols=FINANCE_MODELS[kind].keys.length;
-  if(last<2)throw new Error('対象の申請が見つかりません。');
-  const values=sheet.getRange(2,1,last-1,cols).getValues();
-  const idx=values.findIndex(r=>String(r[0])===String(id));
-  if(idx<0)throw new Error('対象の申請が見つかりません。');
-  return {sheet:sheet,rowNumber:idx+2,values:values[idx],item:financeObject_(kind,values[idx])};
+  const sheet=financeSheet_(kind),cols=FINANCE_MODELS[kind].keys.length;
+  // Reuse the verified row-number hint used by authentication. A hint never
+  // grants access or changes a status: the row is freshly read and ID checked.
+  const found=findVerifiedSheetRow_(sheet,1,cols,String(id||''),'finance-'+kind,false);
+  if(!found)throw new Error('対象の申請が見つかりません。');
+  return {sheet:sheet,rowNumber:found.rowNumber,values:found.row,item:financeObject_(kind,found.row)};
 }
+
+// Retry safety: the same request key may only confirm the *same* submitted contents.
+// Otherwise an earlier successful save could be incorrectly presented as a new edit.
+const FINANCE_INPUT_FIELDS=Object.freeze({
+  expense:['usedOn','vendor','item','category','amount','purpose','paymentMethod','receiptRef'],
+  travel:['startsOn','startsAt','endsOn','endsAt','destination','purpose','outcome','distanceCategory',
+    'spentAmount','lodgingArea','nights','timeAllowance','dailyCategory','requestedAllowance','note'],
+  receipt:['usedOn','category','vendor','invoiceNo','item','amount','note','payer','paymentMethod','paid','receiptRef']
+});
+function financeSameSubmittedRecord_(kind,stored,submitted){
+  const numbers=['amount','spentAmount','nights','requestedAllowance'];
+  const dates=['usedOn','startsOn','endsOn'];
+  return FINANCE_INPUT_FIELDS[kind].every(field=>{
+    let oldValue=String(stored[field]==null?'':stored[field]).trim();
+    let newValue=String(submitted[field]==null?'':submitted[field]).trim();
+    if(numbers.includes(field)){
+      const amount=v=>v===''?0:Number(v.replace(/[¥￥,\s円]/g,''));
+      return Number.isFinite(amount(oldValue))&&amount(oldValue)===amount(newValue);
+    }
+    if(dates.includes(field)){
+      const dateString=value=>value instanceof Date?
+        Utilities.formatDate(value,DB.timeZone,'yyyy-MM-dd'):financeNormalizeDateText_(value);
+      return dateString(stored[field])===dateString(submitted[field]);
+    }
+    if(/^'[=+\-@]/.test(oldValue))oldValue=oldValue.slice(1);
+    if(/^'[=+\-@]/.test(newValue))newValue=newValue.slice(1);
+    return oldValue===newValue;
+  });
+}
+
 function financeWriteNew_(kind,record,employee){
   const key=financeRequestKey_(record.requestKey);
   return withScriptLock_(function(){
@@ -142,6 +175,8 @@ function financeWriteNew_(kind,record,employee){
       if(match!==-1){
         const existing=financeObject_(kind,sheet.getRange(match+2,1,1,model.keys.length).getDisplayValues()[0]);
         if(String(existing.employeeId||existing.creatorId)!==String(employee.employeeId))throw new Error('送信識別子が重複しています。');
+        if(!financeSameSubmittedRecord_(kind,existing,record))
+          throw new Error('前回と異なる内容で再送されています。登録履歴を確認してから新しい申請を作成してください。');
         return {ok:true,id:existing.id,duplicate:true,record:financeConfirmedRecord_(existing)};
       }
     }
@@ -248,11 +283,14 @@ function financeReceiptCrossCheck_(expenses,receipts,visibleExpenses){
     const key=String(r.receiptRef||'').trim().toUpperCase();
     if(key)(byReference[key]||(byReference[key]=[])).push(r);
   });
-  const claimSums={};
+  const claimSums={},claimCounts={};
   (expenses||[]).filter(x=>x.status!=='差戻し').forEach(x=>{
     const key=String(x.receiptRef||'').trim().toUpperCase();
     const n=financeAmountDisplay_(x.amount);
-    if(key&&n!==null)claimSums[key]=(claimSums[key]||0)+n;
+    if(key){
+      claimCounts[key]=(claimCounts[key]||0)+1;
+      if(n!==null)claimSums[key]=(claimSums[key]||0)+n;
+    }
   });
   const matches={};
   (visibleExpenses||expenses||[]).forEach(x=>{
@@ -266,8 +304,12 @@ function financeReceiptCrossCheck_(expenses,receipts,visibleExpenses){
       matches[x.id]={status:'UNVERIFIED',label:'金額形式の確認が必要'};return;
     }
     if(matchesRows.length!==1){
-      matches[x.id]={status:'MULTIPLE',label:'同じ証憑番号が複数件（要確認）',
+      matches[x.id]={status:'MULTIPLE',label:'同じ証憑番号の経費記録が複数件（要確認）',
         recordedAmount:amounts.reduce((a,b)=>a+b,0),claimAmount:declared};return;
+    }
+    if((claimCounts[ref]||0)>1){
+      matches[x.id]={status:'MULTIPLE_CLAIMS',label:'同じ証憑番号の申請が複数件（重複精算に注意）',
+        recordedAmount:amounts[0],claimAmount:declared};return;
     }
     const amount=amounts[0];
     matches[x.id]={status:amount===declared?'MATCHED':'AMOUNT_MISMATCH',
@@ -286,6 +328,7 @@ function financeOutstandingFirst_(rows,max){
   return ordered.slice(0,max);
 }
 function getFinanceOverview(sessionToken,params){
+  const startedAt=Date.now();
   requireFinanceOperator_(sessionToken);
   const status=financeStorageStatus_();
   if(!status.ready)return {setupRequired:true,expenses:[],travels:[],receipts:[],message:'DB初期設定が必要です。管理者はバックアップ後にDB更新を実施してください。'};
@@ -298,6 +341,7 @@ function getFinanceOverview(sessionToken,params){
   const receipts=allReceipts.slice(0,max);
   return {
     setupRequired:false,expenses:expenses,travels:travels,receipts:receipts,
+    performance:{serverMs:Math.max(0,Date.now()-startedAt)},
     receiptMatches:financeReceiptCrossCheck_(allExpenses,allReceipts,expenses),
     totals:{
       expense:allExpenses.length,travel:allTravels.length,receipt:allReceipts.length,
@@ -321,8 +365,11 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
     const target=financeFindRow_(kind,id),item=target.item,model=FINANCE_MODELS[kind];
     if(String(item.employeeId)!==String(employee.employeeId))
       throw new Error('他の社員の申請は修正できません。');
-    if(item.status==='承認待ち'&&item.requestKey===key)
+    if(item.status==='承認待ち'&&item.requestKey===key){
+      if(!financeSameSubmittedRecord_(kind,item,values))
+        throw new Error('前回と異なる内容で再送されています。申請履歴を確認してください。');
       return {ok:true,id:item.id,status:item.status,duplicate:true,record:financeConfirmedRecord_(item)};
+    }
     if(item.status!=='差戻し')throw new Error('差戻された申請だけを修正・再申請できます。');
     if(item.requestKey===key)throw new Error('再申請には新しい送信識別子が必要です。');
     const now=financeNow_();

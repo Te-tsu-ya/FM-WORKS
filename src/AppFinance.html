@@ -2,11 +2,11 @@
 /* FM WORKS v0.13.0 finance UI. No confidential data in persistent browser storage. */
 const FINANCE_READ_TTL=30000;
 let financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 function resetFinanceUi(){
   financeActiveForm=null;
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 }
 function financeIdentity(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
@@ -20,12 +20,16 @@ function loadFinanceOverview(options={}){
   if(!options.force&&financeUi.overview&&financeUi.identity===financeIdentity()&&
     now-financeUi.at<FINANCE_READ_TTL)return;
   if(financeUi.loading){if(options.force)financeUi.refreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.overview;
+  const identity=financeIdentity(),hadData=!!financeUi.overview,revision=financeUi.revOverview;
   financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
   if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
   const started=Date.now();
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview){
+      financeUi.loading=false;financeUi.refreshNeeded=false;
+      loadFinanceOverview({force:true,silent:true});return;
+    }
     financeUi.lastLatencyMs=Date.now()-started;
     if(!result||!Array.isArray(result.expenses)||!Array.isArray(result.travels)||!Array.isArray(result.receipts)){
       financeUi.loading=false;
@@ -40,6 +44,10 @@ function loadFinanceOverview(options={}){
     renderPageIfActive('office');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview){
+      financeUi.loading=false;financeUi.refreshNeeded=false;
+      loadFinanceOverview({force:true,silent:true});return;
+    }
     financeUi.lastLatencyMs=Date.now()-started;
     financeUi.error=cleanApiErrorMessage(error,'経理情報を取得できませんでした。');
     financeUi.loading=false;
@@ -54,11 +62,15 @@ function loadMyFinanceItems(options={}){
   if(!options.force&&financeUi.mine&&financeUi.identity===financeIdentity()&&
     now-financeUi.mineAt<FINANCE_READ_TTL)return;
   if(financeUi.ownLoading){if(options.force)financeUi.ownRefreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now();
+  const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
   financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
   if(!hadData&&!options.silent)renderPageIfActive('requests');
   google.script.run.withSuccessHandler(result=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine){
+      financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
+      loadMyFinanceItems({force:true,silent:true});return;
+    }
     financeUi.mineLatencyMs=Date.now()-started;
     if(!result||!Array.isArray(result.expenses)||!Array.isArray(result.travels)){
       financeUi.ownError='申請履歴の形式が不正です。';financeUi.ownLoading=false;
@@ -69,6 +81,10 @@ function loadMyFinanceItems(options={}){
     renderPageIfActive('requests');
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine){
+      financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
+      loadMyFinanceItems({force:true,silent:true});return;
+    }
     financeUi.mineLatencyMs=Date.now()-started;
     financeUi.ownError=cleanApiErrorMessage(error,'経費・出張の履歴を取得できませんでした。');
     financeUi.ownLoading=false;
@@ -152,20 +168,32 @@ const FINANCE_FORM_FIELDS={
     ['note','備考','textarea',false]
   ]
 };
+
+// Client limits mirror Finance.gs validation; the server remains authoritative.
+const FINANCE_FIELD_LIMITS=Object.freeze({
+  expense:{vendor:120,item:200,category:60,purpose:500,paymentMethod:60,receiptRef:160},
+  travel:{destination:160,purpose:600,outcome:1000,lodgingArea:90,timeAllowance:80,
+    dailyCategory:60,note:500},
+  receipt:{category:60,vendor:120,invoiceNo:32,item:200,note:500,payer:120,
+    paymentMethod:80,receiptRef:160}
+});
+
 function financeFormField(entry,source={}){
   const key=entry[0],label=entry[1],kind=entry[2],required=entry[3],id='fin-'+key;
   const req=required?' required':'',common='id="'+id+'" name="'+escapeHtml(key)+'"'+req;
   const value=source[key]==null?'':String(source[key]);
+  const formType=financeActiveForm&&financeActiveForm.kind||'expense';
+  const max=Number((FINANCE_FIELD_LIMITS[formType]||{})[key]||(kind==='textarea'?1000:500));
   const caption=escapeHtml(label)+(required?" <em class='v15-required'>必須</em>":"");
   if(kind==='textarea')return '<label class="finance-field"><span>'+caption+'</span><textarea '+common+
-    ' rows="3" maxlength="1000">'+escapeHtml(value)+'</textarea></label>';
+    ' rows="3" maxlength="'+max+'">'+escapeHtml(value)+'</textarea></label>';
   if(kind==='distance'||kind==='paid'){
     const options=kind==='distance'?['未確認','30km以上','30km未満']:['未','済'];
     return '<label class="finance-field"><span>'+caption+'</span><select '+common+'>'+
       options.map(x=>'<option value="'+escapeHtml(x)+'"'+((value||options[0])===x?' selected':'')+'>'+escapeHtml(x)+'</option>').join('')+
       '</select></label>';
   }
-  const attrs=kind==='number'?' min="'+(required?'1':'0')+'" max="999999999" step="1"':' maxlength="500"';
+  const attrs=kind==='number'?' min="'+(required?'1':'0')+'" max="999999999" step="1"':(kind==='text'?' maxlength="'+max+'"':'');
   const today=state.data&&state.data.today||'';
   const actual=value||(kind==='date'?today:'');
   return '<label class="finance-field"><span>'+caption+'</span><input type="'+kind+'" '+common+
@@ -175,6 +203,10 @@ function financeNewKey(){
   return 'FM'+Date.now().toString(36)+Math.random().toString(36).slice(2,15);
 }
 let financeActiveForm=null;
+function financeCloseModalIfIdle(){
+  if(financeUi.busy){showToast('経理の処理中です。結果を確認してから閉じてください。');return;}
+  closeModal();
+}
 function financeOwnEditableItem_(kind,id){
   const items=kind==='travel'?financeUi.mine&&financeUi.mine.travels:financeUi.mine&&financeUi.mine.expenses;
   const hit=(items||[]).find(x=>x.id===id&&x.status==='差戻し');
@@ -182,7 +214,7 @@ function financeOwnEditableItem_(kind,id){
 }
 function openFinanceForm(kind,editId=''){
   if(!FINANCE_FORM_FIELDS[kind]||financeUi.busy)return;
-  if(kind==='receipt'&&financeUi.demo){showToast('サンプル表示中は新規登録できません。実データに戻してください。');return;}
+  if(financeUi.demo){showToast('サンプル表示中は実データへ登録できません。経理画面で「実データに戻る」を選択してください。');return;}
   if(kind==='receipt'&&!financeAccessAllowed()){showToast('経理の閲覧・記録権限が必要です');return;}
   if(!state.sessionToken)return;
   const source=editId?financeOwnEditableItem_(kind,editId):null;
@@ -193,16 +225,16 @@ function openFinanceForm(kind,editId=''){
   if(kind==='expense'||kind==='travel'){navigate('financeEntry');return;}
   const title=editId?'修正して再申請':({expense:'経費精算申請',travel:'出張報告',receipt:'レシート・経費記録'}[kind]);
   const root=ensureModal();
-  root.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  root.innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card finance-form-modal" role="dialog" aria-modal="true" aria-label="'+title+'">'+
     '<div class="modal-head"><div><small>FM WORKS / FINANCE</small><h2>'+title+'</h2></div>'+
-    '<button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<form id="financeEntryForm" onsubmit="event.preventDefault();submitFinanceForm()">'+
     '<div class="finance-form-grid">'+FINANCE_FORM_FIELDS[kind].map(financeFormField).join('')+'</div>'+
     '<p class="finance-note">'+(kind==='travel'?'日当・宿泊費は自動計算していません。金額は会社規程に従い担当者が確認してください。':
     '経費記録と精算申請を照合するには、双方に同じ証憑整理番号を入力してください。領収書画像はここでは保存されません。')+'</p>'+
     '<p id="financeFormError" role="alert" class="finance-error" hidden></p>'+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeSubmitButton" type="submit" class="primary-button">'+(editId?'再申請する':'登録する')+'</button></div></form></section>';
   if(source){
     FINANCE_FORM_FIELDS[kind].forEach(([field])=>{
@@ -290,6 +322,9 @@ function financeCancelEntry(){
 
 function financeApplyServerSavedRecord_(kind,result){
   if(!result||result.ok!==true||!result.id)return false;
+  // In-flight reads begun before the write must never replace the confirmed record.
+  financeUi.revOverview++;
+  if(kind==='expense'||kind==='travel')financeUi.revMine++;
   const entry=result.record;
   if(!entry||String(entry.id)!==String(result.id))return true;
   if(kind==='receipt'){
@@ -324,6 +359,7 @@ function financeMyActionFirstClient_(rows){
 
 function submitFinanceForm(){
   if(!financeActiveForm||financeUi.busy||!state.sessionToken)return;
+  if(financeUi.demo){showToast('サンプル表示中は実データを登録できません。');return;}
   const form=document.getElementById('financeEntryForm');
   if(!form||typeof form.checkValidity==='function'&&!form.checkValidity()){if(form&&form.reportValidity)form.reportValidity();return;}
   const kind=financeActiveForm.kind,fields=FINANCE_FORM_FIELDS[kind],payload={requestKey:financeActiveForm.key};
@@ -331,7 +367,13 @@ function submitFinanceForm(){
   const method=financeActiveForm.editId?'resubmitFinanceRequest':
     {expense:'submitFinanceExpense',travel:'submitFinanceTravel',receipt:'saveFinanceReceipt'}[kind];
   const activeForm=financeActiveForm;
-  const identity=financeIdentity();financeUi.busy=true;
+  const identity=financeIdentity();
+  // Freeze the entire input while one server write is pending. Otherwise the
+  // user could edit values after the payload was sent and think they were saved.
+  const frozen=Array.from(form.querySelectorAll('input,select,textarea,button')).map(el=>({el,disabled:el.disabled}));
+  const restore=()=>frozen.forEach(({el,disabled})=>{el.disabled=disabled;});
+  financeUi.busy=true;
+  frozen.forEach(({el})=>{el.disabled=true;});
   const button=document.getElementById('financeSubmitButton');if(button){button.disabled=true;button.textContent='登録しています…';}
   const err=document.getElementById('financeFormError');if(err)err.hidden=true;
   google.script.run.withSuccessHandler(result=>{
@@ -341,6 +383,7 @@ function submitFinanceForm(){
       const message='サーバーから登録完了を確認できませんでした。履歴を更新してから再試行してください。';
       const node=document.getElementById('financeFormError');
       if(node){node.textContent=message;node.hidden=false;}
+      restore();
       if(button){button.disabled=false;button.textContent=activeForm.editId?'修正して再申請する':'登録する';}
       return;
     }
@@ -356,6 +399,7 @@ function submitFinanceForm(){
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;
     financeUi.busy=false;
+    restore();
     const node=document.getElementById('financeFormError');
     if(node){node.textContent=cleanApiErrorMessage(error,'登録できませんでした。');node.hidden=false;}
     const b=document.getElementById('financeSubmitButton');
@@ -511,11 +555,11 @@ function financeShowDetail(kind,id){
   if(!financeAccessAllowed())return;
   const item=financeOverviewItem_(kind,id);
   if(!item){showToast('最新の経理記録を再読込してください');return;}
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card finance-form-modal" role="dialog" aria-modal="true" aria-label="経理記録の詳細">'+
-    '<div class="modal-head"><h2>経理記録の詳細</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<div class="modal-head"><h2>経理記録の詳細</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     financeDetailRows_(kind,item)+
-    '<div class="modal-actions"><button type="button" class="primary-button" onclick="closeModal()">閉じる</button></div></section>';
+    '<div class="modal-actions"><button type="button" class="primary-button" onclick="financeCloseModalIfIdle()">閉じる</button></div></section>';
 }
 function financeVisibleItems_(kind){
   const d=financeDisplayedOverview_()||{},records=(kind==='receipt'?d.receipts:kind==='expense'?d.expenses:d.travels)||[];
@@ -541,12 +585,12 @@ function financeSelectedItem_(kind){
 }
 function financeReviewClass_(match){
   const status=match&&match.status||'NO_REFERENCE';
-  return status==='MATCHED'?'matched':status==='AMOUNT_MISMATCH'||status==='MULTIPLE'?'attention':'unchecked';
+  return status==='MATCHED'?'matched':['AMOUNT_MISMATCH','MULTIPLE','MULTIPLE_CLAIMS'].includes(status)?'attention':'unchecked';
 }
 function financeMatchText_(match){
   const status=match&&match.status||'NO_REFERENCE';
   return {MATCHED:'金額一致',NO_REFERENCE:'番号なし',NO_RECORD:'記録未登録',
-    AMOUNT_MISMATCH:'金額差異',MULTIPLE:'番号重複',UNVERIFIED:'確認が必要'}[status]||'要確認';
+    AMOUNT_MISMATCH:'金額差異',MULTIPLE:'記録番号重複',MULTIPLE_CLAIMS:'申請複数',UNVERIFIED:'確認が必要'}[status]||'要確認';
 }
 function financeInspectorHtml_(kind,item){
   if(!item)return '<div class="finance-inspector-empty"><strong>表示する記録がありません</strong>'+
@@ -654,7 +698,7 @@ function financeOverviewRows(kind){
     const picker='<button type="button" class="finance-record-pick" data-kind="'+escapeHtml(kind)+
       '" data-id="'+escapeHtml(x.id)+'" aria-pressed="'+(active?'true':'false')+
       '" aria-label="'+escapeHtml(String(person||'')+'の'+String(description||'')+'の詳細を表示')+
-      '" onclick="financeSelectRecord(this.dataset.kind,this.dataset.id)">'+
+      '" onclick="event.stopPropagation();financeSelectRecord(this.dataset.kind,this.dataset.id)">'+
       financeDateDisplay(financeDateForItem(kind,x))+'</button>';
     return {desktop:'<tr class="finance-ledger-row" '+attrs+
         ' onclick="financeSelectRecord(this.dataset.kind,this.dataset.id)">'+
@@ -770,7 +814,8 @@ function financePage(){
         '1000件以上の確認は管理者にお問い合わせください。')+'</div>':'')+
       '<p class="finance-refresh-note">'+(demo?'サンプルは保存されません。':
         financeUi.at?'最終取得：'+escapeHtml(new Date(financeUi.at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}))+
-          (Number.isFinite(financeUi.lastLatencyMs)?' ／ 前回API応答 '+(financeUi.lastLatencyMs/1000).toFixed(2)+'秒':''):'未取得')+
+          (Number.isFinite(financeUi.lastLatencyMs)?' ／ 前回API応答 '+(financeUi.lastLatencyMs/1000).toFixed(2)+'秒':'')+
+      (d.performance&&Number.isFinite(d.performance.serverMs)?'（サーバー内処理 '+(d.performance.serverMs/1000).toFixed(2)+'秒）':''):'未取得')+
       ' 検索・絞り込み・選択は追加通信なしで動作します。</p></section>'+
     '<aside class="v15-finance-side"><section class="card finance-inspector" aria-label="選択した記録の詳細">'+
       '<div id="financeSelectedDetail" aria-live="polite">'+
@@ -787,13 +832,13 @@ function financeApprovalDialog(kind,id,decision){
   const item=financeOverviewItem_(kind,id),own=String(state.data&&state.data.user&&state.data.user.employeeId||'');
   if(!item||item.status!=='承認待ち'||String(item.employeeId||'')===own){showToast('承認できる申請ではありません。最新の情報を確認してください。');return;}
   const title=decision==='APPROVE'?'申請を承認':'申請を差戻し';
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div>'+
     '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="'+title+'">'+
-    '<div class="modal-head"><h2>'+title+'</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+    '<div class="modal-head"><h2>'+title+'</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<p>'+ (decision==='APPROVE'?'金額・証憑・会社規程を確認してから承認してください。':'差戻しの理由を入力してください。')+'</p>'+
     (financeOverviewItem_(kind,id)?financeDetailRows_(kind,financeOverviewItem_(kind,id)):'')+
     (decision==='RETURN'?'<label class="finance-field"><span>差戻し理由（必須）</span><textarea id="financeDecisionReason" maxlength="500" rows="3"></textarea></label>':'')+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeDecisionSubmitButton" type="button" class="primary-button" data-k="'+escapeHtml(kind)+'" data-id="'+escapeHtml(id)+
     '" data-decision="'+decision+'" onclick="financeSubmitDecision(this.dataset.k,this.dataset.id,this.dataset.decision)">'+title+'</button></div>'+
     '<p id="financeDecisionError" class="finance-error" role="alert" hidden></p></section>';
@@ -812,6 +857,7 @@ function financeSubmitDecision(kind,id,decision){
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='処理結果を確認できませんでした。最新の情報を確認してください。';}
       if(action){action.disabled=false;action.textContent=decision==='APPROVE'?'申請を承認':'申請を差戻し';}return;}
+    financeUi.revOverview++;
     closeModal();showToast('処理しました');loadFinanceOverview({force:true});
   }).withFailureHandler(err=>{
     if(identity!==financeIdentity())return;
@@ -827,13 +873,13 @@ function financeSettlementDialog(kind,id){
   const item=financeOverviewItem_(kind,id),own=String(state.data&&state.data.user&&state.data.user.employeeId||'');
   if(!item||item.status!=='承認済'||String(item.employeeId||'')===own){showToast('精算できる申請ではありません。最新の情報を確認してください。');return;}
   const today=state.data&&state.data.today||'';
-  ensureModal().innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="精算確認">'+
-    '<div class="modal-head"><h2>精算済みにする</h2><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div>'+
+  ensureModal().innerHTML='<div class="modal-backdrop" onclick="financeCloseModalIfIdle()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="精算確認">'+
+    '<div class="modal-head"><h2>精算済みにする</h2><button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<p>実際の振込・出金が完了した場合のみ確定してください。この操作で銀行振込は行われません。</p>'+
     '<label class="finance-field"><span>出金・精算日</span><input id="financePaidOn" type="date" value="'+escapeHtml(today)+'"></label>'+
     (kind==='expense'?'<label class="finance-field"><span>立替者受取日（任意）</span><input id="financeReceivedOn" type="date"></label>':'')+
     '<p id="financeDecisionError" role="alert" class="finance-error" hidden></p>'+
-    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
     '<button id="financeDecisionSubmitButton" type="button" class="primary-button" data-k="'+escapeHtml(kind)+'" data-id="'+escapeHtml(id)+'" onclick="financeSubmitSettlement(this.dataset.k,this.dataset.id)">精算確認を登録</button></div></section>';
 }
 function financeSubmitSettlement(kind,id){
@@ -850,6 +896,7 @@ function financeSubmitSettlement(kind,id){
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='精算登録の結果を確認できませんでした。履歴を再確認してください。';}
       if(action){action.disabled=false;action.textContent='精算確認を登録';}return;}
+    financeUi.revOverview++;
     closeModal();showToast('精算済みに更新しました');loadFinanceOverview({force:true});
   }).withFailureHandler(error=>{
     if(identity!==financeIdentity())return;

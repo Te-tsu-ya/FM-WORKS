@@ -1830,3 +1830,17 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `loadQuoteWorkspace(options)` は読み込み中の `force` を `refreshNeeded=true` に記録し、先行通信の完了後に最後の1回を再取得する。古いレスポンスの描画を回避し、配列構造不一致で旧正常データを破棄しない。
 - 取引先単体追加、貼付インポート、採番設定は `quoteIdentity_` でログイン元の遅延コールバックを拒否する。
 - 新規 `scripts/test_quote_session.mjs` にて、連続force・通信失敗・異常データ・書類詳細の別ログイン混入・遅延応答をVMで模擬。既存 `test_quote_integration.mjs` に組み込んで全CIとGAS公開前チェックへ適用する。
+
+## v0.17.6 経理の非同期応答・データ整合性・大容量読取の設計追加（2026-10-10）
+
+- `Finance.gs:financeText_`: `safeSheetText_` の文字数上限による黙ったトリミングを禁止し、入力文字数を先に検証してエラーとする。APIが許容する最大文字数は `AppFinance.html:FINANCE_FIELD_LIMITS` へ反映。
+- `financeSameSubmittedRecord_`: 送信識別子一致に加え、本人と送信内容の一致を要求する。種類別の入力フィールドだけを比較し、数値は桁区切りを無視、日付は表示文字列／Dateを正規化、スプレッドシートの計算式保護用先頭アポストロフィを考慮する。内容が異なる場合は前回の保存結果を新しい入力の成功として扱わない。重複申請防止の本体判定は引き続きLockService下で行う。
+- `financeReceiptCrossCheck_`: 全申請を参照する番号ごとの請求数と金額合計を計算し、同一番号の申請が2件以上なら `MULTIPLE_CLAIMS` として返す。非表示の申請も重複判定に含む。経費記録の番号重複（`MULTIPLE`）とは別の状態で扱う。
+- `financeFindRow_`: `DataAccess.gs:findVerifiedSheetRow_` を共用。5分のキャッシュは行番号のヒントだけで、対象を開く際は毎回その行のIDを読み直す。候補不一致ならTextFinderで検索し、権限・申請状態は現在の行内容で再判定する。
+- `AppFinance.html`: overview／mineの読込開始時に画面の書込世代番号を保持し、保存・承認・精算の成功時に世代番号を進める。開始後に状態が変わった旧取得結果は破棄して最新を再読込する。サンプルモードは経理記録だけでなく経費精算と出張報告の登録フォームにも適用し、送信関数で最終的な遮断を行う。
+- `getFinanceOverview` は `performance.serverMs` のみ追加返却し、ユーザー画面では既存のネットワーク込みの計測 `financeUi.lastLatencyMs` と別表示。個人情報や認証情報は計測値に含めない。
+- CIは `scripts/test_finance_integration.mjs`／`scripts/test_client_contract.mjs` で登録内容一致、長文、重複申請、行番号照合、書込中と古いレスポンスの順不同を検証する。実本番データへの書き込み、監査ログの偽造、本人承認を伴う試験は行わない。
+
+- AppFinance.html の submitFinanceForm は実際のフォームの input/select/textarea/button を元の disabled 状態ごと記録し、書込中は凍結する。失敗や確認不能時に restore() で復旧し、保存成功時は画面遷移で破棄する。PC台帳の日付ボタンのクリックは伝播停止し、親行からの重複処理を抑止する。
+
+- AppFinance.html の経理モーダルに financeCloseModalIfIdle() を使用し、financeUi.busy 中は閉じる動作を抑止する。完了後は通常の closeModal() を実行し、異常応答時にはダイアログ内のエラーを確認できる状態を維持する。
