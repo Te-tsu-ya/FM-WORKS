@@ -175,7 +175,7 @@ function projectHubOpenEditor_(kind,id=''){
  if(kind==='task'){form.plannedHours=source&&source.plannedMinutes?Number(source.plannedMinutes)/60:'';form.progress=Number(form.progress||0);form.status=form.status||'未着手';}
  if(kind==='resource'){form.resourceKind=form.kind||'要件定義書';form.status=form.status||'共有';}
  if(kind==='update')form.updateKind='共有';
- ui.editor={kind,projectId:ui.selected,form,changed:false,context:d};renderPageIfActive('projects');
+ ui.view='detail';ui.editor={kind,projectId:ui.selected,form,changed:false,context:d};renderPageIfActive('projects');
 }
 function projectHubOpenPlan_(){projectHubOpenEditor_('plan');}function projectHubOpenTask_(id){projectHubOpenEditor_('task',id);}function projectHubOpenResource_(id){projectHubOpenEditor_('resource',id);}function projectHubOpenUpdate_(){projectHubOpenEditor_('update');}
 function projectHubField_(key,value){if(!projectHubUi.editor||projectHubUi.busy)return;projectHubUi.editor.form[key]=value;projectHubUi.editor.changed=true;if(key==='quoteId'&&projectHubUi.editor.kind==='plan')renderPageIfActive('projects');}
