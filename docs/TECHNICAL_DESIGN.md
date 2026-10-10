@@ -1888,3 +1888,10 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 既存クライアントVMテストにログイン変更の遅延応答確認を追加し、勤怠・工数・申請の回帰テストを通す。
 
 - `performLogout` のGAS完了ハンドラは現セッション/初期化済みユーザーの有無を再確認する。旧セッションのlogout応答は新ログイン画面へ `showLogin()` を適用しない。成功/失敗の両系統をVMで検証する（遅延ログアウト応答）。
+
+## 2026-10-10 監査済み再送を返すAPI契約
+
+- `financeAuditRequestNote_(requestKey)` は経理レコード既存の送信識別子に対する監査ログ`note`で、`経理新規登録`および`経理再申請`時にのみ記録する。追加の列やテーブルは作らない。送信識別子はログインの認証トークンではなく、経理APIでは認証済み社員の本人確認と内容一致を従来どおり必須とする。
+- `financeAuditConfirmedForRetry_(kind,id,operation,requestKey)` は`DB.sheets.audit`の対象ID列（G列）でTextFinderを実行し、操作名・対象種類・対象ID・成功状態を照合する。再申請では送信識別子を含む監査記録`note`も厳密に一致させる。未取得時はfail-closed（`false`）。既存の古い再申請ログに識別子が記録されていない場合も確認不能として扱う。
+- 新規登録と再申請の`duplicate:true`応答は`auditRecorded`を必ず返す。データ本体の重複登録を防ぐLockServiceとユーザー・内容一致判定は保持し、再送時の追加監査書込は行わない。
+- audit TextFinderは正常な初回登録や一覧取得では呼び出さない。CIの仮想シートを実監査表と同じ12列で構築し、`findAll`による再照合と両系統の失敗応答を確認する。

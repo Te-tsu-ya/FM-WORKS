@@ -163,6 +163,34 @@ function financeSameSubmittedRecord_(kind,stored,submitted){
   });
 }
 
+function financeAuditRequestNote_(key){
+  // The same idempotency value is already stored in the financial record.
+  // It is not a login credential; the audit sheet is admin-restricted.
+  return 'finance-request:'+String(key||'');
+}
+function financeAuditConfirmedForRetry_(kind,id,operation,key){
+  // Only called on an actual retry. Do not introduce another Sheets roundtrip
+  // into first-time submissions or the normal finance overview.
+  try {
+    const sheet=getDb_().getSheetByName(DB.sheets.audit);
+    const last=sheet&&sheet.getLastRow();
+    if(!last||last<2)return false;
+    const matches=sheet.getRange(2,7,last-1,1)
+      .createTextFinder(String(id)).matchEntireCell(true).findAll();
+    return matches.some(cell=>{
+      const row=sheet.getRange(cell.getRow(),5,1,8).getDisplayValues()[0]||[];
+      return String(row[0])===String(operation)&&
+        String(row[1])===String(kind)&&String(row[2])===String(id)&&
+        String(row[6])==='SUCCESS'&&
+        (operation==='経理新規登録'||String(row[7])===financeAuditRequestNote_(key));
+    });
+  }catch(error){
+    // A missing or unreadable audit cannot be declared successful.
+    console.error('finance retry audit verification failed',error);
+    return false;
+  }
+}
+
 function financeWriteNew_(kind,record,employee){
   const key=financeRequestKey_(record.requestKey);
   return withScriptLock_(function(){
@@ -177,7 +205,8 @@ function financeWriteNew_(kind,record,employee){
         if(String(existing.employeeId||existing.creatorId)!==String(employee.employeeId))throw new Error('送信識別子が重複しています。');
         if(!financeSameSubmittedRecord_(kind,existing,record))
           throw new Error('前回と異なる内容で再送されています。登録履歴を確認してから新しい申請を作成してください。');
-        return {ok:true,id:existing.id,duplicate:true,record:financeConfirmedRecord_(existing)};
+        return {ok:true,id:existing.id,duplicate:true,record:financeConfirmedRecord_(existing),
+          auditRecorded:financeAuditConfirmedForRetry_(kind,existing.id,'経理新規登録',key)};
       }
     }
     const now=financeNow_();
@@ -189,7 +218,7 @@ function financeWriteNew_(kind,record,employee){
     else {record.employeeId=employee.employeeId;record.employeeName=employee.name;record.status='承認待ち';}
     sheet.appendRow(financeArray_(kind,record));
     const auditRecorded=appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'経理新規登録',target:kind,
-      targetId:record.id,before:'',after:auditJson_({kind:kind,id:record.id}),source:'WEB',result:'SUCCESS',note:''});
+      targetId:record.id,before:'',after:auditJson_({kind:kind,id:record.id}),source:'WEB',result:'SUCCESS',note:financeAuditRequestNote_(key)});
     return {ok:true,id:record.id,duplicate:false,record:financeConfirmedRecord_(record),auditRecorded:auditRecorded===true};
   });
 }
@@ -368,7 +397,8 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
     if(item.status==='承認待ち'&&item.requestKey===key){
       if(!financeSameSubmittedRecord_(kind,item,values))
         throw new Error('前回と異なる内容で再送されています。申請履歴を確認してください。');
-      return {ok:true,id:item.id,status:item.status,duplicate:true,record:financeConfirmedRecord_(item)};
+      return {ok:true,id:item.id,status:item.status,duplicate:true,record:financeConfirmedRecord_(item),
+        auditRecorded:financeAuditConfirmedForRetry_(kind,item.id,'経理再申請',key)};
     }
     if(item.status!=='差戻し')throw new Error('差戻された申請だけを修正・再申請できます。');
     if(item.requestKey===key)throw new Error('再申請には新しい送信識別子が必要です。');
@@ -382,7 +412,7 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
       operation:'経理再申請',target:kind,targetId:item.id,
       before:auditJson_({status:item.status,amount:item.amount||item.spentAmount,returnReason:item.returnReason}),
       after:auditJson_({status:updated.status,amount:updated.amount||updated.spentAmount}),
-      source:'WEB',result:'SUCCESS',note:''});
+      source:'WEB',result:'SUCCESS',note:financeAuditRequestNote_(key)});
     return {ok:true,id:item.id,status:updated.status,duplicate:false,record:financeConfirmedRecord_(updated),auditRecorded:auditRecorded===true};
   });
 }
