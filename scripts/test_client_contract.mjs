@@ -606,6 +606,42 @@ const result=vm.runInContext(`
   financeCloseModalIfIdle();
   expect('finance modal can close once the operation has finished',modalCloseCalls===1);
   closeModal=originalCloseModal;
+  financeUi.auditWarning='';
+  const auditWarningExposed=financeTrackAuditResult_({ok:true,id:'EXP-AUDIT-TEST',auditRecorded:false});
+  expect('audit failure notice distinguishes stored data from unconfirmed audit record',
+    auditWarningExposed&&financeUi.auditWarning.includes('EXP-AUDIT-TEST')&&
+    financeUi.auditWarning.includes('保存済み')&&financeUi.auditWarning.includes('重複登録'));
+  expect('finance and employee screens display persistent audit warning',
+    financePage().includes('EXP-AUDIT-TEST')&&financeSelfSection().includes('EXP-AUDIT-TEST'));
+  financeUi.auditWarning='';
+  const financeModal={querySelector:selector=>selector==='[data-finance-modal="true"]'?{}:null};
+  financeUi.busy=true;
+  expect('Escape gating correctly identifies a busy finance dialog',
+    financeModalBusy_(financeModal)===true);
+  financeUi.busy=false;
+  expect('finance dialog can close after the operation finishes',
+    financeModalBusy_(financeModal)===false);
+  // Keyboard shortcut regression: same test checks the actual listener, not only the helper.
+  document.addEventListener=(name,fn)=>{if(name==='keydown')document.financeKeydownListener=fn;};
+  globalKeysBound=false;
+  initGlobalKeyboardShortcuts();
+  const modalHost=document.getElementById('modalRoot');
+  modalHost.innerHTML='<section data-finance-modal="true"></section>';
+  modalHost.querySelector=financeModal.querySelector;
+  const originalCloseModal=closeModal;
+  let modalEscCloses=0;
+  closeModal=()=>{modalEscCloses++;};
+  financeUi.busy=true;
+  document.financeKeydownListener({key:'Escape',target:document.body,preventDefault(){}});
+  expect('Escape cannot close finance confirmation while server write is pending',
+    modalEscCloses===0);
+  financeUi.busy=false;
+  document.financeKeydownListener({key:'Escape',target:document.body,preventDefault(){}});
+  expect('Escape closes finance confirmation after server finishes',
+    modalEscCloses===1);
+  closeModal=originalCloseModal;
+  modalHost.innerHTML='';
+  modalHost.querySelector=()=>null;
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
