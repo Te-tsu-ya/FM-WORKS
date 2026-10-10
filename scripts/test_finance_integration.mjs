@@ -267,17 +267,18 @@ ok('overview reads all 3 sheet headers once, with no second redundant header pas
 for(const sheet of Object.values(sheets)){
   sheet.stats.displayCalls=0;sheet.stats.displayCells=0;sheet.stats.headerReads=0;
 }
-const beforeBulkLookup=sheets['経費精算申請'].stats.rawCells;
-const byId=vm.runInContext('financeFindRow_("expense","BULK-0")',ctx);
-ok('finance row index verifies the selected ID and only reads a full row once',
- byId&&byId.item.id==='BULK-0'&&byId.rowNumber>=2&&
- sheets['経費精算申請'].stats.rawCells-beforeBulkLookup<=models.expense.keys.length);
 const focused=api.getMyFinanceItems('STAFF');
 ok('only the logged-in employee records are returned with large shared sheets',
   focused.expenses.length===2&&focused.travels.length===1);
 ok('personal history reads the owner column and only the matching records',
   sheets['経費精算申請'].stats.displayCells<1100&&
   sheets['経費精算申請'].stats.displayCalls<=4);
+const beforeBulkLookup=sheets['経費精算申請'].stats.rawCells;
+const byId=vm.runInContext('financeFindRow_("expense","BULK-0")',ctx);
+ok('finance row index verifies the selected ID and only reads a full row once',
+ byId&&byId.item.id==='BULK-0'&&byId.rowNumber>=2&&
+ sheets['経費精算申請'].stats.rawCells-beforeBulkLookup<=models.expense.keys.length);
+
 
 sheets['経費記録'].rows[0][0]='不正な列見出し';
 ok('schema mismatch is detected',!api.financeStorageStatus_().ready);
