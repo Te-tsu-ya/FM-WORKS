@@ -666,7 +666,7 @@ const result=vm.runInContext(`
   expect('payer drilldown filters item rows in-browser without a server request',
     financeInsightRows().includes('架空備品店')&&!financeInsightRows().includes('架空交通社'));
   const filteredInsight=financePage();
-  expect('payer selection changes the monthly totals to the selected person's verified 1,200 yen',
+  expect('payer selection changes monthly totals to the verified 1,200 yen for the chosen payer',
     filteredInsight.includes('支払者：架空社員A')&&filteredInsight.includes('1,200円')&&
     filteredInsight.includes('finance-advisor-month'));
   financeUi.insightPayer='';financeUi.insightMode=false;financeUi.insights=null;
