@@ -215,6 +215,10 @@ const result=vm.runInContext(`
   quoteUi.data={setupRequired:false,vendors:[{code:'FI-0001',name:'架空法人A',invoice:'T1234567890123',address:'架空市'}],
     sequencesReady:['FI-0001'],quotes:[],canConfigure:false};
   quoteUi.identity=quoteIdentity_();quoteUi.at=Date.now();
+  quoteUi.data.quotes=[{id:'DEMO-QUOTE-20261010-001',status:'下書き',vendorName:'【デモ】架空取引先',subject:'【デモ】テスト用見積',total:110000,quoteDate:'2026-10-10',updatedAt:'2026-10-10 08:40:00'}];
+  expect('persisted demo drafts appear in creation entry',quotePage().includes('操作確認用のデモ見積が 1 件あります')&&quotePage().includes('デモ見積を開く'));
+  expect('archive marks genuine stored demo records',documentHistoryPage().includes('doc-demo-tag')&&documentHistoryPage().includes('DEMO'));
+  quoteUi.data.quotes=[];
   expect('creation page offers all four documents without status-dashboard clutter',
     quotePage().includes('書類を作成する')&&quotePage().includes('請求書')&&
     quotePage().includes('納品書')&&quotePage().includes('領収書')&&

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.1  
+**文書版:** 0.17.2  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1771,3 +1771,9 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 修正: `.modal-card` に `background:var(--surface);color:var(--text);border:1px solid var(--line)` を適用し、`.modal-head small`、閉じる `.icon-button`、dark `.field>span` をテーマに応じた色にする。`.request-modal-actions` も `var(--surface)` と `var(--line)` に揃え、スクロール時の白いフッターを回避する。
 - 新設 `scripts/test_modal_theme.mjs`: 実際の AppQuotes.html / AppDocuments.html のダイアログ生成関数をVMで実行し、Styles.html + StylesWorkflowV15.html をChromiumでレンダリング。1366×768と390×844、light/dark、5種のモーダルを検証し、computedStyle色からWCAGコントラスト比4.5以上、モーダル枠の画面内配置、申請フッター色一致を検査する。
 - CI / mainデプロイの両方で、既存の業務テストに加えてモーダルの表示契約テストを必須化。CIではスクリーンショットを `fmworks-modal-theme-qa` の成果物として保存。元の見積Excel描画・DB構造・業務権限・採番ルールに変更を加えない。
+
+## v0.17.2 デモデータ保存および動作確認UI（2026-10-10）
+
+- デモ見積レコードは全て既存見積ヘッダー・見積明細・取引先・採番の各シートに実体を保存する。デモIDはDEMO-QUOTE-接頭辞で分類し、取引先名・件名にも【デモ】を入れる。
+- AppQuotes.htmlのquoteOverview_は表示権限があるデモ下書き件数を表示し、書類履歴へ遷移できるようにする。AppDocuments.htmlでは該当見積にDEMOラベルを表示する。
+- スプレッドシートの保存値は再読込で検算。テストスクリプトでデモ表示導線と一覧ラベルの契約を検証。既存の見積PDF/Excel描画・採番・認可ロジックは変更しない。

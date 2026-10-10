@@ -356,6 +356,7 @@ function documentEntryAction_(kind){
 }
 function quoteOverview_(){
   const d=quoteUi.data,setup=d&&d.setupRequired,admin=d&&d.canConfigure;
+  const demoDrafts=(d&&d.quotes||[]).filter(x=>/^DEMO-QUOTE-/.test(String(x.id||''))&&x.status==='下書き');
   const warning=setup?"<div class='doc-setup-note' role='alert'>見積書の保存先が未準備です。"+
     (admin?" <button type='button' class='secondary-button' onclick='quoteSetupStorage_()'>バックアップして準備</button>":"管理者に連絡してください。")+"</div>":
     d&&d.documentsSetupRequired?"<div class='doc-setup-note' role='status'>請求書・納品書・領収書の保存先を準備してください。"+
@@ -372,6 +373,12 @@ function quoteOverview_(){
     "<button type='button' class='secondary-button' onclick='navigate(\"documentHistory\")'>書類一覧・履歴を見る →</button></header>"+
     (quoteUi.loading&&!d?"<div class='card quote-state' role='status'>書類情報を読み込んでいます…</div>":"")+
     (quoteUi.error?"<div class='card quote-state' role='alert'>"+escapeHtml(quoteUi.error)+"</div>":"")+warning+
+    (demoDrafts.length?"<section class='card doc-demo-guide' aria-label='操作確認用デモデータ'>"+
+      "<div><strong>操作確認用のデモ見積が "+demoDrafts.length+" 件あります</strong>"+
+      "<p>架空のデータです。書類一覧で下書きを開き、編集・保存してから再読み込みで確認できます。</p></div>"+
+      "<button type='button' class='secondary-button' onclick='navigate("+
+      "\"documentHistory\""+
+      ");documentSetFilter("+ "\"quote\""+")'>デモ見積を開く →</button></section>":"")+
     "<section class='card doc-entry-hero'><h2>何を作成しますか？</h2>"+
     "<p>まずは見積書を作成します。請求書などを作る際は発行済みの見積を選ぶだけなので、明細を再入力する必要はありません。</p></section>"+
     "<section class='doc-start-grid' aria-label='書類の作成方法'>"+
