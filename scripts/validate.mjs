@@ -386,7 +386,7 @@ if (!serverCode.includes('function auditJson_(') ||
   failed = true;
 }
 
-for (const marker of ['const DB_SCHEMA_VERSION = 16','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+for (const marker of ['const DB_SCHEMA_VERSION = 17','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
   if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {
