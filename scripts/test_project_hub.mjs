@@ -64,6 +64,15 @@ save('X','resource',{...resource,projectId:'PRJ-002',title:'別案件の本文',
 const workspace=plain(ctx.getProjectHubWorkspace('E'));
 assert.ok(sheets['プロジェクト資料'].reads.every(r=>r.row===1||!(r.col<=6&&r.col+r.width>6)),'workspace does not fetch document bodies');
 assert.equal(workspace.projects[0].actualMinutes,180,'current and historical names link, deleted worklogs excluded');
+assert.equal(workspace.projects[0].myOpenTasks,1,'my unfinished task is identified');
+assert.equal(workspace.projects[0].myOverdueTasks,0,'my task is not yet overdue');
+assert.equal(workspace.projects[0].nextTaskDueDate,'2026-10-11');
+assert.equal(Object.hasOwn(workspace,'employeeWorkload'),false,'staff response excludes admin workload');
+const adminProjectWorkspace=plain(ctx.getProjectHubWorkspace('A'));
+assert.ok(Array.isArray(adminProjectWorkspace.employeeWorkload),'admin receives planned team workload');
+assert.equal(adminProjectWorkspace.employeeWorkload.find(x=>x.employeeId==='E').openTasks,1);
+assert.equal(adminProjectWorkspace.employeeWorkload.find(x=>x.employeeId==='X').openTasks,1);
+
 assert.equal(workspace.projects[0].progress,40,'8h at 50% plus 2h at 0% = 40%, not effort consumption');
 assert.equal(workspace.projects[0].usagePercent,30);
 assert.equal(workspace.projects[0].scheduledProgress,90);
@@ -142,6 +151,7 @@ client.projectHubSelect_('PRJ-001');assert.equal(cr('projectHubUi.view'),'detail
 client.projectHubOpenList_();assert.equal(cr('projectHubUi.view'),'list','breadcrumb returns to portfolio');
 client.projectHubFilter_('risk');assert.equal(cr('projectHubUi.filter'),'risk');
 client.projectHubFilter_('all');
+client.projectHubFilter_('mine');assert.equal(cr('projectHubVisibleProjects_().length'),1,'my projects filter');client.projectHubFilter_('all');
 assert.ok(!cr('projectHubPage()').includes('管理者ダッシュボード'),'employee cannot see manager tab');
 client.projectHubOpenManagement_();assert.equal(cr('projectHubUi.view'),'list','employee cannot enter manager mode');
 client.projectHubSearch_('<script>');assert.ok(!cr('projectHubPage()').includes('<script>'),'project search stays escaped');
