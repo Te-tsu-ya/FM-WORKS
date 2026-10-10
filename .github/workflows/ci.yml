@@ -34,6 +34,8 @@ jobs:
         run: node scripts/test_quote_integration.mjs
       - name: Verify company document CRUD and access rules
         run: node scripts/test_company_documents.mjs
+      - name: Verify company document navigation and editing
+        run: node scripts/test_company_documents_client.mjs
       - name: Verify general affairs storage and permissions
         run: node scripts/test_somu_integration.mjs
       - name: Verify general affairs client actions
@@ -43,6 +45,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
           fc-cache -f
+      - name: Verify company document desktop and mobile layouts in Chromium
+        run: node scripts/test_company_documents_viewport.mjs
+      - name: Upload company document layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-company-docs-layout-qa
+          path: artifacts/company-docs-layout/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify general affairs responsive interface in Chromium
         run: node scripts/test_somu_viewport.mjs
       - name: Upload general affairs QA screenshots

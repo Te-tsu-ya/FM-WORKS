@@ -1,140 +1,483 @@
 <script>
-/* Internal company policy library: no dummy company rules are represented as real. */
-let companyDocsUi={data:null,identity:'',loading:false,busy:false,error:'',query:'',category:'ALL',selectedId:'',detail:null,editing:false,draft:null,key:''};
-function companyDocsIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'')}
-function resetCompanyDocsUi(){companyDocsUi={data:null,identity:'',loading:false,busy:false,error:'',query:'',category:'ALL',selectedId:'',detail:null,editing:false,draft:null,key:''}}
-function companyDocsKeyClient_(){return 'CD-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,17)}
-function companyDocsRender_(){if(state.page==='companyDocs')renderPageIfActive('companyDocs')}
+/* FM WORKS - Company document library: folder tree, searchable list and preview.
+ * Lazy metadata/body reads, session isolation and mobile single-panel navigation.
+ */
+let companyDocsUi={
+  data:null,identity:'',loading:false,loadedAt:0,reloadRequested:false,busy:false,error:'',
+  query:'',folderId:'all',category:'all',status:'all',sort:'newest',
+  remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
+  expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
+  selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
+  editing:false,draft:null,key:'',mobileStep:'folders',limit:60
+};
+let companyDocsSearchTimer=null;
+function companyDocsIdentity_(){
+  return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+}
+function resetCompanyDocsUi(){
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  companyDocsSearchTimer=null;
+  companyDocsUi={
+    data:null,identity:'',loading:false,loadedAt:0,reloadRequested:false,busy:false,error:'',
+    query:'',folderId:'all',category:'all',status:'all',sort:'newest',
+    remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
+    expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
+    selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
+    editing:false,draft:null,key:'',mobileStep:'folders',limit:60
+  };
+}
+function companyDocsRender_(){if(state.page==='companyDocs')renderPageIfActive('companyDocs');}
+function companyDocsSafeAttr_(v){return escapeHtml(String(v==null?'':v));}
+function companyDocsData_(){return companyDocsUi.data||{items:[],folders:[],categories:['就業規則','社内規程','マニュアル','その他']};}
+function companyDocsFolder_(id){return (companyDocsData_().folders||[]).find(f=>f.id===id)||null;}
+function companyDocsFolderName_(id){
+  if(id==='all')return 'すべての文書';
+  const f=companyDocsFolder_(id);
+  return f?f.name:'その他の文書';
+}
+function companyDocsFolderParent_(id){
+  const f=companyDocsFolder_(id);
+  return f&&f.parentId?companyDocsFolder_(f.parentId):null;
+}
+function companyDocsFolderCount_(folderId){
+  const items=companyDocsData_().items||[];
+  if(folderId==='all')return items.length;
+  return items.filter(d=>d.folderId===folderId||d.folderId.indexOf(folderId+'/')===0).length;
+}
+function companyDocsCanManage_(){return !!(companyDocsUi.data&&companyDocsUi.data.canManage);}
 function loadCompanyDocs(force=false){
   if(!state.sessionToken||!state.data)return;
   const identity=companyDocsIdentity_();
-  if(companyDocsUi.loading||(!force&&companyDocsUi.data&&companyDocsUi.identity===identity))return;
-  companyDocsUi.identity=identity;companyDocsUi.loading=true;companyDocsUi.error='';companyDocsRender_();
+  let ui=companyDocsUi;
+  if(ui.identity&&ui.identity!==identity){resetCompanyDocsUi();ui=companyDocsUi;}
+  if(ui.loading){if(force)ui.reloadRequested=true;return;}
+  if(!force&&ui.data&&ui.identity===identity&&Date.now()-ui.loadedAt<60000)return;
+  ui.identity=identity;ui.loading=true;ui.error='';
+  if(!ui.data)companyDocsRender_();
   google.script.run.withSuccessHandler(result=>{
-    if(identity!==companyDocsIdentity_())return;
-    companyDocsUi.data=result;companyDocsUi.loading=false;companyDocsUi.error='';
-    if(companyDocsUi.selectedId&&!(result.items||[]).some(x=>x.id===companyDocsUi.selectedId)){
-      companyDocsUi.selectedId='';companyDocsUi.detail=null;
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.data=result;ui.loading=false;ui.loadedAt=Date.now();ui.error='';
+    if(ui.selectedId){
+      const item=(result.items||[]).find(x=>x.id===ui.selectedId);
+      if(!item){ui.selectedId='';ui.detail=null;ui.loadingDetail=false;ui.detailSerial++;}
+      else if(ui.detail&&ui.detail.revision!==item.revision){
+        ui.detail=null;delete ui.details[item.id];
+        ui.loadingDetail=false;
+        ui.detailSerial++;
+      }
     }
+    const again=ui.reloadRequested;ui.reloadRequested=false;
+    if(again){loadCompanyDocs(true);return;}
     companyDocsRender_();
-  }).withFailureHandler(e=>{
-    if(identity!==companyDocsIdentity_())return;
-    companyDocsUi.loading=false;companyDocsUi.error=cleanApiErrorMessage(e,'文書一覧の取得に失敗しました');companyDocsRender_();
+    if(ui.selectedId&&!ui.detail&&!ui.loadingDetail&&!ui.editing)companyDocsSelect(ui.selectedId,false);
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.loading=false;ui.error=cleanApiErrorMessage(err,'社内文書の一覧を取得できませんでした。');
+    companyDocsRender_();
   }).getCompanyDocuments(state.sessionToken);
 }
-function companyDocsSelect(id){
+function companyDocsSwitchStep_(step){
+  if(companyDocsUi.busy)return;
+  if(companyDocsUi.editing&&step!=='detail')return;
+  companyDocsUi.mobileStep=step;companyDocsRender_();
+}
+function companyDocsSelectFolder(id){
   if(companyDocsUi.editing||companyDocsUi.busy)return;
-  companyDocsUi.selectedId=String(id||'');
-  if(companyDocsUi.detail&&companyDocsUi.detail.id===id){companyDocsRender_();return;}
-  const identity=companyDocsIdentity_();companyDocsUi.detail=null;companyDocsUi.loadingDetail=true;companyDocsRender_();
-  google.script.run.withSuccessHandler(r=>{
-    if(identity!==companyDocsIdentity_()||companyDocsUi.selectedId!==id)return;
-    companyDocsUi.detail=r.document;companyDocsUi.loadingDetail=false;companyDocsRender_();
-  }).withFailureHandler(e=>{
-    if(identity!==companyDocsIdentity_()||companyDocsUi.selectedId!==id)return;
-    companyDocsUi.loadingDetail=false;handleApiError(e,'文書を開けませんでした');companyDocsRender_();
+  if(id!=='all'&&!companyDocsFolder_(id))return;
+  companyDocsUi.folderId=id;
+  companyDocsUi.limit=60;
+  companyDocsUi.mobileStep='list';
+  companyDocsUi.selectedId='';
+  companyDocsUi.detail=null;
+  companyDocsUi.loadingDetail=false;
+  companyDocsUi.detailSerial++;
+  companyDocsRender_();
+}
+function companyDocsToggleFolder(id){
+  const ui=companyDocsUi;
+  ui.expanded[id]=!ui.expanded[id];
+  companyDocsRender_();
+}
+function companyDocsSelect(id,mobile=true){
+  const ui=companyDocsUi;
+  if(ui.editing||ui.busy)return;
+  const item=(companyDocsData_().items||[]).find(x=>x.id===id);
+  if(!item)return;
+  ui.selectedId=id;
+  if(mobile)ui.mobileStep='detail';
+  if(ui.detail&&ui.detail.id===id&&ui.detail.revision===item.revision){companyDocsRender_();return;}
+  const cached=ui.details[id];
+  if(cached&&cached.revision===item.revision){
+    ui.detail=cached;ui.loadingDetail=false;companyDocsRender_();return;
+  }
+  ui.detail=null;ui.loadingDetail=true;ui.detailSerial++;
+  const serial=ui.detailSerial,identity=companyDocsIdentity_();
+  companyDocsRender_();
+  google.script.run.withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi||
+       serial!==ui.detailSerial||ui.selectedId!==id)return;
+    ui.loadingDetail=false;ui.detail=result.document;ui.details[id]=result.document;companyDocsRender_();
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi||serial!==ui.detailSerial)return;
+    ui.loadingDetail=false;ui.error=cleanApiErrorMessage(err,'本文を開けませんでした。');
+    companyDocsRender_();
   }).getCompanyDocument(state.sessionToken,id);
 }
-function companyDocsStartEdit(id){
-  if(!companyDocsUi.data||!companyDocsUi.data.canManage)return;
-  if(id&&(!companyDocsUi.detail||companyDocsUi.detail.id!==id)){companyDocsSelect(id);return;}
-  const d=id?companyDocsUi.detail:{};
-  companyDocsUi.draft={id:d.id||'',revision:d.revision||0,title:d.title||'',category:d.category||'就業規則',summary:d.summary||'',body:d.body||'',url:d.url||'',effectiveOn:d.effectiveOn||'',status:d.status||'下書き'};
-  companyDocsUi.key=companyDocsKeyClient_();companyDocsUi.editing=true;companyDocsRender_();
+function companyDocsSetQuery(value){
+  const ui=companyDocsUi,query=String(value||'').slice(0,80);
+  ui.query=query;ui.limit=60;ui.remoteQuery='';ui.remoteIds=null;ui.searchError='';
+  ui.searchSerial++;
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  companyDocsSearchTimer=null;
+  const term=query.trim();
+  ui.searching=term.length>=2;
+  const onMobile=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&
+    window.matchMedia('(max-width: 760px)').matches;
+  if(onMobile&&term&&ui.mobileStep==='folders'){
+    ui.mobileStep='list';companyDocsRender_();
+    const input=document.getElementById('companyDocsSearch');if(input)input.focus();
+  }
+  companyDocsPaintList_();
+  if(term.length<2)return;
+  const serial=ui.searchSerial,identity=companyDocsIdentity_();
+  companyDocsSearchTimer=setTimeout(()=>{
+    if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+    google.script.run.withSuccessHandler(result=>{
+      if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+      ui.remoteQuery=term;ui.remoteIds=new Set(result.matchedIds||[]);
+      ui.searching=false;ui.searchError=result.truncated?'本文の検索結果は先頭250件まで表示しています。':'';
+      companyDocsPaintList_();
+    }).withFailureHandler(err=>{
+      if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+      ui.searching=false;ui.searchError='本文検索を完了できませんでした。文書名・概要の検索は利用できます。';
+      companyDocsPaintList_();
+    }).searchCompanyDocumentBodies(state.sessionToken,term);
+  },320);
 }
-function companyDocsCancelEdit(){if(companyDocsUi.busy)return;companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsRender_()}
-function companyDocsDraftField(key,val){if(companyDocsUi.draft)companyDocsUi.draft[key]=val}
+function companyDocsSetCategory(value){companyDocsUi.category=value;companyDocsUi.limit=60;companyDocsRender_();}
+function companyDocsSetStatus(value){companyDocsUi.status=value;companyDocsUi.limit=60;companyDocsRender_();}
+function companyDocsSetSort(value){companyDocsUi.sort=value;companyDocsRender_();}
+function companyDocsMore(){companyDocsUi.limit+=60;companyDocsRender_();}
+function companyDocsClearFilters(){
+  const ui=companyDocsUi;
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  ui.query='';ui.category='all';ui.status='all';ui.folderId='all';
+  ui.remoteIds=null;ui.remoteQuery='';ui.searching=false;ui.searchError='';ui.searchSerial++;
+  ui.limit=60;companyDocsRender_();
+}
+function companyDocsVisibleItems_(){
+  const ui=companyDocsUi,raw=companyDocsData_().items||[];
+  const query=ui.query.trim().toLocaleLowerCase('ja-JP'),terms=query.split(/\s+/).filter(Boolean);
+  const remote=ui.remoteQuery===ui.query.trim()?ui.remoteIds:null;
+  const list=raw.filter(d=>{
+    if(ui.folderId!=='all'&&d.folderId!==ui.folderId&&d.folderId.indexOf(ui.folderId+'/')!==0)return false;
+    if(ui.category!=='all'&&d.category!==ui.category)return false;
+    if(ui.status!=='all'&&d.status!==ui.status)return false;
+    if(!terms.length)return true;
+    const text=[d.title,d.summary,d.category,d.folderId,companyDocsFolderName_(d.folderId)]
+      .concat(d.tags||[]).join(' ').toLocaleLowerCase('ja-JP');
+    return terms.every(t=>text.includes(t))||!!(remote&&remote.has(d.id));
+  });
+  if(ui.sort==='name')list.sort((a,b)=>a.title.localeCompare(b.title,'ja'));
+  else if(ui.sort==='oldest')list.sort((a,b)=>a.updatedAt.localeCompare(b.updatedAt));
+  else list.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id));
+  return list;
+}
+function companyDocsStatusBadge_(status){
+  return '<span class="company-doc-status '+(status==='公開'?'is-published':'is-draft')+'">'+
+    escapeHtml(status)+'</span>';
+}
+function companyDocsFolderTree_(){
+  const ui=companyDocsUi,data=companyDocsData_();
+  let html='<button type="button" class="company-doc-tree-all '+(ui.folderId==='all'?'is-active':'')+
+    '" onclick="companyDocsSelectFolder(\'all\')"><span class="company-doc-tree-all-icon">▤</span><span>すべての文書</span><small>'+
+    companyDocsFolderCount_('all')+'</small></button>';
+  (data.folders||[]).filter(f=>!f.parentId).forEach(root=>{
+    const children=(data.folders||[]).filter(f=>f.parentId===root.id);
+    const opened=!!ui.expanded[root.id],active=ui.folderId===root.id;
+    html+='<div class="company-doc-tree-group" data-root="'+companyDocsSafeAttr_(root.id)+'">'+
+      '<div class="company-doc-tree-root">'+
+      '<button type="button" class="company-doc-tree-toggle" aria-label="'+escapeHtml(root.name)+'を'+(opened?'閉じる':'開く')+
+      '" aria-expanded="'+opened+'" onclick="companyDocsToggleFolder(\''+root.id+'\')">'+(opened?'⌄':'›')+'</button>'+
+      '<button type="button" class="company-doc-tree-root-name '+(active?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+root.id+'\')"><span class="company-doc-folder-icon">▣</span>'+
+      '<span>'+escapeHtml(root.name)+'</span><small>'+companyDocsFolderCount_(root.id)+'</small></button></div>';
+    if(opened)html+='<div class="company-doc-tree-children">'+children.map(f=>
+      '<button type="button" class="company-doc-tree-leaf '+(ui.folderId===f.id?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+f.id+'\')"><span>⌞</span><span>'+escapeHtml(f.name)+'</span>'+
+      '<small>'+companyDocsFolderCount_(f.id)+'</small></button>').join('')+'</div>';
+    html+='</div>';
+  });
+  return html;
+}
+function companyDocsQuickFolders_(){
+  const data=companyDocsData_();
+  return '<div class="company-doc-quick-folders" aria-label="分野から探す">'+
+    (data.folders||[]).filter(f=>!f.parentId).map(f=>
+      '<button type="button" class="company-doc-quick-folder '+(companyDocsUi.folderId===f.id?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+f.id+'\')"><span class="company-doc-quick-dot"></span><strong>'+
+      escapeHtml(f.name)+'</strong><small>'+companyDocsFolderCount_(f.id)+'件</small></button>').join('')+
+    '</div>';
+}
+function companyDocsListRows_(){
+  const ui=companyDocsUi,filtered=companyDocsVisibleItems_(),visible=filtered.slice(0,ui.limit);
+  if(!filtered.length)return '<div class="company-doc-empty"><span class="company-doc-empty-icon">⌕</span>'+
+    '<strong>該当する文書がありません</strong><p>フォルダや検索条件を変えてください。</p>'+
+    '<button class="secondary-button compact" type="button" onclick="companyDocsClearFilters()">条件を解除</button></div>';
+  let html=visible.map(d=>{
+    const selected=d.id===ui.selectedId,folder=companyDocsFolderName_(d.folderId);
+    return '<button type="button" class="company-doc-row '+(selected?'is-selected':'')+
+      '" onclick="companyDocsSelect('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">'+
+      '<span class="company-doc-row-icon" aria-hidden="true">▤</span>'+
+      '<span class="company-doc-row-main"><strong>'+escapeHtml(d.title)+'</strong>'+
+      '<span class="company-doc-row-desc">'+escapeHtml(d.summary||folder)+'</span>'+
+      '<span class="company-doc-row-meta">'+escapeHtml(folder)+' <span aria-hidden="true">·</span> '+
+      escapeHtml(d.category)+' <span aria-hidden="true">·</span> 第'+d.revision+'版</span></span>'+
+      '<span class="company-doc-row-right">'+companyDocsStatusBadge_(d.status)+
+      '<small>'+escapeHtml(String(d.updatedAt||'').slice(0,10))+'</small></span>'+
+      '<span class="company-doc-row-chevron" aria-hidden="true">›</span></button>';
+  }).join('');
+  if(visible.length<filtered.length)html+='<button type="button" class="company-doc-more secondary-button" onclick="companyDocsMore()">さらに'+
+    Math.min(60,filtered.length-visible.length)+'件を表示</button>';
+  return html;
+}
+function companyDocsPaintList_(){
+  const list=document.getElementById('companyDocsListRows');
+  if(list)list.innerHTML=companyDocsListRows_();
+  const count=document.getElementById('companyDocsListCount');
+  if(count)count.textContent=companyDocsVisibleItems_().length+'件';
+  const status=document.getElementById('companyDocsSearchStatus');
+  if(status)status.textContent=companyDocsUi.searching?'本文を検索中…':companyDocsUi.searchError||'';
+}
+function companyDocsBreadcrumb_(){
+  const parent=companyDocsFolderParent_(companyDocsUi.folderId),name=companyDocsFolderName_(companyDocsUi.folderId);
+  return '<nav class="company-doc-crumb" aria-label="現在のフォルダ">'+
+    '<button type="button" onclick="companyDocsSelectFolder(\'all\')">社内文書</button>'+
+    (parent?' <span>›</span><button type="button" onclick="companyDocsSelectFolder(\''+parent.id+'\')">'+escapeHtml(parent.name)+'</button>':'')+
+    ' <span>›</span><strong>'+escapeHtml(name)+'</strong></nav>';
+}
+function companyDocsBeginNew(){
+  if(!companyDocsCanManage_()||companyDocsUi.busy)return;
+  const ui=companyDocsUi,folder=companyDocsFolder_(ui.folderId);
+  const folderId=folder&&folder.parentId?folder.id:
+    folder?((companyDocsData_().folders||[]).find(f=>f.parentId===folder.id)||{}).id||'other/general':'other/general';
+  ui.draft={id:'',revision:0,title:'',category:'社内規程',folderId,
+    tags:[],summary:'',body:'',url:'',effectiveOn:'',status:'下書き'};
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.mobileStep='detail';ui.error='';
+  companyDocsRender_();
+}
+function companyDocsKeyClient_(){
+  return 'CD-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,17);
+}
+function companyDocsStartEdit(id){
+  const ui=companyDocsUi,d=ui.detail;
+  if(!companyDocsCanManage_()||!d||d.id!==id||ui.busy)return;
+  ui.draft={id:d.id,revision:d.revision,title:d.title,category:d.category,
+    folderId:d.folderId||'other/general',tags:(d.tags||[]).slice(),
+    summary:d.summary||'',body:d.body||'',url:d.url||'',
+    effectiveOn:d.effectiveOn||'',status:d.status||'下書き'};
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.mobileStep='detail';ui.error='';
+  companyDocsRender_();
+}
+function companyDocsCancelEdit(){
+  if(companyDocsUi.busy)return;
+  companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsUi.key='';companyDocsRender_();
+}
+function companyDocsDraftField(key,value){
+  if(!companyDocsUi.draft)return;
+  companyDocsUi.draft[key]=key==='tags'?String(value).split(/[,、，]/).map(x=>x.trim()).filter(Boolean):value;
+}
 function companyDocsSave(){
-  if(companyDocsUi.busy||!companyDocsUi.draft)return;
-  const d=companyDocsUi.draft;
-  if(!d.title.trim()){showToast('文書名を入力してください');return;}
-  companyDocsUi.busy=true;companyDocsRender_();
-  google.script.run.withSuccessHandler(r=>{
-    if(!companyDocsUi.data)return;
-    companyDocsUi.busy=false;companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsUi.key='';
-    companyDocsUi.selectedId=r.document.id;companyDocsUi.detail=r.document;
-    showToast('社内文書を保存しました');loadCompanyDocs(true);companyDocsRender_();
-  }).withFailureHandler(e=>{
-    companyDocsUi.busy=false;handleApiError(e,'文書を保存できませんでした');companyDocsRender_();
-  }).saveCompanyDocument(state.sessionToken,Object.assign({},d,{requestKey:companyDocsUi.key}));
+  const ui=companyDocsUi,d=ui.draft;
+  if(!d||ui.busy||!companyDocsCanManage_())return;
+  if(!String(d.title||'').trim()){showToast('文書名を入力してください');return;}
+  if(!d.folderId||!companyDocsFolder_(d.folderId)||!companyDocsFolder_(d.folderId).parentId){
+    showToast('保存先の業務フォルダを選択してください');return;
+  }
+  const identity=companyDocsIdentity_();
+  ui.busy=true;companyDocsRender_();
+  google.script.run.withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.editing=false;ui.draft=null;ui.key='';
+    ui.selectedId=result.document.id;ui.detail=result.document;
+    ui.details[result.document.id]=result.document;ui.mobileStep='detail';
+    ui.folderId=result.document.folderId;
+    showToast('社内文書を保存しました');
+    loadCompanyDocs(true);companyDocsRender_();
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.error=cleanApiErrorMessage(err,'文書を保存できませんでした。');
+    companyDocsRender_();
+  }).saveCompanyDocument(state.sessionToken,Object.assign({},d,{requestKey:ui.key}));
 }
 function companyDocsDelete(){
-  const d=companyDocsUi.detail;
-  if(!d||!companyDocsUi.data||!companyDocsUi.data.canManage||companyDocsUi.busy)return;
+  const ui=companyDocsUi,d=ui.detail;
+  if(!d||!companyDocsCanManage_()||ui.busy)return;
   const modal=ensureModal();
-  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書の削除確認"><div class="modal-head"><h2>社内文書を削除しますか？</h2></div><p>「'+escapeHtml(d.title)+'」を一覧から非表示にします。監査情報は残ります。</p><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="companyDocsConfirmDelete()">削除する</button></div></section>';
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="文書を削除">'+
+    '<div class="modal-head"><h2>社内文書を削除しますか？</h2></div><p>「'+escapeHtml(d.title)+
+    '」を一覧から非表示にします。監査ログには操作が残ります。</p>'+
+    '<div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<button class="primary-button" onclick="companyDocsConfirmDelete()">削除する</button></div></section>';
 }
 function companyDocsConfirmDelete(){
-  const d=companyDocsUi.detail;
-  if(!d||companyDocsUi.busy)return;
-  closeModal();companyDocsUi.busy=true;companyDocsRender_();
+  const ui=companyDocsUi,d=ui.detail;
+  if(!d||!companyDocsCanManage_()||ui.busy)return;
+  const identity=companyDocsIdentity_();
+  closeModal();ui.busy=true;companyDocsRender_();
   google.script.run.withSuccessHandler(()=>{
-    companyDocsUi.busy=false;companyDocsUi.detail=null;companyDocsUi.selectedId='';
-    showToast('社内文書を削除しました');loadCompanyDocs(true);
-  }).withFailureHandler(e=>{companyDocsUi.busy=false;handleApiError(e,'削除に失敗しました');companyDocsRender_()})
-  .deleteCompanyDocument(state.sessionToken,d.id,d.revision);
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;delete ui.details[d.id];ui.detail=null;ui.selectedId='';ui.detailSerial++;
+    ui.mobileStep='list';showToast('社内文書を削除しました');loadCompanyDocs(true);
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.error=cleanApiErrorMessage(err,'削除できませんでした。');companyDocsRender_();
+  }).deleteCompanyDocument(state.sessionToken,d.id,d.revision);
 }
 function companyDocsInitialize(){
-  if(!companyDocsUi.data||!companyDocsUi.data.canInitialize||companyDocsUi.busy)return;
+  const ui=companyDocsUi;
+  if(!ui.data||!ui.data.canInitialize||ui.busy)return;
   const modal=ensureModal();
-  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書の初期化確認"><div class="modal-head"><h2>社内文書の保存先を準備</h2></div><p>FM WORKS DBのバックアップ後に専用シートを新設します。</p><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="companyDocsConfirmInitialize()">バックアップして準備</button></div></section>';
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書のDB更新">'+
+    '<div class="modal-head"><h2>社内文書のDBを準備します</h2></div>'+
+    '<p>バックアップを作成した後、保存用シートまたは分類用の列を追加します。既存の文書は削除しません。</p>'+
+    '<div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<button class="primary-button" onclick="companyDocsConfirmInitialize()">バックアップして更新</button></div></section>';
 }
 function companyDocsConfirmInitialize(){
-  if(companyDocsUi.busy)return;
-  closeModal();companyDocsUi.busy=true;companyDocsRender_();
+  const ui=companyDocsUi;
+  if(!ui.data||!ui.data.canInitialize||ui.busy)return;
+  const identity=companyDocsIdentity_();
+  closeModal();ui.busy=true;companyDocsRender_();
   google.script.run.withSuccessHandler(()=>{
-    companyDocsUi.busy=false;showToast('保存先を準備しました');loadCompanyDocs(true);
-  }).withFailureHandler(e=>{companyDocsUi.busy=false;handleApiError(e,'初期化できませんでした');companyDocsRender_()})
-  .initializeCompanyDocuments(state.sessionToken);
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;showToast('保存先を準備しました');loadCompanyDocs(true);
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.error=cleanApiErrorMessage(err,'DB更新に失敗しました。');companyDocsRender_();
+  }).initializeCompanyDocuments(state.sessionToken);
 }
-function companyDocsSetQuery(v){companyDocsUi.query=v;companyDocsUpdateList_()}
-function companyDocsSetCategory(v){companyDocsUi.category=v;companyDocsUpdateList_()}
-function companyDocsFiltered_(){
-  const query=companyDocsUi.query.trim().toLowerCase(),items=companyDocsUi.data&&companyDocsUi.data.items||[];
-  return items.filter(d=>(companyDocsUi.category==='ALL'||d.category===companyDocsUi.category)&&(!query||[d.title,d.category,d.summary].join(' ').toLowerCase().includes(query)));
+function companyDocsEditor_(){
+  const ui=companyDocsUi,d=ui.draft||{},data=companyDocsData_();
+  const folders=(data.folders||[]).filter(f=>f.parentId);
+  return '<form class="company-doc-editor" onsubmit="event.preventDefault();companyDocsSave()">'+
+    '<div class="company-doc-detail-heading"><div><span class="company-doc-eyebrow">DOCUMENT EDITOR</span>'+
+    '<h2>'+(d.id?'社内文書の編集':'社内文書の新規登録')+'</h2></div></div>'+
+    (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p>':'')+
+    '<label>文書名 <span class="company-doc-required">必須</span><input required maxlength="120" value="'+companyDocsSafeAttr_(d.title)+
+      '" oninput="companyDocsDraftField(\'title\',this.value)" placeholder="例：備品貸出マニュアル"></label>'+
+    '<div class="company-doc-form-pair"><label>業務フォルダ <span class="company-doc-required">必須</span><select required onchange="companyDocsDraftField(\'folderId\',this.value)">'+
+      folders.map(f=>'<option value="'+f.id+'" '+(d.folderId===f.id?'selected':'')+'>'+
+        escapeHtml((companyDocsFolder_(f.parentId)||{}).name+' ／ '+f.name)+'</option>').join('')+'</select></label>'+
+    '<label>文書の種類<select onchange="companyDocsDraftField(\'category\',this.value)">'+
+      (data.categories||[]).map(c=>'<option value="'+c+'" '+(d.category===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('')+'</select></label></div>'+
+    '<div class="company-doc-form-pair"><label>公開状態<select onchange="companyDocsDraftField(\'status\',this.value)">'+
+      ['下書き','公開'].map(s=>'<option '+(d.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></label>'+
+    '<label>施行日<input type="date" value="'+companyDocsSafeAttr_(d.effectiveOn)+'" onchange="companyDocsDraftField(\'effectiveOn\',this.value)"></label></div>'+
+    '<label>検索タグ（カンマ区切り・最大8個）<input maxlength="320" value="'+companyDocsSafeAttr_((d.tags||[]).join(', '))+
+      '" oninput="companyDocsDraftField(\'tags\',this.value)" placeholder="例：備品, 貸出, 総務"></label>'+
+    '<label>概要<textarea rows="3" maxlength="300" oninput="companyDocsDraftField(\'summary\',this.value)">'+
+      escapeHtml(d.summary||'')+'</textarea></label>'+
+    '<label>本文<textarea rows="12" maxlength="20000" oninput="companyDocsDraftField(\'body\',this.value)">'+
+      escapeHtml(d.body||'')+'</textarea></label>'+
+    '<label>参照リンク（HTTPS）<input type="url" maxlength="2000" value="'+companyDocsSafeAttr_(d.url)+
+      '" oninput="companyDocsDraftField(\'url\',this.value)" placeholder="https://..."></label>'+
+    '<div class="company-doc-editor-note">文書本文はテキスト形式です。PDF・Word添付は今後の機能拡張対象です。</div>'+
+    '<div class="company-doc-form-actions"><button type="button" class="secondary-button" onclick="companyDocsCancelEdit()" '+
+      (ui.busy?'disabled':'')+'>キャンセル</button><button type="submit" class="primary-button" '+(ui.busy?'disabled':'')+'>'+
+      (ui.busy?'保存中…':'変更を保存')+'</button></div></form>';
 }
-function companyDocsListMarkup_(){
-  const list=companyDocsFiltered_();
-  return list.length?list.map(d=>'<button class="company-doc-item '+(companyDocsUi.selectedId===d.id?'selected':'')+'" onclick="companyDocsSelect('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">'+
-    '<strong>'+escapeHtml(d.title)+'</strong><small>'+escapeHtml(d.category)+' · '+escapeHtml(d.status)+' · 第'+d.revision+'版</small>'+
-    '<small>'+escapeHtml(d.updatedAt)+'</small></button>').join(''):'<div class="v15-empty">該当する文書はありません。</div>';
+function companyDocsDetail_(){
+  const ui=companyDocsUi;
+  if(ui.editing)return companyDocsEditor_();
+  if(ui.loadingDetail)return '<div class="company-doc-detail-loading"><div class="loading-card"></div><p>文書を読み込んでいます…</p></div>';
+  if(!ui.detail)return '<div class="company-doc-no-selection"><span class="company-doc-no-selection-icon">▤</span>'+
+    '<h2>文書を選ぶと、ここに内容が表示されます</h2><p>中央の一覧から文書を選択してください。<br>別画面に移動せず内容を確認できます。</p></div>';
+  const d=ui.detail,folder=companyDocsFolderName_(d.folderId),parent=companyDocsFolderParent_(d.folderId);
+  // Never turn a manually edited spreadsheet URL into an executable link.
+  const safeUrl=/^https:\/\/[A-Za-z0-9.-]+(?::443)?(?:[/?#][^\s]*)?$/i.test(String(d.url||''))?String(d.url):'';
+  return '<article class="company-doc-article"><div class="company-doc-detail-heading">'+
+    '<div><span class="company-doc-eyebrow">DOCUMENT PREVIEW</span><h2>'+escapeHtml(d.title)+'</h2></div>'+
+    companyDocsStatusBadge_(d.status)+'</div>'+
+    '<div class="company-doc-detail-path">'+escapeHtml(parent?parent.name+' ／ ':'')+escapeHtml(folder)+'</div>'+
+    '<dl class="company-doc-info">'+
+    '<div><dt>文書の種類</dt><dd>'+escapeHtml(d.category)+'</dd></div>'+
+    '<div><dt>改訂番号</dt><dd>第'+d.revision+'版</dd></div>'+
+    '<div><dt>施行日</dt><dd>'+escapeHtml(d.effectiveOn||'未設定')+'</dd></div>'+
+    '<div><dt>最終更新</dt><dd>'+escapeHtml(d.updatedAt||'—')+'</dd></div></dl>'+
+    ((d.tags||[]).length?'<div class="company-doc-tags">'+d.tags.map(t=>
+      '<span class="company-doc-tag">#'+escapeHtml(t)+'</span>').join('')+'</div>':'')+
+    (d.summary?'<p class="company-doc-summary">'+escapeHtml(d.summary)+'</p>':'')+
+    (d.body?'<div class="company-doc-body">'+escapeHtml(d.body)+'</div>':
+      '<div class="company-doc-no-body">本文は登録されていません。</div>')+
+    (safeUrl?'<p class="company-doc-link"><a target="_blank" rel="noopener noreferrer" href="'+companyDocsSafeAttr_(safeUrl)+
+      '">参照リンクを開く ↗</a></p>':'')+
+    (companyDocsCanManage_()?'<div class="company-doc-article-actions">'+
+      '<button type="button" class="primary-button compact" onclick="companyDocsStartEdit('+JSON.stringify(d.id).replace(/"/g,'&quot;')+
+      ')">編集する</button><button type="button" class="secondary-button compact" onclick="companyDocsDelete()" '+(ui.busy?'disabled':'')+'>削除</button></div>':'')+
+    '</article>';
 }
-function companyDocsUpdateList_(){const el=document.getElementById('companyDocsList');if(el)el.innerHTML=companyDocsListMarkup_();}
 function companyDocsPage(){
-  const ui=companyDocsUi,data=ui.data,canManage=!!(data&&data.canManage);
-  const heading='<header class="v15-page-hero v15-page-hero-short"><div><div class="v15-kicker">COMPANY LIBRARY</div><h1>社内文書</h1><p>就業規則・社内規程・マニュアルをまとめて確認できます。</p></div>'+
-    (canManage?'<button type="button" class="primary-button" onclick="companyDocsStartEdit()">＋ 新規登録</button>':'')+'</header>';
-  if(!data)return '<section class="v15-workspace">'+heading+'<div class="card">'+(ui.error?escapeHtml(ui.error)+' <button onclick="loadCompanyDocs(true)">再読込</button>':'文書一覧を読み込んでいます…')+'</div></section>';
-  if(data.setupRequired)return '<section class="v15-workspace">'+heading+'<div class="card"><h2>保存先が未設定です</h2><p class="muted">まだ社内文書は登録されていません。既存データは変更しません。</p>'+
-    (data.canInitialize?'<button type="button" class="primary-button" onclick="companyDocsInitialize()" '+(ui.busy?'disabled':'')+'>バックアップして保存先を準備</button>':'管理者による初期設定後に利用できます。')+'</div></section>';
-  const categories=['ALL',...data.categories];
-  const toolbar='<div class="company-doc-controls"><input type="search" aria-label="文書を検索" placeholder="文書名・概要を検索" value="'+escapeHtml(ui.query)+'" oninput="companyDocsSetQuery(this.value)"><select aria-label="分類で絞り込み" onchange="companyDocsSetCategory(this.value)">'+categories.map(c=>'<option value="'+c+'" '+(ui.category===c?'selected':'')+'>'+(c==='ALL'?'すべての分類':c)+'</option>').join('')+'</select>'+
-    '<button class="secondary-button" onclick="loadCompanyDocs(true)">更新</button></div>';
-  let detail='<div class="v15-empty">左の一覧から文書を選択してください。</div>';
-  if(ui.loadingDetail)detail='<div class="v15-empty">本文を読み込んでいます…</div>';
-  else if(ui.editing){
-    const d=ui.draft||{};
-    detail='<form class="company-doc-form" onsubmit="event.preventDefault();companyDocsSave()">'+
-      '<h2>'+(d.id?'文書を編集':'文書を登録')+'</h2>'+
-      '<label>文書名<input required maxlength="120" value="'+escapeHtml(d.title||'')+'" oninput="companyDocsDraftField(\'title\',this.value)"></label>'+
-      '<label>分類<select onchange="companyDocsDraftField(\'category\',this.value)">'+data.categories.map(c=>'<option '+(c===d.category?'selected':'')+'>'+c+'</option>').join('')+'</select></label>'+
-      '<label>公開状態<select onchange="companyDocsDraftField(\'status\',this.value)"><option '+(d.status==='下書き'?'selected':'')+'>下書き</option><option '+(d.status==='公開'?'selected':'')+'>公開</option></select></label>'+
-      '<label>施行日<input type="date" value="'+escapeHtml(d.effectiveOn||'')+'" onchange="companyDocsDraftField(\'effectiveOn\',this.value)"></label>'+
-      '<label>概要<textarea maxlength="300" rows="2" oninput="companyDocsDraftField(\'summary\',this.value)">'+escapeHtml(d.summary||'')+'</textarea></label>'+
-      '<label>本文（最大20,000文字）<textarea maxlength="20000" rows="12" oninput="companyDocsDraftField(\'body\',this.value)">'+escapeHtml(d.body||'')+'</textarea></label>'+
-      '<label>参考資料のHTTPSリンク<input type="url" maxlength="2000" placeholder="https://..." value="'+escapeHtml(d.url||'')+'" oninput="companyDocsDraftField(\'url\',this.value)"></label>'+
-      '<p class="muted">文書本文はテキスト保存です。PDF／Wordファイルのアップロードは次の段階で検討します。</p>'+
-      '<div class="button-row"><button class="primary-button" type="submit" '+(ui.busy?'disabled':'')+'>保存</button><button class="secondary-button" type="button" '+(ui.busy?'disabled':'')+' onclick="companyDocsCancelEdit()">キャンセル</button></div></form>';
-  }else if(ui.detail){
-    const d=ui.detail;detail='<article class="company-doc-article"><div class="company-doc-article-header"><h2>'+escapeHtml(d.title)+'</h2><span class="badge">'+escapeHtml(d.status)+'</span></div>'+
-      '<div class="company-doc-meta">'+escapeHtml(d.category)+' · 第'+d.revision+'版'+(d.effectiveOn?' · 施行日 '+escapeHtml(d.effectiveOn):'')+' · 最終更新 '+escapeHtml(d.updatedAt)+'</div>'+
-      (d.summary?'<p>'+escapeHtml(d.summary)+'</p>':'')+
-      (d.body?'<div class="company-doc-body">'+escapeHtml(d.body)+'</div>':'<div class="v15-empty">本文未登録</div>')+
-      (d.url?'<p><a href="'+escapeHtml(d.url)+'" target="_blank" rel="noopener noreferrer">参照リンクを開く</a></p>':'')+
-      (canManage?'<div class="button-row"><button class="primary-button" onclick="companyDocsStartEdit('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">編集</button><button class="secondary-button" onclick="companyDocsDelete()" '+(ui.busy?'disabled':'')+'>削除</button></div>':'')+'</article>';
+  const ui=companyDocsUi,data=ui.data;
+  const canManage=!!(data&&data.canManage),count=(data&&data.items||[]).length;
+  const published=(data&&data.items||[]).filter(d=>d.status==='公開').length;
+  const hero='<header class="company-doc-hero"><div class="company-doc-hero-copy"><span class="company-doc-eyebrow">COMPANY LIBRARY</span>'+
+    '<h1>社内文書</h1><p>就業規則・社内規程・マニュアルを業務分野から探せます。</p></div>'+
+    '<div class="company-doc-hero-actions">'+
+    '<span class="company-doc-count-chip">全'+count+'件 <span>／ 公開 '+published+'件</span></span>'+
+    (canManage?'<button class="primary-button company-doc-create" type="button" onclick="companyDocsBeginNew()">＋ 文書登録</button>':'')+
+    '</div></header>';
+  if(!data){
+    return '<section class="v15-workspace company-doc-workspace" data-step="'+ui.mobileStep+'">'+hero+
+      '<div class="company-doc-loading card">'+
+      (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p><button type="button" class="secondary-button" onclick="loadCompanyDocs(true)">再読込</button>':
+      '<div class="loading-card"></div><p>文書一覧を読み込んでいます…</p>')+'</div></section>';
   }
-  return '<section class="v15-workspace company-doc-workspace">'+heading+
-    '<div class="company-doc-layout"><section class="card company-doc-list-pane"><h2>文書一覧 <small>('+data.items.length+'件)</small></h2>'+toolbar+'<div id="companyDocsList" class="company-doc-list">'+companyDocsListMarkup_()+'</div></section>'+
-    '<section class="card company-doc-detail-pane">'+detail+'</section></div></section>';
+  if(data.setupRequired){
+    return '<section class="v15-workspace company-doc-workspace">'+hero+'<div class="card company-doc-empty-setup">'+
+      '<h2>社内文書の保存先が未準備です</h2><p>既存の勤怠や経理データを変更せず専用シートを作成します。</p>'+
+      (data.canInitialize?'<button type="button" class="primary-button" onclick="companyDocsInitialize()">バックアップして準備</button>':
+      '<p>管理者による初期設定後に利用できます。</p>')+'</div></section>';
+  }
+  const upgrade=data.needsUpgrade?'<div class="company-doc-upgrade"><span>分類列の更新が必要です。</span>'+
+    (data.canInitialize?'<button class="secondary-button compact" onclick="companyDocsInitialize()">バックアップしてDB更新</button>':
+    '<span>管理者へ連絡してください。</span>')+'</div>':'';
+  const options=(data.categories||[]).map(c=>'<option value="'+c+'" '+(ui.category===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('');
+  const toolbar='<div class="company-doc-toolbar"><label class="company-doc-search">'+
+    '<span aria-hidden="true">⌕</span><input id="companyDocsSearch" type="search" autocomplete="off" aria-label="社内文書を検索"'+
+    ' placeholder="文書名・タグ・本文を検索" maxlength="80" value="'+companyDocsSafeAttr_(ui.query)+
+    '" oninput="companyDocsSetQuery(this.value)"></label>'+
+    '<label class="company-doc-filter"><span>種類</span><select aria-label="文書の種類" onchange="companyDocsSetCategory(this.value)">'+
+    '<option value="all">すべて</option>'+options+'</select></label>'+
+    '<label class="company-doc-filter"><span>状態</span><select aria-label="公開状態" onchange="companyDocsSetStatus(this.value)">'+
+    '<option value="all">すべて</option><option value="公開" '+(ui.status==='公開'?'selected':'')+'>公開</option>'+
+    (canManage?'<option value="下書き" '+(ui.status==='下書き'?'selected':'')+'>下書き</option>':'')+'</select></label>'+
+    '<button type="button" class="company-doc-refresh secondary-button compact" onclick="loadCompanyDocs(true)" '+
+    (ui.loading?'disabled':'')+' aria-label="一覧を更新">↻ <span>更新</span></button></div>';
+  const categories=companyDocsQuickFolders_();
+  const stepBackFolders='<button type="button" class="company-doc-mobile-back" onclick="companyDocsSwitchStep_(\'folders\')">‹ 分野を選び直す</button>';
+  const stepBackList='<button type="button" class="company-doc-mobile-back" onclick="companyDocsSwitchStep_(\'list\')">‹ 文書一覧へ</button>';
+  const folderPanel='<aside class="company-doc-tree-pane card" aria-label="業務フォルダ">'+
+    '<div class="company-doc-pane-head"><h2>業務フォルダ</h2><small>分野から探す</small></div>'+
+    '<nav class="company-doc-tree" aria-label="社内文書の業務分類">'+companyDocsFolderTree_()+'</nav></aside>';
+  const listPanel='<section class="company-doc-list-pane card" aria-label="文書一覧">'+stepBackFolders+
+    companyDocsBreadcrumb_()+
+    '<div class="company-doc-pane-head company-doc-list-heading"><h2>文書一覧</h2>'+
+    '<div class="company-doc-list-tools"><small id="companyDocsListCount">'+companyDocsVisibleItems_().length+'件</small>'+
+    '<select aria-label="並び替え" onchange="companyDocsSetSort(this.value)">'+
+    '<option value="newest" '+(ui.sort==='newest'?'selected':'')+'>更新が新しい順</option>'+
+    '<option value="oldest" '+(ui.sort==='oldest'?'selected':'')+'>更新が古い順</option>'+
+    '<option value="name" '+(ui.sort==='name'?'selected':'')+'>文書名順</option></select></div></div>'+
+    '<p id="companyDocsSearchStatus" class="company-doc-search-note" role="status">'+
+    (ui.searching?'本文を検索中…':escapeHtml(ui.searchError||''))+'</p>'+
+    '<div id="companyDocsListRows" class="company-doc-list">'+companyDocsListRows_()+'</div></section>';
+  const detailPanel='<section class="company-doc-detail-pane card" aria-label="文書プレビュー">'+stepBackList+
+    companyDocsDetail_()+'</section>';
+  return '<section class="v15-workspace company-doc-workspace" data-step="'+companyDocsSafeAttr_(ui.mobileStep)+'">'+
+    hero+upgrade+toolbar+categories+
+    (ui.error?'<div class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</div>':'')+
+    '<div class="company-doc-layout">'+folderPanel+listPanel+detailPanel+'</div></section>';
 }
 </script>
