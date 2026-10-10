@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/Finance.gs','src/FinanceAdvisor.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Somu.gs','src/SomuGrowth.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesFinanceAdvisor.html','src/StylesCompanyDocs.html','src/StylesSomu.html','src/StylesSomuGrowth.html','src/AppSomu.html','src/AppSomuGrowth.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_somu_growth.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs'
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_somu_growth.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs','src/RotaryEngine.html','src/AppRotaryIntegration.html','src/StylesRotaryLoader.html','scripts/test_rotary_integration.mjs','scripts/test_rotary_viewport.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -15,9 +15,9 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppSomu.html','AppSomuGrowth.html','AppCompanyDocs.html','AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppFinanceAdvisor.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['RotaryEngine.html','AppRotaryIntegration.html','AppSomu.html','AppSomuGrowth.html','AppCompanyDocs.html','AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppFinanceAdvisor.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
-const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesFinanceAdvisor.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesCompanyDocs.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomu.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomuGrowth.html'),'utf8');
+const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesFinanceAdvisor.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesCompanyDocs.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomu.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesRotaryLoader.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesSomuGrowth.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','事務','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
@@ -56,6 +56,29 @@ for(const marker of ['function companyDocsFolderTree_(','function companyDocsVis
 for(const marker of ['.company-doc-layout','.company-doc-tree-pane','.company-doc-list-pane',
  '.company-doc-detail-pane','@media(max-width:760px)']){
  if(!companyDocsStyles.includes(marker)){console.error('Company document responsive layout missing '+marker);failed=true;}
+}
+const rotaryIntegration=fs.readFileSync(path.join(root,'src/AppRotaryIntegration.html'),'utf8');
+const rotaryEngine=fs.readFileSync(path.join(root,'src/RotaryEngine.html'),'utf8');
+const rotaryStyles=fs.readFileSync(path.join(root,'src/StylesRotaryLoader.html'),'utf8');
+for(const marker of ["include_('RotaryEngine')","include_('AppRotaryIntegration')","include_('StylesRotaryLoader')"]){
+ if(!indexText.includes(marker)){console.error('Rotary loader not mounted: '+marker);failed=true;}
+}
+for(const marker of ['class FMRotaryLoader','_animate(t)','1.22','deg/3']){
+ if(!rotaryEngine.includes(marker)){console.error('Rotary geometry/animation marker missing: '+marker);failed=true;}
+}
+for(const marker of ['function FMRotaryRPC()','authMethods','pending.region','progress:null']){
+ if(!rotaryIntegration.includes(marker)){console.error('Rotary activity tracking missing: '+marker);failed=true;}
+}
+for(const marker of ['.fmr-root.fmr-page','.fmr-root.fmr-region']){
+ if(!rotaryStyles.includes(marker)){console.error('Rotary loader CSS missing: '+marker);failed=true;}
+}
+const coveredSources=['AppCore','AppShell','AppOperations','AppPeopleMonthly','AppQuotes',
+ 'AppDocuments','AppCompanyDocs','AppSomu','AppSomuGrowth','AppFinance','AppFinanceAdvisor','AppAdmin'];
+for(const moduleName of coveredSources){
+ const source=fs.readFileSync(path.join(root,'src',moduleName+'.html'),'utf8');
+ if(!source.includes("FMRotaryRPC():google.script.run")){
+   console.error('GAS calls not covered by rotary loader: '+moduleName);failed=true;
+ }
 }
 const tinyFontMatches=[...styles.matchAll(/font-size\\s*:\\s*(\\d+(?:\\.\\d+)?)px/g)].filter(m=>Number(m[1])<11);
 if(tinyFontMatches.length){

@@ -1,0 +1,175 @@
+<script>
+/* FM WORKS rotary activity integration. Covers every foreground GAS RPC without
+ * changing individual success/failure handlers. The supplied rotary component is
+ * the visual engine; this file binds it to real request lifecycle events.
+ * Percent remains hidden because google.script.run does not report true progress.
+ */
+(function(global){
+'use strict';
+let activity=null,sequence=0;
+const authMethods=new Set(['getPublicAuthConfig','resumeSession','getInitialData','login','initializeFirstAdmin']);
+const quietMethods=new Set(['getNotifications','ensureDailyBackup']);
+const labels={
+getPublicAuthConfig:'ログイン画面を準備しています…',
+resumeSession:'ログイン状態を確認しています…',
+getInitialData:'勤怠データを読み込んでいます…',
+login:'ログインしています…',
+initializeFirstAdmin:'初期設定を保存しています…',
+getHomeOverview:'ホームの集計を読み込んでいます…',
+getCompanyDocuments:'社内文書を読み込んでいます…',
+getCompanyDocument:'文書本文を読み込んでいます…',
+searchCompanyDocumentBodies:'社内文書を検索しています…',
+getFinanceOverview:'経理データを読み込んでいます…',
+getQuoteWorkspace:'見積データを読み込んでいます…',
+getAttendancePreview:'勤怠データを読み込んでいます…',
+getWorklogWindow:'工数データを読み込んでいます…',
+getMonthly:'月次データを読み込んでいます…'
+};
+function readable(method){
+if(labels[method])return labels[method];
+if(/^(record|save|create|update|upsert|submit|approve|reject|delete|remove|cancel|settle|initialize|apply|set|change|process)/i.test(method))return '変更内容を保存しています…';
+if(/^(search|find)/i.test(method))return '検索しています…';
+if(/^(import|export|generate|createPdf)/i.test(method))return '書類を処理しています…';
+return 'データを読み込んでいます…';
+}
+function isBackground(method){
+  if(quietMethods.has(method))return true;
+  if(/Notification|ensureDailyBackup/.test(method))return true;
+  // Ambient global search is displayed near its input, not over the whole page.
+  return false;
+}
+function zoneFor(method){
+  if(authMethods.has(method))return 'page';
+  if(/GlobalSearch|searchGlobal/i.test(method))return 'inline';
+  return 'region';
+}
+function ensureActivity(){
+if(activity)return activity;
+if(typeof FMRotaryLoader!=='function')return null;
+const body=document.body,content=document.querySelector('#app .workspace');
+if(!body||!content)return null;
+const page=new FMRotaryLoader({mode:'page',host:body,delay:0,minVisible:270,slowAfter:10000});
+const region=new FMRotaryLoader({mode:'region',host:content,delay:160,minVisible:270,slowAfter:10000});
+const inlineHost=document.querySelector('.search-wrap');
+const inline=inlineHost?new FMRotaryLoader({mode:'inline',host:inlineHost,delay:160,minVisible:120,slowAfter:10000}):null;
+const loaders={page,region,inline};
+const pending={page:new Map(),region:new Map(),inline:new Map()};
+const versions={page:0,region:0,inline:0};
+let bootstrap=true,bootstrapToken=page.start({label:'FM WORKSを読み込んでいます…'});
+let currentRoute=null;
+function refresh(zone){
+ const loader=loaders[zone];if(!loader)return;
+ const map=pending[zone];
+ if(zone==='page'&&bootstrap){
+   // Startup is held until the first actual authentication/config result arrives.
+   if(map.size)loader.sub.textContent='サーバーと通信しています…';
+   return;
+ }
+ if(map.size){
+   const newest=Array.from(map.values()).at(-1);
+   if(loader.state!=='loading'){
+     versions[zone]=loader.start({label:newest.label,progress:null});
+   }else{
+     loader._announce(newest.label);
+   }
+   if(zone!=='inline')loader.sub.textContent=map.size>1?map.size+'件の処理を確認しています…':'サーバーと通信しています…';
+ }else{
+   if(loader.state==='loading')loader.complete(versions[zone]);
+ }
+}
+function begin(method){
+if(isBackground(method))return null;
+const zone=zoneFor(method);
+if(!loaders[zone])return null;
+const id=++sequence;
+pending[zone].set(id,{method,label:readable(method),started:performance.now(),route:currentRoute});
+if(zone==='page'&&bootstrap){
+ page._announce(readable(method));
+ page.sub.textContent='サーバーと通信しています…';
+}else refresh(zone);
+return {id,zone};
+}
+function settle(task,error){
+if(!task)return;
+const zone=task.zone,map=pending[zone],loader=loaders[zone];
+if(!map||!map.has(task.id))return;
+map.delete(task.id);
+if(zone==='page'&&bootstrap){
+ if(!map.size){
+   bootstrap=false;
+   if(error)page.fail('通信状態を確認し、画面の案内に従って再試行してください。',{token:bootstrapToken});
+   else page.complete(bootstrapToken);
+ }else page._announce(Array.from(map.values()).at(-1).label);
+ return;
+}
+if(map.size){refresh(zone);return}
+if(error&&loader&&loader.state==='loading'){
+ loader.fail('通信状態を確認し、再試行してください。',{token:versions[zone]});
+}else refresh(zone);
+}
+function reset(){
+ for(const zone of ['page','region','inline']){
+   pending[zone].clear();
+   if(loaders[zone])loaders[zone].hide();
+ }
+ bootstrap=false;currentRoute=null;
+}
+function route(next){
+ currentRoute=next;
+ // Old-route reads are still free to finish and update caches, but must not
+ // obstruct a newly opened page. Leave actual RPC handlers untouched.
+ for(const [id,info] of pending.region){
+   if(info.route!==null&&info.route!==next)pending.region.delete(id);
+ }
+ if(!pending.region.size&&region.state==='loading')region.hide();
+}
+activity={begin,settle,reset,route,loaders,pending,snapshot:()=>({
+  bootstrap,pending:Object.fromEntries(Object.entries(pending).map(([z,m])=>[z,m.size])),
+  state:Object.fromEntries(Object.entries(loaders).map(([z,l])=>[z,l&&l.state||'none']))
+})};
+global.FMRotaryActivity=activity;
+return activity;
+}
+/* Chain-compatible proxy for google.script.run. It only wraps callbacks and
+ * dispatch; method arguments, user objects, and API results remain unchanged.
+ * Existing code/tests can fall back to native google.script.run if absent.
+ */
+function FMRotaryRPC(){
+const raw=global.google&&global.google.script&&global.google.script.run;
+if(!raw)throw Error('GAS client is unavailable');
+let success=null,failure=null,userObject,hasUserObject=false;
+let proxy=null;
+proxy=new Proxy(Object.create(null),{get(_target,prop){
+ if(prop==='withSuccessHandler')return fn=>{success=fn;return proxy};
+ if(prop==='withFailureHandler')return fn=>{failure=fn;return proxy};
+ if(prop==='withUserObject')return value=>{hasUserObject=true;userObject=value;return proxy};
+ if(prop==='then')return undefined;
+ if(typeof prop!=='string')return undefined;
+ return (...args)=>{
+   const tracking=ensureActivity();
+   const task=tracking&&tracking.begin(prop);
+   let ended=false;
+   const finish=error=>{if(ended)return;ended=true;if(tracking)tracking.settle(task,error)};
+   try{
+     let runner=raw.withSuccessHandler((...values)=>{
+       try{if(typeof success==='function')return success(...values)}
+       finally{finish(null)}
+     }).withFailureHandler((error,...rest)=>{
+       try{if(typeof failure==='function')return failure(error,...rest)}
+       finally{finish(error||new Error('GAS request failed'))}
+     });
+     if(hasUserObject)runner=runner.withUserObject(userObject);
+     if(typeof runner[prop]!=='function')throw Error('Unknown GAS method: '+prop);
+     return runner[prop](...args);
+   }catch(error){finish(error);throw error}
+ };
+}});
+return proxy;
+}
+global.FMRotaryRPC=FMRotaryRPC;
+global.FMRotaryInit=ensureActivity;
+// Display the rotor from the first HTML paint, before authentication begins.
+// Calls occur only after the body's app elements have been parsed.
+try{ensureActivity()}catch(e){if(global.console)console.warn('Rotary startup fallback',e)}
+})(window);
+</script>

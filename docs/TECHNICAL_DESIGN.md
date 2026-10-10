@@ -1981,3 +1981,14 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 増量フィクスチャは実際の期限条件で表示件数が変わるため、残件の具体数値を固定せず、優先4件と「残りN件」の表示をチェックする。
 
 - 1366px画面の再測定でホーム下端803pxが持続した原因は、優先対応行ではなく右側6カードの3段積みとリンク行にある。入口カードの「開く」テキストを右端矢印として絶対配置して2行に圧縮し、60pxのクリック領域を確保する。
+
+
+## 共通ロータリーローダーの実装構成（2026-10-10）
+
+- ユーザー提供のProduction ZIPのハウジング形状・ローターと偏心軸3:1連動・色・高速回転を、src/RotaryEngine.html、src/StylesRotaryLoader.htmlに移植する。SVG生成後はアニメーションフレームごとに変換行列のみ変更し、外部通信は行わない。
+- src/AppRotaryIntegration.html は FMRotaryRPC() を提供し、従来の google.script.run.withSuccessHandler / withFailureHandler / withUserObject とAPI引数の仕様を維持しつつRPC開始・終了を追跡する。全フロントエンドのRPC呼び出しはこの関数を経由し、単体テストでローダーが存在しない場合は従来APIへフォールバックする。
+- Index.htmlはスタイルをheadに、ロータリー描画・共通RPCをAppCoreより先に読み込み、初回DOMが利用可能になった時点でページ起動ローダーを開始する。
+- pageはbody、regionは再描画で削除されない #app .workspace をホストに利用し、検索欄はinline。Mapによる参照件数で並列処理の全完了を判定する。
+- 成功コールバック実行後にcomplete、失敗コールバック実行後にfailを通知。タイムアウト疑似エラーは作らない。長時間通信は説明文を表示する。
+- 通常のGAS通信では進捗％を指定せず不確定表示、実進捗が取得できる他処理のみsetProgressを利用できる。
+- scripts/test_rotary_integration.mjsとscripts/test_rotary_viewport.mjsをCIおよび公開前検証に組み込む。

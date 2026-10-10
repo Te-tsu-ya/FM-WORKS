@@ -201,7 +201,7 @@ function setSessionToken(token,persistent=false){
   }
 }
 function getStoredSessionToken(){return localStorage.getItem('fmworks.session')||sessionStorage.getItem('fmworks.session')||null}
-function clearLocalSession(){state.busy=false;if(typeof somuReset==='function')somuReset();if(typeof resetLeaveDemoSession==='function')resetLeaveDemoSession();if(typeof resetFinanceUi==='function')resetFinanceUi();if(typeof resetQuoteUi==='function')resetQuoteUi();if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();setSessionToken(null);stopLiveAttendanceTicker();clearWorklogQuickDrafts();invalidateWorklogWindowCache();invalidateScheduleWindowCache();worklogActiveRequest=null;invalidateMonthlyResultCache();delete pageCache.requests;state.requests=createEmptyRequestsState();state.data=null;state.authAdmin=null;state.adminUi=createAdminUiState();state.adminTab='people';invalidatePageCache('authAdmin');state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
+function clearLocalSession(){if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.reset();state.busy=false;if(typeof somuReset==='function')somuReset();if(typeof resetLeaveDemoSession==='function')resetLeaveDemoSession();if(typeof resetFinanceUi==='function')resetFinanceUi();if(typeof resetQuoteUi==='function')resetQuoteUi();if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();setSessionToken(null);stopLiveAttendanceTicker();clearWorklogQuickDrafts();invalidateWorklogWindowCache();invalidateScheduleWindowCache();worklogActiveRequest=null;invalidateMonthlyResultCache();delete pageCache.requests;state.requests=createEmptyRequestsState();state.data=null;state.authAdmin=null;state.adminUi=createAdminUiState();state.adminTab='people';invalidatePageCache('authAdmin');state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
 function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 587" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg>`}
 
 
@@ -229,7 +229,7 @@ function changeWorkLocation(location){
   state.busy=true;
   showToast(`勤務場所を${location}へ変更しています...`);
   const operationToken=state.sessionToken;
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     if(operationToken!==state.sessionToken||!state.data)return;
     if(data&&data.attendance){
       state.data.attendance=data.attendance;
@@ -253,7 +253,7 @@ function performPunch(action){
   if(state.busy)return;
   state.busy=true;showToast(`${action}を登録しています...`);
   const operationToken=state.sessionToken;
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     if(operationToken!==state.sessionToken||!state.data)return;
     if(data&&data.attendance){
       state.data.attendance=data.attendance;
@@ -360,7 +360,7 @@ function navigate(page){
   if(page==='financeEntry'&&!financeActiveForm){page='requests';}
   if(page==='admin'&&state.adminTab==='people')page='people';
   if(page!=='schedule')state.schedule.mobileDetailOpen=false;
-  state.page=page;history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
+  state.page=page;if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.route(page);history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
   const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
   if(page==='schedule')loadSchedule({silent:true});
   if(page==='companyCalendar')loadCompanyCalendar();
@@ -408,7 +408,7 @@ function loadHomeOverview(options={}){
   state.homeOverview.loading=true;
   state.homeOverview.error='';
   if(!options.silent&&state.page==='home')renderPageIfActive('home');
-  google.script.run.withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
     endPageLoad(ticket);
     if(requestSession!==state.sessionToken||requestData!==state.data)return;
     const rerun=state.homeOverview.reloadRequested;

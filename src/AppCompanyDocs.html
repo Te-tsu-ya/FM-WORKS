@@ -57,7 +57,7 @@ function loadCompanyDocs(force=false){
   if(!force&&ui.data&&ui.identity===identity&&Date.now()-ui.loadedAt<60000)return;
   ui.identity=identity;ui.loading=true;ui.error='';
   if(!ui.data)companyDocsRender_();
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
     ui.data=result;ui.loading=false;ui.loadedAt=Date.now();ui.error='';
     if(ui.selectedId){
@@ -116,7 +116,7 @@ function companyDocsSelect(id,mobile=true){
   ui.detail=null;ui.loadingDetail=true;ui.detailSerial++;
   const serial=ui.detailSerial,identity=companyDocsIdentity_();
   companyDocsRender_();
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi||
        serial!==ui.detailSerial||ui.selectedId!==id)return;
     ui.loadingDetail=false;ui.detail=result.document;ui.details[id]=result.document;companyDocsRender_();
@@ -162,7 +162,7 @@ function companyDocsSetQuery(value){
   const serial=ui.searchSerial,identity=companyDocsIdentity_();
   companyDocsSearchTimer=setTimeout(()=>{
     if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
-    google.script.run.withSuccessHandler(result=>{
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
       if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
       ui.remoteQuery=term;ui.remoteIds=new Set(result.matchedIds||[]);
       ui.searching=false;ui.searchError=result.truncated?'本文の検索結果は先頭250件まで表示しています。':'';
@@ -392,7 +392,7 @@ function companyDocsSave(){
   }
   const identity=companyDocsIdentity_();
   ui.busy=true;companyDocsRender_();
-  google.script.run.withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
     ui.busy=false;ui.editing=false;ui.draft=null;ui.key='';ui.dirty=false;
     ui.selectedId=result.document.id;ui.detail=result.document;
@@ -422,7 +422,7 @@ function companyDocsConfirmDelete(){
   if(!d||!companyDocsCanManage_()||ui.busy)return;
   const identity=companyDocsIdentity_();
   closeModal();ui.busy=true;companyDocsRender_();
-  google.script.run.withSuccessHandler(()=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
     ui.busy=false;delete ui.details[d.id];ui.detail=null;ui.selectedId='';ui.detailSerial++;
     ui.mobileStep='list';showToast('社内文書を削除しました');loadCompanyDocs(true);
@@ -447,7 +447,7 @@ function companyDocsConfirmInitialize(){
   if(!ui.data||!ui.data.canInitialize||ui.busy)return;
   const identity=companyDocsIdentity_();
   closeModal();ui.busy=true;companyDocsRender_();
-  google.script.run.withSuccessHandler(()=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
     ui.busy=false;showToast('保存先を準備しました');loadCompanyDocs(true);
   }).withFailureHandler(err=>{

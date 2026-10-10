@@ -49,7 +49,7 @@ function somuGrowthLoad(force){
  const identity=somuSessionIdentity(),wasLoaded=somuGrowth.loaded;
  somuGrowth.loading=true;somuGrowth.error='';
  if(somuGrowthTab_(somuUi.tab)&&!wasLoaded&&state.page==='office')renderPageIfActive('office');
- google.script.run.withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(identity!==somuSessionIdentity())return;
   somuGrowth.data=data;somuGrowth.loading=false;somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();
   if(state.page==='office'&&!somuUi.demo)renderPageIfActive('office');
@@ -253,7 +253,7 @@ function somuGrowthSubmit_(){
  somuUi.busy=true;
  if(save){save.disabled=true;save.textContent='保存中…';}
  const identity=somuSessionIdentity();
- google.script.run.withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;
   if(!result||!result.ok){
