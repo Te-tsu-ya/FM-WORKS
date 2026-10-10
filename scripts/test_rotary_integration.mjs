@@ -18,7 +18,7 @@ for(const marker of ["include_('StylesRotaryLoader')","include_('RotaryEngine')"
 assert.ok(index.indexOf("include_('AppRotaryIntegration')")<index.indexOf("include_('AppCore')"),
   'loader must be ready before application scripts');
 const files=['AppCore','AppOperations','AppPeopleMonthly','AppQuotes','AppDocuments','AppCompanyDocs',
-  'AppSomu','AppSomuGrowth','AppProjectHub','AppFinance','AppFinanceAdvisor','AppAdmin','AppShell'];
+  'AppSomu','AppSomuGrowth','AppProjectHub','AppFinance','AppFinanceAdvisor','AppCashFlow','AppAdmin','AppShell'];
 let calls=0;
 for(const p of files){
  const s=fs.readFileSync('src/'+p+'.html','utf8');
