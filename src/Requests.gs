@@ -269,13 +269,17 @@ function approveRequest(sessionToken, requestId, decision, comment) {
         if (!leaveEmployee.leaveBasisDate) throw new Error('年休基準日が未設定です。社員設定で登録してください。');
         leaveDaysToConsume = calculateLeaveDaysForRequest_(r[4], r[5], r[6]);
         if (leaveDaysToConsume <= 0) throw new Error('対象日に消化する有給日数がありません。会社カレンダーを確認してください。');
-        if (leaveState.balance < leaveDaysToConsume) throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveState.balance + '日');
+        const priorUse=findLeaveLedgerRequestPosting_(leaveEmployee.employeeId,r[0],'USE');
+        if (!priorUse&&leaveState.balance < leaveDaysToConsume) throw new Error('有給残日数が不足しています。現在の残日数: ' + leaveState.balance + '日');
       }
     }
 
+    // Apply idempotent side effects first. A failure must not mark the request approved
+    // while its leave balance or corrected punch has not yet been recorded.
     if (approve && r[4] === '打刻修正') {
-      preparePunchCorrection_(r);
+      applyApprovedPunchCorrection_(r);
     }
+    if (approve && leaveEmployee && leaveDaysToConsume > 0) consumeLeaveBalance_(leaveEmployee,leaveDaysToConsume,r[0],approver);
 
     rowInfo.sheet.getRange(rowInfo.row,10,1,4).setValues([[
       approve ? '承認済' : '差戻し',
@@ -283,11 +287,6 @@ function approveRequest(sessionToken, requestId, decision, comment) {
       nowText,
       approve ? '' : rejectReason
     ]]);
-
-    if (approve && r[4] === '打刻修正') {
-      applyApprovedPunchCorrection_(r);
-    }
-    if (approve && leaveEmployee && leaveDaysToConsume > 0) consumeLeaveBalance_(leaveEmployee,leaveDaysToConsume,r[0],approver);
 
     appendAudit_({
       employeeId:approver.employeeId,employeeName:approver.name,
@@ -459,11 +458,19 @@ function preparePunchCorrection_(requestRow) {
 }
 
 function applyApprovedPunchCorrection_(requestRow) {
-  const plan = preparePunchCorrection_(requestRow);
-  const nowText = toTimestamp_(new Date());
-  getDb_().getSheetByName(DB.sheets.punches).appendRow([
+  const marker='申請承認による修正 '+requestRow[0];
+  const punchSheet=getDb_().getSheetByName(DB.sheets.punches);
+  if(punchSheet.getLastRow()>1){
+    const matching=readRowsByDateRange_(punchSheet,4,12,requestRow[5],requestRow[5])
+      .some(r=>String(r[1])===String(requestRow[2])&&r[7]==='CORRECTION'&&String(r[10]||'')===marker);
+    if(matching)return {alreadyApplied:true};
+  }
+  const plan=preparePunchCorrection_(requestRow);
+  const nowText=toTimestamp_(new Date());
+  punchSheet.appendRow([
     createId_('P'), plan.employeeId, plan.employeeName, plan.date, plan.action,
     plan.timestamp, plan.workLocation, 'CORRECTION',
-    false, plan.originalId, '申請承認による修正 ' + requestRow[0], nowText
+    false, plan.originalId, marker, nowText
   ]);
+  return {alreadyApplied:false};
 }

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.9  
+**文書版:** 0.17.10  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1912,3 +1912,12 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `Monthly.gs:assertMonthRangeOpen_` は正規化した日付の開始・終了を比較し、開始が終了より後であれば月ごとの反復前にエラーとする。
 - `scripts/test_request_indexing.mjs` は架空シートのRead APIをモックし、社員別索引利用、関連なし社員の除外、期間重複、月次締め、逆転期間拒否を検証。`scripts/test_logic.mjs` から統合テストを実行する。
 - APP.versionと要件定義書・技術設計書の文書版は0.17.9に同期。
+
+## v0.17.10 申請書き込みの順序と台帳の再実行可能性（2026-10-10）
+
+- `Requests.gs:approveRequest` は有給消化・打刻修正の副作用を先に実行し、最後に申請行の状態列を更新する。前半の書込みエラーがあっても「承認済」だけが先行しない。
+- `LeaveLedger.gs:findLeaveLedgerRequestPosting_` は社員ID・申請ID・種別(USE/RESTORE)の記録を探す。`consumeLeaveBalance_`/`restoreLeaveBalance_` は重複記録を確認したら増減を再適用しない。
+- 既存記録がある場合は `syncLeaveMasterFromLedger_` で最新台帳残日数を社員マスタへ同期する。再実行時の要求日数と記録済み日数が違えば例外で停止し、勝手な残数変更をしない。
+- `applyApprovedPunchCorrection_` は対象社員・日付・`CORRECTION`・申請ID入り備考の一致を先に確認し、同一申請の再適用を避ける。
+- `scripts/test_leave_transaction_retries.mjs` で申請ステータス/社員残日数更新の途中障害、有給返却の再試行、打刻修正の重複防止を模擬する。
+- DBスキーマ・権限・経理/総務API契約は変更しない。
