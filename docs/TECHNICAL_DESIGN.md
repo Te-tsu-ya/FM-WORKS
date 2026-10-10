@@ -2141,7 +2141,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ## v0.21.0 年間資金繰りの保存・計算
 - DB v17 追加シートは「資金繰り年間」。1行＝決算年度、期首現預金残高、12か月分のJSON、改訂番号、日時、更新者、送信識別子。既存台帳は変更せず、認証済ADMINによるバックアップ付きSchema移行で追加する。
 - CashFlow.gsの公開API getCashFlowYear / saveCashFlowYear はいずれも requireAdminSession_ を先頭に配置。financeWorkspaceとは独立して機密アクセスを制御。
-- 月別のplanIn/planOut/actualIn/actualOut はnull=未入力、0=入力済0円。月のどちらか一方が入力された場合、もう一方は0円で計算。月の両方が未入力の場合、以降の残高は不明とする。
+- 月別のplanIn/planOut/actualIn/actualOut はnull=未入力、0=入力済0円。各系列の入金と出金が**両方入力済み**の月だけ同系列の月末残高を算出。片側のみ入力の月は0円と推測せず未確定にする（0円のときは明示入力が必要）。未確定月以降の残高は不明とする。見込みは実績が両方入力された月のみ実績を優先、それ以外は計画が両方入力済みなら計画を使用する。
 - 計画・実績・実績優先見込みを期首から累積し、最初の赤字見込み月を検出する。別期の期首残高は自動入力しない。
 - 1年分を単一シート行に保存、ScriptLock・改訂番号確認・送信識別子の再送厳密照合・書込み後の読み戻し・監査エラー通知を実施。テスト scripts/test_cashflow.mjs。
 

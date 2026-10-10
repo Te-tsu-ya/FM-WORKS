@@ -42,7 +42,7 @@ function cashFlowSummary_(opening,months){
  let plan=opening,actual=opening,forecast=opening,lowest=opening,firstNegative='';
  const rows=months.map(row=>{
   CASH_FLOW_FIELDS.forEach(key=>{if(row[key]!=null)totals[key]+=Number(row[key]);});
-  const hp=row.planIn!=null||row.planOut!=null,ha=row.actualIn!=null||row.actualOut!=null;
+  const hp=row.planIn!=null&&row.planOut!=null,ha=row.actualIn!=null&&row.actualOut!=null;
   if(hp)counts.plan++;if(ha)counts.actual++;
   plan=plan!==null&&hp?plan+(row.planIn||0)-(row.planOut||0):null;
   actual=actual!==null&&ha?actual+(row.actualIn||0)-(row.actualOut||0):null;

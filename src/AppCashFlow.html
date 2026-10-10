@@ -65,7 +65,7 @@ function cashFlowCalc_(){
  const totals={planIn:0,planOut:0,actualIn:0,actualOut:0},counts={plan:0,actual:0};
  const months=d.months.map(row=>{
   const v={};for(const key of ['planIn','planOut','actualIn','actualOut']){v[key]=cashFlowInt_(row[key]);if(v[key]!==null)totals[key]+=v[key];}
-  const hp=v.planIn!==null||v.planOut!==null,ha=v.actualIn!==null||v.actualOut!==null;
+  const hp=v.planIn!==null&&v.planOut!==null,ha=v.actualIn!==null&&v.actualOut!==null;
   if(hp)counts.plan++;if(ha)counts.actual++;
   plan=plan!==null&&hp?plan+(v.planIn||0)-(v.planOut||0):null;
   actual=actual!==null&&ha?actual+(v.actualIn||0)-(v.actualOut||0):null;
@@ -171,7 +171,7 @@ function cashFlowPage_(){
   '<div class="cf-save"><span id="cfStatus" role="status">'+(u.dirty?'未保存の変更あり':u.data.record.exists?'保存済み':'未作成')+'</span><button type="button" id="cfSave" class="primary-button" onclick="cashFlowSave_()"'+(!u.dirty||u.busy?' disabled':'')+'>'+(u.busy?'保存中…':'年度を保存')+'</button></div></section>'+feedback+
   '<div class="cf-metrics" id="cfMetrics">'+cashFlowMetricHtml_(s)+'</div>'+
   '<section class="card cf-chart"><h2>月末残高の推移</h2><div id="cfChart">'+cashFlowChartHtml_(s)+'</div></section>'+
-  '<section class="card cf-table-card"><h2>月別入出金</h2><p>計画・実績は現金ベースです。空欄＝未入力、0＝入力済み0円。未入力の月以降、月末残高は「—」で表示します。</p>'+
+  '<section class="card cf-table-card"><h2>月別入出金</h2><p>計画・実績は現金ベースです。空欄＝未入力、0＝入力済み0円。入金・出金の両方が入力済みの月だけ残高を計算します（片方がない場合は0を入力）。</p>'+
   '<div class="cf-scroll" role="region" aria-label="12か月の入出金" tabindex="0"><table class="cf-table"><thead><tr><th>対象月</th><th>計画入金</th><th>計画出金</th><th>実績入金</th><th>実績出金</th><th>計画末</th><th>実績末</th><th>見込み末</th><th>備考</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
   '<p class="cf-note">手入力の資金繰り表です。銀行口座、既存経費、試算表とは自動同期していません。年間残高は他年度へ自動引き継ぎしません。</p></div>';
 }

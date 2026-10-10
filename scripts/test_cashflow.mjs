@@ -35,6 +35,8 @@ const months=JSON.parse(JSON.stringify(blank.record.months));
 months[0].planIn=100;months[0].planOut=30;months[0].actualIn=80;months[0].actualOut=20;
 months[0].note='<img src=x onerror=alert(1)>';
 months[1].planIn=200;months[1].planOut=80;
+months[2].planIn=60; // A partial month's outflow is unknown, not zero.
+
 const payload={fiscalYear:2026,openingBalance:1000,months,revision:0,requestKey:'CF-TEST-RETRY-00001'};
 assert.throws(()=>ctx.saveCashFlowYear('ADMIN',{...payload,months:months.slice(1)}),/12か月/);
 assert.throws(()=>ctx.saveCashFlowYear('ADMIN',{...payload,months:months.map((m,i)=>i===0?{...m,month:'2026-01'}:m)}),/並び/);
@@ -51,7 +53,8 @@ assert.equal(current.summary.months[0].actualEnd,1060);
 assert.equal(current.summary.months[0].forecastEnd,1060);
 assert.equal(current.summary.months[1].planEnd,1190);
 assert.equal(current.summary.months[1].forecastEnd,1180);
-assert.equal(current.summary.months[2].forecastEnd,null);
+assert.equal(current.summary.months[2].forecastEnd,null,'one-sided inputs are not treated as zero outflow');
+assert.equal(current.summary.months[2].planEnd,null,'planned outflow must be explicitly entered');
 assert.equal(current.summary.forecastYearEnd,null);
 assert.equal(current.summary.counts.actual,1);
 assert.equal(ctx.saveCashFlowYear('ADMIN',payload).duplicate,true);

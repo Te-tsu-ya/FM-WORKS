@@ -36,6 +36,7 @@ assert.equal((html.match(/data-key="planIn"/g)||[]).length,12,'all 12 monthly in
 const noNetworkBefore=calls.length;
 ctx.cashFlowEdit_({dataset:{key:'openingBalance'},value:'1000'});
 ctx.cashFlowEdit_({dataset:{key:'planIn',index:'0'},value:'200'});
+assert.equal(ctx.cashFlowCalc_().months[0].planEnd,null,'partial income alone must not imply zero outflow');
 ctx.cashFlowEdit_({dataset:{key:'planOut',index:'0'},value:'50'});
 assert.equal(ctx.cashFlowCalc_().months[0].planEnd,1150);
 assert.equal(ctx.cashFlowCalc_().months[1].forecastEnd,null,'unknown months are not invented');
