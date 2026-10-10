@@ -381,9 +381,19 @@ const result=vm.runInContext(`
     htmlDetail.includes('&lt;img')&&!htmlDetail.includes('<img src=x'));
   expect('finance detail shows receipt reference and mismatch evidence',
     htmlDetail.includes('REC-001')&&htmlDetail.includes('金額差異')&&htmlDetail.includes('2,000円'));
+  financeVisual.match='ISSUE';
+  expect('finance receipt discrepancy filter isolates mismatched references',
+    financeVisibleItems_('expense').length===1);
+  financeVisual.match='MATCHED';
+  expect('finance match filter excludes genuine discrepancies',
+    financeVisibleItems_('expense').length===0);
+  financeVisual.match='ALL';
+  expect('finance inline detail escapes spreadsheet markup',
+    financeInspectorHtml_('expense',financeFakeExpense).includes('金額差異')&&
+    !financeInspectorHtml_('expense',financeFakeExpense).includes('<img src=x'));
   const financeRowsHtml=financeOverviewRows('expense');
   expect('financial approval view includes detail action for every record',
-    financeRowsHtml.includes('financeShowDetail('));
+    financeRowsHtml.includes('financeSelectRecord(')&&financeRowsHtml.includes('finance-ledger-table'));
   financeUi.mine={setupRequired:false,expenses:[financeFakeExpense],travels:[]};
   expect('returned finance claim offers an owner resubmission path',
     financeMyRow('expense',financeFakeExpense).includes('修正して再申請'));
@@ -424,6 +434,41 @@ const result=vm.runInContext(`
   expect('accounting status filter finds pending approvals without extra requests',
     financeVisibleItems_('expense').length===1&&apiCalls.length===0);
   financeVisual.status='ALL';
+  resetCalls();
+  financeSelectRecord('expense','EXP-PENDING');
+  expect('finance selection updates local selected detail without GAS roundtrip',
+    financeUi.selectedIds.expense==='EXP-PENDING'&&apiCalls.length===0);
+  expect('finance screen has table + inline inspector + date filter',
+    financePage().includes('financeSelectedDetail')&&financePage().includes('finance-ledger-table')&&
+    financePage().includes('financeSetMonthFilter('));
+  const unchangedReal=financeUi.overview;
+  resetCalls();financeToggleDemo();
+  expect('finance demo uses fabricated data without overwriting the real cache',
+    financeUi.demo===true&&financeUi.overview===unchangedReal&&financeVisibleItems_('expense').length===6);
+  expect('finance demo is visibly labeled and forbids saving or approval',
+    financePage().includes('サンプル表示中｜架空データ')&&
+    financeInspectorHtml_('expense',financeVisibleItems_('expense')[0]).includes('サンプルでは承認')&&
+    financePage().includes('経費記録を追加'));
+  financeUi.tab='expense';financeSetMonthFilter('2026-09');
+  expect('demo month filter uses only loaded synthetic rows',
+    financeVisibleItems_('expense').length===0&&apiCalls.length===0);
+  financeSetMonthFilter('2026-10');
+  expect('demo local month filter restores relevant records',
+    financeVisibleItems_('expense').length===6&&apiCalls.length===0);
+  financeVisual.query='';
+  financeSearchVisible('架空社員F');
+  expect('demo local text search is instantaneous and server-free',
+    financeVisibleItems_('expense').length===1&&apiCalls.length===0);
+  financeVisual.query='';financeVisual.match='ISSUE';
+  expect('demo detects unmatched and discrepant receipts without API calls',
+    financeVisibleItems_('expense').length===3&&apiCalls.length===0);
+  resetCalls();financeSubmitDecision('expense','DEMO-EXP-001','APPROVE');
+  financeSubmitSettlement('expense','DEMO-EXP-003');
+  expect('attempted demo approval or settlement makes zero GAS requests',apiCalls.length===0);
+  financeUi.demo=false;financeUi.demoData=null;
+  financeVisual={query:'',status:'ALL',match:'ALL',month:''};
+  expect('demo leaves actual financial records untouched',financeUi.overview===unchangedReal&&
+    financeVisibleItems_('expense').length===2);
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
