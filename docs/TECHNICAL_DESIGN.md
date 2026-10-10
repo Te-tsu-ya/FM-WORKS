@@ -2077,3 +2077,14 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Production authentication, real GAS save behavior and user observation remain separate acceptance checks. No DB migration, live data writes, third-party synchronization or new OAuth scope is performed in this change.
 
 - Timeline guards ISO date roundtrips and rejects invalid imported dates without throwing; project master save failures preserve the common AUTH_REQUIRED / SESSION_EXPIRED handling route.
+
+
+## v0.19.4 Lazy details, linear workspace aggregation, task-to-worklog intent
+
+- AppProjectHub.loadProjectHub obtains the cached project workspace but no longer issues getProjectHubDetail while view=list or dashboard. Navigation into view=detail triggers the existing detail fetch; projectHubTab_ also ensures the detail request for deep links. No prefetch of document bodies on portfolio load.
+- ProjectHub.getProjectHubWorkspace indexes first plan per project, tasks by projectId, resource counts and worklog buckets by normalized project/alias names. Aliases can map to a set of project IDs, preserving historical semantics when legacy names overlap. Unlinked worklogs are counted once and employee/quote permissions remain applied at the original server boundaries.
+- projectHubMetrics_ checks ISO dates with a UTC roundtrip before deriving scheduled progress or expired-task counts. Malformed imported dates do not produce NaN percentages.
+- AppProjectHub.projectHubRecordWork_ records optional task title with queueProjectWorklogIntent, switches only to active projects and navigates to the existing worklog route. Task title is copied to the normal worklog description, not treated as a durable task ID relation; hours do not automatically become a task-level actual-hours metric.
+- AppOperations stores one in-memory, identity-bound project worklog intent. restoreWorklogQuickDraft applies it once the real quick-input form appears. When another worklog draft exists, the form is protected until the user explicitly applies only project/description, preserving dates/times/category. clearWorklogQuickDrafts removes it on logout. UI labels distinguish the handoff from a saved entry.
+- Project overview shows most recently updated existing project docs and latest shared notes with escaped titles/snippets. It does not introduce uploads, AI analysis, or new server calls.
+- Regression covers portfolio one-RPC loading, selected detail lazy fetch, inherited worklog draft protection, late rendering, session isolation, malformed schedule, and 90 synthetic projects with 1080 synthetic log rows. Full Chromium/CI and live GAS deployment are gates; authenticated production CRUD and measured cold-start latency remain separate.
