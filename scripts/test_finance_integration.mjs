@@ -97,7 +97,7 @@ ctx.UrlFetchApp={fetch:url=>{invoiceFetches++;return {
  getResponseCode:()=>200,
  getContentText:()=>JSON.stringify({announcement:[{registratedNumber:'T1234567890123',
    name:'架空の照会結果',address:'架空住所',registrationDate:'2023-10-01'}]})
-}}}};
+}}};
 vm.runInContext(`getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";
   appendAudit_=item=>{if(!auditAvailable)return false;mockAudits.push(item);
     mockAuditSheet.appendRow(['AUD-'+mockAudits.length,'2026-10-10 12:00:00',
