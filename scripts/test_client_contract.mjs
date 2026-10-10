@@ -319,7 +319,7 @@ const result=vm.runInContext(`
   state.data=quoteBeforeData;
   resetCalls();
 
-  // v0.15.0: General Affairs is a planning-only area, distinct from finance.
+  // v0.18.2: General Affairs now opens its own loading and CRUD workspace, not legacy planning.
   const beforeOfficeData=state.data;
   const beforeOfficePage=state.page;
   state.data={today:'2026-10-08',user:{employeeId:'FM9000',displayName:'一般社員',department:'開発'},
@@ -340,13 +340,19 @@ const result=vm.runInContext(`
     officeDenied.includes('権限')&&!officeDenied.includes('v15-affairs-grid'));
   state.data.permissions.officeWorkspace=true;
   const officePlanning=officePage();
-  expect('general affairs is not a second quote or finance workspace',
-    officePlanning.includes('v15-affairs-grid')&&
-    officePlanning.includes('備品・購買')&&officePlanning.includes('書類の整理')&&
-    officePlanning.includes('設計中')&&
+  expect('general affairs shows its own loading state without legacy planning flicker',
+    officePlanning.includes('総務')&&officePlanning.includes('読み込んでいます')&&
+    !officePlanning.includes('設計中')&&!officePlanning.includes('v15-affairs-grid')&&
     !officePlanning.includes('finance-overview-row')&&!officePlanning.includes('quote-record'));
-  expect('general affairs planning does not offer fake asset saves',
-    !officePlanning.includes('備品を登録')&&!officePlanning.includes('新規資産登録'));
+  expect('loading state has no unverified save button',
+    !officePlanning.includes('保存する')&&!officePlanning.includes('新規資産登録'));
+  somuUi.loaded=true;
+  somuUi.data={setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:false};
+  const officeReady=officePage();
+  expect('general affairs renders real home and independent tab navigation',
+    officeReady.includes('somu-workspace')&&officeReady.includes('総務ホーム')&&
+    officeReady.includes('備品台帳')&&officeReady.includes('購買管理')&&officeReady.includes('書類整理'));
+  somuReset();
   state.data.permissions.adminConsole=true;
   expect('administrator can open both general affairs and system settings',
     visibleNav().some(x=>x[0]==='office')&&visibleNav().some(x=>x[0]==='admin'));

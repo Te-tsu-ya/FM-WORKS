@@ -1895,3 +1895,12 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `financeAuditConfirmedForRetry_(kind,id,operation,requestKey)` は`DB.sheets.audit`の対象ID列（G列）でTextFinderを実行し、操作名・対象種類・対象ID・成功状態を照合する。再申請では送信識別子を含む監査記録`note`も厳密に一致させる。未取得時はfail-closed（`false`）。既存の古い再申請ログに識別子が記録されていない場合も確認不能として扱う。
 - 新規登録と再申請の`duplicate:true`応答は`auditRecorded`を必ず返す。データ本体の重複登録を防ぐLockServiceとユーザー・内容一致判定は保持し、再送時の追加監査書込は行わない。
 - audit TextFinderは正常な初回登録や一覧取得では呼び出さない。CIの仮想シートを実監査表と同じ12列で構築し、`findAll`による再照合と両系統の失敗応答を確認する。
+
+## v0.18.2 総務読込高速化
+- src/Somu.gs: getSomuWorkspace(sessionToken,forceFresh) は somuOperator_ による認証・権限チェック後だけ、CacheService に保持した表示用snapshotを読む。スクリプト全体共通なのでアクセス制御は省略不可。鍵は getDatabaseSpreadsheetId_ を含む。保存成功時の somuNew_ / somuWrite_ がcacheRemove_する。
+- スナップショットは20秒TTLかつJSON UTF-8 85KB以下。貸出制約・購買状態・楽観ロックは従来どおりシート実体をScriptLock下で検査し、snapshotを更新判定に使わない。DBが未準備の状態はキャッシュしない。
+- フレッシュ取得の先行見出しチェック後、4シートは preverifiedSheet を使って重複ヘッダーI/Oを削除。logPerformance_ に SHEETS / SCRIPT_CACHE / SETUP_REQUIRED のソースを記録。
+- src/AppSomu.html: UIスナップショットは45秒。戻り遷移やタグ切り替えでは即描画。期限経過時は画面保持してバックグラウンド更新。明示更新・保存成功後は forceFresh=true としてキャッシュを迂回。ロード失敗時も取得済みデータを保持。
+- 表示台帳は先頭60件、もっと見るで60件ずつ追加。貸出可能数は貸出台帳の集計結果をWeakMapで再利用し、備品数×貸出数のループを避ける。
+- src/AppCore.html: office を 220ms の意図プリフェッチ対象に追加。他のホーム・工数・経理の読込ロジックは変更しない。
+- 品質ゲート: scripts/test_somu_integration.mjs は実Sheets模擬の読取回数、ログイン別権限、保存時のキャッシュ破棄を検査。scripts/test_somu_client.mjs は通信0のローカル再表示・60件表示・明示更新・失敗時表示維持を検査。
