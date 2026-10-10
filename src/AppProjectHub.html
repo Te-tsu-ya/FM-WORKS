@@ -8,7 +8,7 @@ function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(proj
 function loadProjectHub(options={}){
  if(!state.sessionToken||!state.data)return;
  if(projectHubUi.loading){if(options.force)projectHubUi.refreshNeeded=true;return;}
- if(!options.force&&projectHubUi.data&&Date.now()-projectHubUi.at<300000){if(projectHubUi.view==='detail'&&projectHubUi.selected)projectHubLoadDetail_(projectHubUi.selected);return;}
+ if(!options.force&&projectHubUi.data&&Date.now()-projectHubUi.at<300000){if(projectHubUi.selected)projectHubLoadDetail_(projectHubUi.selected);return;}
  if(options.force){projectHubUi.serial++;projectHubUi.details.clear();}
  const ui=projectHubUi,identity=projectHubIdentity_(),serial=ui.serial;ui.loading=true;ui.error='';
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
@@ -18,7 +18,7 @@ function loadProjectHub(options={}){
   ui.data=data;ui.at=Date.now();
   if(ui.selected&&!data.projects.some(p=>p.projectId===ui.selected))ui.selected='';
   if(!ui.selected&&data.projects.length)ui.selected=data.projects[0].projectId;
-  if(ui.selected&&ui.view==='detail')projectHubLoadDetail_(ui.selected);
+  if(ui.selected)projectHubLoadDetail_(ui.selected);
   renderPageIfActive('projects');
  }).withFailureHandler(error=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.loading=false;
