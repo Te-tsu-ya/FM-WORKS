@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){

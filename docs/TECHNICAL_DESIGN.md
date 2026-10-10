@@ -1853,3 +1853,16 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `saveCompanyDocument` は送信識別子による二重登録抑止と revision による競合検出。削除は `削除日時` を入れる論理削除。外部参照はHTTPSに限定。
 - 画面: `AppCompanyDocs.html` / `StylesCompanyDocs.html`。既存ナビゲーションに独立の社内文書を追加し、遷移時遅延読込・ユーザー切替時のメモリ破棄に対応。本文は HTML エスケープしプレーンテキスト表示。
 - 統合の手順: 社内文書専用PRで先にCI検証。並行する総務PRとの更新競合を防ぐ。GAS公開は統合後のActions完走まで未確認。
+
+## v0.18.0 総務ワークスペース
+- フロントは AppSomu.html、スタイルは StylesSomu.html、既存ルート office / AppOffice.html が読み込み完了後に切替。
+- サーバーは Somu.gs。getSomuWorkspace、saveSomuAsset、createSomuLoan、returnSomuLoan、createSomuPurchase、advanceSomuPurchase、saveSomuDocument を実装。
+- 読み取りと書き込みの双方で requireSession_ → assertPermission_(officeWorkspace) を実行。保存は ScriptLock で直列化し、改訂番号/送信識別子で競合・重複を防ぐ。
+- DB_SCHEMA_VERSION=13 で総務備品/総務貸出/総務購買/総務書類の4シートを追加。管理者が既存の migrateDatabaseToCurrent によりバックアップ後に移行する。自動移行は行わない。
+- サーバー側で管理番号重複、保有数上限、貸出期限、購買状態・自己承認を検証。書類管理はURL参照情報のみ。
+- 総務読込はナビゲーション後の一度だけ、画面内の検索/切替はローカル操作で無通信。保存成功後に再読み込みする。権限・期限はAPIごとに再照合。
+- サンプルはブラウザ内の架空データで本番書込不可。既存の見積、経理、人事などのAPI・DBスキーマはそのまま。
+
+- 返却と購買状態変更は総務専用の確認ダイアログを使う。ネイティブのalert/confirm/promptは使わない。
+
+- 総務台帳の各日付列を受信時にYYYY-MM-DDへ正規化し、期限比較の誤判定を防止。強制再取得時は画面の旧データ表示を維持し、戻り後に更新。初期DB未設定時も架空データの画面サンプルを閲覧可能。
