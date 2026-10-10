@@ -8,7 +8,7 @@ let companyDocsUi={
   remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
   expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
   selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
-  editing:false,draft:null,key:'',mobileStep:'folders',limit:60
+  editing:false,draft:null,key:'',dirty:false,mobileStep:'folders',limit:60
 };
 let companyDocsSearchTimer=null;
 function companyDocsIdentity_(){
@@ -23,11 +23,14 @@ function resetCompanyDocsUi(){
     remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
     expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
     selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
-    editing:false,draft:null,key:'',mobileStep:'folders',limit:60
+    editing:false,draft:null,key:'',dirty:false,mobileStep:'folders',limit:60
   };
 }
 function companyDocsRender_(){if(state.page==='companyDocs')renderPageIfActive('companyDocs');}
 function companyDocsSafeAttr_(v){return escapeHtml(String(v==null?'':v));}
+// Escape the entire JS string argument before placing it in an HTML event attribute.
+// This also neutralizes pre-encoded entities in Sheet-sourced document IDs.
+function companyDocsInlineId_(id){return escapeHtml(JSON.stringify(String(id==null?'':id)));}
 function companyDocsData_(){return companyDocsUi.data||{items:[],folders:[],categories:['就業規則','社内規程','マニュアル','その他']};}
 function companyDocsFolder_(id){return (companyDocsData_().folders||[]).find(f=>f.id===id)||null;}
 function companyDocsFolderName_(id){
@@ -123,6 +126,13 @@ function companyDocsSelect(id,mobile=true){
     companyDocsRender_();
   }).getCompanyDocument(state.sessionToken,id);
 }
+function companyDocsDropHiddenSelection_(){
+  const ui=companyDocsUi;
+  if(!ui.selectedId||ui.editing)return false;
+  if(companyDocsVisibleItems_().some(item=>item.id===ui.selectedId))return false;
+  ui.selectedId='';ui.detail=null;ui.loadingDetail=false;ui.detailSerial++;
+  return true;
+}
 function companyDocsSetQuery(value){
   const ui=companyDocsUi,query=String(value||'').slice(0,80);
   ui.query=query;ui.limit=60;ui.remoteQuery='';ui.remoteIds=null;ui.searchError='';
@@ -130,12 +140,22 @@ function companyDocsSetQuery(value){
   if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
   companyDocsSearchTimer=null;
   const term=query.trim();
+  // The primary search is global, even when invoked inside a selected folder.
+  const globalReset=!!term&&ui.folderId!=='all';
+  if(globalReset)ui.folderId='all';
   ui.searching=term.length>=2;
+  const clearedSelection=companyDocsDropHiddenSelection_();
   const onMobile=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&
     window.matchMedia('(max-width: 760px)').matches;
-  if(onMobile&&term&&ui.mobileStep==='folders'){
-    ui.mobileStep='list';companyDocsRender_();
-    const input=document.getElementById('companyDocsSearch');if(input)input.focus();
+  const mobileSwitch=onMobile&&!!term&&ui.mobileStep==='folders';
+  if(mobileSwitch)ui.mobileStep='list';
+  if(mobileSwitch||globalReset||clearedSelection){
+    companyDocsRender_();
+    const input=document.getElementById('companyDocsSearch');
+    if(input){
+      input.focus();
+      if(typeof input.setSelectionRange==='function')input.setSelectionRange(query.length,query.length);
+    }
   }
   companyDocsPaintList_();
   if(term.length<2)return;
@@ -154,8 +174,14 @@ function companyDocsSetQuery(value){
     }).searchCompanyDocumentBodies(state.sessionToken,term);
   },320);
 }
-function companyDocsSetCategory(value){companyDocsUi.category=value;companyDocsUi.limit=60;companyDocsRender_();}
-function companyDocsSetStatus(value){companyDocsUi.status=value;companyDocsUi.limit=60;companyDocsRender_();}
+function companyDocsSetCategory(value){
+  companyDocsUi.category=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
+function companyDocsSetStatus(value){
+  companyDocsUi.status=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
 function companyDocsSetSort(value){companyDocsUi.sort=value;companyDocsRender_();}
 function companyDocsMore(){companyDocsUi.limit+=60;companyDocsRender_();}
 function companyDocsClearFilters(){
@@ -227,7 +253,7 @@ function companyDocsListRows_(){
   let html=visible.map(d=>{
     const selected=d.id===ui.selectedId,folder=companyDocsFolderName_(d.folderId);
     return '<button type="button" class="company-doc-row '+(selected?'is-selected':'')+
-      '" onclick="companyDocsSelect('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">'+
+      '" onclick="companyDocsSelect('+companyDocsInlineId_(d.id)+')">'+
       '<span class="company-doc-row-icon" aria-hidden="true">▤</span>'+
       '<span class="company-doc-row-main"><strong>'+escapeHtml(d.title)+'</strong>'+
       '<span class="company-doc-row-desc">'+escapeHtml(d.summary||folder)+'</span>'+
@@ -263,7 +289,7 @@ function companyDocsBeginNew(){
     folder?((companyDocsData_().folders||[]).find(f=>f.parentId===folder.id)||{}).id||'other/general':'other/general';
   ui.draft={id:'',revision:0,title:'',category:'社内規程',folderId,
     tags:[],summary:'',body:'',url:'',effectiveOn:'',status:'下書き'};
-  ui.key=companyDocsKeyClient_();ui.editing=true;ui.mobileStep='detail';ui.error='';
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.dirty=false;ui.mobileStep='detail';ui.error='';
   companyDocsRender_();
 }
 function companyDocsKeyClient_(){
@@ -276,16 +302,86 @@ function companyDocsStartEdit(id){
     folderId:d.folderId||'other/general',tags:(d.tags||[]).slice(),
     summary:d.summary||'',body:d.body||'',url:d.url||'',
     effectiveOn:d.effectiveOn||'',status:d.status||'下書き'};
-  ui.key=companyDocsKeyClient_();ui.editing=true;ui.mobileStep='detail';ui.error='';
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.dirty=false;ui.mobileStep='detail';ui.error='';
   companyDocsRender_();
 }
+function companyDocsFinishCancelEdit_(){
+  const ui=companyDocsUi;
+  ui.editing=false;ui.draft=null;ui.key='';ui.dirty=false;ui.error='';
+  if(ui.selectedId&&!ui.detail)companyDocsSelect(ui.selectedId,false);
+  else companyDocsRender_();
+}
+function companyDocsConfirmCancelEdit_(){
+  closeModal();companyDocsFinishCancelEdit_();
+}
 function companyDocsCancelEdit(){
-  if(companyDocsUi.busy)return;
-  companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsUi.key='';companyDocsRender_();
+  const ui=companyDocsUi;
+  if(ui.busy)return;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="編集の取り消し">'+
+    '<div class="modal-head"><h2>変更内容を破棄しますか？</h2></div>'+
+    '<p>保存していない変更は元に戻せません。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsConfirmCancelEdit_()">破棄する</button></div></section>';
 }
 function companyDocsDraftField(key,value){
-  if(!companyDocsUi.draft)return;
-  companyDocsUi.draft[key]=key==='tags'?String(value).split(/[,、，]/).map(x=>x.trim()).filter(Boolean):value;
+  const ui=companyDocsUi;
+  if(!ui.draft)return;
+  const next=key==='tags'?String(value).split(/[,、，]/).map(x=>x.trim()).filter(Boolean):value;
+  if(JSON.stringify(ui.draft[key])!==JSON.stringify(next)){
+    ui.dirty=true;
+    const notice=document.getElementById('companyDocsUnsaved');
+    if(notice)notice.hidden=false;
+  }
+  ui.draft[key]=next;
+}
+function companyDocsConfirmLeave_(targetPage){
+  const ui=companyDocsUi;
+  if(ui.busy)return false;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の変更">'+
+    '<div class="modal-head"><h2>未保存の変更があります</h2></div>'+
+    '<p>社内文書の編集内容を保存していません。ページを移動すると変更内容を破棄します。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsLeaveNow_('+escapeHtml(JSON.stringify(targetPage))+')">移動する</button></div></section>';
+  return false;
+}
+function companyDocsLeaveNow_(targetPage){
+  closeModal();
+  companyDocsFinishCancelEdit_();
+  navigate(targetPage);
+}
+function companyDocsConfirmLogout_(){
+  const ui=companyDocsUi;
+  if(ui.busy)return false;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の社内文書">'+
+    '<div class="modal-head"><h2>社内文書の変更が未保存です</h2></div>'+
+    '<p>ログアウトすると、未保存の変更が失われます。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsLogoutNow_()">破棄してログアウト</button></div></section>';
+  return false;
+}
+function companyDocsLogoutNow_(){
+  closeModal();
+  companyDocsFinishCancelEdit_();
+  performLogout();
+}
+function companyDocsBeforeUnload_(event){
+  if(companyDocsUi.editing&&companyDocsUi.dirty){
+    event.preventDefault();event.returnValue='';
+  }
+}
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){
+  window.addEventListener('beforeunload',companyDocsBeforeUnload_);
 }
 function companyDocsSave(){
   const ui=companyDocsUi,d=ui.draft;
@@ -298,7 +394,7 @@ function companyDocsSave(){
   ui.busy=true;companyDocsRender_();
   google.script.run.withSuccessHandler(result=>{
     if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
-    ui.busy=false;ui.editing=false;ui.draft=null;ui.key='';
+    ui.busy=false;ui.editing=false;ui.draft=null;ui.key='';ui.dirty=false;
     ui.selectedId=result.document.id;ui.detail=result.document;
     ui.details[result.document.id]=result.document;ui.mobileStep='detail';
     ui.folderId=result.document.folderId;
@@ -366,6 +462,7 @@ function companyDocsEditor_(){
     '<div class="company-doc-detail-heading"><div><span class="company-doc-eyebrow">DOCUMENT EDITOR</span>'+
     '<h2>'+(d.id?'社内文書の編集':'社内文書の新規登録')+'</h2></div></div>'+
     (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p>':'')+
+    '<p id="companyDocsUnsaved" class="company-doc-unsaved" '+(ui.dirty?'':'hidden')+'>未保存の変更があります</p>'+
     '<label>文書名 <span class="company-doc-required">必須</span><input required maxlength="120" value="'+companyDocsSafeAttr_(d.title)+
       '" oninput="companyDocsDraftField(\'title\',this.value)" placeholder="例：備品貸出マニュアル"></label>'+
     '<div class="company-doc-form-pair"><label>業務フォルダ <span class="company-doc-required">必須</span><select required onchange="companyDocsDraftField(\'folderId\',this.value)">'+
@@ -415,7 +512,7 @@ function companyDocsDetail_(){
     (safeUrl?'<p class="company-doc-link"><a target="_blank" rel="noopener noreferrer" href="'+companyDocsSafeAttr_(safeUrl)+
       '">参照リンクを開く ↗</a></p>':'')+
     (companyDocsCanManage_()?'<div class="company-doc-article-actions">'+
-      '<button type="button" class="primary-button compact" onclick="companyDocsStartEdit('+JSON.stringify(d.id).replace(/"/g,'&quot;')+
+      '<button type="button" class="primary-button compact" onclick="companyDocsStartEdit('+companyDocsInlineId_(d.id)+
       ')">編集する</button><button type="button" class="secondary-button compact" onclick="companyDocsDelete()" '+(ui.busy?'disabled':'')+'>削除</button></div>':'')+
     '</article>';
 }

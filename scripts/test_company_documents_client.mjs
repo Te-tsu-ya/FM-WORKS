@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source=fs.readFileSync('src/AppCompanyDocs.html','utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-const calls=[],elements={},modal={innerHTML:''},toasts=[];
+const calls=[],elements={},modal={innerHTML:''},toasts=[],navigations=[];let logouts=0;
 let nextSuccess=null,nextFailure=null;
 const runner={withSuccessHandler(fn){nextSuccess=fn;return proxy;},
   withFailureHandler(fn){nextFailure=fn;return proxy;}};
@@ -34,9 +34,10 @@ const data={ok:true,setupRequired:false,needsUpgrade:false,canManage:true,
   canInitialize:true,folders,categories:['就業規則','社内規程','マニュアル','その他'],items};
 const ctx=vm.createContext({
   state:{page:'companyDocs',sessionToken:'SESSION-A',data:{user:{employeeId:'FM0001'}}},
-  document:{getElementById:id=>elements[id]||(elements[id]={innerHTML:'',textContent:''})},
+  document:{getElementById:id=>elements[id]||(elements[id]={innerHTML:'',textContent:'',hidden:false,focus(){this.focused=true;},setSelectionRange(){}})},
   google:{script:{run:proxy}},escapeHtml,renderPageIfActive:()=>{},
   ensureModal:()=>modal,closeModal:()=>{},showToast:message=>toasts.push(message),
+  navigate:page=>navigations.push(page),performLogout:()=>{logouts++;},
   cleanApiErrorMessage:e=>String(e&&e.message||e),Date,Math,Number,String,Array,Object,Set,RegExp,
   setTimeout:fn=>{fn();return 1;},clearTimeout:()=>{}
 });
@@ -62,6 +63,13 @@ run('companyDocsClearFilters()');
 run("companyDocsSetCategory('マニュアル')");
 assert.equal(run('companyDocsVisibleItems_().length'),1);
 run("companyDocsSetCategory('all')");
+// Search from a selected folder must reach documents in every other folder.
+run("companyDocsSelectFolder('hr')");
+assert.equal(run('companyDocsVisibleItems_().length'),2);
+run("companyDocsSetQuery('経費精算')");
+assert.equal(run('companyDocsUi.folderId'),'all','global search clears folder scope');
+assert.equal(run('companyDocsVisibleItems_().length'),1,'finance document found from HR folder');
+run('companyDocsClearFilters()');
 run("companyDocsSetQuery('秘密キーワード')");
 assert.equal(calls.at(-1).method,'searchCompanyDocumentBodies');
 assert.equal(calls.at(-1).args[1],'秘密キーワード');
@@ -76,6 +84,11 @@ calls.at(-1).success({document:{...items[0],body:'<script>alert(1)</script> サ�
 markup=run('companyDocsPage()');
 assert.ok(markup.includes('&lt;script&gt;alert(1)&lt;/script&gt;'),'body escaped');
 assert.ok(!markup.includes('<script>alert(1)</script>'),'raw body never becomes HTML');
+const encodedId='CD-abcdefghijklmnop&amp;quot;);alert(1)//';
+const encodedArg=run('companyDocsInlineId_('+JSON.stringify(encodedId)+')');
+assert.ok(encodedArg.includes('&amp;amp;quot;')||encodedArg.includes('&amp;quot;'),
+  'encoded entities must not turn into executable onclick arguments');
+assert.ok(!encodedArg.includes('"'), 'HTML onclick argument may not contain raw quotes');
 run('companyDocsUi.detail.url="javascript:alert(1)"');
 assert.ok(!run('companyDocsPage()').includes('href="javascript:'),'unsafe links never appear');
 run('companyDocsUi.detail.url="https://example.com"');
@@ -85,6 +98,8 @@ assert.ok(markup.includes('業務フォルダ')&&markup.includes('検索タグ')
 run("companyDocsDraftField('folderId','general/equipment')");
 run("companyDocsDraftField('tags','備品,貸出')");
 run("companyDocsDraftField('title','【DEMO】備品管理規程')");
+assert.equal(run('companyDocsUi.dirty'),true,'editing any form field marks document dirty');
+assert.ok(run('companyDocsPage()').includes('未保存の変更があります'));
 run('companyDocsSave()');
 assert.equal(calls.at(-1).method,'saveCompanyDocument');
 assert.equal(calls.at(-1).args[1].folderId,'general/equipment');
@@ -98,6 +113,40 @@ assert.equal(calls.at(-1).method,'getCompanyDocuments','save refreshes metadata'
 assert.ok(toasts.includes('社内文書を保存しました'));
 calls.at(-1).success({...data,items:[{...items[0],title:'【DEMO】備品管理規程',
   folderId:'general/equipment',revision:2,tags:['備品','貸出']},items[1],items[2]]});
+assert.equal(run('companyDocsUi.dirty'),false,'successful save clears unsaved marker');
+// Cancel must not silently discard edits or allow app navigation without consent.
+run("companyDocsStartEdit("+JSON.stringify(items[0].id)+")");
+run("companyDocsDraftField('summary','下書き変更')");
+assert.equal(run("companyDocsConfirmLeave_('home')"),false);
+assert.ok(modal.innerHTML.includes('未保存の変更があります'));
+run('companyDocsCancelEdit()');
+assert.ok(modal.innerHTML.includes('破棄しますか'));
+assert.equal(run('companyDocsUi.editing'),true,'cancel requires explicit confirmation');
+run('companyDocsConfirmCancelEdit_()');
+assert.equal(run('companyDocsUi.editing'),false);
+assert.equal(run('companyDocsUi.dirty'),false);
+assert.equal(run("companyDocsConfirmLeave_('home')"),true);
+// Unsaved navigation confirmation resumes the requested route.
+run("companyDocsStartEdit("+JSON.stringify(items[0].id)+")");
+run("companyDocsDraftField('summary','再編集')");
+run("companyDocsLeaveNow_('home')");
+assert.equal(navigations.at(-1),'home');
+assert.equal(run('companyDocsUi.dirty'),false);
+// Logout must not discard an unsaved company document.
+run("companyDocsStartEdit("+JSON.stringify(items[0].id)+")");
+run("companyDocsDraftField('summary','ログアウト前の変更')");
+assert.equal(run('companyDocsConfirmLogout_()'),false);
+assert.ok(modal.innerHTML.includes('ログアウト'));
+assert.equal(logouts,0);
+run('companyDocsLogoutNow_()');
+assert.equal(logouts,1,'confirmed logout resumes');
+assert.equal(run('companyDocsUi.dirty'),false);
+// Filter changes must remove an outdated preview.
+run('companyDocsUi.selectedId='+JSON.stringify(items[0].id)+';companyDocsUi.detail=companyDocsUi.details[companyDocsUi.selectedId];');
+run("companyDocsSetCategory('マニュアル')");
+assert.equal(run('companyDocsUi.selectedId'),'');
+assert.equal(run('companyDocsUi.detail'),null);
+run("companyDocsSetCategory('all')");
 run('companyDocsUi.data={...companyDocsUi.data,canManage:false,canInitialize:false,items:companyDocsUi.data.items.filter(x=>x.status==="公開")};companyDocsUi.selectedId="";companyDocsUi.detail=null;companyDocsUi.folderId="all";');
 markup=run('companyDocsPage()');
 assert.ok(!markup.includes('＋ 文書登録'),'normal users have no create action');

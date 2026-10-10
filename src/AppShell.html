@@ -379,6 +379,8 @@ function toggleProfileMenu(){
 function closeProfileMenu(){const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');if(menu){menu.hidden=true}if(button)button.setAttribute('aria-expanded','false')}
 
 function performLogout(){
+  if(state.page==='companyDocs'&&typeof companyDocsConfirmLogout_==='function'&&
+     !companyDocsConfirmLogout_())return;
   const token=state.sessionToken;
   clearLocalSession();closeProfileMenu();document.getElementById('app').hidden=true;
   // A prior logout must not hide the application after a different user signs in.

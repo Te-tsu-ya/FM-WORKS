@@ -350,6 +350,9 @@ function scheduleWorkspaceTabs(activeId){
   return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
 }
 function navigate(page){
+  // Do not silently discard an unsaved company document when switching modules.
+  if(state.page==='companyDocs'&&page!=='companyDocs'&&
+     typeof companyDocsConfirmLeave_==='function'&&!companyDocsConfirmLeave_(page))return;
   closeMobileDrawer();
   if((page==='admin'||page==='people')&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
   if(page==='office'&&!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace)){page='home'}
