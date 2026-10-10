@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.20.1
+**文書版:** 0.20.2
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.20.1`
+`APP.version = 0.20.2`
 
 DBスキーマ: 16。  
 認証スキーマ: 3。  
@@ -2123,3 +2123,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Browser-local projectHubTimingSamples stores {label, ms, ok} with a rolling maximum of 500 entries and only four predeclared labels. Latency is timed between sending the existing RPC and receiving its success/failure handler; no additional RPC, PII, files, or local storage. Timer state is cleared by resetProjectHubUi on logout.
 - Admin-only projectHubTimingPanel computes nearest-rank P50 for any nonempty sample set, and P95 for 20+ samples only. The values reflect client/network/GAS round trips, not GAS function execution alone. Cache hits, splash screen start-up, and cold/warm network classification are out of scope of this passive panel.
 - Tests cover six missing v16 sheet names, admin/staff UI separation, cache/session clearing, initial P95 suppression, failed-RPC counts, and absence of extra network activity. Chromium viewport checks remain the release gate.
+
+## v0.20.2 Guarded migration regression and audit recovery
+
+- The migrateDatabaseToCurrent function remains the sole admin-authorized schema update path. It preflights all nonempty existing schema headers, creates and verifies a backup before modifications, upgrades missing sheets non-destructively, then moves DB_VERSION to 16 and flushes.
+- If audit append fails after successful schema verification, the function returns {ok:true,changed:true,auditRecorded:false} and records a server warning. The ADMIN screen explicitly requests an audit-log check rather than suggesting the schema failed or inviting repeated migration.
+- scripts/test_schema_migration.mjs uses isolated fake sheets with no private records. It verifies unauthorized rejection, corrupt headers/backup failure with zero mutations, exact six-sheet creation, data preservation, audit ordering, repeat idempotence, audit failure signal, and safe recovery from a synthetic partial failure.
+- The CI workflow and the production deployment workflow both execute this contract test before allowing code publication. The live authenticated GAS execution and verified backend spreadsheet update remain separate acceptance evidence.

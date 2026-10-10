@@ -124,10 +124,16 @@ function migrateDatabaseToCurrent(sessionToken){
     SpreadsheetApp.flush();
     const after=getDatabaseSchemaStatus_();
     if(!after.ready)throw new Error('DB更新後もスキーマ不整合が残っています: '+after.issues.join(' / '));
-    appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,operation:'DBスキーマ更新',target:'Database',targetId:String(DB_SCHEMA_VERSION),
-      before:auditJson_({version:before.version,issues:before.issues}),after:auditJson_({version:after.version,issues:after.issues}),
-      source:'WEB',result:'SUCCESS',note:backup&&backup.name||''});
-    return {ok:true,changed:true,before,after,backup:backup||null};
+    let auditRecorded=true;
+    try{
+      appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,operation:'DBスキーマ更新',target:'Database',targetId:String(DB_SCHEMA_VERSION),
+        before:auditJson_({version:before.version,issues:before.issues}),after:auditJson_({version:after.version,issues:after.issues}),
+        source:'WEB',result:'SUCCESS',note:backup&&backup.name||''});
+    }catch(auditError){
+      auditRecorded=false;
+      console.warn('FM WORKS schema updated but audit log failed. Admin must verify operation: '+String(auditError.message||auditError));
+    }
+    return {ok:true,changed:true,before,after,backup:backup||null,auditRecorded};
   },30000);
 }
 

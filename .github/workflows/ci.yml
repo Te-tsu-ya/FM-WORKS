@@ -46,6 +46,8 @@ jobs:
         run: node scripts/test_somu_client.mjs
       - name: Verify project aggregation, permissions and retry behavior
         run: node scripts/test_project_hub.mjs
+      - name: Verify fail-closed DB v16 migration, backup and retry safety
+        run: node scripts/test_schema_migration.mjs
       - name: Verify private project extensions, worklog link security and migration contracts
         run: node scripts/test_project_advanced.mjs
       - name: Verify navigation cache and input preservation
