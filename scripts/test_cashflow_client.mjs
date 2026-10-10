@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const calls=[];
+const runner=(x={})=>new Proxy({}, {get(_obj,key){
+ if(key==='withSuccessHandler')return fn=>runner({...x,success:fn});
+ if(key==='withFailureHandler')return fn=>runner({...x,failure:fn});
+ return(...args)=>calls.push({method:String(key),args,...x});
+}});
+const escapeHtml=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const state={sessionToken:'ADMIN-TOKEN',page:'finance',data:{today:'2026-10-11',permissions:{adminConsole:true,cashFlowWorkspace:true},user:{employeeId:'A'}}};
+let renders=0,confirmCallback=null;
+const ctx=vm.createContext({state,financeUi:{insightMode:false},google:{script:{run:runner()}},renderPageIfActive:()=>renders++,escapeHtml,
+ financeIdentity:()=>state.sessionToken+'|'+state.data.user.employeeId,cleanApiErrorMessage:(err)=>err.message,
+ pageHead:(name,desc)=>name+' '+desc,
+ window:{},openConfirmDialog:(_t,_m,_confirm,cb)=>{confirmCallback=cb;},
+ document:{getElementById:()=>null},Date,Number,Math,String,Array,JSON,Set,Map,RegExp,console});
+const source=fs.readFileSync('src/AppCashFlow.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+vm.runInContext(source,ctx);
+assert.equal(ctx.cashFlowAllowed_(),true);
+ctx.cashFlowOpen_();
+assert.equal(calls.length,1);
+assert.equal(calls[0].method,'getCashFlowYear');
+assert.equal(calls[0].args[1],2026);
+const months=Array.from({length:12},(_v,i)=>({month:i===0?'2025-12':'2026-'+String(i).padStart(2,'0'),planIn:null,planOut:null,actualIn:null,actualOut:null,note:''}));
+months[0].note='<svg onload=alert(1)>';
+const result={ok:true,setupRequired:false,fiscalYear:2026,record:{openingBalance:100,months,revision:0,exists:false,updatedAt:''},availableYears:[],summary:{}};
+calls[0].success(result);
+let html=ctx.cashFlowPage_();
+assert.ok(html.includes('2026年11月期'),'fiscal year ending November');
+assert.ok(html.includes('2025年12月'),'December starts the fiscal year');
+assert.ok(html.includes('2026年11月'));
+assert.ok(html.includes('&lt;svg onload=alert(1)&gt;'),'stored notes are escaped');
+assert.ok(!html.includes('<svg onload=alert(1)>'));
+assert.equal((html.match(/data-key="planIn"/g)||[]).length,12,'all 12 monthly input rows are rendered');
+const noNetworkBefore=calls.length;
+ctx.cashFlowEdit_({dataset:{key:'openingBalance'},value:'1000'});
+ctx.cashFlowEdit_({dataset:{key:'planIn',index:'0'},value:'200'});
+ctx.cashFlowEdit_({dataset:{key:'planOut',index:'0'},value:'50'});
+assert.equal(ctx.cashFlowCalc_().months[0].planEnd,1150);
+assert.equal(ctx.cashFlowCalc_().months[1].forecastEnd,null,'unknown months are not invented');
+assert.equal(calls.length,noNetworkBefore,'typing is entirely local');
+ctx.cashFlowClose_();
+assert.equal(typeof confirmCallback,'function','unsaved cash flow requires a confirmation');
+assert.equal(vm.runInContext('cashFlowUi.open',ctx),true,'cancel keeps the draft and view');
+ctx.cashFlowSave_();
+assert.equal(calls.at(-1).method,'saveCashFlowYear');
+const key=calls.at(-1).args[1].requestKey;
+const lastDraft=JSON.parse(JSON.stringify(vm.runInContext('cashFlowUi.draft',ctx)));
+calls.at(-1).failure(Error('network'));
+assert.equal(vm.runInContext('cashFlowUi.dirty',ctx),true);
+assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cashFlowUi.draft',ctx))),lastDraft);
+ctx.cashFlowSave_();
+assert.equal(calls.at(-1).args[1].requestKey,key,'retry uses the identical key');
+calls.at(-1).success({ok:true,revision:1,auditRecorded:false});
+assert.equal(calls.at(-1).method,'getCashFlowYear','server success is verified by refetching saved data');
+assert.ok(vm.runInContext('cashFlowUi.auditWarning',ctx).includes('監査ログ'));
+ctx.resetCashFlowUi();
+assert.equal(vm.runInContext('cashFlowUi.draft',ctx),null,'logout clears private cash data');
+state.data.permissions.cashFlowWorkspace=false;
+const count=calls.length;
+ctx.cashFlowOpen_();
+assert.equal(calls.length,count,'non-admin cannot fetch cash data');
+assert.ok(ctx.cashFlowPage_().includes('管理者専用'),'non-admin screen is blank');
+assert.equal(renders>0,true);
+console.log('PASS cashflow client: ADMIN-only entry, fiscal year navigation, 12 months, escaped notes, local calculation, preserved retries, audit warning and logout isolation');

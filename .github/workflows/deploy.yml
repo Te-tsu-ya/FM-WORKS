@@ -40,6 +40,8 @@ jobs:
         run: node scripts/test_finance_integration.mjs
       - name: Verify secure annual cash flow and calculations
         run: node scripts/test_cashflow.mjs
+      - name: Verify annual cash flow client interactions and private-data isolation
+        run: node scripts/test_cashflow_client.mjs
       - name: Test estimates and formal document outputs
         run: node scripts/test_quote_integration.mjs
       - name: Test rotary loader lifecycle and all GAS entrypoints
