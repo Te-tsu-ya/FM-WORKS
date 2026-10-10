@@ -47,6 +47,16 @@ class Sheet{
          sheet.stats.finds++;
          const idx=sheet.rows.findIndex((r,i)=>i>=1&&String(r[col-1]??'')===String(value));
          return idx<0?null:{getRow:()=>idx+1};
+       },
+       findAll(){
+         sheet.stats.finds++;
+         const found=[];
+         for(let i=row-1;i<Math.min(row-1+height,sheet.rows.length);i++){
+           if(String(sheet.rows[i]?.[col-1]??'')===String(value)){
+             const at=i+1;found.push({getRow:()=>at});
+           }
+         }
+         return found;
        }
      };
    },
@@ -60,10 +70,20 @@ class Sheet{
 }
 const sheets={};
 for(const kind of Object.keys(models))sheets[models[kind].sheet]=new Sheet(specs[models[kind].sheet]);
+// Separate synthetic audit table: id, at, employeeId, name, operation, kind,
+// targetId, before, after, source, result, note.
+const auditSheet=new Sheet(Array.from({length:12},(_,i)=>'AUDIT_'+i));
+sheets['監査ログ']=auditSheet;
 ctx.mockDb={getSheetByName:name=>sheets[name]||null};
 ctx.mockAudits=audits;
+ctx.mockAuditSheet=auditSheet;
 ctx.auditAvailable=true;
-vm.runInContext('getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";appendAudit_=item=>{if(!auditAvailable)return false;mockAudits.push(item);return true;};',ctx);
+vm.runInContext(`getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";
+  appendAudit_=item=>{if(!auditAvailable)return false;mockAudits.push(item);
+    mockAuditSheet.appendRow(['AUD-'+mockAudits.length,'2026-10-10 12:00:00',
+      item.employeeId||'',item.employeeName||'',item.operation||'',item.target||'',
+      item.targetId||'',item.before||'',item.after||'',item.source||'',
+      item.result||'',item.note||'']);return true;};`,ctx);
 const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest,resubmitFinanceRequest,financeReceiptCrossCheck_,financeNormalizeDateText_,financeOutstandingFirst_,financeMyActionFirst_,financeAmountDisplay_,assertDatabaseMigrationSafe_})',ctx);
 const expense={
  usedOn:'2026-10-08',vendor:'架空の販売店',item:'事務用品',category:'消耗品費',
@@ -92,7 +112,9 @@ denied('staff cannot see all records',()=>api.getFinanceOverview('STAFF'),/権�
 denied('manager cannot see all records',()=>api.getFinanceOverview('MANAGER'),/権限/);
 denied('staff cannot enter receipt',()=>api.saveFinanceReceipt('STAFF',receipt),/権限/);
 denied('manager cannot approve',()=>api.reviewFinanceRequest('MANAGER','expense','x','APPROVE',''),/権限/);
+const auditFindsBeforeWrite=auditSheet.stats.finds;
 const saved=api.submitFinanceExpense('STAFF',expense);
+ok('first-time save never performs a slow audit lookup',auditSheet.stats.finds===auditFindsBeforeWrite);
 const beforeFastRead=sheets['経費精算申請'].stats.rawCells;
 ok('the finance save API explicitly confirms its audit entry',saved.auditRecorded===true);
 ok('self-service creates owned pending expense',saved.ok&&sheets['経費精算申請'].rows.length===2&&
@@ -100,7 +122,15 @@ ok('self-service creates owned pending expense',saved.ok&&sheets['経費精算�
 denied('same request id with edited amount cannot silently confirm the wrong record',
  ()=>api.submitFinanceExpense('STAFF',{...expense,amount:'2700'}),/前回と異なる内容/);
 const retry=api.submitFinanceExpense('STAFF',expense);
-ok('retry is idempotent',retry.duplicate&&retry.id===saved.id&&sheets['経費精算申請'].rows.length===2);
+ok('retry is idempotent and verifies the actual original audit entry',
+  retry.duplicate&&retry.id===saved.id&&retry.auditRecorded===true&&
+  sheets['経費精算申請'].rows.length===2);
+const savedAuditRow=auditSheet.rows.find(row=>row[6]===saved.id&&row[4]==='経理新規登録');
+const auditOperation=savedAuditRow[4];savedAuditRow[4]='経理差戻し';
+const mismatchedAudit=api.submitFinanceExpense('STAFF',expense);
+ok('a wrong audit operation is never considered proof of a successful finance audit',
+  mismatchedAudit.duplicate&&mismatchedAudit.auditRecorded===false);
+savedAuditRow[4]=auditOperation;
 ok('confirmed expense is returned from server, without resubmission secret',
   saved.record&&saved.record.id===saved.id&&saved.record.status==='承認待ち'&&
   saved.record.amount===2500&&!('requestKey' in saved.record)&&
@@ -151,7 +181,16 @@ denied('edited retry with same resubmission key cannot mask changed contents',
 const revisionRetry=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
  ...travel,outcome:'差戻しを修正した出張報告',requestKey:'test-20261008-travel-B'
 });
-ok('resubmission retry is idempotent',revisionRetry.duplicate&&revisionRetry.id===trip.id);
+ok('resubmission retry is idempotent and verifies the matching request audit',
+  revisionRetry.duplicate&&revisionRetry.id===trip.id&&revisionRetry.auditRecorded===true);
+const resubmissionAudit=auditSheet.rows.find(row=>row[6]===trip.id&&row[4]==='経理再申請');
+const actualAuditNote=resubmissionAudit[11];resubmissionAudit[11]='finance-request:OTHER-NONCE';
+const wrongRetryAudit=api.resubmitFinanceRequest('STAFF','travel',trip.id,{
+  ...travel,outcome:'差戻しを修正した出張報告',requestKey:'test-20261008-travel-B'
+});
+ok('the correct record id with a wrong resubmission key cannot validate audit',
+  wrongRetryAudit.duplicate&&wrongRetryAudit.auditRecorded===false);
+resubmissionAudit[11]=actualAuditNote;
 ok('resubmission provides confirmed updated values for immediate UI feedback',
   revised.record&&revised.record.outcome==='差戻しを修正した出張報告'&&
   !('requestKey' in revised.record));
@@ -265,7 +304,7 @@ ok('hidden split claims are included in reconciliation and trigger duplicate war
   large.receiptMatches['SPLIT-VISIBLE']?.status==='MULTIPLE_CLAIMS'&&
   large.receiptMatches['SPLIT-VISIBLE']?.claimAmount===2500);
 ok('overview reads all 3 sheet headers once, with no second redundant header pass',
-  Object.values(sheets).every(sheet=>sheet.stats.headerReads===1));
+  Object.keys(models).every(kind=>sheets[models[kind].sheet].stats.headerReads===1));
 for(const sheet of Object.values(sheets)){
   sheet.stats.displayCalls=0;sheet.stats.displayCells=0;sheet.stats.headerReads=0;
 }
@@ -292,6 +331,14 @@ ok('financial record is durable but audit failure is explicitly disclosed',
  unlogged.ok===true&&unlogged.auditRecorded===false&&
  sheets['経費精算申請'].rows.some(row=>row[0]===unlogged.id)&&
  audits.length===auditBeforeFailure);
+const unloggedRetry=api.submitFinanceExpense('STAFF',{
+ ...expense,requestKey:'test-20261010-audit-unavailable',vendor:'架空取引先B'
+});
+ok('retry after lost response never hides missing finance audit',
+ unloggedRetry.ok&&unloggedRetry.duplicate&&unloggedRetry.id===unlogged.id&&
+ unloggedRetry.auditRecorded===false);
+ok('audit retry verification never creates a second financial record',
+ sheets['経費精算申請'].rows.filter(row=>row[0]===unlogged.id).length===1);
 const unloggedApproval=api.reviewFinanceRequest('ACCOUNTING','expense',unlogged.id,'APPROVE','');
 ok('approval explicitly reports audit failure without pretending full verification',
  unloggedApproval.ok&&unloggedApproval.auditRecorded===false&&unloggedApproval.status==='承認済');
