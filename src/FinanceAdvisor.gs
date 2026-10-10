@@ -130,6 +130,7 @@ function financeTravelExplanation_(data,role){
       '円 × '+Math.max(1,nights)+'日〈参考〉)',amount:daily});
     if(overnight&&timeCode)issues.push('宿泊日数がある場合、早朝・夜間手当の適用日と日ごとの上限を承認者が確認してください。');
     if(!overnight&&!far&&!near)issues.push('片道100kmを確認するまで日帰り日当は確定できません。');
+    if(!overnight&&near&&timeCode)issues.push('片道100km未満の早朝・夜間出張は業務理由、移動経路、会社承認の確認が必要です。');
     if(!overnight&&near&&!timeCode)issues.push('100km未満かつ早朝・夜間なしの場合、通常の出張日当対象外です。');
     if(overnight){
       const raw=String(p.lodgingActual==null?'':p.lodgingActual).trim();
@@ -151,9 +152,9 @@ function financeTravelExplanation_(data,role){
   return {policy:'Fusion Mind旅費規程 2025-12-01',role:position||'未確認',
     status:issues.length?'REVIEW_REQUIRED':'REFERENCE',issues,steps,daily,lodging,total,
     note:total===null?'':('[旅費試算2025-12-01/参考] '+position+
-      ' 日当'+daily+'円、宿泊実費'+lodging+'円、合計'+total+'円。'+
-      '片道'+(km===null?(far?'100km以上':near?'100km未満':'未確認'):km+'km')+
-      '。承認時に原本・距離・規程を照合。')};
+      '・片道'+(km===null?(far?'100km以上':near?'100km未満':'未確認'):km+'km')+
+      '：'+steps.map(step=>step.label+' '+step.equation+' ='+step.amount+'円').join('；')+
+      '。日当'+daily+'円＋宿泊実費'+lodging+'円＝参考合計'+total+'円。承認時は規程と領収書を照合。')};
 }
 function getFinanceTravelExplanation(sessionToken,params){
   const employee=requireSession_(sessionToken).employee;

@@ -1945,3 +1945,5 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - **国税庁**: `NTA_INVOICE_API_ID`をスクリプトプロパティのみから取得（13桁）。ブラウザ・ログに秘匿IDを出さない。公式JSON`announcement[].registratedNumber`（原文のリソース名はregistratedNumber）を厳密照合し、`name`, `address`, `registrationDate`, `disposalDate`, `expireDate`等のみを返す。未設定／番号不正／取得失敗／未該当と成功を区別して扱う。公式情報の免責をUIに表示。
 - **src/AppFinance.html**: 経理トップの支出分析切替、経費記録の事業者照会、旅費申請画面に計算根拠を表示。**src/AppFinanceAdvisor.html**を専用の追加フロントモジュールとし、CSSを**src/StylesFinanceAdvisor.html**に分離。Index.htmlから読み込み。支出分析の人別検索や明細検索はページ内だけで処理し、不要なGAS通信を避ける。
 - **テスト**: in-memoryの旧台帳のみを読み取り、複数年・支払者別・アクセス権限、出張の100km境界・実費12,000円／上限20,000円・多泊条件・未確認を検証。国税庁APIはモックで`registratedNumber`を返し、未設定なら通信せず会社名を捏造しない。新しいUI表示・フロントRPC引数・操作後の権限制御を全既存回帰検証とともに実行する。
+
+- 片道100km未満、宿泊なし、早朝または夜間の経路は `issues` に業務理由・経路・会社承認の必須確認を加え、`status='REVIEW_REQUIRED'`・`total=null` とする。後日の説明に備え、備考へ転記する参照計算はNo.1～No.5、上限適用、宿泊実費それぞれの式を含める。

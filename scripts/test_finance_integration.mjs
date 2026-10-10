@@ -384,8 +384,9 @@ ok('policy basis: representative 120 km day trip yields No.1 5,500 yen',
  dayQuote.status==='REFERENCE'&&dayQuote.daily===5500&&dayQuote.total===5500&&dayQuote.steps[0].amount===5500);
 const shortTrip=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',startsAt:'06:30',
  endsAt:'19:00',oneWayKm:'70',nights:'0',lodgingArea:'なし'},'代表');
-ok('under 100 km day trip excludes No.1 but can receive early departure allowance',
- shortTrip.status==='REFERENCE'&&shortTrip.daily===3000&&shortTrip.total===3000);
+ok('under 100 km early trip shows 3,000 yen reference but requires company approval, not finalized',
+ shortTrip.status==='REVIEW_REQUIRED'&&shortTrip.daily===3000&&shortTrip.total===null&&
+ shortTrip.issues.some(x=>x.includes('会社承認')));
 const legacyTrip=advisor.financeTravelExplanation_({startsOn:'2026-10-01',endsOn:'2026-10-01',
  startsAt:'08:30',endsAt:'16:00',distanceCategory:'30km以上',nights:'0'},'代表');
 ok('historical 30km flag is never interpreted as an eligible 100km day trip',
