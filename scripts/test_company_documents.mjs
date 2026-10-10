@@ -38,7 +38,7 @@ function mockSheet(headers=fullHeaders){
         },
         createTextFinder(query){
           let lower=String(query).toLowerCase();
-          return {matchCase(){return this;},findAll(){
+          return {matchCase(){return this;},useRegularExpression(flag){assert.equal(flag,false);return this;},findAll(){
             return rows.slice(r-1,r-1+n).flatMap((row,i)=>
               String(row[c-1]||'').toLowerCase().includes(lower)?[{getRow:()=>r+i}]:[]);
           }};
@@ -139,6 +139,13 @@ employee=staff;
 assert.equal(call('getCompanyDocuments','SESSION').items.length,1);
 assert.equal(call('getCompanyDocument','SESSION',created.document.id).document.body,payload.body);
 assert.equal(call('searchCompanyDocumentBodies','SESSION','テスト本文').matchedIds.length,1,'published body searchable');
+assert.equal(call('searchCompanyDocumentBodies','SESSION','一般 テスト本文').matchedIds.length,1,
+  'space-separated words match anywhere in the same document, not only as one phrase');
+assert.equal(call('searchCompanyDocumentBodies','SESSION','一般 存在しない用語').matchedIds.length,0,
+  'every search term must appear in the same body');
+assert.throws(()=>call('searchCompanyDocumentBodies','SESSION','一 二 三 四 五 六 七 八 九'),/最大8語/);
+assert.equal(call('companyDocsValidId_','CD-demo-malicious&quot;'),false);
+assert.equal(call('companyDocsValidId_',created.document.id),true);
 employee=admin;
 assert.throws(()=>call('deleteCompanyDocument','SESSION',created.document.id,1),/別の担当者/);
 assert.equal(call('deleteCompanyDocument','SESSION',created.document.id,2).deleted,true);
