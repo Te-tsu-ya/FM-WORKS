@@ -70,13 +70,11 @@ function getProjectHubWorkspace(sessionToken,force){
  const u=requireSession_(sessionToken).employee,r=projectHubRead_(!!force),today=projectHubToday_();
  const plans=new Map(),tasks=new Map(),resourceCounts=new Map(),names=new Map(),logBuckets=new Map();
  r.plans.forEach(p=>{if(!plans.has(p.projectId))plans.set(p.projectId,p);});
- r.tasks.forEach(t=>{const a=tasks.get(t.projectId)||[];a.push(t);tasks.set(t.projectId,a);});
- r.resources.forEach(resource=>resourceCounts.set(resource.projectId,(resourceCounts.get(resource.projectId)||0)+1));
- // One normalized name can be linked to several records in legacy data.
- // Keep the original per-project matching semantics rather than silently dropping a match.
+ r.tasks.forEach(t=>{const list=tasks.get(t.projectId)||[];list.push(t);tasks.set(t.projectId,list);});
+ r.resources.forEach(doc=>resourceCounts.set(doc.projectId,(resourceCounts.get(doc.projectId)||0)+1));
  r.projects.forEach(p=>{
-  const plan=plans.get(p.projectId),keys=new Set([p.name,...projectHubAliases_(plan)].map(projectHubName_));
-  keys.forEach(name=>{const owners=names.get(name)||new Set();owners.add(p.projectId);names.set(name,owners);});
+  const keys=new Set([p.name,...projectHubAliases_(plans.get(p.projectId))].map(projectHubName_));
+  keys.forEach(key=>{const owners=names.get(key)||new Set();owners.add(p.projectId);names.set(key,owners);});
  });
  let unlinkedWorklogCount=0;
  r.worklogs.forEach(w=>{
@@ -84,12 +82,33 @@ function getProjectHubWorkspace(sessionToken,force){
   if(!owners||!owners.size){unlinkedWorklogCount++;return;}
   owners.forEach(id=>{const bucket=logBuckets.get(id)||[];bucket.push(w);logBuckets.set(id,bucket);});
  });
+ const dateValid=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
  const projects=r.projects.map(p=>{
-  const plan=plans.get(p.projectId)||{},metrics=projectHubMetrics_(p,plan,tasks.get(p.projectId)||[],logBuckets.get(p.projectId)||[],today);
-  return {...p,...metrics,ownerId:plan.ownerId||'',orderStatus:plan.orderStatus||'未登録',receivedOn:plan.receivedOn||'',canManage:projectHubCanManage_(u,plan),resourceCount:resourceCounts.get(p.projectId)||0};
+  const plan=plans.get(p.projectId)||{},group=tasks.get(p.projectId)||[],metrics=projectHubMetrics_(p,plan,group,logBuckets.get(p.projectId)||[],today);
+  const open=group.filter(t=>t.status!=='完了'&&Number(t.progress)<100);
+  const myTasks=open.filter(t=>t.ownerId===u.employeeId);
+  const dueDates=open.map(t=>t.dueDate).filter(dateValid).sort();
+  return {...p,...metrics,ownerId:plan.ownerId||'',orderStatus:plan.orderStatus||'未登録',receivedOn:plan.receivedOn||'',canManage:projectHubCanManage_(u,plan),resourceCount:resourceCounts.get(p.projectId)||0,
+   myOpenTasks:myTasks.length,myOverdueTasks:myTasks.filter(t=>dateValid(t.dueDate)&&t.dueDate<today).length,nextTaskDueDate:dueDates[0]||''};
  });
- return {projects,today,setupRequired:!r.storage.ready,missing:r.storage.missing,canCreate:u.role==='ADMIN',unlinkedWorklogCount,
-  employees:getEmployees_().map(e=>({employeeId:e.employeeId,name:e.displayName||e.name})),quoteOptions:projectHubQuoteOptions_(u)};
+ const employees=getEmployees_();
+ const result={projects,today,setupRequired:!r.storage.ready,missing:r.storage.missing,canCreate:u.role==='ADMIN',unlinkedWorklogCount,
+  employees:employees.map(e=>({employeeId:e.employeeId,name:e.displayName||e.name})),quoteOptions:projectHubQuoteOptions_(u)};
+ if(u.role==='ADMIN'){
+  const people=new Map(employees.map(e=>[e.employeeId,e.displayName||e.name]));
+  const activeIds=new Set(r.projects.filter(p=>p.status==='進行中').map(p=>p.projectId));
+  const workload=new Map();
+  r.tasks.forEach(t=>{
+   if(!activeIds.has(t.projectId)||t.status==='完了'||Number(t.progress)>=100)return;
+   const id=String(t.ownerId||''),record=workload.get(id)||{employeeId:id,name:id?(people.get(id)||'担当者情報なし'):'担当未設定',openTasks:0,overdueTasks:0,plannedMinutes:0};
+   record.openTasks++;
+   if(dateValid(t.dueDate)&&t.dueDate<today)record.overdueTasks++;
+   record.plannedMinutes+=Math.max(0,Number(t.plannedMinutes)||0);
+   workload.set(id,record);
+  });
+  result.employeeWorkload=Array.from(workload.values()).sort((a,b)=>b.overdueTasks-a.overdueTasks||b.openTasks-a.openTasks||a.name.localeCompare(b.name,'ja'));
+ }
+ return result;
 }
 function getProjectHubDetail(sessionToken,projectId,force){
  const u=requireSession_(sessionToken).employee,r=projectHubRead_(!!force,String(projectId)),p=r.projects.find(x=>x.projectId===String(projectId));

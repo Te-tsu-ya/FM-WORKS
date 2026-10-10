@@ -2088,3 +2088,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - AppOperations stores one in-memory, identity-bound project worklog intent. restoreWorklogQuickDraft applies it once the real quick-input form appears. When another worklog draft exists, the form is protected until the user explicitly applies only project/description, preserving dates/times/category. clearWorklogQuickDrafts removes it on logout. UI labels distinguish the handoff from a saved entry.
 - Project overview shows most recently updated existing project docs and latest shared notes with escaped titles/snippets. It does not introduce uploads, AI analysis, or new server calls.
 - Regression covers portfolio one-RPC loading, selected detail lazy fetch, inherited worklog draft protection, late rendering, session isolation, malformed schedule, and 90 synthetic projects with 1080 synthetic log rows. Full Chromium/CI and live GAS deployment are gates; authenticated production CRUD and measured cold-start latency remain separate.
+
+
+## v0.19.5 User task filters and admin planning allocation
+
+- ProjectHub.getProjectHubWorkspace extends existing per-project aggregation with myOpenTasks, myOverdueTasks and nextTaskDueDate. Only authenticated user's ownerId is matched for my* fields. Dates use validated ISO strings, incomplete tasks use status and progress consistently with existing calculation rules.
+- The administrator-only employeeWorkload field is calculated from existing task records for projects with status=進行中. It groups by ownerId (including an explicit unassigned bucket) and includes openTasks, overdueTasks, plannedMinutes. No employee worklog rows, personal attendance records, financial amounts or actual overtime are included. The server omits the field for non-admin users entirely.
+- AppProjectHub adds a local '自分の作業' filter and per-project own task chip, plus a management planning-assignment table. The table is not an availability/overload calculation and must not be described as an actual effort load.
+- The existing project/worklog data cache, date validation, active project checks, name-alias grouping, and permission checks remain in force. No DB migration or new API endpoint.
