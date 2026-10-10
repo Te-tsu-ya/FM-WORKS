@@ -250,7 +250,7 @@ function saveLaborRulesFromAdmin(){
 }
 function migrateDatabaseFromAdmin(){
   openConfirmDialog('DBスキーマを更新','現在のDBをバックアップしてから、欠けているシート・列見出しを現在のスキーマへ更新します。既存の非空欄見出しが想定と異なる場合は停止します。','バックアップして更新',()=>{
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(r=>{showToast(r&&r.changed?'DBスキーマを更新しました':'DBスキーマは最新です');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'DBスキーマを更新できませんでした')).migrateDatabaseToCurrent(state.sessionToken);
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(r=>{showToast(r&&r.auditRecorded===false?'DBは更新済みですが監査ログを記録できませんでした。管理者が履歴を確認してください':r&&r.changed?'DBスキーマを更新しました':'DBスキーマは最新です');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'DBスキーマを更新できませんでした')).migrateDatabaseToCurrent(state.sessionToken);
   },true);
 }
 function maintenanceSection(){
