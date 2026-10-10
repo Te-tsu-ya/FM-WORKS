@@ -2031,7 +2031,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 進捗 = Σ（作業予定分 × 作業進捗率）/ Σ作業予定分。日程目安は開始日から期限までの暦日直線補間を同じ重みで平均する。休日・実作業順序を含む工程予測ではない。予算工数未設定なら作業予定分合計を使い、計画がなければnullを返す。工数消化率 = 実績分 / 予算分。案件名・旧名はtrim/lowercaseで照合し、類似顧客名は照合しない。
 
-`saveProjectHubRecord(token,kind,payload)`はScriptLock内で認証・案件・編集権限を再検証する。予定時間は分に変換する。既存revision相違は拒否し、完全に同じ内容の再試行だけ成功扱いにする。新規保存のrequestKeyは作成者・案件・内容が一致する場合だけ重複扱いにする。記録保存後の監査失敗はauditRecorded=falseとして保存済みを明示する。資料本文はシート式注入を抑止し、HTMLはescapeHtmlで描画する。リンクはcompanyDocsUrl_でHTTPS検証する。
+`saveProjectHubRecord(token,kind,payload)`はScriptLock内で認証・案件・編集権限を再検証する。予定時間は分に変換する。既存revision相違は拒否し、完全に同じ内容の再試行だけ成功扱いにする。新規保存のrequestKeyは作成者・案件・内容が一致する場合だけ重複扱いにする。記録保存後の監査失敗はauditRecorded=falseとして保存済みを明示する。task/resourceの非表示は通常のrevision付き保存を経由し、完了作業の100%を非表示に戻さない。案件管理者のみ作業を、作成者または案件管理者のみ資料を非表示にできる。新しい見積を選択すると、閲覧可能な選択先に応じて受注金額欄を切り替える。資料本文はシート式注入を抑止し、HTMLはescapeHtmlで描画する。リンクはcompanyDocsUrl_でHTTPS検証する。
 
 案件名更新はProjects.gsから旧名を計画台帳に記録してからマスタを書き込む。未移行時の名称変更は連携を失わないため拒否する。旧名の他案件への再使用も拒否する。全社員の集約値は共有するが、個人明細は本人/直属メンバー/ADMIN、受注金額・見積は元見積の閲覧権限に従う。
 

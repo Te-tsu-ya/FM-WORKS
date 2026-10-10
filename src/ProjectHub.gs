@@ -140,7 +140,7 @@ function saveProjectHubRecord(sessionToken,kind,payload){
    data.plannedMinutes=projectHubMinutes_(p.plannedHours,true);data.progress=Number(p.progress);
    if(!Number.isFinite(data.progress)||data.progress<0||data.progress>100)throw new Error('進捗率は0〜100で入力してください。');
    data.status=String(p.status||'未着手');if(!['未着手','進行中','確認待ち','完了','保留','非表示'].includes(data.status))throw new Error('作業状態を確認してください。');
-   if(data.status==='完了')data.progress=100;if(data.progress===100)data.status='完了';
+   if(data.status==='完了')data.progress=100;if(data.progress===100&&data.status!=='非表示')data.status='完了';
    data.note=projectHubText_(p.note,'作業メモ',2000,false);
    if(!manager){['title','ownerId','startDate','dueDate','plannedMinutes'].forEach(k=>{if(String(data[k])!==String(existing[k]))throw new Error('担当者が変更できるのは進捗・状態・メモのみです。');});if(data.status==='非表示')throw new Error('作業を非表示にできるのは案件管理者です。');}
   }else if(kind==='resource'){

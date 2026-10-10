@@ -83,6 +83,7 @@ const updateTask={...task,id:t1.id,revision:1,progress:75};save('E','task',updat
 assert.equal(save('E','task',updateTask).duplicate,true,'lost update response accepts exact same stale revision');
 assert.throws(()=>save('E','task',{...updateTask,progress:80}),/別の人/);
 assert.equal(ctx.projectHubMetrics_({status:'進行中'},{},[],[], '2026-10-10').progress,null);
+const completed=save('M','task',{...task,title:'誤登録',progress:100,status:'完了',requestKey:key()});save('M','task',{...task,id:completed.id,title:'誤登録',progress:100,status:'非表示',revision:1,requestKey:key()});assert.ok(!ctx.getProjectHubDetail('A','PRJ-001').tasks.some(t=>t.id===completed.id),'completed erroneous task can be hidden');
 const keep=sheets['プロジェクト資料'];delete sheets['プロジェクト資料'];assert.equal(ctx.getProjectHubWorkspace('E').setupRequired,true);assert.equal(ctx.getProjectHubWorkspace('E').projects[0].actualMinutes,60);assert.throws(()=>save('A','plan',plan),/DB更新/);sheets['プロジェクト資料']=keep;
 keep.rows[0][0]='不一致';assert.throws(()=>ctx.getProjectHubWorkspace('E'),/列構成/);keep.rows[0][0]=specs['プロジェクト資料'][0];
 console.log('PASS project backend: real sheets/quote helpers, aggregates, permissions, revisions, duplicate retries, renames and migration gates');
@@ -90,7 +91,7 @@ console.log('PASS project backend: real sheets/quote helpers, aggregates, permis
 // Client behavior with controlled asynchronous GAS responses.
 const calls=[];const runner=(meta={})=>new Proxy({}, {get(_,method){if(method==='withSuccessHandler')return success=>runner({...meta,success});if(method==='withFailureHandler')return failure=>runner({...meta,failure});return (...args)=>calls.push({method,args,...meta});}});
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const client=vm.createContext({state:{page:'projects',sessionToken:'E',data:{today:'2026-10-10',user:users[2],permissions:{}}},google:{script:{run:runner()}},document:{getElementById:()=>null,querySelectorAll:()=>[]},window:{addEventListener:()=>{}},renderPageIfActive:()=>{},showToast:()=>{},escapeHtml,cleanApiErrorMessage:e=>e.message,navigate:()=>{}});
+const client=vm.createContext({state:{page:'projects',sessionToken:'E',data:{today:'2026-10-10',user:users[2],permissions:{}}},google:{script:{run:runner()}},document:{getElementById:()=>null,querySelectorAll:()=>[]},window:{addEventListener:()=>{}},renderPageIfActive:()=>{},showToast:()=>{},openConfirmDialog:(_t,_m,_l,callback)=>callback(),escapeHtml,cleanApiErrorMessage:e=>e.message,navigate:()=>{}});
 vm.runInContext(fs.readFileSync('src/AppProjectHub.html','utf8').replace(/<\/?script>/g,''),client);
 const cr=code=>vm.runInContext(code,client);
 client.loadProjectHub();assert.equal(calls.length,1);calls[0].success(workspace);assert.equal(calls.length,2);calls[1].success(detail);
@@ -107,5 +108,8 @@ client.loadProjectHub({force:true});assert.doesNotThrow(()=>cr('projectHubPage()
 client.resetProjectHubUi();cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');client.projectHubOpenResource_(r1.id);client.projectHubField_('body','自分の変更');
 cr('projectHubUi.details.get("PRJ-001").data.resources[0].revision=2');assert.ok(cr('projectHubPage()').includes('最新の登録内容を確認'));assert.equal(cr('projectHubUi.editor.form.revision'),1);client.projectHubAcceptLatest_();assert.equal(cr('projectHubUi.editor.form.revision'),2);assert.equal(cr('projectHubUi.editor.form.body'),'自分の変更');
 client.resetProjectHubUi();assert.equal(cr('projectHubUi.editor'),null);
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');
+client.projectHubHideResource_(r1.id);assert.equal(calls.at(-1).args[2].status,'非表示');calls.at(-1).failure(Error('network'));client.projectHubSave_();assert.equal(calls.at(-1).args[2].status,'非表示','failed hide retry keeps confirmed operation');client.resetProjectHubUi();
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify({...detail,canSeeOrderValue:false,plan:{...detail.plan,quoteId:'Q2',orderValue:undefined}})+',at:Date.now()});');client.projectHubOpenPlan_();assert.ok(!cr('projectHubPage()').includes('id="ph-orderValue"'));client.projectHubField_('quoteId','Q1');assert.ok(cr('projectHubPage()').includes('id="ph-orderValue"'),'selecting a visible quote exposes its order amount field');client.resetProjectHubUi();
 console.log('PASS project client: cached tabs/routes, escaped documents, retained failed forms, stable retries, stale-response and session isolation');
 export {workspace,detail,escapeHtml};
