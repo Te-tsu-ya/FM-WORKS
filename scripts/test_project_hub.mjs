@@ -60,7 +60,9 @@ auditFails=true;const upd={projectId:'PRJ-001',updateKind:'決定事項',body:'�
 assert.equal(save('E','update',upd).duplicate,true);
 ctx.projectHubRememberRename_('PRJ-001','旧案件','現案件',users[0]);
 ctx.projectHubInvalidateWorklogs_();
+save('X','resource',{...resource,projectId:'PRJ-002',title:'別案件の本文',body:'other-project-body',requestKey:key()});sheets['プロジェクト資料'].reads=[];
 const workspace=plain(ctx.getProjectHubWorkspace('E'));
+assert.ok(sheets['プロジェクト資料'].reads.every(r=>r.row===1||!(r.col<=6&&r.col+r.width>6)),'workspace does not fetch document bodies');
 assert.equal(workspace.projects[0].actualMinutes,180,'current and historical names link, deleted worklogs excluded');
 assert.equal(workspace.projects[0].progress,40,'8h at 50% plus 2h at 0% = 40%, not effort consumption');
 assert.equal(workspace.projects[0].usagePercent,30);
@@ -68,7 +70,8 @@ assert.equal(workspace.projects[0].scheduledProgress,90);
 assert.equal(workspace.unlinkedWorklogCount,1);
 assert.deepEqual(workspace.quoteOptions.map(q=>q.id),['Q1']);
 assert.equal(workspace.projects[0].resourceCount,1);
-const detail=plain(ctx.getProjectHubDetail('E','PRJ-001'));
+sheets['プロジェクト資料'].reads=[];const detail=plain(ctx.getProjectHubDetail('E','PRJ-001'));
+assert.ok(sheets['プロジェクト資料'].reads.filter(r=>r.row>=2&&r.col===1&&r.width>6).every(r=>r.row===2&&r.n===1),'detail fetches only selected project document bodies');
 assert.equal(detail.worklogs.length,1);assert.equal(detail.byPerson.length,1);assert.equal(detail.metrics.actualMinutes,180);
 assert.equal(detail.canSeeOrderValue,true);assert.equal(detail.resources[0].body,"'=secret");
 assert.equal(ctx.getProjectHubDetail('M','PRJ-001').worklogs.length,1);
@@ -91,7 +94,7 @@ const client=vm.createContext({state:{page:'projects',sessionToken:'E',data:{tod
 vm.runInContext(fs.readFileSync('src/AppProjectHub.html','utf8').replace(/<\/?script>/g,''),client);
 const cr=code=>vm.runInContext(code,client);
 client.loadProjectHub();assert.equal(calls.length,1);calls[0].success(workspace);assert.equal(calls.length,2);calls[1].success(detail);
-client.loadProjectHub();for(const tab of ['tasks','effort','resources','updates','overview'])client.projectHubTab_(tab);assert.equal(calls.length,2,'cached route and all tabs produce no extra RPC');
+client.loadProjectHub();for(const tab of ['tasks','effort','resources','updates','overview'])client.projectHubTab_(tab);client.projectHubTogglePicker_();assert.equal(cr('projectHubUi.pickerOpen'),true);client.projectHubTogglePicker_();assert.equal(calls.length,2,'cached route, project selector and all tabs produce no extra RPC');
 assert.ok(cr('projectHubPage()').includes('作業の完成度'));client.projectHubTab_('resources');assert.ok(cr('projectHubPage()').includes('&lt;script&gt;'));
 client.projectHubOpenResource_('');client.projectHubField_('body','保存前の本文');const requestKey=cr('projectHubUi.editor.form.requestKey');client.projectHubSave_();const request=calls.at(-1);request.failure(Error('network'));assert.equal(cr('projectHubUi.editor.form.body'),'保存前の本文');client.projectHubSave_();assert.equal(calls.at(-1).args[2].requestKey,requestKey,'failed retry uses same identity');calls.at(-1).success({ok:true});
 const fresh=calls.at(-1);fresh.success(workspace);const newDetail=calls.at(-1);newDetail.success(detail);

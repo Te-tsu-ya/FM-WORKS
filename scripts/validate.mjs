@@ -73,7 +73,7 @@ for(const marker of ['.fmr-root.fmr-page','.fmr-root.fmr-region']){
  if(!rotaryStyles.includes(marker)){console.error('Rotary loader CSS missing: '+marker);failed=true;}
 }
 const coveredSources=['AppCore','AppShell','AppOperations','AppPeopleMonthly','AppQuotes',
- 'AppDocuments','AppCompanyDocs','AppSomu','AppSomuGrowth','AppFinance','AppFinanceAdvisor','AppAdmin'];
+ 'AppDocuments','AppCompanyDocs','AppSomu','AppSomuGrowth','AppProjectHub','AppFinance','AppFinanceAdvisor','AppAdmin'];
 for(const moduleName of coveredSources){
  const source=fs.readFileSync(path.join(root,'src',moduleName+'.html'),'utf8');
  if(!source.includes("FMRotaryRPC():google.script.run")){

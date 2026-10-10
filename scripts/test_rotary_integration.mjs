@@ -18,7 +18,7 @@ for(const marker of ["include_('StylesRotaryLoader')","include_('RotaryEngine')"
 assert.ok(index.indexOf("include_('AppRotaryIntegration')")<index.indexOf("include_('AppCore')"),
   'loader must be ready before application scripts');
 const files=['AppCore','AppOperations','AppPeopleMonthly','AppQuotes','AppDocuments','AppCompanyDocs',
-  'AppSomu','AppSomuGrowth','AppFinance','AppFinanceAdvisor','AppAdmin','AppShell'];
+  'AppSomu','AppSomuGrowth','AppProjectHub','AppFinance','AppFinanceAdvisor','AppAdmin','AppShell'];
 let calls=0;
 for(const p of files){
  const s=fs.readFileSync('src/'+p+'.html','utf8');
@@ -102,3 +102,4 @@ invoke('FMRotaryActivity.reset()');
 assert.equal(ui.snapshot().pending.page+ui.snapshot().pending.region+ui.snapshot().pending.inline,0);
 assert.ok(actions.every(a=>a.method!=='withSuccessHandler'),'only GAS method names are dispatched');
 console.log('PASS FM rotary loader integration: '+calls+' RPC sites, boot, concurrency, errors, quiet background, correct 3:1 geometry contract, user object, route cancellation and no fake percent');
+
