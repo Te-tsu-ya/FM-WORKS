@@ -69,6 +69,8 @@ assert.equal(workspace.projects[0].myOverdueTasks,0,'my task is not yet overdue'
 assert.equal(workspace.projects[0].nextTaskDueDate,'2026-10-11');
 assert.equal(Object.hasOwn(workspace,'employeeWorkload'),false,'staff response excludes admin workload');
 const adminProjectWorkspace=plain(ctx.getProjectHubWorkspace('A'));
+assert.equal(adminProjectWorkspace.advancedMissing.length,6,'admin is told exactly which v16 sheet names are missing');
+assert.equal(Object.hasOwn(workspace,'advancedMissing'),false,'employees are not shown administrative schema information');
 assert.ok(Array.isArray(adminProjectWorkspace.employeeWorkload),'admin receives planned team workload');
 assert.equal(adminProjectWorkspace.employeeWorkload.find(x=>x.employeeId==='E').openTasks,1);
 assert.equal(adminProjectWorkspace.employeeWorkload.find(x=>x.employeeId==='X').openTasks,1);
@@ -242,6 +244,29 @@ assert.equal(calls.at(-1).args[2].title,'開発','non-editable task plan data is
 assert.equal(calls.at(-1).args[2].plannedHours,8,'stored task planned hours are preserved');
 calls.at(-1).failure(Error('network'));
 assert.equal(cr('projectHubUi.editor.form.status'),'完了','failed task save retains progress draft');
+client.resetProjectHubUi();
+
+
+// Browser RPC timings must report real samples, must not make network calls and must clear on logout.
+client.resetProjectHubUi();
+assert.equal(cr('projectHubTimingSamples.length'),0);
+const diagCalls=calls.length;
+for(let n=0;n<5;n++)client.projectHubTimingRecord_('案件一覧',Date.now()-(50+n*20),true);
+assert.equal(cr('projectHubTimingSamples.length'),5);
+assert.ok(cr('projectHubTimingPanel_()').includes('20回未満'),'avoid claiming reliable P95 from too few samples');
+for(let n=0;n<16;n++)client.projectHubTimingRecord_('案件一覧',Date.now()-(100+n*10),n!==0);
+assert.ok(cr('projectHubTimingPanel_()').includes('P95'),'diagnostic panel reports P95 after 20+ requests');
+assert.ok(cr('projectHubTimingPanel_()').includes('1回'),'failed requests are counted');
+assert.equal(calls.length,diagCalls,'timing collection adds no GAS RPC');
+client.resetProjectHubUi();
+assert.equal(cr('projectHubTimingSamples.length'),0,'logout clears session-only timing history');
+cr('state.data.permissions.adminConsole=true;projectHubUi.data='+JSON.stringify(adminProjectWorkspace)+';projectHubUi.view="list";');
+assert.ok(cr('projectHubPage()').includes('運用・労務でDB更新'),'administrator sees actionable schema setup banner');
+client.projectHubOpenManagement_();
+assert.ok(cr('projectHubPage()').includes('プロジェクトの通信速度を確認する'),'administrator sees passive timing diagnostics');
+cr('state.data.permissions.adminConsole=false;projectHubUi.view="list";');
+assert.ok(!cr('projectHubPage()').includes('運用・労務でDB更新'),'staff cannot be guided to admin-only maintenance');
+assert.ok(!cr('projectHubPage()').includes('プロジェクトの通信速度を確認する'),'staff cannot access admin timing panel');
 client.resetProjectHubUi();
 
 console.log('PASS project UX: tasks board/timeline/list, effort split, document filters, shared memo filters, simple master form and failed save recovery');

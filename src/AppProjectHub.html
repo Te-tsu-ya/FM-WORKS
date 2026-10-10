@@ -2,7 +2,28 @@
 /* Project workspace uses session-local snapshots and drafts, never persistent business storage. */
 let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};
 const PROJECT_HUB_TABS=[['overview','概要'],['tasks','計画・進捗'],['effort','工数'],['resources','資料'],['updates','共有メモ'],['advanced','詳細管理']];
-function resetProjectHubUi(){if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
+
+/* Session-only, privacy-preserving client RPC timing; counts browser/network/server round trips. */
+const PROJECT_HUB_TIMING_LABELS=['案件一覧','案件詳細','詳細管理','案件保存'];
+const projectHubTimingSamples=[];
+function projectHubTimingRecord_(label,startedAt,success){
+ if(!PROJECT_HUB_TIMING_LABELS.includes(label)||!Number.isFinite(Number(startedAt)))return;
+ const ms=Math.max(0,Date.now()-Number(startedAt));
+ projectHubTimingSamples.push({label,ms,ok:!!success});
+ if(projectHubTimingSamples.length>500)projectHubTimingSamples.splice(0,projectHubTimingSamples.length-500);
+}
+function projectHubTimingPanel_(){
+ const fmt=n=>n==null?'未計測':Math.round(n).toLocaleString('ja-JP')+' ms';
+ const rows=PROJECT_HUB_TIMING_LABELS.map(label=>{
+  const values=projectHubTimingSamples.filter(x=>x.label===label),sort=values.map(x=>x.ms).sort((a,b)=>a-b),count=sort.length,fail=values.filter(x=>!x.ok).length;
+  const p50=count?sort[Math.ceil(count*.5)-1]:null,p95=count>=20?sort[Math.ceil(count*.95)-1]:null;
+  const suffix=count&&count<20?'P95は20回以上で表示':'';
+  return '<tr><td>'+escapeHtml(label)+'</td><td>'+count+'回</td><td>'+fmt(p50)+'</td><td>'+(count>=20?fmt(p95):'20回未満')+'</td><td>'+fmt(count?sort[count-1]:null)+'</td><td>'+fail+'回</td></tr>';
+ }).join('');
+ return `<details class="ph-panel ph-timing-panel"><summary>プロジェクトの通信速度を確認する</summary><p class="ph-help">このブラウザーの現在のログイン中に実際に発生した通信の往復時間です（ネットワーク・GAS起動・サーバー処理を含む）。キャッシュ表示や初回アプリ起動時間は含みません。20回以上の測定でP95を表示します。測定操作は追加の通信を発生させません。</p><div class="ph-table-wrap"><table class="ph-manager-table"><thead><tr><th>操作</th><th>件数</th><th>P50</th><th>P95</th><th>最長</th><th>失敗</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+
+function resetProjectHubUi(){projectHubTimingSamples.length=0;if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
 function projectHubIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();}
 function loadProjectHub(options={}){
@@ -10,10 +31,11 @@ function loadProjectHub(options={}){
  if(projectHubUi.loading){if(options.force)projectHubUi.refreshNeeded=true;return;}
  if(!options.force&&projectHubUi.data&&Date.now()-projectHubUi.at<300000){if(projectHubUi.selected&&(projectHubUi.view==='detail'||projectHubUi.editor))projectHubLoadDetail_(projectHubUi.selected);return;}
  if(options.force){projectHubUi.serial++;projectHubUi.details.clear();}
- const ui=projectHubUi,identity=projectHubIdentity_(),serial=ui.serial;ui.loading=true;ui.error='';
+ const ui=projectHubUi,identity=projectHubIdentity_(),serial=ui.serial,started=Date.now();ui.loading=true;ui.error='';
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.loading=false;
   if(serial!==ui.serial||ui.refreshNeeded){ui.refreshNeeded=false;loadProjectHub({force:true});return;}
+  projectHubTimingRecord_('案件一覧',started,!!data&&Array.isArray(data.projects));
   if(!data||!Array.isArray(data.projects)){ui.error='プロジェクト情報を確認できませんでした。';renderPageIfActive('projects');return;}
   ui.data=data;ui.at=Date.now();
   if(ui.selected&&!data.projects.some(p=>p.projectId===ui.selected))ui.selected='';
@@ -23,19 +45,22 @@ function loadProjectHub(options={}){
  }).withFailureHandler(error=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.loading=false;
   if(serial!==ui.serial||ui.refreshNeeded){ui.refreshNeeded=false;loadProjectHub({force:true});return;}
+  projectHubTimingRecord_('案件一覧',started,false);
   ui.error=cleanApiErrorMessage(error,'プロジェクトを読み込めませんでした。');renderPageIfActive('projects');
  }).getProjectHubWorkspace(state.sessionToken,!!options.force);
 }
 function projectHubLoadDetail_(id,force=false){
  const ui=projectHubUi,cached=ui.details.get(id);if(!force&&cached&&Date.now()-cached.at<300000)return;
- if(ui.pending.has(id))return;ui.pending.add(id);const identity=projectHubIdentity_(),serial=ui.serial;
+ if(ui.pending.has(id))return;ui.pending.add(id);const identity=projectHubIdentity_(),serial=ui.serial,started=Date.now();
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.pending.delete(id);
   if(serial!==ui.serial){if(ui.selected===id)projectHubLoadDetail_(id,true);return;}
+  projectHubTimingRecord_('案件詳細',started,!!data);
   ui.details.set(id,{data,at:Date.now()});if(ui.selected===id)renderPageIfActive('projects');
  }).withFailureHandler(error=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.pending.delete(id);
   if(serial!==ui.serial){if(ui.selected===id)projectHubLoadDetail_(id,true);return;}
+  projectHubTimingRecord_('案件詳細',started,false);
   ui.error=cleanApiErrorMessage(error,'案件の詳細を読み込めませんでした。');renderPageIfActive('projects');
  }).getProjectHubDetail(state.sessionToken,id,force);
 }
@@ -292,11 +317,12 @@ function projectHubDashboard_(){
  <div class="ph-overview-grid"><section class="ph-panel"><h3>案件の状況</h3><div class="ph-dashboard-bars">${states.map(([label,count])=>`<div class="ph-bar-row"><span>${label}</span><div><i style="width:${projects.length?count/projects.length*100:0}%"></i></div><strong>${count}件</strong></div>`).join('')}</div><p class="ph-help">「要対応」は期限超過や工数超過など、現在の登録情報に基づく状態です。</p></section>
  <section class="ph-panel"><h3>管理上の確認事項</h3>${risk.slice(0,5).map(p=>`<button type="button" class="ph-aside-link" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)"><strong>${escapeHtml(p.name)}</strong><small>期限超過 ${Number(p.overdue)||0}件 · 実績 ${projectHubHours_(p.actualMinutes)}</small><span>›</span></button>`).join('')||'<p class="ph-empty">現在、要対応の案件はありません。</p>'}</section></div>
  <section class="ph-panel"><div class="ph-panel-heading"><div><h3>全案件の比較</h3><p class="ph-help">案件を選択すると、詳細画面で作業や工数を確認できます。</p></div></div><div class="ph-table-wrap"><table class="ph-manager-table"><thead><tr><th>案件</th><th>状態</th><th>作業の完成度</th><th>実績 / 予定工数</th><th>期限超過</th><th>終了予定</th><th>詳細</th></tr></thead><tbody>${important.map(p=>`<tr><td><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.client||'社内')}</small></td><td><span class="ph-badge ${p.health==='要対応'?'risk':''}">${escapeHtml(p.health)}</span></td><td>${projectHubPct_(p.progress)}</td><td>${projectHubHours_(p.actualMinutes)} / ${projectHubHours_(p.plannedMinutes)}</td><td>${Number(p.overdue)||0}件</td><td>${escapeHtml(p.endDate||'未設定')}</td><td><button type="button" class="secondary-button" data-id="${escapeHtml(p.projectId)}" onclick="projectHubSelect_(this.dataset.id)">開く</button></td></tr>`).join('')||'<tr><td colspan="7">案件がありません。</td></tr>'}</tbody></table></div></section>
- <section class="ph-panel ph-workload-panel"><div class="ph-panel-heading"><div><h3>担当者別の未完了作業</h3><p class="ph-help">進行中の案件に登録された未完了の作業と、割り当てられた予定工数です。実際の稼働時間や余力・負荷率ではありません。</p></div></div><div class="ph-table-wrap"><table class="ph-manager-table ph-workload-table"><thead><tr><th>担当者</th><th>未完了作業</th><th>期限超過</th><th>割当予定時間</th></tr></thead><tbody>${workload.map(w=>`<tr><td><strong>${escapeHtml(w.name)}</strong></td><td>${Number(w.openTasks)||0}件</td><td>${Number(w.overdueTasks)||0}件</td><td>${projectHubHours_(Number(w.plannedMinutes)||0)}</td></tr>`).join('')||'<tr><td colspan="4">進行中の案件に未完了の作業はありません。</td></tr>'}</tbody></table></div></section></section>`;
+ <section class="ph-panel ph-workload-panel"><div class="ph-panel-heading"><div><h3>担当者別の未完了作業</h3><p class="ph-help">進行中の案件に登録された未完了の作業と、割り当てられた予定工数です。実際の稼働時間や余力・負荷率ではありません。</p></div></div><div class="ph-table-wrap"><table class="ph-manager-table ph-workload-table"><thead><tr><th>担当者</th><th>未完了作業</th><th>期限超過</th><th>割当予定時間</th></tr></thead><tbody>${workload.map(w=>`<tr><td><strong>${escapeHtml(w.name)}</strong></td><td>${Number(w.openTasks)||0}件</td><td>${Number(w.overdueTasks)||0}件</td><td>${projectHubHours_(Number(w.plannedMinutes)||0)}</td></tr>`).join('')||'<tr><td colspan="4">進行中の案件に未完了の作業はありません。</td></tr>'}</tbody></table></div></section>${projectHubTimingPanel_()}</section>`;
 }
 function projectHubPage(){
  const ui=projectHubUi,data=ui.data,view=ui.view||'list',d=projectHubDetail_()||(ui.editor&&ui.editor.context),p=data&&data.projects.find(x=>x.projectId===ui.selected),editor=ui.editor&&ui.editor.projectId===ui.selected;
  let intro='';
+  if(data&&Array.isArray(data.advancedMissing)&&data.advancedMissing.length&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)intro+=`<aside class="ph-setup"><strong>プロジェクトの詳細管理を有効化できます</strong><p>作業別工数・添付・通知・予算を使うには、6つの管理シートをバックアップ付きで追加してください。既存の工数データは変更しません。</p><button type="button" class="secondary-button" onclick="setAdminTab('operation')">運用・労務でDB更新</button><small>${escapeHtml(data.advancedMissing.join('、'))}</small></aside>`;
  if(data&&data.setupRequired)intro+=`<aside class="ph-setup"><strong>案件データの保存先を準備してください</strong><p>管理者が「管理・設定 → 運用・労務 → DBスキーマ更新」でバックアップと更新を行います。</p><small>${escapeHtml((data.missing||[]).join('、'))}</small></aside>`;
  if(data&&data.unlinkedWorklogCount)intro+=`<details class="ph-link-warning"><summary>案件とのひも付けを確認する工数：${data.unlinkedWorklogCount}件</summary><p>現在の案件名・旧案件名に一致しない工数記録です。案件集計には含まれません。</p></details>`;
  const error=ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}</p>`:'';
@@ -391,14 +417,16 @@ function projectHubHide_(kind,id){
 }
 function projectHubSave_(overrides={}){
  const ui=projectHubUi,e=ui.editor;if(ui.busy||!e)return;projectHubRememberDraft_();const pending=overrides.status==='非表示'?overrides:(e.pendingOverrides||{});e.pendingOverrides=pending;ui.busy=true;const identity=projectHubIdentity_();
+ const started=Date.now();
  document.querySelectorAll('#projectHubForm input,#projectHubForm textarea,#projectHubForm select,#projectHubForm button').forEach(el=>el.disabled=true);
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.busy=false;
+  projectHubTimingRecord_('案件保存',started,!!result&&result.ok===true);
   if(!result||result.ok!==true){ui.error='保存結果を確認できませんでした。同じ入力を保持しています。';renderPageIfActive('projects');return;}
   ui.editor=null;ui.selected=e.projectId;ui.tab={plan:'overview',task:'tasks',resource:'resources',update:'updates'}[e.kind];projectHubInvalidate_();
   showToast(result.auditRecorded===false?'保存済みですが、監査履歴を管理者が確認してください。':'プロジェクトに保存しました');loadProjectHub({force:true});renderPageIfActive('projects');
  }).withFailureHandler(error=>{
-  if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.busy=false;e.error=cleanApiErrorMessage(error,'保存できませんでした。入力は保持しています。');renderPageIfActive('projects');
+  if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.busy=false;projectHubTimingRecord_('案件保存',started,false);e.error=cleanApiErrorMessage(error,'保存できませんでした。入力は保持しています。');renderPageIfActive('projects');
  }).saveProjectHubRecord(state.sessionToken,e.kind,{...e.form,...pending});
 }
 if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('beforeunload',event=>{if(projectHubUi.editor&&projectHubUi.editor.changed){event.preventDefault();event.returnValue='';}});

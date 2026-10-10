@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.20.0
+**文書版:** 0.20.1
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.20.0`
+`APP.version = 0.20.1`
 
 DBスキーマ: 16。  
 認証スキーマ: 3。  
@@ -2115,3 +2115,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - AppOperations.html adds task selector to quick and modal worklog forms, safely stores pending task ID and preserves unsaved time/date/category details, keeping attempt keys between retries. AppProjectHub.html adds detailed management tab mounted through AppProjectAdvanced.html, which loads data only when selected.
 - Notifications.gs appends authorized deadline/memo alerts into the normal bell. AppShell.html routes user into the relevant project and marks the chosen notification read. Notifications list never returns Drive IDs, cost data or per-person worklogs.
 - Limits: DB must be explicitly migrated in an authenticated admin session; no browsing of the authenticated live GAS app from GitHub CI; user-specific browser proof, cross-browser testing on Windows/Mac, automated virus scanning, exact accounting profit/expense auto-match and critical-path scheduling are not established by this release. These stay open in Issue #72.
+
+## v0.20.1 Migration affordance and passive timing diagnostics
+
+- ProjectHub.getProjectHubWorkspace returns advancedMissing to ADMIN only, calculated by six cheap getSheetByName existence checks. Full column verification and verified backup remain the responsibility of the authenticated admin-only migrateDatabaseToCurrent procedure. No schema mutation is performed by the project page.
+- AppProjectHub adds a role-gated migration banner and a direct link to the existing admin operation tab. AppProjectAdvanced shows the same link when v16 storage is unavailable.
+- Browser-local projectHubTimingSamples stores {label, ms, ok} with a rolling maximum of 500 entries and only four predeclared labels. Latency is timed between sending the existing RPC and receiving its success/failure handler; no additional RPC, PII, files, or local storage. Timer state is cleared by resetProjectHubUi on logout.
+- Admin-only projectHubTimingPanel computes nearest-rank P50 for any nonempty sample set, and P95 for 20+ samples only. The values reflect client/network/GAS round trips, not GAS function execution alone. Cache hits, splash screen start-up, and cold/warm network classification are out of scope of this passive panel.
+- Tests cover six missing v16 sheet names, admin/staff UI separation, cache/session clearing, initial P95 suppression, failed-RPC counts, and absence of extra network activity. Chromium viewport checks remain the release gate.

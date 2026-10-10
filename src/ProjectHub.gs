@@ -95,6 +95,9 @@ function getProjectHubWorkspace(sessionToken,force){
  const result={projects,today,setupRequired:!r.storage.ready,missing:r.storage.missing,canCreate:u.role==='ADMIN',unlinkedWorklogCount,
   employees:employees.map(e=>({employeeId:e.employeeId,name:e.displayName||e.name})),quoteOptions:projectHubQuoteOptions_(u)};
  if(u.role==='ADMIN'){
+  const upgradeSheets=['プロジェクト工数対応','プロジェクト依存','プロジェクト添付','プロジェクト既読','プロジェクト原価','プロジェクト予算'];
+  const db=getDb_();
+  result.advancedMissing=upgradeSheets.filter(name=>!db.getSheetByName(name));
   const people=new Map(employees.map(e=>[e.employeeId,e.displayName||e.name]));
   const activeIds=new Set(r.projects.filter(p=>p.status==='進行中').map(p=>p.projectId));
   const workload=new Map();
