@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -197,7 +197,7 @@ const result=vm.runInContext(`
   toggleFontSize();
   expect('font size toggle returns to standard mode',document.documentElement.dataset.fontSize==='standard');
   const topNav=NAV.map(x=>x[0]);
-  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','documentHistory','finance','office','admin']));
+  expect('main navigation preserves five daily tabs and adds role-scoped office plus admin',JSON.stringify(topNav)===JSON.stringify(['home','attendance','worklog','schedule','requests','quotes','documentHistory','companyDocs','finance','office','admin']));
   expect('admin navigation is permission-gated for non-admin users',visibleNav().every(x=>x[0]!=='admin'));
   expect('monthly is represented by attendance in the primary navigation',primaryNavIdForPage('monthly')==='attendance');
   expect('company calendar is represented by schedule in the primary navigation',primaryNavIdForPage('companyCalendar')==='schedule');

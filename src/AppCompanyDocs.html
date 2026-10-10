@@ -1,0 +1,140 @@
+<script>
+/* Internal company policy library: no dummy company rules are represented as real. */
+let companyDocsUi={data:null,identity:'',loading:false,busy:false,error:'',query:'',category:'ALL',selectedId:'',detail:null,editing:false,draft:null,key:''};
+function companyDocsIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'')}
+function resetCompanyDocsUi(){companyDocsUi={data:null,identity:'',loading:false,busy:false,error:'',query:'',category:'ALL',selectedId:'',detail:null,editing:false,draft:null,key:''}}
+function companyDocsKeyClient_(){return 'CD-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,17)}
+function companyDocsRender_(){if(state.page==='companyDocs')renderPageIfActive('companyDocs')}
+function loadCompanyDocs(force=false){
+  if(!state.sessionToken||!state.data)return;
+  const identity=companyDocsIdentity_();
+  if(companyDocsUi.loading||(!force&&companyDocsUi.data&&companyDocsUi.identity===identity))return;
+  companyDocsUi.identity=identity;companyDocsUi.loading=true;companyDocsUi.error='';companyDocsRender_();
+  google.script.run.withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_())return;
+    companyDocsUi.data=result;companyDocsUi.loading=false;companyDocsUi.error='';
+    if(companyDocsUi.selectedId&&!(result.items||[]).some(x=>x.id===companyDocsUi.selectedId)){
+      companyDocsUi.selectedId='';companyDocsUi.detail=null;
+    }
+    companyDocsRender_();
+  }).withFailureHandler(e=>{
+    if(identity!==companyDocsIdentity_())return;
+    companyDocsUi.loading=false;companyDocsUi.error=cleanApiErrorMessage(e,'文書一覧の取得に失敗しました');companyDocsRender_();
+  }).getCompanyDocuments(state.sessionToken);
+}
+function companyDocsSelect(id){
+  if(companyDocsUi.editing||companyDocsUi.busy)return;
+  companyDocsUi.selectedId=String(id||'');
+  if(companyDocsUi.detail&&companyDocsUi.detail.id===id){companyDocsRender_();return;}
+  const identity=companyDocsIdentity_();companyDocsUi.detail=null;companyDocsUi.loadingDetail=true;companyDocsRender_();
+  google.script.run.withSuccessHandler(r=>{
+    if(identity!==companyDocsIdentity_()||companyDocsUi.selectedId!==id)return;
+    companyDocsUi.detail=r.document;companyDocsUi.loadingDetail=false;companyDocsRender_();
+  }).withFailureHandler(e=>{
+    if(identity!==companyDocsIdentity_()||companyDocsUi.selectedId!==id)return;
+    companyDocsUi.loadingDetail=false;handleApiError(e,'文書を開けませんでした');companyDocsRender_();
+  }).getCompanyDocument(state.sessionToken,id);
+}
+function companyDocsStartEdit(id){
+  if(!companyDocsUi.data||!companyDocsUi.data.canManage)return;
+  if(id&&(!companyDocsUi.detail||companyDocsUi.detail.id!==id)){companyDocsSelect(id);return;}
+  const d=id?companyDocsUi.detail:{};
+  companyDocsUi.draft={id:d.id||'',revision:d.revision||0,title:d.title||'',category:d.category||'就業規則',summary:d.summary||'',body:d.body||'',url:d.url||'',effectiveOn:d.effectiveOn||'',status:d.status||'下書き'};
+  companyDocsUi.key=companyDocsKeyClient_();companyDocsUi.editing=true;companyDocsRender_();
+}
+function companyDocsCancelEdit(){if(companyDocsUi.busy)return;companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsRender_()}
+function companyDocsDraftField(key,val){if(companyDocsUi.draft)companyDocsUi.draft[key]=val}
+function companyDocsSave(){
+  if(companyDocsUi.busy||!companyDocsUi.draft)return;
+  const d=companyDocsUi.draft;
+  if(!d.title.trim()){showToast('文書名を入力してください');return;}
+  companyDocsUi.busy=true;companyDocsRender_();
+  google.script.run.withSuccessHandler(r=>{
+    if(!companyDocsUi.data)return;
+    companyDocsUi.busy=false;companyDocsUi.editing=false;companyDocsUi.draft=null;companyDocsUi.key='';
+    companyDocsUi.selectedId=r.document.id;companyDocsUi.detail=r.document;
+    showToast('社内文書を保存しました');loadCompanyDocs(true);companyDocsRender_();
+  }).withFailureHandler(e=>{
+    companyDocsUi.busy=false;handleApiError(e,'文書を保存できませんでした');companyDocsRender_();
+  }).saveCompanyDocument(state.sessionToken,Object.assign({},d,{requestKey:companyDocsUi.key}));
+}
+function companyDocsDelete(){
+  const d=companyDocsUi.detail;
+  if(!d||!companyDocsUi.data||!companyDocsUi.data.canManage||companyDocsUi.busy)return;
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書の削除確認"><div class="modal-head"><h2>社内文書を削除しますか？</h2></div><p>「'+escapeHtml(d.title)+'」を一覧から非表示にします。監査情報は残ります。</p><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="companyDocsConfirmDelete()">削除する</button></div></section>';
+}
+function companyDocsConfirmDelete(){
+  const d=companyDocsUi.detail;
+  if(!d||companyDocsUi.busy)return;
+  closeModal();companyDocsUi.busy=true;companyDocsRender_();
+  google.script.run.withSuccessHandler(()=>{
+    companyDocsUi.busy=false;companyDocsUi.detail=null;companyDocsUi.selectedId='';
+    showToast('社内文書を削除しました');loadCompanyDocs(true);
+  }).withFailureHandler(e=>{companyDocsUi.busy=false;handleApiError(e,'削除に失敗しました');companyDocsRender_()})
+  .deleteCompanyDocument(state.sessionToken,d.id,d.revision);
+}
+function companyDocsInitialize(){
+  if(!companyDocsUi.data||!companyDocsUi.data.canInitialize||companyDocsUi.busy)return;
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書の初期化確認"><div class="modal-head"><h2>社内文書の保存先を準備</h2></div><p>FM WORKS DBのバックアップ後に専用シートを新設します。</p><div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button><button class="primary-button" onclick="companyDocsConfirmInitialize()">バックアップして準備</button></div></section>';
+}
+function companyDocsConfirmInitialize(){
+  if(companyDocsUi.busy)return;
+  closeModal();companyDocsUi.busy=true;companyDocsRender_();
+  google.script.run.withSuccessHandler(()=>{
+    companyDocsUi.busy=false;showToast('保存先を準備しました');loadCompanyDocs(true);
+  }).withFailureHandler(e=>{companyDocsUi.busy=false;handleApiError(e,'初期化できませんでした');companyDocsRender_()})
+  .initializeCompanyDocuments(state.sessionToken);
+}
+function companyDocsSetQuery(v){companyDocsUi.query=v;companyDocsUpdateList_()}
+function companyDocsSetCategory(v){companyDocsUi.category=v;companyDocsUpdateList_()}
+function companyDocsFiltered_(){
+  const query=companyDocsUi.query.trim().toLowerCase(),items=companyDocsUi.data&&companyDocsUi.data.items||[];
+  return items.filter(d=>(companyDocsUi.category==='ALL'||d.category===companyDocsUi.category)&&(!query||[d.title,d.category,d.summary].join(' ').toLowerCase().includes(query)));
+}
+function companyDocsListMarkup_(){
+  const list=companyDocsFiltered_();
+  return list.length?list.map(d=>'<button class="company-doc-item '+(companyDocsUi.selectedId===d.id?'selected':'')+'" onclick="companyDocsSelect('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">'+
+    '<strong>'+escapeHtml(d.title)+'</strong><small>'+escapeHtml(d.category)+' · '+escapeHtml(d.status)+' · 第'+d.revision+'版</small>'+
+    '<small>'+escapeHtml(d.updatedAt)+'</small></button>').join(''):'<div class="v15-empty">該当する文書はありません。</div>';
+}
+function companyDocsUpdateList_(){const el=document.getElementById('companyDocsList');if(el)el.innerHTML=companyDocsListMarkup_();}
+function companyDocsPage(){
+  const ui=companyDocsUi,data=ui.data,canManage=!!(data&&data.canManage);
+  const heading='<header class="v15-page-hero v15-page-hero-short"><div><div class="v15-kicker">COMPANY LIBRARY</div><h1>社内文書</h1><p>就業規則・社内規程・マニュアルをまとめて確認できます。</p></div>'+
+    (canManage?'<button type="button" class="primary-button" onclick="companyDocsStartEdit()">＋ 新規登録</button>':'')+'</header>';
+  if(!data)return '<section class="v15-workspace">'+heading+'<div class="card">'+(ui.error?escapeHtml(ui.error)+' <button onclick="loadCompanyDocs(true)">再読込</button>':'文書一覧を読み込んでいます…')+'</div></section>';
+  if(data.setupRequired)return '<section class="v15-workspace">'+heading+'<div class="card"><h2>保存先が未設定です</h2><p class="muted">まだ社内文書は登録されていません。既存データは変更しません。</p>'+
+    (data.canInitialize?'<button type="button" class="primary-button" onclick="companyDocsInitialize()" '+(ui.busy?'disabled':'')+'>バックアップして保存先を準備</button>':'管理者による初期設定後に利用できます。')+'</div></section>';
+  const categories=['ALL',...data.categories];
+  const toolbar='<div class="company-doc-controls"><input type="search" aria-label="文書を検索" placeholder="文書名・概要を検索" value="'+escapeHtml(ui.query)+'" oninput="companyDocsSetQuery(this.value)"><select aria-label="分類で絞り込み" onchange="companyDocsSetCategory(this.value)">'+categories.map(c=>'<option value="'+c+'" '+(ui.category===c?'selected':'')+'>'+(c==='ALL'?'すべての分類':c)+'</option>').join('')+'</select>'+
+    '<button class="secondary-button" onclick="loadCompanyDocs(true)">更新</button></div>';
+  let detail='<div class="v15-empty">左の一覧から文書を選択してください。</div>';
+  if(ui.loadingDetail)detail='<div class="v15-empty">本文を読み込んでいます…</div>';
+  else if(ui.editing){
+    const d=ui.draft||{};
+    detail='<form class="company-doc-form" onsubmit="event.preventDefault();companyDocsSave()">'+
+      '<h2>'+(d.id?'文書を編集':'文書を登録')+'</h2>'+
+      '<label>文書名<input required maxlength="120" value="'+escapeHtml(d.title||'')+'" oninput="companyDocsDraftField(\'title\',this.value)"></label>'+
+      '<label>分類<select onchange="companyDocsDraftField(\'category\',this.value)">'+data.categories.map(c=>'<option '+(c===d.category?'selected':'')+'>'+c+'</option>').join('')+'</select></label>'+
+      '<label>公開状態<select onchange="companyDocsDraftField(\'status\',this.value)"><option '+(d.status==='下書き'?'selected':'')+'>下書き</option><option '+(d.status==='公開'?'selected':'')+'>公開</option></select></label>'+
+      '<label>施行日<input type="date" value="'+escapeHtml(d.effectiveOn||'')+'" onchange="companyDocsDraftField(\'effectiveOn\',this.value)"></label>'+
+      '<label>概要<textarea maxlength="300" rows="2" oninput="companyDocsDraftField(\'summary\',this.value)">'+escapeHtml(d.summary||'')+'</textarea></label>'+
+      '<label>本文（最大20,000文字）<textarea maxlength="20000" rows="12" oninput="companyDocsDraftField(\'body\',this.value)">'+escapeHtml(d.body||'')+'</textarea></label>'+
+      '<label>参考資料のHTTPSリンク<input type="url" maxlength="2000" placeholder="https://..." value="'+escapeHtml(d.url||'')+'" oninput="companyDocsDraftField(\'url\',this.value)"></label>'+
+      '<p class="muted">文書本文はテキスト保存です。PDF／Wordファイルのアップロードは次の段階で検討します。</p>'+
+      '<div class="button-row"><button class="primary-button" type="submit" '+(ui.busy?'disabled':'')+'>保存</button><button class="secondary-button" type="button" '+(ui.busy?'disabled':'')+' onclick="companyDocsCancelEdit()">キャンセル</button></div></form>';
+  }else if(ui.detail){
+    const d=ui.detail;detail='<article class="company-doc-article"><div class="company-doc-article-header"><h2>'+escapeHtml(d.title)+'</h2><span class="badge">'+escapeHtml(d.status)+'</span></div>'+
+      '<div class="company-doc-meta">'+escapeHtml(d.category)+' · 第'+d.revision+'版'+(d.effectiveOn?' · 施行日 '+escapeHtml(d.effectiveOn):'')+' · 最終更新 '+escapeHtml(d.updatedAt)+'</div>'+
+      (d.summary?'<p>'+escapeHtml(d.summary)+'</p>':'')+
+      (d.body?'<div class="company-doc-body">'+escapeHtml(d.body)+'</div>':'<div class="v15-empty">本文未登録</div>')+
+      (d.url?'<p><a href="'+escapeHtml(d.url)+'" target="_blank" rel="noopener noreferrer">参照リンクを開く</a></p>':'')+
+      (canManage?'<div class="button-row"><button class="primary-button" onclick="companyDocsStartEdit('+JSON.stringify(d.id).replace(/"/g,'&quot;')+')">編集</button><button class="secondary-button" onclick="companyDocsDelete()" '+(ui.busy?'disabled':'')+'>削除</button></div>':'')+'</article>';
+  }
+  return '<section class="v15-workspace company-doc-workspace">'+heading+
+    '<div class="company-doc-layout"><section class="card company-doc-list-pane"><h2>文書一覧 <small>('+data.items.length+'件)</small></h2>'+toolbar+'<div id="companyDocsList" class="company-doc-list">'+companyDocsListMarkup_()+'</div></section>'+
+    '<section class="card company-doc-detail-pane">'+detail+'</section></div></section>';
+}
+</script>

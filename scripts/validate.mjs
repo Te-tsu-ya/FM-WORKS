@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.cwd());
 const required = [
-  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
+  'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesCompanyDocs.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
   '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs'
 ];
 let failed = false;
@@ -15,9 +15,9 @@ for (const file of required) {
     console.error(`Missing or empty: ${file}`); failed = true;
   }
 }
-const clientFiles=['AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
+const clientFiles=['AppCompanyDocs.html','AppQuotes.html','AppDocuments.html','AppCore.html','AppHomePortal.html','AppOperations.html','AppPeopleMonthly.html','AppLeaveDemo.html','AppOffice.html','AppFinance.html','AppAdmin.html','AppShell.html'];
 const app = clientFiles.map(file=>fs.readFileSync(path.join(root,'src',file),'utf8')).join('\n');
-const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
+const styles = fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesCompanyDocs.html'),'utf8');
 const indexText = fs.readFileSync(path.join(root,'src/Index.html'),'utf8');
 for (const label of ['ホーム','勤怠','工数','予定表','会社カレンダー','申請','事務','社員','月次','設定']) {
   if (!app.includes(label)) { console.error(`Navigation label missing: ${label}`); failed = true; }
@@ -32,7 +32,7 @@ try {
   console.error(String(err.stderr || err.message || err));
   failed = true;
 }
-for (const serverFile of ['Quotes.gs','Documents.gs','Code.gs','Finance.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
+for (const serverFile of ['CompanyDocs.gs','Quotes.gs','Documents.gs','Code.gs','Finance.gs','AnnualLeaveAutomation.gs','Auth.gs','Worklog.gs','Requests.gs','Monthly.gs','MonthlySnapshot.gs','LeaveLedger.gs','Labor.gs','Schema.gs','DataAccess.gs','Employees.gs','Search.gs','Notifications.gs','Maintenance.gs','Holidays.gs','Projects.gs','Docs.gs','GeneratedDocs.gs']) {
   try {
     const server = fs.readFileSync(path.join(root,'src',serverFile),'utf8');
     new Function(server);
@@ -714,7 +714,7 @@ if (!app.includes("const nestedRoutes=['monthly','companyCalendar','people','fin
   failed = true;
 }
 for (const iaMarker of [
-  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']]",
+  "const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['companyDocs','社内文書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']]",
   "const MOBILE_NAV = ['home','attendance','worklog','schedule','requests']",
   "function primaryNavIdForPage(page)",
   "if(page==='monthly')return 'attendance'",

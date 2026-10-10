@@ -1844,3 +1844,12 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - AppFinance.html の submitFinanceForm は実際のフォームの input/select/textarea/button を元の disabled 状態ごと記録し、書込中は凍結する。失敗や確認不能時に restore() で復旧し、保存成功時は画面遷移で破棄する。PC台帳の日付ボタンのクリックは伝播停止し、親行からの重複処理を抑止する。
 
 - AppFinance.html の経理モーダルに financeCloseModalIfIdle() を使用し、financeUi.busy 中は閉じる動作を抑止する。完了後は通常の closeModal() を実行し、異常応答時にはダイアログ内のエラーを確認できる状態を維持する。
+
+
+## 社内文書の独立モジュール（2026-10-10）
+- `src/CompanyDocs.gs` が `社内文書` 独立シートにデータ保存。新規作成・編集・論理削除の書込みは `withScriptLock_`、状態変更は `appendAudit_` を利用。既存見積・関連書類とデータを共有しない。
+- 列は文書ID／文書名／分類／概要／施行日／公開状態／改訂番号／更新日時／更新者ID／参照URL／登録日時／登録者ID／削除日時／削除者ID／送信識別子／本文。既存 `DB_SCHEMA_VERSION` を変更せず、初回ADMINによる `initializeCompanyDocuments` でバックアップ成功後のみ追加する。
+- `getCompanyDocuments` は本文列を取得せずメタデータのみ返却。`getCompanyDocument` は選択文書だけ本文を読込。一般社員には公開文書だけ返す。管理者・総務だけに編集・非公開閲覧を許す。各サーバーAPIは `requireSession_` で認証し、各編集操作は総務・ADMINの権限を再確認する。
+- `saveCompanyDocument` は送信識別子による二重登録抑止と revision による競合検出。削除は `削除日時` を入れる論理削除。外部参照はHTTPSに限定。
+- 画面: `AppCompanyDocs.html` / `StylesCompanyDocs.html`。既存ナビゲーションに独立の社内文書を追加し、遷移時遅延読込・ユーザー切替時のメモリ破棄に対応。本文は HTML エスケープしプレーンテキスト表示。
+- 統合の手順: 社内文書専用PRで先にCI検証。並行する総務PRとの更新競合を防ぐ。GAS公開は統合後のActions完走まで未確認。
