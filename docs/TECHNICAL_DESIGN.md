@@ -1912,3 +1912,15 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - `Monthly.gs:assertMonthRangeOpen_` は正規化した日付の開始・終了を比較し、開始が終了より後であれば月ごとの反復前にエラーとする。
 - `scripts/test_request_indexing.mjs` は架空シートのRead APIをモックし、社員別索引利用、関連なし社員の除外、期間重複、月次締め、逆転期間拒否を検証。`scripts/test_logic.mjs` から統合テストを実行する。
 - APP.versionと要件定義書・技術設計書の文書版は0.17.9に同期。
+
+
+## 社内文書：フォルダ・検索タグと高速化（2026-10-10）
+
+- 対象ソース：src/CompanyDocs.gs、src/AppCompanyDocs.html、src/StylesCompanyDocs.html。商取引書類・総務備品・勤怠など既存機能の保存先を変更しない。
+- スキーマ：旧16列（A:P）を維持し、Q=業務フォルダID、R=カンマ区切りタグ。旧16列のみのDBは読み取りを許し、更新はADMINによるバックアップ付き初期化を実施するまで拒否する。
+- 移行：initializeCompanyDocuments はADMIN＋ScriptLock必須。バックアップ成功後、ensureSchemaSheet_ が不足列を追加し、既存本文・版番号を保持する。
+- 分類：COMPANY_DOC_FOLDERS に親子2階層の安定IDを定義。文書は末端フォルダのみ保存し、保存時に登録済みIDか検証する。古い未分類文書は「その他の文書」として表示する。
+- API：getCompanyDocumentsはA:OとQ:Rのみ読み、本文Pを読まない。getCompanyDocumentは選択時だけ本文を読み込む。検索API searchCompanyDocumentBodies は2～80文字の語でP列TextFinderを使い、権限により公開文書IDのみ最大250件を返す。
+- クライアント：検索APIは入力後320ms遅延、返答のセッション・リクエスト識別を照合して古い応答を除外。文書詳細はID＋revisionでキャッシュ。60件ずつ段階描画する。
+- UI：3ペインGrid、1120px以下で2段階、760px以下でフォルダ・一覧・本文の切替。すべての本文・属性をHTMLエスケープし、外部リンクはHTTPSだけ許可。
+- QA：test_company_documents.mjs（既存16列アップグレード／権限／検索／CRUD）、test_company_documents_client.mjs（ブラウザ操作契約）、test_company_documents_viewport.mjs（Chromiumによる明暗・PC・タブレット・スマホ表示）。

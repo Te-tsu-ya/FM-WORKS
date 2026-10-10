@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/Finance.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/Docs.gs','src/GeneratedDocs.gs','src/Somu.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesCompanyDocs.html','src/StylesSomu.html','src/AppSomu.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs'
+  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_data_access_performance.mjs','scripts/test_finance_integration.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -40,6 +40,22 @@ for (const serverFile of ['Somu.gs','CompanyDocs.gs','Quotes.gs','Documents.gs',
     console.error(`Server JavaScript syntax error in ${serverFile}:`, err.message);
     failed = true;
   }
+}
+const companyDocsServer=fs.readFileSync(path.join(root,'src/CompanyDocs.gs'),'utf8');
+const companyDocsClient=fs.readFileSync(path.join(root,'src/AppCompanyDocs.html'),'utf8');
+const companyDocsStyles=fs.readFileSync(path.join(root,'src/StylesCompanyDocs.html'),'utf8');
+for(const marker of ["'業務フォルダID','タグ'","function searchCompanyDocumentBodies(",
+ "getRange(2,17,count,2)","function companyDocsIndexReady_("]){
+ if(!companyDocsServer.includes(marker)){console.error('Company document taxonomy/server marker missing '+marker);failed=true;}
+}
+for(const marker of ['function companyDocsFolderTree_(','function companyDocsVisibleItems_(',
+ 'function companyDocsDetail_(','function companyDocsEditor_(','function companyDocsSetQuery(',
+ 'function companyDocsSelectFolder(','function companyDocsSave(']){
+ if(!companyDocsClient.includes(marker)){console.error('Company document UI marker missing '+marker);failed=true;}
+}
+for(const marker of ['.company-doc-layout','.company-doc-tree-pane','.company-doc-list-pane',
+ '.company-doc-detail-pane','@media(max-width:760px)']){
+ if(!companyDocsStyles.includes(marker)){console.error('Company document responsive layout missing '+marker);failed=true;}
 }
 const tinyFontMatches=[...styles.matchAll(/font-size\\s*:\\s*(\\d+(?:\\.\\d+)?)px/g)].filter(m=>Number(m[1])<11);
 if(tinyFontMatches.length){

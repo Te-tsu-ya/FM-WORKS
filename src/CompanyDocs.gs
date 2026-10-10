@@ -1,18 +1,50 @@
-/* FM WORKS: internal company policies and manuals (concept implementation).
- * Independent from issued commercial documents and the General Affairs document index.
- * All access checks are repeated on the Apps Script server.
+/* FM WORKS - Company document library and stable two-level business taxonomy.
+ * A:P are unchanged legacy columns. Q=folderId, R=search tags.
+ * Form values and visibility are always validated on the server.
  */
 const COMPANY_DOC_SHEET='社内文書';
-const COMPANY_DOC_HEADERS=Object.freeze([
+const COMPANY_DOC_BASE_HEADERS=Object.freeze([
   '文書ID','文書名','分類','概要','施行日','公開状態','改訂番号','更新日時','更新者ID',
   '参照URL','登録日時','登録者ID','削除日時','削除者ID','送信識別子','本文'
 ]);
+const COMPANY_DOC_HEADERS=Object.freeze(COMPANY_DOC_BASE_HEADERS.concat(['業務フォルダID','タグ']));
 const COMPANY_DOC_CATEGORIES=Object.freeze(['就業規則','社内規程','マニュアル','その他']);
 const COMPANY_DOC_STATUSES=Object.freeze(['下書き','公開']);
+const COMPANY_DOC_FOLDERS=Object.freeze([
+  {id:'hr',parentId:'',name:'人事・労務'},
+  {id:'hr/work',parentId:'hr',name:'就業・勤怠'},
+  {id:'hr/leave',parentId:'hr',name:'休暇・福利厚生'},
+  {id:'hr/onboarding',parentId:'hr',name:'採用・入退社'},
+  {id:'general',parentId:'',name:'総務・設備'},
+  {id:'general/equipment',parentId:'general',name:'備品・貸出'},
+  {id:'general/purchase',parentId:'general',name:'購買・施設'},
+  {id:'finance',parentId:'',name:'経理・出張'},
+  {id:'finance/expenses',parentId:'finance',name:'経費精算'},
+  {id:'finance/travel',parentId:'finance',name:'出張・旅費'},
+  {id:'safety',parentId:'',name:'安全・衛生'},
+  {id:'safety/health',parentId:'safety',name:'衛生・健康'},
+  {id:'safety/emergency',parentId:'safety',name:'防災・緊急時'},
+  {id:'information',parentId:'',name:'情報管理'},
+  {id:'information/security',parentId:'information',name:'セキュリティ'},
+  {id:'information/privacy',parentId:'information',name:'個人情報'},
+  {id:'information/systems',parentId:'information',name:'社内システム'},
+  {id:'other',parentId:'',name:'その他'},
+  {id:'other/general',parentId:'other',name:'その他の文書'}
+]);
 function companyDocsManager_(employee){
   if(String(employee&&employee.role||'').toUpperCase()==='ADMIN')return true;
   const department=String(employee&&employee.department||'').replace(/\s+/g,'').replace(/[／/]/g,'・');
   return department.split('・').some(part=>/^総務(?:部|課|室|担当|チーム)?$/.test(part));
+}
+function companyDocsLeaf_(id){
+  return COMPANY_DOC_FOLDERS.some(f=>f.id===id&&!!f.parentId);
+}
+function companyDocsIndexReady_(sheet){
+  if(sheet.getMaxColumns()<COMPANY_DOC_HEADERS.length)return false;
+  const headers=sheet.getRange(1,17,1,2).getDisplayValues()[0];
+  if(headers[0]==='業務フォルダID'&&headers[1]==='タグ')return true;
+  if(!String(headers[0]||'').trim()&&!String(headers[1]||'').trim())return false;
+  throw new Error('社内文書の分類列が一致しません。管理者へご連絡ください。');
 }
 function companyDocsSheet_(optional){
   const sheet=getDb_().getSheetByName(COMPANY_DOC_SHEET);
@@ -20,16 +52,23 @@ function companyDocsSheet_(optional){
     if(optional)return null;
     throw new Error('社内文書の保存先が未準備です。管理者はバックアップ後に初期化してください。');
   }
-  const found=sheet.getRange(1,1,1,COMPANY_DOC_HEADERS.length).getDisplayValues()[0];
-  if(schemaHeaderIssues_(found,COMPANY_DOC_HEADERS).length)throw new Error('社内文書シートの列構成が異なります。既存データは変更せず管理者へご連絡ください。');
+  const found=sheet.getRange(1,1,1,COMPANY_DOC_BASE_HEADERS.length).getDisplayValues()[0];
+  if(schemaHeaderIssues_(found,COMPANY_DOC_BASE_HEADERS).length)
+    throw new Error('社内文書シートの列構成が異なります。既存データは変更せず管理者へご連絡ください。');
   return sheet;
 }
+function companyDocsTagsFromStorage_(text){
+  return String(text||'').split(',').map(s=>s.trim()).filter(Boolean);
+}
 function companyDocsRow_(row,withBody){
+  const rawFolder=String(row[16]||'');
   const result={
     id:String(row[0]||''),title:String(row[1]||''),category:String(row[2]||''),
     summary:String(row[3]||''),effectiveOn:String(row[4]||''),
-    status:String(row[5]||''),revision:Number(row[6]||0),updatedAt:String(row[7]||''),
-    editorId:String(row[8]||''),url:String(row[9]||'')
+    status:String(row[5]||''),revision:Number(row[6]||0),
+    updatedAt:String(row[7]||''),editorId:String(row[8]||''),url:String(row[9]||''),
+    folderId:companyDocsLeaf_(rawFolder)?rawFolder:'other/general',
+    tags:companyDocsTagsFromStorage_(row[17])
   };
   if(withBody)result.body=String(row[15]||'');
   return result;
@@ -40,36 +79,53 @@ function companyDocsFind_(sheet,id){
   const ids=sheet.getRange(2,1,last-1,1).getDisplayValues();
   const offset=ids.findIndex(row=>String(row[0]||'')===id);
   if(offset<0)throw new Error('指定された文書が見つかりません。');
-  const rowNumber=offset+2;
-  const row=sheet.getRange(rowNumber,1,1,COMPANY_DOC_HEADERS.length).getDisplayValues()[0];
+  const rowNumber=offset+2,ready=companyDocsIndexReady_(sheet);
+  const row=sheet.getRange(rowNumber,1,1,ready?COMPANY_DOC_HEADERS.length:COMPANY_DOC_BASE_HEADERS.length).getDisplayValues()[0];
   if(row[12])throw new Error('この文書は削除されています。');
-  return {rowNumber,row};
+  return {rowNumber,row,ready};
 }
 function companyDocsNow_(){return Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd HH:mm:ss');}
 function companyDocsText_(value,label,max,required){
-  const text=safeSheetText_(value,max);
+  const raw=String(value==null?'':value).trim();
+  if(raw.length>max)throw new Error(label+'は'+max+'文字以内で入力してください。');
+  const text=safeSheetText_(raw,max);
   if(required&&!text)throw new Error(label+'を入力してください。');
-  if(String(value==null?'':value).trim().length>max)throw new Error(label+'は'+max+'文字以内で入力してください。');
   return text;
 }
 function companyDocsUrl_(value){
   const url=String(value||'').trim();
   if(!url)return '';
-  if(url.length>2000||!/^https:\/\/[A-Za-z0-9.-]+(?::443)?(?:[/?#][^\s]*)?$/i.test(url))throw new Error('参照URLはHTTPSリンクを入力してください。');
+  if(url.length>2000||!/^https:\/\/[A-Za-z0-9.-]+(?::443)?(?:[/?#][^\s]*)?$/i.test(url))
+    throw new Error('参照URLはHTTPSリンクを入力してください。');
   return safeSheetText_(url,2000);
+}
+function companyDocsTags_(value){
+  const text=Array.isArray(value)?value.join(','):String(value||'');
+  if(text.length>320)throw new Error('タグの入力が長すぎます。');
+  const parts=text.split(/[,、，]/).map(v=>v.trim()).filter(Boolean);
+  const normalized=[];
+  parts.forEach(tag=>{
+    if(tag.length>30||/[\r\n]/.test(tag))throw new Error('タグは1つ30文字以内で入力してください。');
+    const clean=safeSheetText_(tag,30);
+    if(!normalized.includes(clean))normalized.push(clean);
+  });
+  if(normalized.length>8)throw new Error('タグは最大8個まで登録できます。');
+  return normalized;
 }
 function companyDocsForm_(payload){
   const p=payload||{};
   const category=String(p.category||'その他'),status=String(p.status||'下書き');
-  if(!COMPANY_DOC_CATEGORIES.includes(category))throw new Error('分類が正しくありません。');
+  const folderId=String(p.folderId||'other/general').trim();
+  if(!COMPANY_DOC_CATEGORIES.includes(category))throw new Error('文書種類が正しくありません。');
   if(!COMPANY_DOC_STATUSES.includes(status))throw new Error('公開状態が正しくありません。');
+  if(!companyDocsLeaf_(folderId))throw new Error('業務フォルダの選択が正しくありません。');
   const date=String(p.effectiveOn||'').trim();
   return {
     title:companyDocsText_(p.title,'文書名',120,true),
-    category:category,summary:companyDocsText_(p.summary,'概要',300,false),
+    category,summary:companyDocsText_(p.summary,'概要',300,false),
     body:companyDocsText_(p.body,'本文',20000,false),
     url:companyDocsUrl_(p.url),
-    effectiveOn:date?normalizeDate_(date):'',status:status
+    effectiveOn:date?normalizeDate_(date):'',status,folderId,tags:companyDocsTags_(p.tags)
   };
 }
 function companyDocsKey_(value){
@@ -77,37 +133,67 @@ function companyDocsKey_(value){
   if(!/^[A-Za-z0-9_-]{12,100}$/.test(key))throw new Error('送信識別子が不正です。画面を開き直してください。');
   return key;
 }
-// List reads only the small metadata columns, never all long text bodies.
 function getCompanyDocuments(sessionToken){
   const employee=requireSession_(sessionToken).employee;
   const canManage=companyDocsManager_(employee);
   const sheet=companyDocsSheet_(true);
-  if(!sheet)return {ok:true,setupRequired:true,canManage:canManage,canInitialize:String(employee.role||'').toUpperCase()==='ADMIN',items:[],categories:COMPANY_DOC_CATEGORIES};
+  const base={ok:true,canManage,canInitialize:String(employee.role||'').toUpperCase()==='ADMIN',
+    folders:COMPANY_DOC_FOLDERS,categories:COMPANY_DOC_CATEGORIES,items:[]};
+  if(!sheet)return Object.assign(base,{setupRequired:true,needsUpgrade:false});
+  const needsUpgrade=!companyDocsIndexReady_(sheet);
   const count=sheet.getLastRow()-1;
+  // Never load the long-text body (P) for a list request.
   const rows=count>0?sheet.getRange(2,1,count,15).getDisplayValues():[];
-  const items=rows.filter(row=>!row[12]&&(canManage||String(row[5])==='公開')).map(row=>companyDocsRow_(row,false))
-    .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
-  return {ok:true,setupRequired:false,canManage:canManage,canInitialize:false,items:items,categories:COMPANY_DOC_CATEGORIES};
+  const index=(!needsUpgrade&&count>0)?sheet.getRange(2,17,count,2).getDisplayValues():[];
+  const items=rows.map((row,i)=>{
+    if(row[12]||(!canManage&&String(row[5])!=='公開'))return null;
+    return companyDocsRow_(row.concat(['',index[i]&&index[i][0]||'',index[i]&&index[i][1]||'']),false);
+  }).filter(Boolean).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id));
+  return Object.assign(base,{setupRequired:false,needsUpgrade,items});
 }
 function getCompanyDocument(sessionToken,documentId){
   const employee=requireSession_(sessionToken).employee;
   const id=String(documentId||'').trim();
   if(!/^CD-[A-Za-z0-9-]{12,100}$/.test(id))throw new Error('文書IDが正しくありません。');
   const found=companyDocsFind_(companyDocsSheet_(false),id);
-  if(found.row[5]!=='公開'&&!companyDocsManager_(employee))throw new Error('この文書を閲覧する権限がありません。');
+  if(found.row[5]!=='公開'&&!companyDocsManager_(employee))
+    throw new Error('この文書を閲覧する権限がありません。');
   return {ok:true,document:companyDocsRow_(found.row,true)};
+}
+function searchCompanyDocumentBodies(sessionToken,keyword){
+  const employee=requireSession_(sessionToken).employee;
+  const q=String(keyword||'').trim();
+  if(q.length<2||q.length>80)return {ok:true,matchedIds:[],truncated:false};
+  const sheet=companyDocsSheet_(true);
+  if(!sheet||sheet.getLastRow()<2)return {ok:true,matchedIds:[],truncated:false};
+  const count=sheet.getLastRow()-1;
+  // TextFinder performs the body scan in Sheets. Body content is never sent to the browser.
+  const found=sheet.getRange(2,16,count,1).createTextFinder(q).matchCase(false).findAll();
+  if(!found.length)return {ok:true,matchedIds:[],truncated:false};
+  const matchedRows=new Set(found.map(cell=>cell.getRow()));
+  const meta=sheet.getRange(2,1,count,15).getDisplayValues();
+  const canManage=companyDocsManager_(employee),matchedIds=[];
+  for(let i=0;i<meta.length;i++){
+    if(!matchedRows.has(i+2)||meta[i][12])continue;
+    if(!canManage&&meta[i][5]!=='公開')continue;
+    matchedIds.push(String(meta[i][0]));
+    if(matchedIds.length>=250)break;
+  }
+  return {ok:true,matchedIds,truncated:matchedIds.length>=250};
 }
 function initializeCompanyDocuments(sessionToken){
   const employee=requireAdminSession_(sessionToken).employee;
   return withScriptLock_(function(){
     const existing=companyDocsSheet_(true);
-    if(existing)return {ok:true,changed:false};
-    // Existing company data is never reset; backup must succeed before creating a sheet.
+    if(existing&&companyDocsIndexReady_(existing))return {ok:true,changed:false};
+    // No data can be reset, and schema widening requires a successful backup.
     const backup=createDatabaseBackup_(employee);
     ensureSchemaSheet_(getDb_(),COMPANY_DOC_SHEET,COMPANY_DOC_HEADERS);
-    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'社内文書保存先準備',
-      target:COMPANY_DOC_SHEET,targetId:'',before:'',after:'シート作成',source:'WEB',result:'SUCCESS',note:backup&&backup.name||''});
-    return {ok:true,changed:true};
+    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
+      operation:existing?'社内文書分類列追加':'社内文書保存先準備',
+      target:COMPANY_DOC_SHEET,targetId:'',before:'',after:'保存先を準備',
+      source:'WEB',result:'SUCCESS',note:backup&&backup.name||''});
+    return {ok:true,changed:true,upgraded:!!existing};
   },30000);
 }
 function saveCompanyDocument(sessionToken,payload){
@@ -118,18 +204,22 @@ function saveCompanyDocument(sessionToken,payload){
   if(id&&!/^CD-[A-Za-z0-9-]{12,100}$/.test(id))throw new Error('文書IDが正しくありません。');
   return withScriptLock_(function(){
     const sheet=companyDocsSheet_(false),now=companyDocsNow_();
+    if(!companyDocsIndexReady_(sheet))
+      throw new Error('社内文書の分類列が未準備です。管理者はDB更新を行ってください。');
     if(id){
       const found=companyDocsFind_(sheet,id),row=found.row;
       if(String(row[14]||'')===key)return {ok:true,duplicate:true,document:companyDocsRow_(row,true)};
       if(!Number.isInteger(revision)||revision<1||Number(row[6])!==revision)
         throw new Error('別の担当者が文書を更新しました。再読み込みして内容を確認してください。');
+      const before={revision:Number(row[6]),status:String(row[5]),folderId:String(row[16])};
       row[1]=form.title;row[2]=form.category;row[3]=form.summary;row[4]=form.effectiveOn;
       row[5]=form.status;row[6]=revision+1;row[7]=now;row[8]=employee.employeeId;row[9]=form.url;
-      row[14]=key;row[15]=form.body;
+      row[14]=key;row[15]=form.body;row[16]=form.folderId;row[17]=form.tags.join(',');
       sheet.getRange(found.rowNumber,1,1,COMPANY_DOC_HEADERS.length).setValues([row]);
       appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'社内文書改訂',
-        target:COMPANY_DOC_SHEET,targetId:id,before:auditJson_({revision,status:found.row[5]}),
-        after:auditJson_({revision:revision+1,status:form.status,title:form.title}),source:'WEB',result:'SUCCESS',note:''});
+        target:COMPANY_DOC_SHEET,targetId:id,before:auditJson_(before),
+        after:auditJson_({revision:revision+1,status:form.status,title:form.title,folderId:form.folderId}),
+        source:'WEB',result:'SUCCESS',note:''});
       return {ok:true,document:companyDocsRow_(row,true)};
     }
     const count=sheet.getLastRow()-1;
@@ -144,11 +234,12 @@ function saveCompanyDocument(sessionToken,payload){
     }
     const newId=createId_('CD'),row=[
       newId,form.title,form.category,form.summary,form.effectiveOn,form.status,1,now,employee.employeeId,
-      form.url,now,employee.employeeId,'','',key,form.body
+      form.url,now,employee.employeeId,'','',key,form.body,form.folderId,form.tags.join(',')
     ];
     sheet.appendRow(row);
     appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'社内文書登録',
-      target:COMPANY_DOC_SHEET,targetId:newId,before:'',after:auditJson_({title:form.title,status:form.status,revision:1}),
+      target:COMPANY_DOC_SHEET,targetId:newId,before:'',
+      after:auditJson_({title:form.title,status:form.status,revision:1,folderId:form.folderId}),
       source:'WEB',result:'SUCCESS',note:''});
     return {ok:true,document:companyDocsRow_(row,true)};
   },30000);
@@ -165,10 +256,11 @@ function deleteCompanyDocument(sessionToken,documentId,expectedRevision){
     const before={title:row[1],status:row[5],revision:row[6]};
     row[5]='削除';row[6]=Number(row[6])+1;row[7]=companyDocsNow_();
     row[8]=employee.employeeId;row[12]=row[7];row[13]=employee.employeeId;
-    sheet.getRange(found.rowNumber,1,1,COMPANY_DOC_HEADERS.length).setValues([row]);
+    sheet.getRange(found.rowNumber,1,1,found.ready?COMPANY_DOC_HEADERS.length:COMPANY_DOC_BASE_HEADERS.length)
+      .setValues([row]);
     appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'社内文書削除',
-      target:COMPANY_DOC_SHEET,targetId:id,before:auditJson_(before),after:auditJson_({softDeleted:true}),
-      source:'WEB',result:'SUCCESS',note:'履歴保持'});
-    return {ok:true,id:id,deleted:true};
+      target:COMPANY_DOC_SHEET,targetId:id,before:auditJson_(before),
+      after:auditJson_({softDeleted:true}),source:'WEB',result:'SUCCESS',note:'履歴保持'});
+    return {ok:true,id,deleted:true};
   },30000);
 }
