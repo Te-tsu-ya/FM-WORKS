@@ -158,4 +158,20 @@
 .ph-master-more .form-grid{padding:3px 0 15px}
 .ph-project-modal .modal-actions{margin-top:16px}
 @media(max-width:600px){.ph-master-primary{grid-template-columns:minmax(0,1fr)}.ph-project-modal .modal-actions>div{display:flex;flex-wrap:wrap;gap:8px}.ph-project-modal .modal-actions>div button{flex:1}}
+
+/* v0.19.4: navigation intent, record activity and low-distraction worklog handoff. */
+.ph-recent-grid{margin-top:16px}
+.ph-recent-item{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:5px;align-items:center;border-top:1px solid var(--line);padding:11px 0}
+.ph-recent-item .ph-badge{grid-column:1;grid-row:1;margin:0;white-space:nowrap}
+.ph-recent-item strong{grid-column:2;grid-row:1;line-height:1.5;overflow-wrap:anywhere;font-size:13px}
+.ph-recent-item small{grid-column:2;grid-row:2;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.ph-decision-badge{border-color:#83b8e6;color:#265d9a}
+.worklog-quick-intent{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:13px;background:rgba(38,111,212,.07);border:1px solid rgba(55,136,220,.36);padding:13px;border-radius:12px;margin:10px 0 14px;color:var(--text)}
+.worklog-quick-intent>div:first-child{display:grid;gap:4px;min-width:0}
+.worklog-quick-intent strong{font-size:13px;overflow-wrap:anywhere}
+.worklog-quick-intent small{color:var(--muted);font-size:12px;line-height:1.6}
+.worklog-quick-intent>div:last-child{display:flex;gap:8px;flex-wrap:wrap}
+.worklog-quick-intent button{min-height:38px}
+@media(max-width:730px){.worklog-quick-intent{grid-template-columns:1fr}.worklog-quick-intent>div:last-child button{flex:1}}
+
 </style>

@@ -343,6 +343,7 @@ function attendancePage(){
 function formatMinutesClient(minutes){var m=Math.max(0,Number(minutes||0));return Math.floor(m/60)+'時間'+String(m%60).padStart(2,'0')+'分';}
 const WORKLOG_QUICK_FIELDS=['wlQuickProject','wlQuickCategory','wlQuickStart','wlQuickEnd','wlQuickDescription'];
 const worklogQuickDrafts=new Map();
+let worklogProjectIntent=null;
 function worklogDraftKey(date){return worklogWindowIdentity()+'|'+date;}
 function rememberWorklogQuickDraft(){
   const date=state.worklog.renderedDate;
@@ -360,21 +361,56 @@ function rememberWorklogQuickDraft(){
   worklogQuickDrafts.set(key,draft);
   while(worklogQuickDrafts.size>20)worklogQuickDrafts.delete(worklogQuickDrafts.keys().next().value);
 }
+function queueProjectWorklogIntent(projectName,taskTitle=''){
+ if(!state.sessionToken||!state.data||!String(projectName||'').trim())return false;
+ worklogProjectIntent={identity:worklogWindowIdentity(),date:state.data.today,project:String(projectName),task:String(taskTitle||'')};
+ return true;
+}
+function cancelProjectWorklogIntent_(){
+ worklogProjectIntent=null;
+ if(state.page==='worklog')renderPageIfActive('worklog');
+}
+function applyProjectWorklogIntent_(replaceExisting=false){
+ const intent=worklogProjectIntent;
+ if(!intent||intent.identity!==worklogWindowIdentity()){worklogProjectIntent=null;return false;}
+ if(state.page!=='worklog'||state.worklog.renderedDate!==intent.date)return false;
+ const project=document.getElementById('wlQuickProject');
+ if(!project||project.disabled||!project.closest||!project.closest('.worklog-quick-card'))return false;
+ if(project.options&&!Array.from(project.options).some(opt=>opt.value===intent.project))return false;
+ const dateKey=worklogDraftKey(intent.date);
+ if(worklogQuickDrafts.has(dateKey)&&!replaceExisting)return false;
+ const description=document.getElementById('wlQuickDescription');
+ if(!description)return false;
+ project.value=intent.project;
+ if(intent.task)description.value=intent.task;
+ rememberWorklogQuickDraft();
+ worklogProjectIntent=null;
+ const note=document.getElementById('worklogProjectIntentBanner');
+ if(note&&typeof note.remove==='function')note.remove();
+ return true;
+}
+function worklogProjectIntentBanner_(){
+ const intent=worklogProjectIntent;
+ if(!intent||intent.identity!==worklogWindowIdentity()||state.page!=='worklog'||intent.date!==state.worklog.date)return '';
+ return `<div class="worklog-quick-intent" id="worklogProjectIntentBanner" role="status"><div><strong>案件から工数を入力：${escapeHtml(intent.project)}</strong>${intent.task?`<small>作業：${escapeHtml(intent.task)}</small>`:''}<small>入力途中の内容がある場合、反映すると案件と作業内容だけを置き換えます。時刻は変更しません。</small></div><div><button type="button" class="primary-button compact" onclick="applyProjectWorklogIntent_(true)">フォームに反映</button><button type="button" class="secondary-button compact" onclick="cancelProjectWorklogIntent_()">使わない</button></div></div>`;
+}
 function restoreWorklogQuickDraft(){
   const date=state.worklog.renderedDate;
   if(!date||state.page!=='worklog')return;
   const project=document.getElementById('wlQuickProject');
   if(!project||typeof project.closest!=='function'||!project.closest('.worklog-quick-card'))return;
   const draft=worklogQuickDrafts.get(worklogDraftKey(date));
-  if(!draft)return;
+  if(draft){
   for(const id of WORKLOG_QUICK_FIELDS){
     const field=document.getElementById(id);
     if(!field||!(id in draft))continue;
     if(id==='wlQuickProject'&&field.options&&!Array.from(field.options).some(option=>option.value===draft[id]))continue;
     field.value=draft[id];
   }
+  }
+  if(worklogProjectIntent)applyProjectWorklogIntent_(false);
 }
-function clearWorklogQuickDrafts(){worklogQuickDrafts.clear();state.worklog.renderedDate=null;}
+function clearWorklogQuickDrafts(){worklogQuickDrafts.clear();worklogProjectIntent=null;state.worklog.renderedDate=null;}
 
 const worklogWindowCache=new Map();
 
@@ -673,6 +709,7 @@ function worklogQuickForm(display){
   const options=(realProjects.length?realProjects.map(p=>p.name):['サンプル案件A','サンプル案件B','社内MTG']).map((name,i)=>`<option value='${sampleFallback?'':escapeHtml(name)}'>${escapeHtml(name)}${sampleFallback?'（表示例）':''}</option>`).join('');
   return `<section class='worklog-panel worklog-quick-card'>
     <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div>${display.sample?`<span class='worklog-sample-chip'>表示確認用</span>`:''}</header>
+    ${worklogProjectIntentBanner_()}
     <div class='worklog-quick-grid'>
       <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' ${sampleFallback?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label>
       <label class='field full'><span>作業分類</span><input id='wlQuickCategory' list='wlCategorySuggestions' placeholder='設計 / 開発 / 会議 等'><datalist id='wlCategorySuggestions'><option value='設計'><option value='開発'><option value='テスト'><option value='資料作成'><option value='打合せ'><option value='顧客対応'></datalist></label>

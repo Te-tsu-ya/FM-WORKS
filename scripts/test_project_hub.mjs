@@ -85,7 +85,30 @@ assert.throws(()=>save('E','task',{...updateTask,progress:80}),/別の人/);
 assert.equal(ctx.projectHubMetrics_({status:'進行中'},{},[],[], '2026-10-10').progress,null);
 const completed=save('M','task',{...task,title:'誤登録',progress:100,status:'完了',requestKey:key()});save('M','task',{...task,id:completed.id,title:'誤登録',progress:100,status:'非表示',revision:1,requestKey:key()});assert.ok(!ctx.getProjectHubDetail('A','PRJ-001').tasks.some(t=>t.id===completed.id),'completed erroneous task can be hidden');
 const keep=sheets['プロジェクト資料'];delete sheets['プロジェクト資料'];assert.equal(ctx.getProjectHubWorkspace('E').setupRequired,true);assert.equal(ctx.getProjectHubWorkspace('E').projects[0].actualMinutes,60);assert.throws(()=>save('A','plan',plan),/DB更新/);sheets['プロジェクト資料']=keep;
-keep.rows[0][0]='不一致';assert.throws(()=>ctx.getProjectHubWorkspace('E'),/列構成/);keep.rows[0][0]=specs['プロジェクト資料'][0];
+const originalProjectResourceHeader=keep.rows[0][0];keep.rows[0][0]='不一致';assert.throws(()=>ctx.getProjectHubWorkspace('E'),/列構成/);keep.rows[0][0]=originalProjectResourceHeader;
+
+// Large workspace regression: index projects, aliases, tasks and worklogs without changing totals.
+const preservedProjectRows=sheets['プロジェクト'].rows.slice();
+const preservedLogRows=sheets['工数'].rows.slice();
+for(let i=1;i<=90;i++){
+ const id='PRJ-LOAD-'+String(i).padStart(3,'0');
+ const name='架空負荷案件 '+String(i).padStart(3,'0');
+ sheets['プロジェクト'].rows.push([id,name,'架空顧客','進行中','','','','','']);
+ for(let j=0;j<12;j++)sheets['工数'].rows.push(log('LOAD-'+i+'-'+j,'E',name,30));
+}
+ctx.invalidateProjectCache_();ctx.projectHubInvalidateWorklogs_();
+const largeWorkspace=plain(ctx.getProjectHubWorkspace('A',true));
+assert.equal(largeWorkspace.projects.length,92,'all 90 synthetic projects are included');
+for(let i=1;i<=90;i++){
+ const id='PRJ-LOAD-'+String(i).padStart(3,'0');
+ assert.equal(largeWorkspace.projects.find(p=>p.projectId===id).actualMinutes,360,'all project worklogs remain correctly grouped');
+}
+assert.equal(largeWorkspace.unlinkedWorklogCount,1,'unlinked legacy worklogs are counted once');
+sheets['プロジェクト'].rows=preservedProjectRows;sheets['工数'].rows=preservedLogRows;
+ctx.invalidateProjectCache_();ctx.projectHubInvalidateWorklogs_();
+const invalidDateMetric=plain(ctx.projectHubMetrics_({status:'進行中'},{},[{plannedMinutes:60,progress:35,startDate:'2026-99-99',dueDate:'2026-10-11'}],[], '2026-10-10'));
+assert.equal(invalidDateMetric.scheduledProgress,null,'invalid imported dates never become NaN schedule percentages');
+
 console.log('PASS project backend: real sheets/quote helpers, aggregates, permissions, revisions, duplicate retries, renames and migration gates');
 
 // Client behavior with controlled asynchronous GAS responses.
@@ -94,14 +117,14 @@ const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const client=vm.createContext({state:{page:'projects',sessionToken:'E',data:{today:'2026-10-10',user:users[2],permissions:{}}},google:{script:{run:runner()}},document:{getElementById:()=>null,querySelectorAll:()=>[]},window:{addEventListener:()=>{}},renderPageIfActive:()=>{},showToast:()=>{},openConfirmDialog:(_t,_m,_l,callback)=>callback(),escapeHtml,cleanApiErrorMessage:e=>e.message,navigate:()=>{}});
 vm.runInContext(fs.readFileSync('src/AppProjectHub.html','utf8').replace(/<\/?script>/g,''),client);
 const cr=code=>vm.runInContext(code,client);
-client.loadProjectHub();assert.equal(calls.length,1);calls[0].success(workspace);assert.equal(calls.length,2);calls[1].success(detail);
+client.loadProjectHub();assert.equal(calls.length,1);calls[0].success(workspace);assert.equal(calls.length,1,'portfolio opening never preloads unrelated project details');client.projectHubSelect_('PRJ-001');assert.equal(calls.length,2,'selected record loads one detail');calls[1].success(detail);
 client.loadProjectHub();for(const tab of ['tasks','effort','resources','updates','overview'])client.projectHubTab_(tab);client.projectHubTogglePicker_();assert.equal(cr('projectHubUi.pickerOpen'),true);client.projectHubTogglePicker_();assert.equal(calls.length,2,'cached route, project selector and all tabs produce no extra RPC');
 assert.ok(cr('projectHubPage()').includes('作業の完成度'));client.projectHubTab_('resources');assert.ok(cr('projectHubPage()').includes('&lt;script&gt;'));
 client.projectHubOpenResource_('');client.projectHubField_('body','保存前の本文');const requestKey=cr('projectHubUi.editor.form.requestKey');client.projectHubSave_();const request=calls.at(-1);request.failure(Error('network'));assert.equal(cr('projectHubUi.editor.form.body'),'保存前の本文');client.projectHubSave_();assert.equal(calls.at(-1).args[2].requestKey,requestKey,'failed retry uses same identity');calls.at(-1).success({ok:true});
 const fresh=calls.at(-1);fresh.success(workspace);const newDetail=calls.at(-1);newDetail.success(detail);
 client.loadProjectHub({force:true});const stale=calls.at(-1);client.projectHubInvalidate_();stale.success(workspace);assert.notEqual(calls.at(-1),stale,'invalidated read triggers fresh request');const replacement=calls.at(-1);
 client.resetProjectHubUi();replacement.success(workspace);assert.equal(cr('projectHubUi.data'),null,'old session callback discarded');
-client.loadProjectHub();calls.at(-1).success(workspace);calls.at(-1).success(detail);
+client.loadProjectHub();calls.at(-1).success(workspace);client.projectHubSelect_('PRJ-001');calls.at(-1).success(detail);
 client.projectHubOpenResource_('');client.projectHubField_('body','ひな形で上書きしない');client.projectHubUseTemplate_();assert.equal(cr('projectHubUi.editor.form.body'),'ひな形で上書きしない');
 client.loadProjectHub({force:true});assert.doesNotThrow(()=>cr('projectHubPage()'),'refresh during editing uses retained detail context');calls.at(-1).success(workspace);calls.at(-1).success({...detail,resources:[...detail.resources]});
 // A conflict keeps the draft until the employee explicitly adopts the latest revision.
@@ -191,6 +214,44 @@ const invalidSchedule={...detail,tasks:[{...detail.tasks[0],startDate:'2026-99-9
 assert.doesNotThrow(()=>client.projectHubTaskTimeline_(invalidSchedule),'malformed imported schedule cannot crash timeline');
 assert.ok(client.projectHubTaskTimeline_(invalidSchedule).includes('開始予定日'),'invalid schedule is treated as unscheduled');
 console.log('PASS project UX: tasks board/timeline/list, effort split, document filters, shared memo filters, simple master form and failed save recovery');
+
+
+// Worklog cross-route intent: late DOM rendering and pre-existing drafts are both safe.
+const opSource=fs.readFileSync('src/AppOperations.html','utf8');
+const intentStart=opSource.indexOf('const WORKLOG_QUICK_FIELDS=');
+const intentEnd=opSource.indexOf('const worklogWindowCache=',intentStart);
+assert.ok(intentStart>0&&intentEnd>intentStart,'real worklog intent code can be located');
+const nodes={
+ wlQuickProject:{value:'別案件',disabled:false,options:[{value:'別案件'},{value:'現案件'}],closest:()=>({})},
+ wlQuickCategory:{value:'開発'},wlQuickStart:{value:'09:00'},wlQuickEnd:{value:'10:00'},
+ wlQuickDescription:{value:''},worklogProjectIntentBanner:{remove:()=>{}}
+};
+const intentState={sessionToken:'E',page:'projects',worklog:{date:'2026-10-10',renderedDate:null},data:{today:'2026-10-10',user:{employeeId:'E'}}};
+const intentCtx=vm.createContext({state:intentState,document:{getElementById:id=>nodes[id]||null},escapeHtml,renderPageIfActive:()=>{}});
+intentCtx.worklogWindowIdentity=()=>intentState.sessionToken+'|'+intentState.data.user.employeeId;
+vm.runInContext(intentCtx.worklogWindowIdentity.toString(),intentCtx); // normal script globals behave as deployed
+vm.runInContext(opSource.slice(intentStart,intentEnd),intentCtx);
+assert.equal(intentCtx.queueProjectWorklogIntent('現案件','設計'),true);
+intentState.page='worklog';
+intentCtx.restoreWorklogQuickDraft();
+assert.equal(nodes.wlQuickProject.value,'別案件','early render without form does not overwrite input');
+intentState.worklog.renderedDate='2026-10-10';
+intentCtx.restoreWorklogQuickDraft();
+assert.equal(nodes.wlQuickProject.value,'現案件','project prefill survives late worklog render');
+assert.equal(nodes.wlQuickDescription.value,'設計','task name is copied to description only');
+nodes.wlQuickProject.value='別案件';nodes.wlQuickDescription.value='既存の作業内容';nodes.wlQuickStart.value='13:00';
+intentCtx.rememberWorklogQuickDraft();
+intentCtx.queueProjectWorklogIntent('現案件','テスト');
+intentCtx.restoreWorklogQuickDraft();
+assert.equal(nodes.wlQuickDescription.value,'既存の作業内容','existing unsaved worklog remains intact');
+assert.equal(intentCtx.applyProjectWorklogIntent_(true),true,'explicit confirmation transfers task');
+assert.equal(nodes.wlQuickDescription.value,'テスト');
+assert.equal(nodes.wlQuickStart.value,'13:00','intent does not change time range');
+intentCtx.queueProjectWorklogIntent('<script>alert(1)</script>','');
+assert.ok(intentCtx.worklogProjectIntentBanner_().includes('&lt;script&gt;'),'intent banner escapes untrusted names');
+intentCtx.clearWorklogQuickDrafts();
+assert.equal(intentCtx.applyProjectWorklogIntent_(true),false,'logout reset removes pending worklog intent');
+assert.ok(client.projectHubTaskBoard_(detail).includes('工数を記録'),'task board exposes the worklog shortcut');
 
 console.log('PASS project client: cached tabs/routes, escaped documents, retained failed forms, stable retries, stale-response and session isolation');
 export {workspace,detail,escapeHtml};
