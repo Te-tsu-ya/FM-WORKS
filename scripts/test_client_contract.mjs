@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppSomu.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -349,9 +349,11 @@ const result=vm.runInContext(`
   somuUi.loaded=true;
   somuUi.data={setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:false};
   const officeReady=officePage();
-  expect('general affairs renders real home and independent tab navigation',
-    officeReady.includes('somu-workspace')&&officeReady.includes('総務ホーム')&&
-    officeReady.includes('備品台帳')&&officeReady.includes('購買管理')&&officeReady.includes('書類整理'));
+  expect('general affairs renders 8 grouped destinations and action-centered home',
+    officeReady.includes('somu-workspace')&&officeReady.includes('今日、対応すること')&&
+    officeReady.includes('管理台帳を開く')&&officeReady.includes('契約・更新')&&
+    officeReady.includes('施設・車両')&&officeReady.includes('書類整理')&&
+    (officeReady.match(/aria-current=/g)||[]).length===8);
   somuReset();
   state.data.permissions.adminConsole=true;
   expect('administrator can open both general affairs and system settings',

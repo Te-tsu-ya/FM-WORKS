@@ -7,10 +7,9 @@ import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 
 const root=process.cwd();
-const css=['Styles.html','StylesWorkflowV15.html','StylesSomu.html']
+const css=['Styles.html','StylesWorkflowV15.html','StylesSomu.html','StylesSomuGrowth.html']
  .map(f=>fs.readFileSync(path.join(root,'src',f),'utf8')).join('\n');
-const source=fs.readFileSync(path.join(root,'src/AppSomu.html'),'utf8')
- .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+const source=['AppSomu.html','AppSomuGrowth.html'].map(file=>fs.readFileSync(path.join(root,'src',file),'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const demoData={
   setupRequired:false,today:'2026-10-10',canApprove:true,
@@ -32,6 +31,12 @@ const ctx=vm.createContext({
 });
 vm.runInContext(source,ctx,{filename:'AppSomu.html'});
 vm.runInContext('somuUi.loaded=true;somuUi.data='+JSON.stringify(demoData),ctx);
+vm.runInContext('somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();somuGrowth.data='+JSON.stringify({
+ ready:true,today:'2026-10-10',
+ contracts:[{id:'C1',name:'架空保守契約',vendor:'架空ベンダー',category:'保守',startedOn:'2026-01-01',expiresOn:'2026-12-01',noticeOn:'2026-10-28',renewal:'自動更新あり',annualYen:150000,owner:'架空担当A',status:'有効'}],
+ facilities:[{id:'F1',name:'架空社用車',code:'FM-CAR-001',type:'車両',location:'駐車場',owner:'架空担当B',nextCheckOn:'2026-10-20',status:'稼働中'}],
+ tickets:[{id:'T1',subject:'架空オフィス点検依頼',category:'設備・修理',priority:'高',requesterName:'架空担当A',assignee:'架空担当B',dueOn:'2026-10-12',description:'テスト',status:'未着手'}]
+}),ctx);
 assert.ok(vm.runInContext("somuPage()",ctx).includes('somu-workspace'));
 vm.runInContext("somuTab('assets')",ctx);
 assert.ok(vm.runInContext("somuPage()",ctx).includes('FM-PC-001'));
@@ -49,7 +54,11 @@ const cases=[
  {w:1440,h:900,tab:'assets',theme:'light'},
  {w:390,h:844,tab:'assets',theme:'light'},
  {w:1440,h:900,tab:'purchases',theme:'dark'},
- {w:390,h:844,tab:'loans',theme:'dark'}
+ {w:390,h:844,tab:'loans',theme:'dark'},
+ {w:1440,h:900,tab:'contracts',theme:'light'},
+ {w:390,h:844,tab:'contracts',theme:'light'},
+ {w:1440,h:900,tab:'tickets',theme:'dark'},
+ {w:390,h:844,tab:'facilities',theme:'dark'}
 ];
 const bin=['google-chrome','google-chrome-stable','chromium','chromium-browser']
  .map(cmd=>{try{return execFileSync('which',[cmd],{encoding:'utf8'}).trim();}catch{return '';}})
@@ -68,7 +77,8 @@ for(const c of cases){
  '<script>addEventListener("load",()=>{const x=document.documentElement,content=document.querySelector(".content"),page=document.querySelector(".somu-workspace");'+
  'const result={width:innerWidth,height:innerHeight,scrollWidth:x.scrollWidth,pageWidth:page?.getBoundingClientRect().width,'+
  'contentWidth:content?.getBoundingClientRect().width,heading:!!document.querySelector(".somu-heading h1"),'+
- 'tabs:document.querySelectorAll(".somu-tabs button").length,records:document.querySelectorAll(".somu-list-item").length};'+
+ 'tabs:document.querySelectorAll(".somu-tabs button").length,records:document.querySelectorAll(".somu-list-item").length,'+
+ 'homeBottom:document.querySelector(".somu-hub-grid")?.getBoundingClientRect().bottom??0};'+
  'parent.postMessage({type:"SOMU_QA",result},"*")});</script></body></html>';
  const iframePath=path.join(dir,id+'-frame.html');fs.writeFileSync(iframePath,iframe);
  const host='<html><head><script>addEventListener("message",e=>{if(e.data?.type==="SOMU_QA")document.getElementById("result").setAttribute("data-qa",encodeURIComponent(JSON.stringify(e.data.result)))})</script></head>'+
@@ -87,13 +97,14 @@ for(const c of cases){
  if(Math.abs(v.width-c.w)>2)errors.push('viewport-width');
  if(Math.abs(v.height-c.h)>2)errors.push('viewport-height');
  if(v.scrollWidth>v.width+2)errors.push('horizontal-overflow');
- if(!v.heading||v.tabs!==5)errors.push('navigation');
+ if(!v.heading||v.tabs!==8)errors.push('navigation');
  if(v.pageWidth>v.contentWidth+2)errors.push('content-clipping');
+ if(c.tab==='home'&&c.w>=1366&&v.homeBottom>v.height+2)errors.push('home-first-view-overflow');
  if(c.tab!=='home'&&v.records<1)errors.push('record-missing');
  console.log((errors.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(v)+(errors.length?' errors='+errors.join(','):''));
  if(errors.length)failed++;
  }catch(error){failed++;console.error('FAIL '+id+' '+String(error.message||error));}
- if(c.tab==='home'||c.tab==='assets'){
+ if(['home','assets','contracts','tickets','facilities'].includes(c.tab)){
  try{execFileSync(bin,[...flags,'--screenshot='+path.join(outputs,id+'.png'),pathToFileURL(hostPath).href],
  {timeout:40000,stdio:'ignore'});}catch{}
  }

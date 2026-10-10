@@ -2,8 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
-const source=fs.readFileSync('src/AppSomu.html','utf8')
- .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+const source=['src/AppSomu.html','src/AppSomuGrowth.html'].map(file=>fs.readFileSync(file,'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
 const calls=[],modal={innerHTML:''},nodes={};
 const get=id=>nodes[id]||(nodes[id]={value:'',textContent:'',disabled:false,hidden:false});
 let success=null,failure=null,toast='',closeCount=0;
