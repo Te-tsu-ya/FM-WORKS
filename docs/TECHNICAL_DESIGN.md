@@ -1943,3 +1943,17 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 対象行を見つけた場合だけA:Jの10列を1行取得し、`createdAt` と監査前状態を保持して更新。なければ末尾に10列を新規記録する。従来の `getRange(2,1,lastRow-1,10)` 全件転送は廃止する。
 - `scripts/test_monthly_review_index.mjs` のNode VMモックを既存 `scripts/test_data_access_performance.mjs` から実行し、同社員別月・別社員同月・月次未完了・当月拒否を検査する。
 - 権限・月次統計・監査ログ・DBスキーマに変更はない。具体的なGAS実測値は未測定。
+
+## 経理アドバイザーの実装（2026-10-10）
+
+- **src/FinanceAdvisor.gs**: read-only `getFinanceSpendingInsights(sessionToken,{year})`、`financeSpendingDigest_`、`financeTravelExplanation_`、`getFinanceTravelExplanation`、`lookupFinanceInvoiceIssuer`。保存APIは既存Finance.gsのまま。旧台帳へのWrite/Append/Deleteは行わない。
+- **支出分析データ境界**: スクリプトプロパティ `FM_LEGACY_EXPENSE_SPREADSHEET_ID`、未設定では共有済みの旧台帳IDを使用し、シート「経費」A:Jの見出し確認後に読み取り。使用日が対象年に属する全行を集計し、不正金額はskipとして件数を示す。年月（月別グループ）と支払者／取引先／品目の合計を返し、明細は最大160件の新しい順。サーバーキャッシュ有効期限120秒。承認トップではこのAPIを呼ばない。
+- **旅費の内訳**: 社内規程2025-12-01、役職別rate tableを基礎に片道100km・早朝7時前・夜間20時以降・宿泊実費と上限を個別検証。宿泊を伴い時間帯手当の適用日が不明な場合などは`REVIEW_REQUIRED`で総額`null`とし、担当者の承認前に確定しない。現行「出張報告」の列を追加せず、根拠の転記は既存`note`と`requestedAllowance`へ利用者の明示操作で行う。
+- **国税庁**: `NTA_INVOICE_API_ID`をスクリプトプロパティのみから取得（13桁）。ブラウザ・ログに秘匿IDを出さない。公式JSON`announcement[].registratedNumber`（原文のリソース名はregistratedNumber）を厳密照合し、`name`, `address`, `registrationDate`, `disposalDate`, `expireDate`等のみを返す。未設定／番号不正／取得失敗／未該当と成功を区別して扱う。公式情報の免責をUIに表示。
+- **src/AppFinance.html**: 経理トップの支出分析切替、経費記録の事業者照会、旅費申請画面に計算根拠を表示。**src/AppFinanceAdvisor.html**を専用の追加フロントモジュールとし、CSSを**src/StylesFinanceAdvisor.html**に分離。Index.htmlから読み込み。支出分析の人別検索や明細検索はページ内だけで処理し、不要なGAS通信を避ける。
+- **テスト**: in-memoryの旧台帳のみを読み取り、複数年・支払者別・アクセス権限、出張の100km境界・実費12,000円／上限20,000円・多泊条件・未確認を検証。国税庁APIはモックで`registratedNumber`を返し、未設定なら通信せず会社名を捏造しない。新しいUI表示・フロントRPC引数・操作後の権限制御を全既存回帰検証とともに実行する。
+
+- 片道100km未満、宿泊なし、早朝または夜間の経路は `issues` に業務理由・経路・会社承認の必須確認を加え、`status='REVIEW_REQUIRED'`・`total=null` とする。後日の説明に備え、備考へ転記する参照計算はNo.1～No.5、上限適用、宿泊実費それぞれの式を含める。
+
+- サーバー側で年月×支払者の集計表`payerMonths`を事前生成し、上位30支払者の12か月を転送する。UIでの支払者選択は`payerMonths`を使うため通信しない。分類集計にはプロトタイプを持たない辞書を用い、`__proto__`等の取引先文字列も安全に扱う。
+- 国税庁Web-APIへのHTTP呼び出し例外にURLとアプリケーションIDが含まれる可能性があるため、エラーの原文を運用ログに出力せず固定の診断コードのみを記録する。

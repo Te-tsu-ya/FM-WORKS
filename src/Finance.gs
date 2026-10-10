@@ -242,7 +242,7 @@ function financeTravelPayload_(payload,employee){
   const startsAt=normalizeTime_(p.startsAt),endsAt=normalizeTime_(p.endsAt);
   if(endsOn===startsOn&&startsAt&&endsAt&&endsAt<startsAt)throw new Error('帰着時刻は出発時刻以降にしてください。');
   const distance=String(p.distanceCategory||'未確認');
-  if(!['30km以上','30km未満','未確認'].includes(distance))throw new Error('移動距離区分を確認してください。');
+  if(!['30km以上','30km未満','未確認','片道100km以上','片道100km未満'].includes(distance))throw new Error('移動距離区分を確認してください。');
   const nights=financeAmount_(p.nights,'宿泊日数',false);
   if(nights>365)throw new Error('宿泊日数は365以下で入力してください。');
   return {

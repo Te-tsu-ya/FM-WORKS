@@ -2,11 +2,11 @@
 /* FM WORKS v0.13.0 finance UI. No confidential data in persistent browser storage. */
 const FINANCE_READ_TTL=30000;
 let financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,insightMode:false,insights:null,insightYear:new Date().getFullYear(),insightLoading:false,insightError:'',insightQuery:'',insightPayer:'',travelEstimate:null,invoiceIssuer:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 function resetFinanceUi(){
   financeActiveForm=null;
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
-  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
+  financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,insightMode:false,insights:null,insightYear:new Date().getFullYear(),insightLoading:false,insightError:'',insightQuery:'',insightPayer:'',travelEstimate:null,invoiceIssuer:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 }
 function financeIdentity(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
@@ -152,9 +152,9 @@ const FINANCE_FORM_FIELDS={
     ['endsOn','帰着日','date',true],['endsAt','帰着時刻','time',false],
     ['destination','出張先','text',true],['purpose','出張内容・目的','textarea',true],
     ['outcome','実施内容・結果・次の対応','textarea',true],
-    ['distanceCategory','30km区分','distance',false],
+    ['distanceCategory','片道100kmの確認','distance',false],
     ['spentAmount','実際の使用金額（円）','number',false],
-    ['lodgingArea','宿泊地域','text',false],['nights','宿泊日数','number',false],
+    ['lodgingArea','宿泊地域','lodging',false],['nights','宿泊日数','number',false],
     ['timeAllowance','時間帯手当の区分','text',false],
     ['dailyCategory','日当区分','text',false],
     ['requestedAllowance','支給希望額（円・要確認）','number',false],
@@ -188,8 +188,10 @@ function financeFormField(entry,source={}){
   const caption=escapeHtml(label)+(required?" <em class='v15-required'>必須</em>":"");
   if(kind==='textarea')return '<label class="finance-field"><span>'+caption+'</span><textarea '+common+
     ' rows="3" maxlength="'+max+'">'+escapeHtml(value)+'</textarea></label>';
-  if(kind==='distance'||kind==='paid'){
-    const options=kind==='distance'?['未確認','30km以上','30km未満']:['未','済'];
+  if(kind==='distance'||kind==='paid'||kind==='lodging'){
+    const options=kind==='distance'?['未確認','片道100km以上','片道100km未満','30km以上','30km未満']:
+      kind==='lodging'?['なし','指定地域','指定地域外']:['未','済'];
+    if(value&&!options.includes(value))options.push(value);
     return '<label class="finance-field"><span>'+caption+'</span><select '+common+'>'+
       options.map(x=>'<option value="'+escapeHtml(x)+'"'+((value||options[0])===x?' selected':'')+'>'+escapeHtml(x)+'</option>').join('')+
       '</select></label>';
@@ -236,6 +238,7 @@ function openFinanceForm(kind,editId=''){
   const status=kind==='receipt'?financeUi.overview:financeUi.mine;
   if(status&&status.setupRequired){showToast('経理用DBが未初期化です。管理者にDB更新をご依頼ください');return;}
   financeActiveForm={kind:kind,key:financeNewKey(),editId:editId||'',source:source||{},changed:false};
+  financeUi.travelEstimate=null;financeUi.invoiceIssuer=null;
   if(kind==='expense'||kind==='travel'){navigate('financeEntry');return;}
   const title=editId?'修正して再申請':({expense:'経費精算申請',travel:'出張報告',receipt:'レシート・経費記録'}[kind]);
   const root=ensureModal();
@@ -245,7 +248,8 @@ function openFinanceForm(kind,editId=''){
     '<button type="button" class="icon-button" onclick="financeCloseModalIfIdle()" aria-label="閉じる">×</button></div>'+
     '<form id="financeEntryForm" onsubmit="event.preventDefault();submitFinanceForm()">'+
     '<div class="finance-form-grid">'+FINANCE_FORM_FIELDS[kind].map(financeFormField).join('')+'</div>'+
-    '<p class="finance-note">'+(kind==='travel'?'日当・宿泊費は自動計算していません。金額は会社規程に従い担当者が確認してください。':
+    (kind==='receipt'?financeInvoiceLookupPanel():'')+
+    '<p class="finance-note">'+(kind==='travel'?'旅費計算は社内規程の参考値です。支給額の確定には承認と証憑確認が必要です。':
     '経費記録と精算申請を照合するには、双方に同じ証憑整理番号を入力してください。領収書画像はここでは保存されません。')+'</p>'+
     '<p id="financeFormError" role="alert" class="finance-error" hidden></p>'+
     '<div class="modal-actions"><button type="button" class="secondary-button" onclick="financeCloseModalIfIdle()">キャンセル</button>'+
@@ -281,9 +285,10 @@ function financeEntryPage(){
       "<p>必要事項を入力してください。 <em class='v15-required'>* は必須項目です。</em></p></div></div>",
     "<div class='finance-form-grid v15-finance-fields'>",
       FINANCE_FORM_FIELDS[a.kind].map(x=>financeFormField(x,values)).join(''),"</div>",
+    exp?'':financeTravelEvidencePanel(),
     "<p class='v15-helper-note'>",
       exp?'領収書原本は社内規程に従って保管し、証憑整理番号を入力してください。':
-          '日当・宿泊手当は現在自動計算していません。会社規程と照合してください。',"</p>",
+          '旅費規程（2025-12-01）から参考計算と根拠を表示できます。承認前に確認してください。',"</p>",
     "<p id='financeFormError' role='alert' class='finance-error' hidden></p></section>",
     "<aside class='v15-entry-side'>",
     "<section class='card v15-entry-support'><div class='v15-section-heading'>",
@@ -313,6 +318,11 @@ function financeMarkEntryDirty(){
   const a=financeActiveForm;
   if(!a||state.page!=='financeEntry')return;
   a.changed=true;
+  if(a.kind==='travel'){
+    financeUi.travelEstimate=null;
+    const expl=document.getElementById('financeTravelExplanation');
+    if(expl)expl.textContent='入力内容を変更しました。計算根拠を再確認してください。';
+  }
   const amount=document.getElementById('fin-'+(a.kind==='expense'?'amount':'spentAmount'));
   const date=document.getElementById('fin-'+(a.kind==='expense'?'usedOn':'startsOn'));
   const value=document.getElementById('financeEntryAmount'),day=document.getElementById('financeEntryDate');
@@ -548,7 +558,7 @@ function financeDetailRows_(kind,item){
     travel:[['出張者',item.employeeName],['役職',item.title],['出発日',item.startsOn],
       ['出発時刻',item.startsAt],['帰着日',item.endsOn],['帰着時刻',item.endsAt],
       ['出張先',item.destination],['出張内容',item.purpose],['報告・成果',item.outcome],
-      ['30km区分',item.distanceCategory],['使用金額',financeYen(item.spentAmount)],
+      ['片道距離区分',item.distanceCategory],['使用金額',financeYen(item.spentAmount)],
       ['宿泊地域',item.lodgingArea],['宿泊日数',item.nights],
       ['時間帯手当',item.timeAllowance],['日当区分',item.dailyCategory],
       ['支給希望額',financeYen(item.requestedAllowance)],['備考',item.note],
@@ -743,6 +753,7 @@ function financeOverviewRows(kind){
 }
 function financePage(){
   if(!financeAccessAllowed())return pageHead('経理','この画面を表示する権限がありません。');
+  if(financeUi.insightMode)return financeInsightsPage();
   const original=financeUi.overview, demo=!!financeUi.demo,d=financeDisplayedOverview_(),
     tab=financeUi.tab,ready=!!(d&&!d.setupRequired),totals=d&&d.totals||{};
   const pendingExpense=ready?Number(totals.expensePending||0):0,
@@ -791,6 +802,7 @@ function financePage(){
     '<header class="v15-page-hero finance-page-hero"><div><span class="v15-kicker">FM WORKS / 経理</span>'+
       '<h1>経理・精算管理</h1><p>一覧を選んで詳細を確認。承認・精算を迷わず進められます。</p></div>'+
       '<div class="finance-hero-actions">'+
+      '<button type="button" class="secondary-button" onclick="financeOpenInsights()">支出分析・旧台帳</button>'+
       '<button type="button" class="secondary-button finance-demo-toggle" aria-pressed="'+(demo?'true':'false')+
       '" onclick="financeToggleDemo()">'+(demo?'実データに戻る':'サンプル表示')+'</button>'+
       '<button type="button" class="primary-button" onclick="openFinanceForm(\'receipt\')"'+
