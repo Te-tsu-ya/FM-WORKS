@@ -10,6 +10,7 @@ function cfbReset_(){
 }
 function cfbKey_(){return 'CFB-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15);}
 function cfbRpc_(method,params,onSuccess,onFailure){
+ if(cfbUi.demo)throw Error('架空データ表示中は本番DBに通信しません。');
  const token=state.sessionToken;
  const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run);
  const prepared=runner.withSuccessHandler(value=>{if(token===state.sessionToken)onSuccess(value);})
@@ -17,6 +18,7 @@ function cfbRpc_(method,params,onSuccess,onFailure){
  return params===undefined?prepared[method](token):prepared[method](token,params);
 }
 function cfbLoad_(force){
+ if(cfbUi.demo)return;
  if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.loading||cfbUi.importing)return;
  const year=cashFlowUi.year,token=state.sessionToken,seq=++cfbUi.seq;
  if(!force&&cfbUi.loaded&&cfbUi.year===year)return;
@@ -34,6 +36,7 @@ function cfbLoad_(force){
  });
 }
 function cfbReload_(){
+ if(cfbUi.demo){openConfirmDialog('架空データの初期化','操作中の架空データを最初の状態に戻します。','最初から試す',()=>cfbDemoActivate_(cashFlowUi.year));return;}
  cfbUi.loaded=null;cfbUi.error='';cfbUi.planForm=null;cfbUi.accountForm=null;cfbUi.preview=null;cfbUi.csvRows=null;cfbUi.csvMap=null;
  cfbLoad_(true);
  cashFlowLoad_(true);
@@ -110,6 +113,7 @@ function cfbSaveClose_(){
  const ui=cfbUi;if(ui.busy||!ui.loaded||!cashFlowAllowed_())return;
  if(!ui.closeKey)ui.closeKey=cfbKey_();
  const year=cashFlowUi.year,rev=ui.loaded.closing.revision,payload={fiscalYear:year,through:ui.closeMonth,revision:rev,requestKey:ui.closeKey};
+ if(ui.demo){openConfirmDialog('架空の実績確定','選択した月まで架空の銀行明細を確定として試します。','画面内で確定',()=>{ui.loaded.closing={through:ui.closeMonth,revision:rev+1};ui.notice='架空データの確定月を変更しました。';renderPageIfActive('finance');});return;}
  openConfirmDialog('実績確定月の変更','確定月までの金融機関明細をすべて取り込み、口座間振替も確認しましたか？ 確定済みの月の見込みに実績を使います。','確定月を保存',()=>{
   ui.busy=true;renderPageIfActive('finance');
   cfbRpc_('saveCashFlowClosedThrough',payload,result=>{
@@ -147,6 +151,7 @@ function cfbNewAccount_(id){
 }
 function cfbSaveAccount_(){
  const form=cfbUi.accountForm;if(!form||cfbUi.busy)return;
+ if(cfbUi.demo){cfbDemoAccountSave_(form);return;}
  if(!form.requestKey)form.requestKey=cfbKey_();
  cfbUi.busy=true;cfbUi.error='';
  cfbRpc_('saveCashFlowBankAccount',form,res=>{
@@ -161,6 +166,7 @@ function cfbNewPlan_(id){
 }
 function cfbSavePlan_(){
  const f=cfbUi.planForm;if(!f||cfbUi.busy)return;
+ if(cfbUi.demo){cfbDemoPlanSave_(f);return;}
  if(!f.requestKey)f.requestKey=cfbKey_();
  cfbUi.busy=true;cfbUi.error='';
  cfbRpc_('saveCashFlowScheduledItem',f,res=>{
@@ -320,6 +326,7 @@ function cfbCSVTransfer_(index,checked){
 }
 function cfbBeginImport_(){
  const ui=cfbUi;if(!ui.preview||!ui.preview.length||ui.importing||!ui.csvAccountId)return;
+ if(ui.demo){cfbDemoImport_();return;}
  ui.importing=true;ui.importAdded=0;ui.importSkipped=0;ui.importIndex=0;ui.error='';cfbImportChunk_();
 }
 function cfbImportChunk_(){
@@ -345,6 +352,7 @@ function cfbLoadAfterWrite_(){
 }
 function cfbToggleTransfer_(id,value,revision){
  openConfirmDialog('口座間振替の区分','この明細を会社内部の口座間振替として扱いますか？ 会社全体の収支合計から除外する操作です。','分類を更新',()=>{
+  if(cfbUi.demo){cfbDemoTransfer_(id,value);return;}
   cfbUi.busy=true;renderPageIfActive('finance');
   cfbRpc_('setCashFlowTransfer',{id,value,revision},()=>{cfbUi.busy=false;cfbUi.notice='内部振替の区分を更新しました。';cfbLoadAfterWrite_();},
    err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'区分を変更できませんでした。');renderPageIfActive('finance');});
@@ -358,7 +366,7 @@ function cfbCSVPage_(){
   '<option value="-1">使わない</option>'+rows[0].map((h,i)=>'<option value="'+i+'"'+(map[k]===i?' selected':'')+'>'+cfbEscape_(h||'列'+(i+1))+'</option>').join('')+
   '</select></label>').join('')+'</div>':'';
  const preview=cfbUi.preview;
- return '<section class="card cf-table-card"><h2>金融機関ごとのCSV取込</h2><p>金融機関のWeb明細からCSVをダウンロードして選択してください。ここでファイルを確認し、登録操作を行うまでDBには保存されません。</p>'+
+ return '<section class="card cf-table-card"><h2>CSVファイルから取り込む（任意）</h2><p>CSVがない場合は上の「Webページから貼り付ける」を使ってください。CSVをダウンロードできる場合はファイルを選択します。ここでファイルを確認し、登録操作を行うまでDBには保存されません。</p>'+
   '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbUi.csvAccountId=this.value;cfbUi.preview=null">'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
   '<label>CSVファイル（UTF-8 / Shift-JIS）<input type="file" accept=".csv,text/csv,text/plain" onchange="cfbChooseFile_(this)"></label></div>'+
   (rows.length?'<h3>CSV列の対応（先頭行を見出しとして利用）</h3>'+selectors+
@@ -387,10 +395,10 @@ function cfbBanksPage_(){
     '<td>'+(r.transfer?'内部振替':'通常取引')+'</td><td><button type="button" class="secondary-button" data-id="'+cfbEscape_(r.id)+'" data-rev="'+r.revision+'" onclick="cfbToggleTransfer_(this.dataset.id,'+(!r.transfer)+',Number(this.dataset.rev))">'+
     (r.transfer?'通常取引に戻す':'内部振替にする')+'</button></td></tr>').join('')||
     '<tr><td colspan="7">明細はまだありません。</td></tr>')+'</tbody></table></div></section>';
- return accounts+(data.accounts.length?cfbCSVPage_():'')+transactions;
+ return accounts+(data.accounts.length?cfbPastePanel_()+cfbCSVPage_():'')+transactions;
 }
 function cfbSetup_(){
- if(cfbUi.busy||!cashFlowAllowed_())return;
+ if(cfbUi.demo||cfbUi.busy||!cashFlowAllowed_())return;
  openConfirmDialog('資金管理の初回設定','既存データの検査・バックアップを行った後、必要なシートを追加します。既存Excelの内容は変更しません。続行しますか？','バックアップして初期設定',()=>{
   cfbUi.busy=true;cfbUi.error='';renderPageIfActive('finance');
   cfbRpc_('migrateDatabaseToCurrent',undefined,res=>{
@@ -418,7 +426,7 @@ function cfbPage_(){
  const nav='<div class="cfb-tabs">'+tabs.map(([key,name])=>'<button type="button" class="'+(ui.tab===key?'active':'')+'" aria-pressed="'+(ui.tab===key)+'" onclick="cfbSection_('+"'"+key+"'"+')">'+name+'</button>').join('')+
   '<button type="button" class="secondary-button" onclick="cfbShowOld_()">12か月の手入力・期首設定</button></div>';
  const body=ui.tab==='overview'?cfbOverview_():ui.tab==='schedules'?cfbScheduledPage_():cfbBanksPage_();
- return '<div class="cf-workspace cfb-workspace">'+header+nav+feedback+body+
+ return '<div class="cf-workspace cfb-workspace">'+header+(ui.demo?cfbDemoBanner_():'')+nav+feedback+body+
   '<p class="cf-note">金融機関の明細はCSVから読み込んだ分だけを表示します。取込漏れはゼロ円ではありません。銀行サイトとの自動連携や自動引落しは行いません。</p></div>';
 }
 </script>
