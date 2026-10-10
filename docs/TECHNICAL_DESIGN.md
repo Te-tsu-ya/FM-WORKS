@@ -2063,3 +2063,17 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Known gap: the illustrated designs include future concepts that are outside existing APIs (uploading binary files, auto-generated risk predictions, financial profitability analytics, comprehensive member assignment). Those remain unimplemented. Production authenticated browser CRUD/performance measurement is a separate acceptance gate.
 
 - 320px小画面は案件ヘッダ/基本情報帯を圧縮し、基本情報を横スワイプ表示に切り替えて作業タブの先頭が初期スクロール位置で見えるようにする。
+
+
+## v0.19.3 Project tabs and registration usability (2026-10-10)
+
+- AppProjectHub.html adds local state view handlers for taskView=board|timeline|list, resourceFilter, resourceQuery, updateFilter, and updateQuery. Existing session-scoped caches, optimistic snapshots, draft protection and server APIs are unchanged. Client filters never fetch extra data.
+- Board stages reuse ProjectHub.gs task status values; cards are read-only except existing authorized edit action. Timeline computes a linear UTC date axis from valid ISO start/due dates and renders scheduled bars with completion ratio. Unscheduled tasks remain visible in a separate list, with no invented dependency/holiday/forecast calculations.
+- Effort view uses getProjectHubDetail metrics, valid existing logs and worklogScope, retaining server filtering of byPerson and individual rows. Usage percentage is rendered only with a positive known plan. Frontend must not derive hidden per-person records from total aggregate.
+- Project resources remain ProjectHub resource documents: virtual filtering by existing kind, local title/body search, expandable escaped text, server-validated HTTPS source link, and template shortcuts. No binary upload, new Sheets, or persistent folders.
+- Shared updates remain newest 60 records, append-only. Local kind/search filtering and recent decisions use kind=決定事項, not computed AI priority or server-side notifications.
+- AppAdmin.html keeps saveProject(sessionToken,payload) and ADMIN checks while reducing first-create visible fields. Original IDs remain prjName, prjClient, prjStatus, prjStart, prjEnd, prjNote; optional inputs use details[data-form-section] and are still submitted when collapsed. Client validates name/date order, disables duplicate submission, restores control on errors, and enters the new project detail after success.
+- StylesProjectHub.html adds responsive tab boards, scroll-contained schedule, file categories, memo feed, and compact modal styling. Regression tests in scripts/test_project_hub.mjs exercise local routing/filtering, XSS escaping, modal validation and failure recovery. scripts/test_project_hub_viewport.mjs tests further 320/390/1440 widths and light/dark pages.
+- Production authentication, real GAS save behavior and user observation remain separate acceptance checks. No DB migration, live data writes, third-party synchronization or new OAuth scope is performed in this change.
+
+- Timeline guards ISO date roundtrips and rejects invalid imported dates without throwing; project master save failures preserve the common AUTH_REQUIRED / SESSION_EXPIRED handling route.

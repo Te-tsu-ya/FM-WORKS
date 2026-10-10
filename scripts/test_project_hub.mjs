@@ -123,5 +123,74 @@ assert.ok(!cr('projectHubPage()').includes('管理者ダッシュボード'),'em
 client.projectHubOpenManagement_();assert.equal(cr('projectHubUi.view'),'list','employee cannot enter manager mode');
 client.projectHubSearch_('<script>');assert.ok(!cr('projectHubPage()').includes('<script>'),'project search stays escaped');
 client.projectHubSearch_('');
+
+// Project workspace tabs must remain client-side and preserve server permissions.
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.view="detail";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');
+const projectRequestsBefore=calls.length;
+client.projectHubTab_('tasks');
+client.projectHubTaskView_('board');
+assert.ok(cr('projectHubPage()').includes('ph-kanban-board'),'tasks board displays existing records');
+client.projectHubTaskView_('timeline');
+assert.ok(cr('projectHubPage()').includes('ph-timeline-scroll'),'dated tasks render a timeline');
+client.projectHubTaskView_('list');
+assert.ok(cr('projectHubPage()').includes('ph-task-list'),'task list still available');
+assert.equal(calls.length,projectRequestsBefore,'task view changes do not fetch new data');
+client.projectHubTab_('effort');
+assert.ok(cr('projectHubPage()').includes('工数消化率'),'effort view explicitly separates consumption');
+assert.ok(cr('projectHubPage()').includes('本人のみ'),'personal worklog scope is explained');
+client.projectHubTab_('resources');
+client.projectHubResourceFilter_('要件定義書');
+assert.equal(cr('projectHubResourceMatches_(projectHubDetail_()).length'),1,'resource category filter');
+client.projectHubResourceQuery_('<script>');
+assert.ok(cr('projectHubPage()').includes('&lt;script&gt;'),'document title remains escaped after text search');
+assert.ok(!cr('projectHubPage()').includes('href="javascript:'),'resource links cannot gain javascript URL');
+client.projectHubResourceQuery_('not-found');
+assert.equal(cr('projectHubResourceMatches_(projectHubDetail_()).length'),0,'resource search handles empty results');
+client.projectHubResourceQuery_('');
+client.projectHubCreateResourceKind_('議事録');
+assert.equal(cr('projectHubUi.editor.form.resourceKind'),'議事録','document shortcut selects correct category');
+client.resetProjectHubUi();
+cr('projectHubUi.data='+JSON.stringify(workspace)+';projectHubUi.selected="PRJ-001";projectHubUi.view="detail";projectHubUi.details.set("PRJ-001",{data:'+JSON.stringify(detail)+',at:Date.now()});');
+client.projectHubTab_('updates');client.projectHubUpdateType_('決定事項');
+assert.equal(cr('projectHubUpdateVisible_(projectHubDetail_()).length'),1,'decision type filtering');
+client.projectHubUpdateQuery_('仕様');assert.equal(cr('projectHubUpdateVisible_(projectHubDetail_()).length'),1,'decision keyword search');
+client.projectHubUpdateQuery_('<script>');assert.equal(cr('projectHubUpdateVisible_(projectHubDetail_()).length'),0,'no XSS executed via search');
+client.projectHubUpdateQuick_('相談');
+assert.equal(cr('projectHubUi.editor.form.updateKind'),'相談','shared memo shortcut selects actual type');
+client.resetProjectHubUi();
+assert.equal(calls.length,projectRequestsBefore,'local tab/filter operations trigger no extra RPC');
+
+// Exercise the simplified master form without making any real DB writes.
+let modalNode={innerHTML:''};
+const fieldNodes={
+ prjName:{value:'  案件テスト  ',focus:()=>{}},prjClient:{value:'顧客A'},prjStatus:{value:'進行中'},
+ prjStart:{value:'2026-11-02'},prjEnd:{value:'2026-10-10',focus:()=>{}},prjNote:{value:'任意の詳細'},
+ prjSaveButton:{disabled:false,textContent:'登録して案件を開く'},projectMasterError:{textContent:''}
+};
+const modalContext=vm.createContext({
+ state:{page:'projects',sessionToken:'A',authAdmin:{projects:[]},data:{permissions:{adminConsole:true}}},
+ ensureModal:()=>modalNode,escapeHtml,showToast:()=>{},google:{script:{run:runner()}},
+ document:{getElementById:id=>fieldNodes[id]||null},cleanApiErrorMessage:e=>e.message
+});
+vm.runInContext(fs.readFileSync('src/AppAdmin.html','utf8').replace(/<\/?script>/g,''),modalContext);
+modalContext.openProjectModal('');
+assert.ok(modalNode.innerHTML.includes('project-master-more'),'optional fields are collapsed on first registration');
+assert.ok(modalNode.innerHTML.includes('required'),'project name is required');
+const callsBeforeInvalid=calls.length;
+modalContext.saveProjectFromModal('');
+assert.equal(calls.length,callsBeforeInvalid,'invalid date range is rejected before RPC');
+assert.match(fieldNodes.projectMasterError.textContent,/終了予定日/);
+fieldNodes.prjEnd.value='2026-12-10';
+modalContext.saveProjectFromModal('');
+assert.equal(calls.at(-1).method,'saveProject');
+assert.equal(calls.at(-1).args[1].name,'案件テスト','registration trims project name');
+assert.equal(fieldNodes.prjSaveButton.disabled,true,'duplicate submission blocked while saving');
+calls.at(-1).failure(Error('network'));
+assert.equal(fieldNodes.prjSaveButton.disabled,false,'failed save restores the form');
+const invalidSchedule={...detail,tasks:[{...detail.tasks[0],startDate:'2026-99-99',dueDate:'2026-10-31'}]};
+assert.doesNotThrow(()=>client.projectHubTaskTimeline_(invalidSchedule),'malformed imported schedule cannot crash timeline');
+assert.ok(client.projectHubTaskTimeline_(invalidSchedule).includes('開始予定日'),'invalid schedule is treated as unscheduled');
+console.log('PASS project UX: tasks board/timeline/list, effort split, document filters, shared memo filters, simple master form and failed save recovery');
+
 console.log('PASS project client: cached tabs/routes, escaped documents, retained failed forms, stable retries, stale-response and session isolation');
 export {workspace,detail,escapeHtml};
