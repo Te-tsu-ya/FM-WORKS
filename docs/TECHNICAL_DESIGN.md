@@ -2051,3 +2051,15 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - AppSomu/AppSomuGrowthの埋め込み架空レコード、demo状態、切替関数と保存禁止分岐を削除。総務はDB取得結果だけを表示し、概要と7台帳の既存ナビゲーション・保存・権限制御を維持する。
 - 確認データは本作業で接続済みSheetsへ追加済み。起動時に投入する処理やデモ専用シートは追加しない。再投入は既存IDを確認し、登録済みの同一レコードを重複作成しないこと。
 - 実DBの追加行72件・新規11シートの見出し・DB_VERSIONはコネクタから読み戻して確認。GAS認証付きブラウザーでの実保存・返却・承認は本作業環境で認証できないため、別の確認項目として残す。
+
+
+## Project experience UI v0.19.2 (2026-10-10)
+
+- `AppProjectHub.html` extends the current session-local workspace with `view=list|detail|dashboard`, query, filter, sort and 20-row display limit. `getProjectHubWorkspace` and `getProjectHubDetail` contracts are unchanged; no DB migration, permission expansion, new server API or sample data writes.
+- The landing portfolio reuses the workspace aggregate and separates work completion (%) from effort consumption (planned/actual minutes). Sorting and filtering are client-only; zero planning is rendered as "計画未設定" rather than zero completed.
+- Detail layout replaces the persistent left picker with a breadcrumb and top facts. Existing five functional tabs, optimistic read cache, conflict/retry identity, draft retention, and server-authorized edit actions are preserved.
+- Management overview is restricted by `state.data.permissions.adminConsole`. It displays only real project aggregates (count, overdue tasks, total hours, existing planned hours) and links to detail. Project-level figures do not imply permission to access restricted personal worklogs or order values.
+- `StylesProjectHub.html` provides desktop/tablet/mobile rules for portfolio rows, management tables, hero facts, and filters. The existing detail viewport test explicitly selects detail view. `test_project_hub.mjs` checks portfolio entry, sort, navigation, escape and manager access.
+- Known gap: the illustrated designs include future concepts that are outside existing APIs (uploading binary files, auto-generated risk predictions, financial profitability analytics, comprehensive member assignment). Those remain unimplemented. Production authenticated browser CRUD/performance measurement is a separate acceptance gate.
+
+- 320px小画面は案件ヘッダ/基本情報帯を圧縮し、基本情報を横スワイプ表示に切り替えて作業タブの先頭が初期スクロール位置で見えるようにする。
