@@ -317,7 +317,8 @@ function assertNoLeaveConflict_(employeeId, type, startDate, endDate, excludeReq
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 19).getDisplayValues();
+  // Fetch only this employee's rows; ignore unrelated application history.
+  const rows = readRowsByColumnValues_(sheet,3,19,[employeeId]);
   for (const r of rows) {
     if (!r[0] || r[0] === excludeRequestId || r[2] !== employeeId || !dayOffTypes.includes(r[4])) continue;
     if (approvedOnly ? !['承認済','取消申請中'].includes(r[9]) : !['承認待ち','承認済','取消申請中'].includes(r[9])) continue;

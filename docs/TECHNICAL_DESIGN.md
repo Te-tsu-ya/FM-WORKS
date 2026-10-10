@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.8  
+**文書版:** 0.17.9  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1904,3 +1904,11 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 表示台帳は先頭60件、もっと見るで60件ずつ追加。貸出可能数は貸出台帳の集計結果をWeakMapで再利用し、備品数×貸出数のループを避ける。
 - src/AppCore.html: office を 220ms の意図プリフェッチ対象に追加。他のホーム・工数・経理の読込ロジックは変更しない。
 - 品質ゲート: scripts/test_somu_integration.mjs は実Sheets模擬の読取回数、ログイン別権限、保存時のキャッシュ破棄を検査。scripts/test_somu_client.mjs は通信0のローカル再表示・60件表示・明示更新・失敗時表示維持を検査。
+
+## v0.17.9 申請・月次締めの索引付き読取と逆転期間防御（2026-10-10）
+
+- `Requests.gs:assertNoLeaveConflict_` は `readRowsByColumnValues_(sheet,3,19,[employeeId])` で対象社員行だけを取得する。`excludeRequestId`、`approvedOnly`、期間重複、同一半日種別の判定は不変。
+- `Monthly.gs:closeMonthlyPeriod` は給与対象社員IDの集合 `payrollIds` に対する `readRowsByColumnValues_(requestSheet,3,14,[...payrollIds])` を使い、既存の申請状態・対象月重複フィルタは保持する。
+- `Monthly.gs:assertMonthRangeOpen_` は正規化した日付の開始・終了を比較し、開始が終了より後であれば月ごとの反復前にエラーとする。
+- `scripts/test_request_indexing.mjs` は架空シートのRead APIをモックし、社員別索引利用、関連なし社員の除外、期間重複、月次締め、逆転期間拒否を検証。`scripts/test_logic.mjs` から統合テストを実行する。
+- APP.versionと要件定義書・技術設計書の文書版は0.17.9に同期。

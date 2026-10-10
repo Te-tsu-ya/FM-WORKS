@@ -293,7 +293,7 @@ function closeMonthlyPeriod(sessionToken, yearMonth) {
     const requestSheet=getDb_().getSheetByName('申請');
     if(requestSheet&&requestSheet.getLastRow()>=2){
       const payrollIds=new Set(employees.map(e=>e.employeeId));
-      const pending=requestSheet.getRange(2,1,requestSheet.getLastRow()-1,14).getDisplayValues()
+      const pending=readRowsByColumnValues_(requestSheet,3,14,[...payrollIds])
         .filter(r=>r[0]&&payrollIds.has(r[2])&&r[9]==='承認待ち'&&r[5]<=end&&r[6]>=start);
       if(pending.length)throw new Error('対象月に承認待ち申請が'+pending.length+'件あります。すべて処理してから締めてください。');
     }
@@ -344,8 +344,10 @@ function assertMonthOpenForDate_(date, operationLabel) {
 }
 
 function assertMonthRangeOpen_(startDate,endDate,operationLabel){
-  let ym=normalizeDate_(startDate).slice(0,7);
-  const endYm=normalizeDate_(endDate||startDate).slice(0,7);
+  const firstDate=normalizeDate_(startDate),lastDate=normalizeDate_(endDate||startDate);
+  if(firstDate>lastDate)throw new Error('対象期間の開始日と終了日を確認してください。');
+  let ym=firstDate.slice(0,7);
+  const endYm=lastDate.slice(0,7);
   while(true){
     if(getMonthlyCloseStatusInternal_(ym).closed){
       throw new Error(ym+'は月次締め済みのため'+(operationLabel||'変更')+'できません。');
