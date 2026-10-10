@@ -1937,6 +1937,13 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 複合語検索は業務フォルダやタグ等の軽量メタデータと、本文TextFinderの一致行番号を語ごとに和集合にしてから、語間の共通部分を計算する。権限外の文書は事前・返却前の双方で除外する。
 - companyDocsDropHiddenSelection_ が絞り込み後の不一致プレビューを解除する。AppShell.performLogout も companyDocsConfirmLogout_ を経由し、未保存文書の破棄を明示確認する。
 
+## 月次確認保存のB列社員ID索引による行特定（2026-10-10）
+
+- `Monthly.gs:confirmMonthlyReview` は `getRange(2,2,lastRow-1,1).createTextFinder(employee.employeeId).matchEntireCell(true).findAll()` で候補行を取得し、それぞれのA列の年月を `getDisplayValue()` で照合する。
+- 対象行を見つけた場合だけA:Jの10列を1行取得し、`createdAt` と監査前状態を保持して更新。なければ末尾に10列を新規記録する。従来の `getRange(2,1,lastRow-1,10)` 全件転送は廃止する。
+- `scripts/test_monthly_review_index.mjs` のNode VMモックを既存 `scripts/test_data_access_performance.mjs` から実行し、同社員別月・別社員同月・月次未完了・当月拒否を検査する。
+- 権限・月次統計・監査ログ・DBスキーマに変更はない。具体的なGAS実測値は未測定。
+
 ## 経理アドバイザーの実装（2026-10-10）
 
 - **src/FinanceAdvisor.gs**: read-only `getFinanceSpendingInsights(sessionToken,{year})`、`financeSpendingDigest_`、`financeTravelExplanation_`、`getFinanceTravelExplanation`、`lookupFinanceInvoiceIssuer`。保存APIは既存Finance.gsのまま。旧台帳へのWrite/Append/Deleteは行わない。
