@@ -38,6 +38,8 @@ jobs:
         run: node scripts/test_cashflow_bank.mjs
       - name: Verify bank CSV import UI, schedules and 12-month forecast
         run: node scripts/test_cashflow_bank_client.mjs
+      - name: Verify copied bank statements and isolated sample finance flows
+        run: node scripts/test_cashflow_sandbox.mjs
       - name: Test employee estimates and formal issuance
         run: node scripts/test_quote_integration.mjs
       - name: Test rotary loader lifecycle and all GAS entrypoints

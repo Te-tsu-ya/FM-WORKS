@@ -30,6 +30,7 @@ function cashFlowChangeYear_(value){
  const y=Number(value),input=document.getElementById('cfYear');
  if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
  if(y===cashFlowUi.year)return;
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(y));return;}
  cashFlowDiscard_(()=>{
   cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;
   cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
@@ -39,7 +40,8 @@ function cashFlowChangeYear_(value){
  if(input)input.value=String(cashFlowUi.year);
 }
 function cashFlowLoad_(force=false){
- const ui=cashFlowUi;if(!ui.open||!cashFlowAllowed_()||ui.loading||ui.busy)return;
+ const ui=cashFlowUi;if(typeof cfbUi!=='undefined'&&cfbUi.demo)return;
+ if(!ui.open||!cashFlowAllowed_()||ui.loading||ui.busy)return;
  if(!force&&ui.data&&ui.data.fiscalYear===ui.year)return;
  const token=state.sessionToken,year=ui.year,seq=++ui.seq;
  ui.loading=true;ui.error='';renderPageIfActive('finance');
@@ -55,6 +57,7 @@ function cashFlowLoad_(force=false){
  }).getCashFlowYear(token,year);
 }
 function cashFlowReload_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(cashFlowUi.year));return;}
  cashFlowDiscard_(()=>{
   cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowLoad_(true);
  });
@@ -126,6 +129,7 @@ function cashFlowEdit_(node){
  ui.dirty=true;ui.key='';ui.error='';cashFlowRefresh_();
 }
 function cashFlowSave_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cfbDemoSaveYear_();return;}
  const ui=cashFlowUi;
  if(!cashFlowAllowed_()||!ui.draft||!ui.data||ui.data.setupRequired||!ui.dirty||ui.busy)return;
  if(cashFlowInt_(ui.draft.openingBalance,true)===null){ui.error='期首残高を入力してください。';renderPageIfActive('finance');return;}
@@ -173,7 +177,7 @@ function cashFlowPage_(){
  const feedback=(u.error?'<p class="finance-error" role="alert">'+escapeHtml(u.error)+'</p>':'')+
   (u.auditWarning?'<p class="finance-error" role="alert">'+escapeHtml(u.auditWarning)+'</p>':'')+
   (u.notice?'<p class="cf-success" role="status">'+escapeHtml(u.notice)+'</p>':'');
- return '<div class="cf-workspace">'+header+'<section class="card cf-toolbar"><label>期首現預金残高（12月1日／円）<input type="number" step="1" min="-999999999999" max="999999999999" data-key="openingBalance" value="'+escapeHtml(d.openingBalance==null?'':d.openingBalance)+'" placeholder="例：1000000" oninput="cashFlowEdit_(this)"'+(u.busy?' disabled':'')+'></label>'+
+ return '<div class="cf-workspace">'+header+(typeof cfbUi!=='undefined'&&cfbUi.demo?cfbDemoBanner_():'')+'<section class="card cf-toolbar"><label>期首現預金残高（12月1日／円）<input type="number" step="1" min="-999999999999" max="999999999999" data-key="openingBalance" value="'+escapeHtml(d.openingBalance==null?'':d.openingBalance)+'" placeholder="例：1000000" oninput="cashFlowEdit_(this)"'+(u.busy?' disabled':'')+'></label>'+
   '<div class="cf-save"><span id="cfStatus" role="status">'+(u.dirty?'未保存の変更あり':u.data.record.exists?'保存済み':'未作成')+'</span><button type="button" id="cfSave" class="primary-button" onclick="cashFlowSave_()"'+(!u.dirty||u.busy?' disabled':'')+'>'+(u.busy?'保存中…':'年度を保存')+'</button></div></section>'+feedback+
   '<div class="cf-metrics" id="cfMetrics">'+cashFlowMetricHtml_(s)+'</div>'+
   '<section class="card cf-chart"><h2>月末残高の推移</h2><div id="cfChart">'+cashFlowChartHtml_(s)+'</div></section>'+

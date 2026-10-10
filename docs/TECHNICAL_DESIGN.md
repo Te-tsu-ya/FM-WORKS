@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.22.0
+**文書版:** 0.22.1
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.22.0`
+`APP.version = 0.22.1`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2160,3 +2160,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 取引は銀行口座・日付・金額・摘要・銀行識別子/残高・同一取引内連番からSHA-256を算出し、再取込を排除。実績確定月までは明細、以降は入出金予定を見込み計算に採用する。
 
 - 取引CSVを最大200件の小分けで、SheetsのsetValuesによるまとめ書きとして実装。最大行数を超えるときはinsertRowsAfterで拡張し、1行ごとappendRowによる待ち時間を避ける。
+
+## v0.22.1 デモ資金繰り・Webページ貼付
+- `AppCashFlowSandbox.html` が `cfbDemoCreate_` の固定的な架空データを生成し、既存 `cfbForecast_` を使って年次/月次見込みを表示する。独立したスプレッドシート複製なしで操作できる。
+- `cfbUi.demo` が真の間は `cashFlowLoad_` / `cfbLoad_` がサーバーRPCしない。 `cfbRpc_` 自体もfail closed。保存ボタン・入金予定・銀行明細・振替・確定月・期首残高は画面内の一時状態だけを更新する。
+- `cfbParseBankPaste_` はタブ・空白・CSVの銀行Webコピーを行配列へ変換し、 `cfbPastePreview_` が既存のCSV列対応・取込前プレビューに接続。バリデーションと明示取込のAPI規則は従来どおり。
+- 重要な財務情報はブラウザの永続保存・ログ出力をしない。初回DB移行は既存の管理者バックアップ付き操作が必要。
