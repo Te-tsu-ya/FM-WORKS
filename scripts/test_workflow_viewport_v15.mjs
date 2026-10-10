@@ -118,7 +118,10 @@ for(const [width,height,kind,theme] of cases){
   'rootWidth:root.getBoundingClientRect().width,contentWidth:content.getBoundingClientRect().width,'+
   'buttons:buttons.length,inputs:inputs.length,'+
   'shortestButton:buttons.filter(x=>x.getBoundingClientRect().height>0).map(x=>x.getBoundingClientRect().height).sort((a,b)=>a-b)[0]||0};'+
-  'parent.postMessage({kind:"WORKFLOW_QA",info},"*");</script></body></html>';
+  'if(root.classList.contains("finance-v0173")){'+
+   'const meter=root.querySelector(".finance-priority-stats");'+
+   'info.metricColumns=meter?getComputedStyle(meter).gridTemplateColumns.split(" ").filter(Boolean).length:0;}'+
+   'parent.postMessage({kind:"WORKFLOW_QA",info},"*");</script></body></html>';
  fs.writeFileSync(frame,html);
  const host='<html><head><meta charset="utf-8"><script>'+
   'window.addEventListener("message",e=>{const n=document.getElementById("qa");'+
@@ -148,6 +151,8 @@ for(const [width,height,kind,theme] of cases){
   if(['expense','travel'].includes(kind)&&result.inputs<6)errors.push('missing form fields');
   if(kind.startsWith('finance')&&result.inputs<3)errors.push('missing finance search controls');
   if(kind==='admin'&&result.inputs<3)errors.push('missing master form controls');
+   if(kind.startsWith('finance')&&width>=1200&&result.metricColumns!==4)errors.push('desktop finance KPIs are not one row');
+   if(kind.startsWith('finance')&&width<=760&&result.metricColumns!==2)errors.push('mobile finance KPI grid is not two columns');
   if(result.shortestButton<25)errors.push('button below 25px');
   console.log((errors.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+
     (errors.length?' checks='+errors.join(', '):''));

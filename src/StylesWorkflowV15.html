@@ -795,4 +795,14 @@
 }
 @media(prefers-reduced-motion:reduce){.finance-v0173 .finance-action-stat{transition:none}}
 
+
+/* Screen-captured QA correction: 1366x768 must keep all four KPIs on one row */
+@media(min-width:1200px){
+ .finance-v0173 .finance-priority-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ .finance-v0173 .finance-demo-banner{display:grid;gap:4px;padding:9px 11px;font-size:11px}
+ .finance-v0173 .finance-priority-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 </style>

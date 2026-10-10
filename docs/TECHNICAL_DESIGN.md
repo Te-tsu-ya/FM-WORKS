@@ -1786,3 +1786,7 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 集計：現行getFinanceOverviewのtotalsで経費承認待ち、出張承認待ち、精算待ち（経費／出張内訳）、経費・出張・経費記録の総件数を計算。証憑要確認だけはexpensesの現行取得範囲に含まれるreceiptMatchesにより計算し、全件数と区別する。照合は会計仕訳の証明ではない旨を注記する。
 - 変更境界：src/AppFinance.html、src/StylesWorkflowV15.htmlの.finance-v0173限定スタイル、2設計書、test_client_contract.mjs、test_workflow_viewport_v15.mjsを変更する。Finance.gs、Schema.gs、AppQuotes.html、AppDocuments.html、Code.gs、共通Styles.htmlは変更しない。v0.17.2の見積デモ表示機能は保持する。
 - 検証：既存Node VM契約・架空経理統合テスト・文書同期テスト・Chromiumのライト/ダーク・1366×768/1600×900/390×844/320×700 viewportテストを実行。CIが失敗した場合はmainに取り込まず、実DBを変更しない。
+
+### v0.17.3 スクリーンショット検証による調整
+
+- scripts/test_workflow_viewport_v15.mjs の iframe 内で finance-priority-stats の computedStyle.gridTemplateColumns を計測し、PC（1200px以上）は4列、スマホ（760px以下）は2列を必須化する。スクリーンショットで確認された1366px時の2段化を防止する。
