@@ -8,12 +8,14 @@ function projectAdvancedLoad_(force=false){
  const ui=projectAdvancedUi;
  if(!force&&ui.id===id&&ui.identity===identity&&ui.data&&Date.now()-ui.at<120000)return;
  if(ui.loading)return;
- ui.id=id;ui.identity=identity;ui.loading=true;ui.error='';
+ ui.id=id;ui.identity=identity;ui.loading=true;ui.error='';const started=Date.now();
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(ui!==projectAdvancedUi||identity!==projectHubIdentity_()||ui.id!==id)return;
+  if(typeof projectHubTimingRecord_==='function')projectHubTimingRecord_('詳細管理',started,!!result&&!result.setupRequired);
   ui.loading=false;ui.data=result;ui.at=Date.now();renderPageIfActive('projects');
  }).withFailureHandler(err=>{
   if(identity!==projectHubIdentity_()||ui.id!==id)return;
+  if(typeof projectHubTimingRecord_==='function')projectHubTimingRecord_('詳細管理',started,false);
   ui.loading=false;ui.error=cleanApiErrorMessage(err,'案件の拡張データを取得できませんでした。');renderPageIfActive('projects');
  }).getProjectAdvanced(state.sessionToken,id);
 }
@@ -165,7 +167,7 @@ function projectAdvancedPage_(d){
  }
  if(ui.loading)return '<div class="ph-panel ph-empty" role="status">詳細管理を読み込み中です…</div>';
  if(ui.error)return `<div class="ph-panel ph-empty" role="alert">${escapeHtml(ui.error)}<button type="button" onclick="projectAdvancedLoad_(true)">再試行</button></div>`;
- if(ui.data.setupRequired)return `<div class="ph-panel ph-setup"><h3>データの更新が必要です</h3><p>管理者は「管理・設定 → 運用・労務 → DBスキーマ更新」から、バックアップ確認後にDBを更新してください。</p><small>${escapeHtml((ui.data.missing||[]).join('、'))}</small></div>`;
+ if(ui.data.setupRequired)return `<div class="ph-panel ph-setup"><h3>追加管理機能のDB更新が必要です</h3><p>管理者が最新DBへ更新するまで、作業別工数・資料添付・工程依存・通知既読・案件原価は利用できません。既存の勤怠・工数は引き続き利用できます。</p>${state.data&&state.data.permissions&&state.data.permissions.adminConsole?`<button type="button" class="secondary-button" onclick="setAdminTab('operation')">運用・労務でバックアップ付きDB更新へ</button>`:''}<small>${escapeHtml((ui.data.missing||[]).join('、'))}</small></div>`;
  const tabs=[['dependencies','工程・依存関係'],['files','添付ファイル'],...(ui.data.isAdmin?[['cost','予算・原価']]:[])];
  return `<section class="ph-advanced"><div class="ph-panel-heading"><div><h2>プロジェクト詳細管理</h2><p class="ph-help">作業の前提条件・作業別工数・非公開ファイル・予算情報を管理します。</p></div><button type="button" class="secondary-button" onclick="projectAdvancedLoad_(true)">最新に更新</button></div>
  <div class="ph-display-tabs" role="group" aria-label="詳細管理の切替">${tabs.map(([id,label])=>`<button type="button" class="${ui.mode===id?'is-active':''}" onclick="projectAdvancedMode_('${id}')">${label}</button>`).join('')}</div>
