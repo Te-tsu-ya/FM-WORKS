@@ -22,7 +22,7 @@ function financeAdvisorNumber_(value){
   return Number.isFinite(n)?n:null;
 }
 function financeSpendingDigest_(rows,year){
-  const totals={months:{},payers:{},vendors:{},items:{}},records=[];
+  const totals={months:Object.create(null),payers:Object.create(null),vendors:Object.create(null),items:Object.create(null),payerMonths:Object.create(null)},records=[];
   let count=0,total=0,skipped=0;
   (rows||[]).forEach(row=>{
     const dateText=String(row[0]||'').trim();
@@ -39,6 +39,10 @@ function financeSpendingDigest_(rows,year){
       const entry=obj[key]||(obj[key]={name:key,amount:0,count:0});
       entry.amount+=amount;entry.count++;
     });
+    const payerMonthKey=ym+'|'+payer;
+    if(!totals.payerMonths[payerMonthKey])totals.payerMonths[payerMonthKey]={month:ym,payer,amount:0,count:0};
+    totals.payerMonths[payerMonthKey].amount+=amount;
+    totals.payerMonths[payerMonthKey].count++;
     count++;total+=amount;
     // Only a bounded preview is sent. Summary counts reflect *all* rows.
     records.push({date:m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0'),
@@ -46,8 +50,11 @@ function financeSpendingDigest_(rows,year){
       invoiceNo:String(row[3]||'').slice(0,32),note:String(row[6]||'').slice(0,140)});
   });
   const rank=map=>Object.values(map).sort((a,b)=>b.amount-a.amount||a.name.localeCompare(b.name,'ja'));
+  const topPayers=rank(totals.payers).slice(0,30),selected=new Set(topPayers.map(x=>x.name));
+  const payerMonths=Object.values(totals.payerMonths)
+    .filter(x=>selected.has(x.payer)).sort((a,b)=>a.month.localeCompare(b.month)||a.payer.localeCompare(b.payer,'ja'));
   return {year,count,total,skipped,months:rank(totals.months).sort((a,b)=>a.name.localeCompare(b.name)),
-    payers:rank(totals.payers).slice(0,30),vendors:rank(totals.vendors).slice(0,30),
+    payers:topPayers,payerMonths,vendors:rank(totals.vendors).slice(0,30),
     items:rank(totals.items).slice(0,30),
     records:records.sort((a,b)=>b.date.localeCompare(a.date)).slice(0,160),truncated:count>160,
     source:'LEGACY_ONLY',sourceLabel:'旧・事務所経費台帳（読み取り専用）'};
@@ -201,7 +208,9 @@ function lookupFinanceInvoiceIssuer(sessionToken,number){
     cache.put(key,JSON.stringify(result),21600);
     return result;
   }catch(e){
-    console.error('official invoice lookup failed',String(e));
+    // Network errors may contain the request URL, including the private application ID.
+    // Never log the exception text or the full URL.
+    console.error('NTA invoice lookup failed (transport or response validation)');
     return {status:'ERROR',number:normalized,source:FINANCE_NTA_PUBLIC_URL,
       message:'国税庁の情報取得に失敗しました。公式サイトから確認してください。'};
   }

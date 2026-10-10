@@ -375,6 +375,17 @@ ok('legacy expense report totals all 2026 purchases without combining current ex
  ledgerReport.payers.length===2&&ledgerReport.records.length===2&&legacyWrites===0);
 const previousYear=advisor.getFinanceSpendingInsights('GENERAL',{year:2025});
 ok('legacy report year picker isolates earlier entries',previousYear.count===1&&previousYear.total===8000);
+ok('per-person monthly buckets match source rows and reconcile to annual totals',
+ ledgerReport.payerMonths.length===2&&
+ ledgerReport.payerMonths.find(x=>x.month==='2026-09'&&x.payer==='架空社員A')?.amount===1200&&
+ ledgerReport.payerMonths.find(x=>x.month==='2026-10'&&x.payer==='架空社員B')?.amount===3000&&
+ ledgerReport.payerMonths.reduce((sum,x)=>sum+x.amount,0)===ledgerReport.total);
+const reservedKeyReport=advisor.financeSpendingDigest_([
+ ['2026/10/05','','__proto__','','試験','¥1,200','','constructor','現金','済']
+],2026);
+ok('reserved prototype names in vendor and payer cannot corrupt financial aggregates',
+ reservedKeyReport.total===1200&&reservedKeyReport.vendors[0].name==='__proto__'&&
+ reservedKeyReport.payers[0].name==='constructor');
 denied('non-finance employee cannot query other peoples purchases',
  ()=>advisor.getFinanceSpendingInsights('STAFF',{year:2026}),/権限/);
 denied('invalid spending report years are rejected',()=>advisor.getFinanceSpendingInsights('ADMIN',{year:1900}),/年/);
@@ -415,6 +426,13 @@ const knownIssuer=advisor.lookupFinanceInvoiceIssuer('ADMIN','T1234567890123');
 ok('configured issuer lookup returns only data actually supplied by official API response',
  knownIssuer.status==='FOUND'&&knownIssuer.name==='架空の照会結果'&&
  invoiceFetches===1&&!('apiId' in knownIssuer));
+const originalFetch=ctx.UrlFetchApp.fetch,originalConsole=ctx.console,logged=[];
+ctx.UrlFetchApp.fetch=()=>{throw Error('transport error: https://example.invalid/?id='+invoiceApiId)};
+ctx.console={error:(...args)=>logged.push(args.join(' '))};
+const failedIssuer=advisor.lookupFinanceInvoiceIssuer('ADMIN','T9876543210987');
+ctx.UrlFetchApp.fetch=originalFetch;ctx.console=originalConsole;
+ok('API transport errors never log the private application ID',
+ failedIssuer.status==='ERROR'&&!logged.join('\n').includes(invoiceApiId));
 denied('ordinary staff cannot perform privileged official issuer lookups',
  ()=>advisor.lookupFinanceInvoiceIssuer('STAFF','T1234567890123'),/権限/);
 ok('advisor left all original accounting and source data unchanged',

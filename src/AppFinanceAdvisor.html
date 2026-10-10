@@ -68,10 +68,12 @@ function financeInsightsPage(){
   else if(financeUi.insightError)content='<div class="finance-error" role="alert">'+escapeHtml(financeUi.insightError)+
     ' <button type="button" class="secondary-button" onclick="financeLoadInsights()">再試行</button></div>';
   else if(ok){
-    const maxMonth=Math.max(1,...data.months.map(x=>Math.max(0,x.amount)));
+    const selectedPayer=financeUi.insightPayer;
+    const monthlyRows=selectedPayer?(data.payerMonths||[]).filter(x=>x.payer===selectedPayer):(data.months||[]);
+    const maxMonth=Math.max(1,...monthlyRows.map(x=>Math.max(0,x.amount)));
     const months=Array.from({length:12},(_,i)=>{
       const name=year+'-'+String(i+1).padStart(2,'0');
-      const row=(data.months||[]).find(x=>x.name===name)||{amount:0,count:0};
+      const row=monthlyRows.find(x=>(x.name||x.month)===name)||{amount:0,count:0};
       return '<div class="finance-advisor-month"><span>'+String(i+1)+'月</span>'+
         '<div class="finance-advisor-bar-track"><span style="width:'+
         Math.min(100,Math.max(0,Math.round(Math.max(0,row.amount)/maxMonth*100)))+'%"></span></div>'+
@@ -90,10 +92,12 @@ function financeInsightsPage(){
       '<p>'+data.count+'件を集計／会計ソフトの決算金額ではありません</p></div>'+
       '<div class="card"><small>登録件数</small><strong>'+data.count+'件</strong>'+
       '<p>支払者別・取引先別・購入品目別に確認</p></div></div>'+
-      '<div class="finance-advisor-charts"><section class="card"><h2>月別の支出</h2>'+
+      '<div class="finance-advisor-charts"><section class="card"><h2>月別の支出（'+
+      (selectedPayer?'支払者：'+escapeHtml(selectedPayer):'全員合計')+'）</h2>'+
       '<div class="finance-advisor-months">'+months+'</div></section>'+
       '<section class="card"><h2>支払者別の支出</h2><p>支払者は購入した人と同一とは限りません。</p>'+
-      '<div class="finance-advisor-payers">'+payers+'</div></section></div>'+
+      '<div class="finance-advisor-payers">'+payers+'</div>'+
+      '<small>支払者を選ぶと左側の月別集計と支出明細を絞り込みます。</small></section></div>'+
       '<div class="finance-advisor-charts"><section class="card"><h2>支払先トップ8</h2><ol class="finance-advisor-ranking">'+vendors+
       '</ol></section><section class="card"><h2>購入品目トップ6</h2><ol class="finance-advisor-ranking">'+items+
       '</ol><small>元台帳の「経費種別」は年月のため、勘定科目として分類していません。</small></section></div>'+
