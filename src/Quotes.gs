@@ -163,17 +163,39 @@ function getQuote(sessionToken,id){
   return quoteHeaderAndLines_(header);
 }
 function quoteReplaceDetails_(id,lines){
-  const sh=quoteModelSheet_('detail'),model=QUOTE_MODEL.detail,last=sh.getLastRow();
+  const sh=quoteModelSheet_('detail'),width=QUOTE_MODEL.detail.keys.length,last=sh.getLastRow();
+  const started=Date.now(),matched=[];
+  // Scan only the ID column. Keep unrelated quotes untouched even when rows are interleaved.
   if(last>1){
-    const all=sh.getRange(2,1,last-1,model.keys.length).getDisplayValues();
-    for(let i=all.length-1;i>=0;i--){
-      if(all[i][0]===id)sh.deleteRow(i+2);
-    }
+    sh.getRange(2,1,last-1,1).getDisplayValues().forEach((row,i)=>{
+      if(String(row[0])===String(id))matched.push(i+2);
+    });
   }
-  if(lines.length){
-    const start=sh.getLastRow()+1;
-    sh.getRange(start,1,lines.length,model.keys.length).setValues(lines.map(x=>quoteRowArray_('detail',Object.assign({quoteId:id},x))));
+  const rows=lines.map(x=>quoteRowArray_('detail',Object.assign({quoteId:id},x)));
+  const kept=Math.min(matched.length,rows.length);
+  let writeBlocks=0,deleteBlocks=0;
+  // Reuse existing positions instead of deleting and appending every row on every save.
+  for(let i=0;i<kept;){
+    let j=i+1;
+    while(j<kept&&matched[j]===matched[j-1]+1)j++;
+    sh.getRange(matched[i],1,j-i,width).setValues(rows.slice(i,j));
+    writeBlocks++;i=j;
   }
+  // Delete only the surplus owned rows, in reverse contiguous blocks so positions remain valid.
+  const surplus=matched.slice(kept);
+  for(let i=surplus.length-1;i>=0;){
+    const endRow=surplus[i];let firstRow=endRow;
+    while(i>0&&surplus[i-1]===firstRow-1){i--;firstRow--;}
+    sh.deleteRows(firstRow,endRow-firstRow+1);
+    deleteBlocks++;i--;
+  }
+  // Growing a quote adds only the additional rows in one batch.
+  if(rows.length>kept){
+    sh.getRange(sh.getLastRow()+1,1,rows.length-kept,width).setValues(rows.slice(kept));
+    writeBlocks++;
+  }
+  if(typeof logPerformance_==='function')
+    logPerformance_('quoteDetailSave',started,800,{previous:matched.length,current:rows.length,writeBlocks,deleteBlocks});
 }
 function quoteUniqueRequest_(rows,key,user){
   const existing=rows.find(x=>x.requestKey===key);

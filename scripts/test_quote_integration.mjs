@@ -13,12 +13,14 @@ class Sheet{
  getLastRow(){return this.rows.length}
  getMaxColumns(){return 45}
  appendRow(row){this.rows.push(row.slice())}
- deleteRow(n){this.rows.splice(n-1,1)}
+ deleteRow(n){this.singleDeleteCalls=(this.singleDeleteCalls||0)+1;this.rows.splice(n-1,1)}
+ deleteRows(start,count){this.bulkDeleteCalls=(this.bulkDeleteCalls||0)+1;this.rows.splice(start-1,count)}
  getRange(row,col,height=1,width=1){const self=this;
   const data=()=>Array.from({length:height},(_,r)=>Array.from({length:width},(_,c)=>(self.rows[row+r-1]||[])[col+c-1]??''));
   return {getValues:data,getDisplayValues:()=>data().map(a=>a.map(String)),
    createTextFinder:value=>({matchEntireCell(){return this},findNext(){const found=self.rows.findIndex((r,i)=>i>0&&String(r[col-1])===String(value));return found<0?null:{getRow:()=>found+1}}}),
    setValues:next=>{if(next.length!==height||next.some(r=>r.length!==width))throw Error('Wrong setValues size');
+    self.writeCalls=(self.writeCalls||0)+1;
     for(let r=0;r<height;r++){let ix=row+r-1;self.rows[ix]=self.rows[ix]||[];
       for(let c=0;c<width;c++)self.rows[ix][col+c-1]=next[r][c];}}};
  }}
@@ -161,6 +163,43 @@ no('unknown document kind is rejected',()=>api.createRelatedDocument('STAFF',sav
  requestKey:'quote-purchase-key-01',documentDate:'2026-10-09'
 }),/種別/);
 ok('quote template remains unchanged and still uses 21-row batch',paintedBlocks.filter(x=>x.range==='B17:I37').length===4);
+
+// A former draft-save path deleted all 21 rows one-by-one. Check safe bulk reuse.
+const detailSheet=sheets['見積明細'],previousDetailRows=detailSheet.rows.map(row=>row.slice());
+const replaceQuoteDetails=vm.runInContext('quoteReplaceDetails_',ctx);
+const makeDetail=(position,description)=>({position,description,quantity:1,unit:'式',price:position*100,amount:position*100});
+const own21=Array.from({length:21},(_,i)=>makeDetail(i+1,'旧明細'+(i+1)));
+const foreign=['OTHER-QUOTE',1,'他見積の内容',1,'式',9999,9999];
+const asDetailRow=(quoteId,item)=>[quoteId,item.position,item.description,item.quantity,item.unit,item.price,item.amount];
+detailSheet.rows=[specs['見積明細'].slice(),...own21.map(v=>asDetailRow(saved.id,v)),foreign.slice()];
+detailSheet.writeCalls=0;detailSheet.bulkDeleteCalls=0;detailSheet.singleDeleteCalls=0;
+const edited21=own21.map(v=>({...v,description:v.description.replace('旧','新')}));
+replaceQuoteDetails(saved.id,edited21);
+ok('editing 21 detail lines updates a single batch without per-row deletion',
+ detailSheet.writeCalls===1&&detailSheet.bulkDeleteCalls===0&&detailSheet.singleDeleteCalls===0&&
+ detailSheet.rows.length===23&&detailSheet.rows[1][2]==='新明細1'&&detailSheet.rows[21][2]==='新明細21');
+detailSheet.writeCalls=0;detailSheet.bulkDeleteCalls=0;
+replaceQuoteDetails(saved.id,edited21.slice(0,2));
+ok('shrinking 21 lines removes surplus with one bulk delete and preserves another quote',
+ detailSheet.writeCalls===1&&detailSheet.bulkDeleteCalls===1&&detailSheet.singleDeleteCalls===0&&
+ detailSheet.rows.length===4&&detailSheet.rows[3][0]==='OTHER-QUOTE'&&detailSheet.rows[3][2]==='他見積の内容');
+const f2=['ANOTHER-QUOTE',1,'別の見積',1,'式',1111,1111];
+detailSheet.rows=[specs['見積明細'].slice(),asDetailRow(saved.id,own21[0]),foreign.slice(),
+ asDetailRow(saved.id,own21[1]),f2.slice(),asDetailRow(saved.id,own21[2])];
+detailSheet.writeCalls=0;detailSheet.bulkDeleteCalls=0;
+replaceQuoteDetails(saved.id,edited21.slice(0,2));
+ok('interleaved quote rows are not overwritten or deleted',
+ detailSheet.bulkDeleteCalls===1&&detailSheet.rows.length===5&&
+ detailSheet.rows[2][2]==='他見積の内容'&&detailSheet.rows[4][2]==='別の見積'&&
+ detailSheet.rows[1][2]==='新明細1'&&detailSheet.rows[3][2]==='新明細2');
+detailSheet.writeCalls=0;detailSheet.bulkDeleteCalls=0;
+replaceQuoteDetails(saved.id,edited21.slice(0,4));
+const grownOwnRows=detailSheet.rows.slice(1).filter(x=>x[0]===saved.id);
+ok('growing existing draft appends only extra lines in one batch and preserves neighbors',
+ grownOwnRows.length===4&&grownOwnRows[3][2]==='新明細4'&&
+ detailSheet.rows.length===7&&detailSheet.rows[2][2]==='他見積の内容'&&
+ detailSheet.rows[4][2]==='別の見積'&&detailSheet.writeCalls===3&&detailSheet.bulkDeleteCalls===0);
+detailSheet.rows=previousDetailRows;
 
 console.log('QUOTE TESTS: '+pass+' passed, '+fail+' failed');
 if(fail)process.exitCode=1;
