@@ -684,7 +684,7 @@ const result=vm.runInContext(`
   document.getElementById('fin-invoiceNo').value='T1234567890123';
   financeLookupInvoice();
   expect('issuer search uses authenticated server RPC rather than browser-side API keys',
-    apiCalls.length===1&&lastCall().name==='lookupFinanceInvoiceIssuer');
+    apiCalls.length===1&&lastCall().method==='lookupFinanceInvoiceIssuer');
   invokeServerSuccess({status:'UNCONFIGURED',number:'T1234567890123',message:'ID未設定'});
   expect('unconfigured NTA integration does not hallucinate a business name',
     document.getElementById('financeInvoiceResult').innerHTML.includes('ID未設定')&&
