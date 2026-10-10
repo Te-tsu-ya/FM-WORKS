@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.17.2  
+**文書版:** 0.17.5  
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -1798,3 +1798,12 @@ CIの静的GateとClient Contract Testで、旧トップ階層の再混入と親
 - 取得結果の `header.id` が要求IDと一致することもクライアントで検査する。これは防御的検査であり、認証・認可の代替にはしない。
 - 新設 `scripts/test_document_history.mjs` は、遅延レスポンス、遅延エラー、ダブルクリック、一覧更新、別ユーザーへの切替、異なるIDの応答、通信失敗後の再取得をNode VMで再現。既存の `scripts/test_quote_integration.mjs` から読み込み、CI・Deploy双方の書類発行ゲートに含める。
 
+
+## v0.17.5 経理保存結果・遅延観測・大容量読込の実装設計（2026-10-10）
+
+- Finance.gs:financeRows_(kind,employeeId,limit,verified) は、financeStorageStatus_で先に3シートの見出しを検証した呼び出しに限りverified=trueでヘッダー再読込を省く。社員IDに対して大量行（100行超）かつ一致行10件以下の場合は列Cの所有者IDを先に取得して対象行を選択的に読取る。条件外は従来の一括読取に戻す。共有行数にかかわらず本人だけを返す。
+- getFinanceOverview: 認証後に合計を全件集計。証憑照合は全件の申請金額で分割申請を集計しながら、表示用のreceiptMatchesマップを160〜1000件の取得範囲に限定する。従来の全件×表示件検索の繰り返しを廃止し、メモリ計算と応答ペイロードを削減。保存・監査・シートの列構造は変更しない。
+- financeWriteNew_ / resubmitFinanceRequest: GASからrecord（保存済み内容）をok/id/duplicateと同時に返す。requestKeyを除外し、日付型はGASが返却可能な文字列へ正規化する。これらはサーバー側で保存確認できた値だけであり、ローカルの未保存ドラフトは使用しない。
+- AppFinance.html:financeApplyServerSavedRecord_ は成功後の本人の履歴・経理レシート一覧へ記録を先行表示し、既存loadMyFinanceItems/loadFinanceOverview(force)を引き続き実行して整合させる。失敗・okがtrueでない応答ではフォームを残し、二重送信を防ぐ同一識別子を維持。承認と精算の処理結果もokを検査して画面を閉じる。API応答時間をブラウザのメモリに記録し、経理画面に表示する。
+- scripts/test_finance_integration.mjs は完全にメモリ上の架空シートだけを使用。500件超のレコードによる読込量と照合マップ上限・非表示行の分割照合・保存レコード・再送重複防止を追加。test_client_contract.mjs は数値フォーム入力制限、成功応答前の送信中、未確定応答後のフォーム保全、保存結果による即時表示を追加。
+- 実本番スプレッドシートへの書き込みは行わず、公開後の認証環境で書込／再読込／監査ログを照合する受け入れ確認を残す。ゼロ秒通信は保証しない。

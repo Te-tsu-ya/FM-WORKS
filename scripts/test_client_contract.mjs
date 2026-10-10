@@ -469,6 +469,48 @@ const result=vm.runInContext(`
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
   expect('demo leaves actual financial records untouched',financeUi.overview===unchangedReal&&
     financeVisibleItems_('expense').length===2);
+  expect('required finance amount fields require 1 yen at the browser level',
+    financeFormField(FINANCE_FORM_FIELDS.expense.find(x=>x[0]==='amount')).includes('min="1"')&&
+    financeFormField(FINANCE_FORM_FIELDS.receipt.find(x=>x[0]==='amount')).includes('min="1"'));
+  const confirmedExpense={id:'EXP-CONFIRMED',employeeId:'FM9000',employeeName:'架空社員',
+    item:'登録確認用文具',vendor:'架空店舗',usedOn:'2026-10-10',amount:1900,status:'承認待ち'};
+  financeUi.mine={setupRequired:false,expenses:[],travels:[]};
+  financeUi.mineAt=1;
+  const testSave=financeApplyServerSavedRecord_('expense',{ok:true,id:confirmedExpense.id,record:confirmedExpense});
+  expect('GAS-confirmed expense appears immediately in own history before roundtrip refresh',
+    testSave&&financeUi.mine.expenses.some(x=>x.id===confirmedExpense.id)&&financeUi.mineAt>1);
+  financeApplyServerSavedRecord_('expense',{ok:true,id:confirmedExpense.id,duplicate:true,record:confirmedExpense});
+  expect('idempotent callback does not insert duplicate finance history entries',
+    financeUi.mine.expenses.filter(x=>x.id===confirmedExpense.id).length===1);
+  expect('failed or incomplete save responses do not appear as registered',
+    financeApplyServerSavedRecord_('expense',{ok:false,id:'EXP-BAD',record:{id:'EXP-BAD'}})===false&&
+    !financeUi.mine.expenses.some(x=>x.id==='EXP-BAD'));
+  const originalFinanceTab=financeUi.tab;
+  financeUi.overview={setupRequired:false,expenses:[],travels:[],receipts:[],totals:{receipt:0}};
+  const recorded={id:'REC-CONFIRMED',creatorId:'FM9000',creatorName:'架空経理',
+    usedOn:'2026-10-10',vendor:'架空店',item:'紙',amount:2500,paid:'未'};
+  financeApplyServerSavedRecord_('receipt',{ok:true,id:recorded.id,record:recorded});
+  expect('GAS-confirmed receipt appears in finance without second roundtrip',
+    financeUi.overview.receipts[0].id===recorded.id&&financeUi.overview.totals.receipt===1);
+  financeUi.tab=originalFinanceTab;
+  resetCalls();
+  financeActiveForm={kind:'expense',key:'FMTESTKEY00000001',editId:'',source:{},changed:false};
+  document.getElementById('fin-usedOn').value='2026-10-10';
+  document.getElementById('fin-vendor').value='架空店舗';
+  document.getElementById('fin-item').value='紙';
+  document.getElementById('fin-category').value='消耗品費';
+  document.getElementById('fin-amount').value='2500';
+  document.getElementById('fin-purpose').value='架空テスト';
+  submitFinanceForm();
+  expect('finance submission has a busy state while awaiting server confirmation',
+    financeUi.busy===true&&document.getElementById('financeSubmitButton').disabled&&
+    document.getElementById('financeSubmitButton').textContent==='登録しています…');
+  invokeServerSuccess({ok:false});
+  expect('a server response without ok:true leaves the form available and shows error',
+    financeUi.busy===false&&financeActiveForm!==null&&
+    !document.getElementById('financeFormError').hidden&&
+    !document.getElementById('financeSubmitButton').disabled);
+  financeActiveForm=null;
   const safeOffice=officePage();
   expect('finance records never appear in general affairs workspace',
     !safeOffice.includes('EXP-PENDING')&&!safeOffice.includes('2,500円'));
