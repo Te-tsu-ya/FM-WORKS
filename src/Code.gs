@@ -649,8 +649,13 @@ function appendAudit_(item) {
       item.result || '',
       item.note || ''
     ]);
+    return true;
   } catch (e) {
     console.error('audit log failed', e);
+    // Financial operations can explicitly alert the operator that the record
+    // was written but its audit entry was not confirmed. Existing callers
+    // that ignore this return value retain their previous behavior.
+    return false;
   }
 }
 

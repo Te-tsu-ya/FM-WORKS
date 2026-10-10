@@ -250,7 +250,13 @@ function initGlobalKeyboardShortcuts(){
     if(e.key==='Tab'&&trapModalFocus_(e))return;
     if(e.key==='Escape'){
       const modal=document.getElementById('modalRoot');
-      if(modal&&modal.innerHTML.trim()){e.preventDefault();closeModal();return;}
+      if(modal&&modal.innerHTML.trim()){
+        e.preventDefault();
+        if(typeof financeModalBusy_==='function'&&financeModalBusy_(modal)){
+          showToast('経理処理中のため、結果が確定するまで閉じられません。');return;
+        }
+        closeModal();return;
+      }
       if(state.page==='schedule'&&state.schedule.mobileDetailOpen&&scheduleIsSmallScreen()){e.preventDefault();closeScheduleDetail();return;}
       hideSearchResults();closeNotificationMenu();closeProfileMenu();closeMobileDrawer();
       return;

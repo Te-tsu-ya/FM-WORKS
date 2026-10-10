@@ -62,7 +62,8 @@ const sheets={};
 for(const kind of Object.keys(models))sheets[models[kind].sheet]=new Sheet(specs[models[kind].sheet]);
 ctx.mockDb={getSheetByName:name=>sheets[name]||null};
 ctx.mockAudits=audits;
-vm.runInContext('getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";appendAudit_=item=>mockAudits.push(item);',ctx);
+ctx.auditAvailable=true;
+vm.runInContext('getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-DB";appendAudit_=item=>{if(!auditAvailable)return false;mockAudits.push(item);return true;};',ctx);
 const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest,resubmitFinanceRequest,financeReceiptCrossCheck_,financeNormalizeDateText_,financeOutstandingFirst_,financeMyActionFirst_,financeAmountDisplay_,assertDatabaseMigrationSafe_})',ctx);
 const expense={
  usedOn:'2026-10-08',vendor:'架空の販売店',item:'事務用品',category:'消耗品費',
@@ -93,6 +94,7 @@ denied('staff cannot enter receipt',()=>api.saveFinanceReceipt('STAFF',receipt),
 denied('manager cannot approve',()=>api.reviewFinanceRequest('MANAGER','expense','x','APPROVE',''),/権限/);
 const saved=api.submitFinanceExpense('STAFF',expense);
 const beforeFastRead=sheets['経費精算申請'].stats.rawCells;
+ok('the finance save API explicitly confirms its audit entry',saved.auditRecorded===true);
 ok('self-service creates owned pending expense',saved.ok&&sheets['経費精算申請'].rows.length===2&&
  sheets['経費精算申請'].rows[1][2]==='FM9011'&&sheets['経費精算申請'].rows[1][12]==='承認待ち');
 denied('same request id with edited amount cannot silently confirm the wrong record',
@@ -279,6 +281,24 @@ ok('finance row index verifies the selected ID and only reads a full row once',
  byId&&byId.item.id==='BULK-0'&&byId.rowNumber>=2&&
  sheets['経費精算申請'].stats.rawCells-beforeBulkLookup<=models.expense.keys.length);
 
+
+// An audit logging error must not be misrepresented as an entirely verified save.
+const auditBeforeFailure=audits.length;
+ctx.auditAvailable=false;
+const unlogged=api.submitFinanceExpense('STAFF',{
+  ...expense,requestKey:'test-20261010-audit-unavailable',vendor:'架空取引先B'
+});
+ok('financial record is durable but audit failure is explicitly disclosed',
+ unlogged.ok===true&&unlogged.auditRecorded===false&&
+ sheets['経費精算申請'].rows.some(row=>row[0]===unlogged.id)&&
+ audits.length===auditBeforeFailure);
+const unloggedApproval=api.reviewFinanceRequest('ACCOUNTING','expense',unlogged.id,'APPROVE','');
+ok('approval explicitly reports audit failure without pretending full verification',
+ unloggedApproval.ok&&unloggedApproval.auditRecorded===false&&unloggedApproval.status==='承認済');
+const unloggedSettlement=api.settleFinanceRequest('GENERAL','expense',unlogged.id,'2026-10-10','2026-10-10');
+ok('settlement explicitly reports audit failure for administrator review',
+ unloggedSettlement.ok&&unloggedSettlement.auditRecorded===false&&unloggedSettlement.status==='精算済');
+ctx.auditAvailable=true;
 
 sheets['経費記録'].rows[0][0]='不正な列見出し';
 ok('schema mismatch is detected',!api.financeStorageStatus_().ready);

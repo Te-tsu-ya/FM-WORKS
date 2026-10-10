@@ -188,9 +188,9 @@ function financeWriteNew_(kind,record,employee){
     if(kind==='receipt'){record.creatorId=employee.employeeId;record.creatorName=employee.name;}
     else {record.employeeId=employee.employeeId;record.employeeName=employee.name;record.status='承認待ち';}
     sheet.appendRow(financeArray_(kind,record));
-    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'経理新規登録',target:kind,
+    const auditRecorded=appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'経理新規登録',target:kind,
       targetId:record.id,before:'',after:auditJson_({kind:kind,id:record.id}),source:'WEB',result:'SUCCESS',note:''});
-    return {ok:true,id:record.id,duplicate:false,record:financeConfirmedRecord_(record)};
+    return {ok:true,id:record.id,duplicate:false,record:financeConfirmedRecord_(record),auditRecorded:auditRecorded===true};
   });
 }
 function financeExpensePayload_(payload){
@@ -378,12 +378,12 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
     });
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length)
       .setValues([financeArray_(kind,updated)]);
-    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
+    const auditRecorded=appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
       operation:'経理再申請',target:kind,targetId:item.id,
       before:auditJson_({status:item.status,amount:item.amount||item.spentAmount,returnReason:item.returnReason}),
       after:auditJson_({status:updated.status,amount:updated.amount||updated.spentAmount}),
       source:'WEB',result:'SUCCESS',note:''});
-    return {ok:true,id:item.id,status:updated.status,duplicate:false,record:financeConfirmedRecord_(updated)};
+    return {ok:true,id:item.id,status:updated.status,duplicate:false,record:financeConfirmedRecord_(updated),auditRecorded:auditRecorded===true};
   });
 }
 function financeReview_(sessionToken,kind,id,decision,reason){
@@ -400,10 +400,10 @@ function financeReview_(sessionToken,kind,id,decision,reason){
       decidedBy:reviewer.employeeId,decidedAt:now,returnReason:comment,updatedAt:now
     });
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length).setValues([financeArray_(kind,next)]);
-    appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:decision==='APPROVE'?'経理承認':'経理差戻し',
+    const auditRecorded=appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:decision==='APPROVE'?'経理承認':'経理差戻し',
       target:kind,targetId:item.id,before:auditJson_({status:item.status}),after:auditJson_({status:next.status,reason:comment}),
       source:'WEB',result:'SUCCESS',note:''});
-    return {ok:true,id:item.id,status:next.status};
+    return {ok:true,id:item.id,status:next.status,auditRecorded:auditRecorded===true};
   });
 }
 function reviewFinanceRequest(sessionToken,kind,id,decision,reason){
@@ -421,9 +421,9 @@ function settleFinanceRequest(sessionToken,kind,id,paidOn,receivedOn){
     if(String(item.employeeId)===String(reviewer.employeeId))throw new Error('自分自身の申請の精算確定はできません。');
     const now=financeNow_(),next=Object.assign({},item,{status:'精算済',paidAt:paid,receivedAt:received,updatedAt:now});
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length).setValues([financeArray_(kind,next)]);
-    appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:'経理精算確認',
+    const auditRecorded=appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:'経理精算確認',
       target:kind,targetId:item.id,before:auditJson_({status:item.status}),after:auditJson_({status:next.status,paidAt:paid}),
       source:'WEB',result:'SUCCESS',note:''});
-    return {ok:true,id:item.id,status:next.status};
+    return {ok:true,id:item.id,status:next.status,auditRecorded:auditRecorded===true};
   });
 }
