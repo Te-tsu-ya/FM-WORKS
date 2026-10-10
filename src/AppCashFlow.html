@@ -1,7 +1,7 @@
 <script>
 /* v0.21 annual fiscal cashflow; amounts never use browser persistent storage. */
 let cashFlowUi={open:false,year:0,seq:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};
-function resetCashFlowUi(){cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};}
+function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};}
 function cashFlowAllowed_(){return !!(state.sessionToken&&state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace&&state.data.permissions.adminConsole);}
 function cashFlowThisYear_(){
  const s=String(state.data&&state.data.today||new Date().toISOString().slice(0,10)),m=/^(\d{4})-(\d{2})/.exec(s);
@@ -15,22 +15,26 @@ function cashFlowOpen_(){
  if(!cashFlowAllowed_())return;
  if(financeUi.demo){showToast('資金繰り表は実データです。サンプル表示を解除してから開いてください。');return;}
  financeUi.insightMode=false;cashFlowUi.open=true;cashFlowUi.year=cashFlowUi.year||cashFlowThisYear_();
- renderPageIfActive('finance');cashFlowLoad_();
+ renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(true);
 }
 function cashFlowClose_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.importing){showToast('銀行明細の取り込みが終わるまでお待ちください。');return;}
  cashFlowDiscard_(()=>{
+  if(typeof cfbReset_==='function')cfbReset_();
   cashFlowUi.open=false;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.seq++;
   renderPageIfActive('finance');
  });
 }
 function cashFlowChangeYear_(value){
+ if(typeof cfbUi!=='undefined'&&cfbUi.importing){showToast('銀行明細取込中は年度を切替できません。');return;}
  const y=Number(value),input=document.getElementById('cfYear');
  if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
  if(y===cashFlowUi.year)return;
  cashFlowDiscard_(()=>{
   cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;
   cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
-  renderPageIfActive('finance');cashFlowLoad_();
+  if(typeof cfbUi!=='undefined'){cfbUi.loaded=null;cfbUi.closeKey='';cfbUi.csvRows=null;cfbUi.preview=null;cfbUi.seq++;}
+  renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(true);
  });
  if(input)input.value=String(cashFlowUi.year);
 }
@@ -145,8 +149,9 @@ function cashFlowSave_(){
 }
 function cashFlowPage_(){
  if(!cashFlowAllowed_())return pageHead('年間資金繰り表','管理者専用です。');
+ if(typeof cfbUi!=='undefined'&&cfbUi.active)return cfbPage_();
  const u=cashFlowUi,year=u.year,title=year+'年11月期（'+(year-1)+'年12月～'+year+'年11月）';
- const buttons='<button class="secondary-button" type="button" onclick="cashFlowClose_()">← 経理に戻る</button><button class="secondary-button" type="button" onclick="cashFlowReload_()">更新</button>';
+ const buttons='<button class="secondary-button" type="button" onclick="cashFlowClose_()">← 経理に戻る</button><button class="secondary-button" type="button" onclick="cashFlowReload_()">更新</button><button class="secondary-button" type="button" onclick="cfbShowNew_()">金融機関・年間の見込みへ</button>';
  const picker='<div class="cf-period"><button type="button" class="secondary-button" onclick="cashFlowChangeYear_('+(year-1)+')">‹ 前期</button>'+
   '<label>決算年度 <input id="cfYear" type="number" min="2000" max="2100" step="1" value="'+year+'" onchange="cashFlowChangeYear_(this.value)"></label>'+
   '<button type="button" class="secondary-button" onclick="cashFlowChangeYear_('+(year+1)+')">翌期 ›</button></div>';

@@ -20,7 +20,7 @@ const ctx=vm.createContext({Date,Math,JSON,Number,String,Array,Set,Map,console:{
 vm.runInContext(fs.readFileSync('src/Schema.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync('src/CashFlow.gs','utf8'),ctx);
 const run=expr=>vm.runInContext(expr,ctx);
-assert.equal(run('DB_SCHEMA_VERSION'),17);
+assert.equal(run('DB_SCHEMA_VERSION'),18);
 assert.equal(run('cashFlowMonths_(2026)')[0],'2025-12');
 assert.equal(run('cashFlowMonths_(2026)')[11],'2026-11');
 assert.equal(run('cashFlowMonths_(2027)')[0],'2026-12');

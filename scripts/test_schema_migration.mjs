@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const SCHEMA=fs.readFileSync('src/Schema.gs','utf8');
-const EXTRA=['プロジェクト工数対応','プロジェクト依存','プロジェクト添付','プロジェクト既読','プロジェクト原価','プロジェクト予算','資金繰り年間'];
+const EXTRA=['プロジェクト工数対応','プロジェクト依存','プロジェクト添付','プロジェクト既読','プロジェクト原価','プロジェクト予算','資金繰り年間','資金口座','資金予定','資金取引','資金月次確定'];
 
 class FakeSheet {
  constructor(name,headers=[],body=[],maxColumns=26){
@@ -61,7 +61,7 @@ function makeHarness(){
 const h=makeHarness();
 assert.equal(h.meta.version,15);
 const initial=h.context.getDatabaseSchemaStatus_();
-assert.equal(initial.expectedVersion,17);
+assert.equal(initial.expectedVersion,18);
 assert.equal(initial.version,15);
 assert.deepEqual(Object.keys(initial.sheets).filter(n=>!initial.sheets[n].exists),EXTRA);
 const originalRows=new Map([...h.records].map(([name,sh])=>[name,JSON.stringify(sh.rows)]));
@@ -88,14 +88,14 @@ assert.ok(EXTRA.every(name=>!h.records.has(name)));
 assert.equal(h.events.filter(x=>x.startsWith('create:')).length,0);
 h.meta.backupFails=false;
 
-// Normal migration creates exactly the additive seven sheets, sets v16 and records audit.
+// Normal migration creates exactly eleven additive sheets, sets v18 and records audit.
 const applied=h.context.migrateDatabaseToCurrent('ADMIN');
 assert.equal(applied.ok,true);
 assert.equal(applied.changed,true);
 assert.equal(applied.auditRecorded,true);
 assert.equal(applied.before.version,15);
-assert.equal(applied.after.version,17);
-assert.equal(h.meta.version,17);
+assert.equal(applied.after.version,18);
+assert.equal(h.meta.version,18);
 assert.equal(h.audit.length,1);
 assert.equal(h.audit[0].operation,'DBスキーマ更新');
 assert.equal(h.context.getDatabaseSchemaStatus_().ready,true);
@@ -122,7 +122,7 @@ const notice=auditCase.context.migrateDatabaseToCurrent('ADMIN');
 assert.equal(notice.ok,true);
 assert.equal(notice.changed,true);
 assert.equal(notice.auditRecorded,false);
-assert.equal(auditCase.meta.version,17);
+assert.equal(auditCase.meta.version,18);
 assert.equal(auditCase.context.getDatabaseSchemaStatus_().ready,true);
 
 // If one sheet creation fails, DB_VERSION stays old and retry resumes safely.
@@ -134,9 +134,9 @@ assert.equal(partial.records.get('保護対象の既存追加シート').rows[1]
 partial.meta.failedInsert='';
 const recovered=partial.context.migrateDatabaseToCurrent('ADMIN');
 assert.equal(recovered.after.ready,true);
-assert.equal(partial.meta.version,17);
+assert.equal(partial.meta.version,18);
 assert.equal(partial.meta.backups,2,'retry gets a new verified backup');
 assert.equal(partial.context.getDatabaseSchemaStatus_().ready,true);
 for(const name of EXTRA)assert.deepEqual(partial.records.get(name).rows[0],partial.specs[name]);
 
-console.log('PASS schema v17: unauthorized blocked, corrupt header/backup failure no mutation, six additive sheets, backup-before-edit, audit-after-verification, idempotency, audit failure warning and recovery from partial update');
+console.log('PASS schema v18: unauthorized blocked, corrupt header/backup failure no mutation, six additive sheets, backup-before-edit, audit-after-verification, idempotency, audit failure warning and recovery from partial update');
