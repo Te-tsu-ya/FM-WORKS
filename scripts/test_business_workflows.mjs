@@ -70,3 +70,35 @@ assert.equal(run('somuUi.query'),'保守');assert.equal(run('somuUi.selected'),'
 assert.equal(calls.length,beforeGrowth,'all cached office tab switches have zero RPC');
 run('somuReset()');assert.equal(run('somuTabState_.size'),0,'logout clears tab information');
 console.log('PASS business workflows: five-minute return cache, draft preservation, issuance state, spreadsheet paste, finance resume, combined office read and zero-RPC tabs');
+
+// A force refresh after migration must survive older in-flight maintenance reads.
+vm.runInContext(fs.readFileSync('src/AppAdmin.html','utf8').replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),context,{filename:'AppAdmin'});
+const pendingMaintenance=new Set();let maintenanceCache=true;
+Object.assign(context,{
+ cacheFresh:()=>maintenanceCache,cacheHas:()=>maintenanceCache,
+ beginPageLoad:(name,key)=>{const ticket=name+':'+key;if(pendingMaintenance.has(ticket))return null;pendingMaintenance.add(ticket);return ticket;},
+ endPageLoad:ticket=>pendingMaintenance.delete(ticket),markPageCache:()=>{maintenanceCache=true;},handleApiError(){},
+ openConfirmDialog:(_title,_body,_label,confirm)=>confirm()
+});
+run("state.page='admin';state.data.permissions.adminConsole=true;state.maintenance={status:{schemaStatus:{version:12}},audit:[],loading:false}");
+let maintenanceStart=calls.length;run('loadMaintenance()');
+assert.equal(calls.length,maintenanceStart,'ordinary return still reuses maintenance cache');
+run('loadMaintenance({force:true})');
+assert.equal(calls.length,maintenanceStart+2,'explicit refresh always reads latest status and audit');
+const oldMaintenance=calls.slice(-2);
+run('loadMaintenance({force:true})');
+assert.equal(calls.length,maintenanceStart+2,'forced update waits for the active read rather than duplicating it');
+oldMaintenance[0].success({schemaStatus:{version:12}});
+oldMaintenance[1].success([]);
+assert.equal(calls.length,maintenanceStart+4,'queued force starts a fresh pair after the old read');
+const latestMaintenance=calls.slice(-2);
+latestMaintenance[0].success({schemaStatus:{version:14}});latestMaintenance[1].success([{operation:'DB更新'}]);
+assert.equal(run('state.maintenance.status.schemaStatus.version'),14,'migration result replaces the pre-migration version');
+assert.equal(run('state.maintenance.audit[0].operation'),'DB更新');
+run('loadMaintenance({force:true})');const obsoleteMaintenance=calls.slice(-2);
+run("state.sessionToken='NEW-SESSION';state.maintenance={status:{schemaStatus:{version:99}},audit:[],loading:false}");pendingMaintenance.clear();
+obsoleteMaintenance[0].success({schemaStatus:{version:12}});obsoleteMaintenance[1].success([]);
+assert.equal(run('state.maintenance.status.schemaStatus.version'),99,'previous login callbacks cannot overwrite new session status');
+run('migrateDatabaseFromAdmin()');const migration=calls.at(-1);maintenanceStart=calls.length;
+migration.success({changed:true});assert.equal(calls.length,maintenanceStart+2,'migration confirmation forces fresh status even if cache is still fresh');
+console.log('PASS maintenance refresh: cache reuse, explicit force, queued refresh, DB migration and session isolation');
