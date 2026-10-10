@@ -7,7 +7,8 @@ import {pathToFileURL} from 'node:url';
 
 const root=process.cwd();
 const css=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+
-  fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
+  fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+
+  fs.readFileSync(path.join(root,'src/StylesFinanceAdvisor.html'),'utf8');
 const source=name=>fs.readFileSync(path.join(root,'src/'+name+'.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({
@@ -39,13 +40,24 @@ function renderScreen(kind){
     '<div class="page-head"><h1>'+escapeHtml(title)+'</h1><p>'+escapeHtml(sub)+'</p></div>',
   financeYen:v=>(Number(v)||0).toLocaleString('ja-JP')+'円',
   svg:icon=>'<svg role="img" aria-label="'+escapeHtml(icon)+'" viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>'});
- if(['finance','financeDemo','expense','travel'].includes(kind)){
+ if(['finance','financeDemo','financeInsights','expense','travel'].includes(kind)){
   vm.runInContext(source('AppFinance'),cx,{filename:'AppFinance.html'});
-  if(kind==='finance'||kind==='financeDemo'){
+  vm.runInContext(source('AppFinanceAdvisor'),cx,{filename:'AppFinanceAdvisor.html'});
+  if(kind==='finance'||kind==='financeDemo'||kind==='financeInsights'){
    cx.qaFinance={setupRequired:false,expenses:[sampleExpense],travels:[sampleTravel],
     receipts:[],totals:{expensePending:1,travelPending:1,expenseToSettle:0,
       travelToSettle:0,receipt:0,expenseHidden:0,travelHidden:0,receiptHidden:0}};
    vm.runInContext('financeUi.overview=qaFinance;financeUi.tab="expense";financeUi.demo='+JSON.stringify(kind==='financeDemo')+';',cx);
+   if(kind==='financeInsights'){
+     cx.qaIns={ok:true,year:2026,total:4200,count:2,months:[
+       {name:'2026-09',amount:1200,count:1},{name:'2026-10',amount:3000,count:1}],
+       payers:[{name:'架空社員A',amount:1200,count:1},{name:'架空社員B',amount:3000,count:1}],
+       vendors:[{name:'架空備品店',amount:1200,count:1}],
+       items:[{name:'文具',amount:1200,count:1}],
+       records:[{date:'2026-10-02',payer:'架空社員B',vendor:'架空交通社',
+         item:'交通費',amount:3000,method:'会社カード',note:''}]};
+     vm.runInContext('financeUi.insightMode=true;financeUi.insights=qaIns;financeUi.insightYear=2026;',cx);
+   }
    return vm.runInContext('financePage()',cx);
   }
   cx.qaKind=kind;
@@ -78,6 +90,7 @@ const output=path.join(root,'artifacts','workflow-v15');fs.mkdirSync(output,{rec
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-workflow-'));
 const cases=[
  [1366,768,'finance','light'],[390,844,'finance','dark'],
+ [1366,768,'financeInsights','light'],[390,844,'financeInsights','dark'],
   [1600,900,'financeDemo','light'],[1366,768,'financeDemo','dark'],
   [390,844,'financeDemo','light'],[320,700,'financeDemo','dark'],
  [1366,768,'expense','light'],[390,844,'expense','light'],
@@ -95,9 +108,12 @@ for(const [width,height,kind,theme] of cases){
  if(!page.includes("v15-workspace")||page.includes('ReferenceError:')){
   failed++;console.error('FAIL '+id+' missing unified content');continue;
  }
- if(kind.startsWith('finance')&&(!page.includes('finance-ledger-table')||
+ if(kind!=='financeInsights'&&kind.startsWith('finance')&&(!page.includes('finance-ledger-table')||
      !page.includes('financeSelectedDetail')||!page.includes('financeSetMonthFilter('))){
    failed++;console.error('FAIL '+id+' finance ledger structure missing');continue;
+  }
+  if(kind==='financeInsights'&&(!page.includes('支出の見える化')||!page.includes('finance-advisor-months'))){
+   failed++;console.error('FAIL '+id+' spending analytics summary missing');continue;
   }
   if(kind==='financeDemo'&&!page.includes('サンプル表示中｜架空データ')){
    failed++;console.error('FAIL '+id+' clearly-labeled synthetic data missing');continue;
@@ -149,10 +165,10 @@ for(const [width,height,kind,theme] of cases){
   if(result.rootWidth<=0||result.rootWidth>result.contentWidth+2)errors.push('content width');
   if(!result.buttons)errors.push('no actions');
   if(['expense','travel'].includes(kind)&&result.inputs<6)errors.push('missing form fields');
-  if(kind.startsWith('finance')&&result.inputs<3)errors.push('missing finance search controls');
+  if(kind.startsWith('finance')&&result.inputs<(kind==='financeInsights'?2:3))errors.push('missing finance search controls');
   if(kind==='admin'&&result.inputs<3)errors.push('missing master form controls');
-   if(kind.startsWith('finance')&&width>=1200&&result.metricColumns!==4)errors.push('desktop finance KPIs are not one row');
-   if(kind.startsWith('finance')&&width<=760&&result.metricColumns!==2)errors.push('mobile finance KPI grid is not two columns');
+   if(kind.startsWith('finance')&&kind!=='financeInsights'&&width>=1200&&result.metricColumns!==4)errors.push('desktop finance KPIs are not one row');
+   if(kind.startsWith('finance')&&kind!=='financeInsights'&&width<=760&&result.metricColumns!==2)errors.push('mobile finance KPI grid is not two columns');
   if(result.shortestButton<25)errors.push('button below 25px');
   console.log((errors.length?'FAIL ':'PASS ')+id+' '+JSON.stringify(result)+
     (errors.length?' checks='+errors.join(', '):''));
