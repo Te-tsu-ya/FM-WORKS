@@ -80,11 +80,13 @@
  .fw-priorities{grid-template-columns:repeat(2,minmax(0,1fr))}
  .fw-action-card{padding:12px}
  .fw-action-card strong{font-size:19px}
- .fw-nav-item{padding:9px 12px}
+ .fw-navigation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow-x:visible;gap:6px}
+ .fw-nav-item{min-width:0;flex:none;padding:8px 4px;white-space:nowrap}
  .fw-paste,.fw-table-section{padding:12px}
  .fw-savebar .primary-button{width:100%}
  .fw-inline-actions button{flex:1 1 130px}
  .fw-legacy .finance-review-layout{grid-template-columns:1fr}
 }
+@media(max-width:360px){.fw-navigation{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.fw-action-card,.fw-nav-item{transition:none}}
 </style>

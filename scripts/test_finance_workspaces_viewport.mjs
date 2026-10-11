@@ -78,7 +78,7 @@ for(const [width,height,mode,theme] of runs){
    'grid=document.querySelector(".fw-grid-scroll"),'+
    'buttons=[...document.querySelectorAll(".fw-root button")],'+
    'info={width:innerWidth,docWidth:document.documentElement.scrollWidth,'+
-   'rootWidth:root?.getBoundingClientRect().width||0,navCount:nav?.querySelectorAll("button").length||0,'+
+   'rootWidth:root?.getBoundingClientRect().width||0,navCount:nav?.querySelectorAll("button").length||0,navColumns:getComputedStyle(nav).gridTemplateColumns.split(" ").filter(Boolean).length,'+
    'actions:buttons.length,minButtonHeight:Math.min(...buttons.filter(b=>b.getBoundingClientRect().height>0).map(b=>b.getBoundingClientRect().height)),'+
    'gridScrollWidth:grid?.scrollWidth||0,gridClientWidth:grid?.clientWidth||0};'+
    'parent.postMessage({kind:"FINANCE_WORKSPACE_QA",info},"*");</script></body></html>';
@@ -98,6 +98,8 @@ for(const [width,height,mode,theme] of runs){
   if(info.docWidth>width+2)issues.push('document horizontal overflow');
   if(info.rootWidth<100)issues.push('workspace is not visible');
   if(info.navCount!==6)issues.push('six workspace tabs missing');
+  if(width<=360&&info.navColumns!==2)issues.push('compact navigation must show all six items in two columns');
+  if(width>360&&width<=760&&info.navColumns!==3)issues.push('mobile navigation must show all six items in three columns');
   if(info.actions<6)issues.push('quick actions missing');
   if(info.minButtonHeight<28)issues.push('button hit target below 28px');
   if(mode==='bulk'&&info.gridScrollWidth<=info.gridClientWidth)issues.push('table horizontal scroll absent');
