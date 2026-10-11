@@ -44,7 +44,10 @@ cfaUi.exporting=true;ctx.cfaScenarioSelect_('new');
 assert.equal(cfaUi.exporting,false,'scenario change releases pending export state');
 cfaUi.scenarioId='';
 assert.equal(cfaUi.exporting,false);
-failClick=true;ctx.cfaDownloadReport_('PDF');callbacks[4].success(result);
+cfaUi.projection={ok:true}; // Scenario switching intentionally invalidated the projection; simulate its successful reload.
+failClick=true;ctx.cfaDownloadReport_('PDF');
+assert.equal(callbacks.length,5,'new projection allows a subsequent report request');
+callbacks[4].success(result);
 assert.ok(revoked>0,'failed download should release blob URL');
 assert.match(cfaUi.error,/再試行/);
 console.log('PASS cashflow report stale session/year/scenario guard');
