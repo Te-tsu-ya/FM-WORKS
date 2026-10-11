@@ -108,9 +108,12 @@ assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').p50Ms,237,'monot
 assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').p95Ms,237);
 assert.ok(rpcReport.methods.find(m=>m.method==='getHomeOverview').calls>=2,'repeated RPC calls are grouped');
 assert.ok(!JSON.stringify(rpcReport).includes('SESSION'),'session tokens never enter performance data');
+invoke('FMRotaryRPC().withSuccessHandler(()=>{}).getHomeOverview("OLD-SESSION")');
+const staleRpc=actions.at(-1);
 invoke('FMRotaryActivity.reset()');
 assert.equal(ui.snapshot().pending.page+ui.snapshot().pending.region+ui.snapshot().pending.inline,0);
-assert.equal(invoke('FMWorksPerformance.report().methods.length'),0,'logout clears performance samples');
+staleRpc.meta.success({ok:true});
+assert.equal(invoke('FMWorksPerformance.report().methods.length'),0,'logout clears timing samples and ignores prior-session late replies');
 assert.ok(actions.every(a=>a.method!=='withSuccessHandler'),'only GAS method names are dispatched');
 const offlineCashflow=fs.readFileSync('scripts/fixtures/AppCashFlowDemo.html','utf8')+fs.readFileSync('src/AppCashFlowPaste.html','utf8');
 for(const forbidden of ['google.script.run','SpreadsheetApp','localStorage','sessionStorage']){
