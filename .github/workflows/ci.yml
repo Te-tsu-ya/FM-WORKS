@@ -38,6 +38,8 @@ jobs:
         run: node scripts/test_client_contract.mjs
       - name: Verify scoped global search, stale RPC and logout privacy
         run: node scripts/test_global_search.mjs
+      - name: Verify indexed large schedule search and safe fallbacks
+        run: node scripts/test_search_schedule_index.mjs
       - name: Test finance authorization and workflows
         run: node scripts/test_finance_integration.mjs
       - name: Verify secure annual cash flow and calculations
