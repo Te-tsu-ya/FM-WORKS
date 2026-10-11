@@ -29,6 +29,7 @@ const ctx=vm.createContext({console,Date,JSON,Array,Set,Map,String,Number,Object
  getDb_:()=>({getSheetByName:()=>null})});
 vm.runInContext(source+'\n'+bulk,ctx);
 ctx.financeAuditConfirmedForRetry_=()=>true;
+ctx.financeSheet_=()=>sheet;
 const row=(key,more={})=>({usedOn:'2026-10-09',category:'消耗品費',vendor:'架空文具店',invoiceNo:'',
  item:'事務用品',amount:'2200',note:'',payer:'架空社員',paymentMethod:'会社カード',paid:'済',
  receiptRef:'',requestKey:key,...more});
