@@ -73,8 +73,9 @@ let confirm=null;
 const client=vm.createContext({console,Date,Map,Set,Math,JSON,Number,String,Object,Array,RegExp,Boolean,
  google:{script:{run:runner()}},window:{addEventListener(){}},document:{getElementById:()=>null},
  financeUi:{demo:false},renderPage(){},showToast(){},openConfirmDialog:(_t,_m,_l,fn)=>{confirm=fn;}});
-for(const name of ['AppCore','AppProjectHub','AppProjectAdvanced','AppCashFlow','AppCashFlowBank','AppCashFlowSandbox'])
+for(const name of ['AppCore','AppProjectHub','AppProjectAdvanced','AppCashFlow','AppCashFlowBank','AppCashFlowPaste'])
  vm.runInContext(source(name+'.html').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),client,{filename:name});
+vm.runInContext(fs.readFileSync('scripts/fixtures/AppCashFlowDemo.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),client,{filename:'cashflow-sandbox-test-fixture'});
 const js=code=>vm.runInContext(code,client);
 js("renderPageIfActive=()=>{};state.sessionToken='SESSION-A';state.data={today:'2026-10-11',user:{employeeId:'A'},permissions:{adminConsole:true,cashFlowWorkspace:true}};state.page='projects';projectHubUi.selected='P1';projectHubUi.tab='advanced';");
 client.projectAdvancedLoad_();const first=calls.at(-1);client.projectAdvancedLoad_();assert.equal(calls.at(-1),first,'duplicate requests coalesce');

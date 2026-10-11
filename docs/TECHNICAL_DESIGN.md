@@ -2347,3 +2347,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Initial payload becomes smaller, but do not infer shorter RPC or Sheets I/O latency without production measurements.
 
 - Remove unused annual-leave demo cleanup from `AppCore.clearLocalSession`; normal logout/session cache clearing remains unchanged.
+
+
+### 2026-10-11 Cashflow sandbox test-fixture split
+- Split `src/AppCashFlowSandbox.html` on `cfbParseBankPaste_`: retain live bank-table paste/import preview in `src/AppCashFlowPaste.html`, move synthetic account/plan/transaction controller to `scripts/fixtures/AppCashFlowDemo.html` for Node regression tests only.
+- Move paste CSS to `src/StylesCashFlowPaste.html`; delete demo banner styles and exclude the fixture from GAS `Index.html`.
+- Update validator and contract, sandbox, loading tests to import the synthetic fixture explicitly. The existing `cfbUi.demo` guards remain until PRs #105/#106 are integrated. No backend or DB mutation.
