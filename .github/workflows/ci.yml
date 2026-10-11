@@ -62,6 +62,8 @@ jobs:
         run: node scripts/test_cashflow_sandbox.mjs
       - name: Verify finance workspace and bulk spreadsheet-style entry
         run: node scripts/test_finance_workspace.mjs
+      - name: Verify Excel-like direct finance grid and safe Sheets bulk commit
+        run: node scripts/test_finance_grid.mjs
       - name: Verify redesigned finance portal and spreadsheet grid at desktop/mobile widths
         run: node scripts/test_finance_workspaces_viewport.mjs
       - name: Upload redesigned finance workspace screenshots

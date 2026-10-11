@@ -70,6 +70,7 @@ const cli=vm.createContext({console,Date,String,Number,Math,Set,Map,Object,Array
  navigate:()=>{},financeToggleDemo:()=>{},cashFlowOpenDemo_:()=>{},showToast:()=>{},
  document:{getElementById:()=>null},openConfirmDialog:()=>{},pageHead:(a,b)=>a+' '+b});
 vm.runInContext(client,cli);
+vm.runInContext(fs.readFileSync('src/AppFinanceGrid.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),cli);
 const clipboard='利用日\t経費種別\t取引先\t適格請求書番号\t商品名\t利用金額\t備考\t支払者\t支払方法\t支払有無\n'+
  '2026/10/09\t2026年10月\t架空文具店\t\t事務用品\t2,200円\t\t架空社員\t会社カード\t済\n';
 const parsed=cli.financeBulkParseMatrix_(clipboard);
@@ -90,4 +91,5 @@ assert.ok(cli.financeWorkspaceSummary_().includes('銀行Web明細'));
 assert.ok(cli.financeWorkspaceSummary_().includes('証憑の要確認'),'mismatch queue must remain discoverable');
 assert.ok(cli.financeWorkspaceList_().includes('最新に更新'),'approval screen must have visible refresh');
 assert.ok(!/localStorage|sessionStorage/.test(client),'financial pasted rows must remain in memory');
+assert.ok(cli.financeGridPage_().includes('経費台帳｜表にまとめて入力'),'new sheet-like entry must be reachable');
 console.log('PASS finance workspace navigation, pasted ledger table, validation, one-RPC batch, retries and audit uncertainty');

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.9
+**文書版:** 0.24.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2296,6 +2296,13 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Candidate table adds an escaped active-account label (or inactive-account fallback) and distinguishes scoped versus unscoped scheduled plans. The analysis table remains horizontally scrollable on small screens.
 
 - Mobile QA keeps the existing 760px cashflow table minimum rather than widening the embedded edit form; `test_cashflow_analysis_viewport.mjs` checks 320/390px input bounds.
+
+
+## v0.24.0 Finance direct-entry grid
+- `src/AppFinanceGrid.html` は `FINANCE_GRID_COLUMNS` で表示順を統一したメモリ内編集テーブル。`src/StylesFinanceGrid.html` はライト/ダークの高密度表、行番号・列ヘッダー固定、PC/スマートフォンで表のみ横スクロールを定義する。`Index.html` で既存経理UIの後に両者をinclude。
+- `financeGridApplyPaste_()` はTSVの行・列の上限を保存前に検査し、一括メモリ更新。列並びが異なる場合は既存 `financeBulkParseMatrix_` + 列対応UIに委譲。初期12行の空行を `financeGridHasRecord_` で除外し、登録時に詰めた `rows` と行別 `requestKey` の組を固定して既存 `financeBulkNext_` へ渡す。
+- 登録は既存 `saveFinanceReceiptsBulk` → `FINANCE_MODELS.receipt.sheet='経費記録'` に分離し、サーバー側 `requireFinanceOperator_`・入力検証・ScriptLock・監査ログを変えない。通信失敗時は同一送信キーで再試行する。実DBや元Excel・銀行明細の移行は含まない。
+- QAは `test_finance_grid.mjs` と既存 `test_finance_workspace.mjs` および `test_finance_workspaces_viewport.mjs` で直入力・TSV貼り付け・空行除外・権限・重複・デスクトップ/スマートフォンの視認性を検査する。
 
 ## Cashflow statement coverage disclosure (2026-10-11)
 - `cfbActualCell_` formats imported-but-unreconciled movement as partial, zero unimported rows as unknown, and verified fiscal-closed zero as an actual zero. The financial numerical projection remains unchanged; this is presentation-only. Client regression checks test all three cases.
