@@ -1,0 +1,30 @@
+<style>
+/* Annual cashflow direct input, 12 month columns, compact sticky labels. */
+.cfg-panel{padding:14px;display:grid;gap:11px;min-width:0}
+.cfg-head{display:flex;gap:15px;align-items:start;justify-content:space-between;flex-wrap:wrap}
+.cfg-head h2{font-size:16px;margin:0 0 4px}
+.cfg-head p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}
+.cfg-head button{min-height:40px}
+.cfg-scroll{max-width:100%;max-height:min(60svh,650px);overflow:auto;border:1px solid var(--line);border-radius:8px;overscroll-behavior:contain}
+.cfg-table{min-width:1710px;width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);font-size:12px}
+.cfg-table th,.cfg-table td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;min-width:124px}
+.cfg-table th:first-child{min-width:145px;width:145px;max-width:145px;text-align:left}
+.cfg-table thead th{position:sticky;top:0;z-index:3;background:var(--surface2);height:46px;padding:8px 10px;color:var(--muted);font-weight:750;white-space:nowrap;text-align:center}
+.cfg-table thead th:first-child{left:0;z-index:5}
+.cfg-table tbody th{position:sticky;left:0;z-index:2;background:var(--surface2);font-weight:700;padding:8px 10px;white-space:nowrap}
+.cfg-table tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface2) 35%,var(--surface))}
+.cfg-table tbody tr:hover{background:color-mix(in srgb,var(--blue) 6%,var(--surface))}
+.cfg-table td input{border:1px solid transparent;background:transparent;color:var(--text);height:41px;min-height:41px;width:100%;min-width:0;box-sizing:border-box;
+ padding:6px 8px;text-align:right;font-size:12px;font-family:inherit;font-variant-numeric:tabular-nums;border-radius:0}
+.cfg-table td input[data-cfg-key=note]{text-align:left}
+.cfg-table td input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--surface);position:relative;z-index:4}
+.cfg-table td input[aria-invalid=true]{outline:2px solid #c36528;outline-offset:-2px;background:color-mix(in srgb,#da8b19 6%,var(--surface))}
+.cfg-table td input[readonly]{color:var(--muted)}
+.cfg-table tr.cfg-total th,.cfg-table tr.cfg-total td{background:color-mix(in srgb,var(--blue) 5%,var(--surface));font-size:12px;font-weight:700}
+.cfg-table tr.cfg-total td{text-align:right;white-space:nowrap;padding:10px 8px;font-variant-numeric:tabular-nums}
+.cfg-panel #cfg-copy:not([hidden]){min-height:72px;width:100%}
+.cfg-legacy{padding:9px 0;border-top:1px solid var(--line)}
+.cfg-legacy summary{cursor:pointer;color:var(--muted);font-size:12px;padding:10px;line-height:1.5}
+.cfg-legacy[open] summary{color:var(--text)}
+@media(max-width:650px){.cfg-panel{padding:10px}.cfg-head button{width:100%}.cfg-table td input{font-size:13px}.cfg-scroll{max-height:55svh}}
+</style>

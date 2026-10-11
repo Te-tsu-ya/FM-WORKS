@@ -17,6 +17,7 @@ const ctx=vm.createContext({state,financeUi:{insightMode:false,demo:false},googl
  document:{getElementById:()=>null},Date,Number,Math,String,Array,JSON,Set,Map,RegExp,console});
 const source=fs.readFileSync('src/AppCashFlow.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 vm.runInContext(source,ctx);
+vm.runInContext(fs.readFileSync('src/AppCashFlowGrid.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),ctx);
 assert.equal(ctx.cashFlowAllowed_(),true);
 ctx.financeUi.demo=true;ctx.cashFlowOpen_();
 assert.equal(calls.length,0,'finance sample view cannot silently open a real financial editing screen');
@@ -30,6 +31,7 @@ const result={ok:true,setupRequired:false,fiscalYear:2026,record:{openingBalance
 calls[0].success(result);
 let html=ctx.cashFlowPage_();
 assert.ok(html.includes('2026年11月期'),'fiscal year ending November');
+assert.ok(html.includes('cfg-table')&&html.includes('12か月を横に並べて入力'),'direct-entry grid is visible by default');
 assert.ok(html.includes('2025年12月'),'December starts the fiscal year');
 assert.ok(html.includes('2026年11月'));
 assert.ok(html.includes('&lt;svg onload=alert(1)&gt;'),'stored notes are escaped');
