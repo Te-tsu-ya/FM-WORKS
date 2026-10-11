@@ -43,7 +43,8 @@ function cfbDemoCreate_(year){
   ['SAMPLE-A',dated(months[2],25),1200000,0,'保守入金（架空）',4880000],
   ['SAMPLE-A',dated(months[2],28),0,150000,'社内振替（出金・架空）',4730000,true],
   ['SAMPLE-B',dated(months[2],28),150000,0,'社内振替（入金・架空）',3990000,true],
-  ['SAMPLE-C',dated(months[2],26),0,72000,'通信費（架空）',684000]
+  ['SAMPLE-C',dated(months[2],26),0,72000,'通信費（架空）',684000],
+  ['SAMPLE-C',dated(months[2],28),0,43000,'片側のみの社内移動（架空）',641000,true]
  ];
  const transactions=sample.map((v,i)=>({id:'SAMPLE-TX-'+(i+1),accountId:v[0],date:v[1],incoming:v[2],outgoing:v[3],
   description:v[4],balance:v[5],transfer:!!v[6],revision:1,occurrence:1,externalId:'SAMPLE-REF-'+(i+1)}));
@@ -61,6 +62,33 @@ function cfbDemoPlanApplies_(plan,month){
  return diff>=0&&(plan.frequency==='MONTHLY'||plan.frequency==='ONCE'&&diff===0||
   plan.frequency==='QUARTERLY'&&diff%3===0||plan.frequency==='YEARLY'&&diff%12===0);
 }
+// Browser-only pairing hints for synthetic transactions. No Google Sheets or GAS request.
+function cfbDemoTransferReview_(transactions,months){
+ const inYear=new Set(months),all=(transactions||[]).filter(tx=>tx.transfer&&inYear.has(String(tx.date).slice(0,7)));
+ const rows=all.map(tx=>({...tx,amount:Number(tx.incoming)||Number(tx.outgoing)||0,
+  direction:Number(tx.incoming)>0?'IN':'OUT'}));
+ const grouped=new Map();
+ rows.forEach(row=>{const key=row.direction+'|'+row.amount;const list=grouped.get(key)||[];list.push(row);grouped.set(key,list);});
+ const opposite=row=>(grouped.get((row.direction==='IN'?'OUT':'IN')+'|'+row.amount)||[]).filter(other=>
+  other.accountId!==row.accountId&&Math.abs(Date.parse(other.date)-Date.parse(row.date))<=3*86400000);
+ const paired=new Set(),candidates=[];
+ rows.filter(row=>row.direction==='OUT').forEach(out=>{
+  const hits=opposite(out);if(hits.length!==1||opposite(hits[0]).length!==1)return;
+  const income=hits[0];paired.add(out.id);paired.add(income.id);
+  candidates.push({outId:out.id,inId:income.id,fromAccountId:out.accountId,toAccountId:income.accountId,
+   fromDate:out.date,toDate:income.date,amount:out.amount});
+ });
+ let missingCount=0,ambiguousCount=0;
+ const attention=rows.filter(x=>!paired.has(x.id)).map(x=>{
+  const count=opposite(x).length,reason=count?'同額・近接日の候補が重複しています。':'相手側の振替明細がありません。';
+  if(count)ambiguousCount++;else missingCount++;
+  return {transactionId:x.id,accountId:x.accountId,date:x.date,amount:x.amount,direction:x.direction,reason};
+ });
+ return {total:rows.length,candidateCount:candidates.length,missingCount,ambiguousCount,invalidCount:0,
+  attentionCount:attention.length,candidates:candidates.slice(0,12),attention:attention.slice(0,12),
+  confirmed:false,windowDays:3};
+}
+
 function cfbDemoRebuild_(){
  if(!cfbUi.demo||!cfbUi.loaded)return;
  const data=cfbUi.loaded,months=cfbDemoMonths_(cashFlowUi.year),summaries=new Map(data.accounts.map(a=>[a.id,
@@ -87,6 +115,7 @@ function cfbDemoRebuild_(){
  });
  data.monthly=months.map(x=>calendar.get(x));data.bankSummaries=[...summaries.values()];
  data.transactions=all.filter(tx=>calendar.has(tx.date.slice(0,7))).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,120);
+ data.transferReview=cfbDemoTransferReview_(all,months);
  data.importedCount=data.transactions.length;
 }
 function cfbDemoActivate_(fiscalYear){

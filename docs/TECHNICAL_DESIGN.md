@@ -2245,3 +2245,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `src/AppCashFlowBank.html` shows a brief alert on the annual overview and a separate read-only, HTML-escaped candidate review table on the bank tab. No extra network call, data mutation, or persistent linked-transfer assertion is added.
 - Tests: `scripts/test_cashflow_bank.mjs` exercises unique reciprocal, duplicate-amount ambiguity, same-account, more-than-3-day gap, invalid row, and fiscal-year crossing. `scripts/test_cashflow_bank_client.mjs` checks warning visibility and HTML escaping.
 - Manual bilateral confirmation and its audit history remain an explicit future scope; neither the hints nor an absence of warning is a substitute for the existing per-bank monthly reconciliation.
+
+### v0.23.7 Synthetic transfer-review fixture
+- `cfbDemoCreate_` seeds one two-bank reciprocal transfer and one one-sided transfer. `cfbDemoTransferReview_` calculates unique matching hints and missing or ambiguous entries from local in-memory transactions during `cfbDemoRebuild_`; it does not call `cfpTransferPairReview_` through GAS.
+- The synthetic section is recalculated after transfer flag changes and remains `confirmed:false`. `scripts/test_cashflow_sandbox.mjs` checks the initial panel, review counts, reclassification and zero production RPCs.
