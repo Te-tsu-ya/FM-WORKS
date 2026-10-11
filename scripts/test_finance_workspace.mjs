@@ -17,6 +17,7 @@ const sheet=new Sheet(),users={ADMIN:{employeeId:'A',name:'架空管理者',role
  STAFF:{employeeId:'B',name:'架空社員',role:'USER',department:'開発'}};
 let ids=0,audit=true;
 const ctx=vm.createContext({console,Date,JSON,Array,Set,Map,String,Number,Object,RegExp,Math,Error,
+ DB:{timeZone:'Asia/Tokyo'},
  Utilities:{formatDate:()=> '2026-10-11 12:00:00'},
  financeDepartmentAllowed_:department=>department==='経理',
  requireSession_:token=>{if(!users[token])throw Error('AUTH_REQUIRED');return {employee:users[token]};},
