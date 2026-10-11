@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const jsFile=name=>fs.readFileSync('src/'+name+'.html','utf8')
+ .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
+const calls=[];
+const runner=meta=>new Proxy({}, {get(_t,key){
+ if(key==='withSuccessHandler')return fn=>runner({...meta,success:fn});
+ if(key==='withFailureHandler')return fn=>runner({...meta,failure:fn});
+ return (...args)=>calls.push({method:key,args,...meta});
+}});
+let confirm=null,renders=0;
+const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const months=Array.from({length:12},(_,i)=>({month:i===0?'2025-12':'2026-'+String(i).padStart(2,'0'),
+ planIn:null,planOut:null,actualIn:null,actualOut:null,note:''}));
+const result={ok:true,setupRequired:false,fiscalYear:2026,record:{openingBalance:1000000,months,revision:0,exists:false},availableYears:[]};
+const state={sessionToken:'ADMIN',page:'finance',data:{today:'2026-10-11',permissions:{adminConsole:true,cashFlowWorkspace:true}}};
+const el={'cfg-copy':{hidden:true,value:'',focus(){},select(){}},'cfStatus':{textContent:''},'cfSave':{disabled:true}};
+const ctx=vm.createContext({console,Date,Number,Math,String,JSON,Array,Set,Map,Object,RegExp,Error,
+ state,financeUi:{demo:false},escapeHtml,google:{script:{run:runner({})}},
+ document:{getElementById:id=>el[id]||null,querySelector:()=>null,querySelectorAll:()=>[],activeElement:null},
+ showToast:()=>{},renderPageIfActive:()=>renders++,openConfirmDialog:(title,message,confirmText,cb)=>{confirm={title,message,cb};},
+ cleanApiErrorMessage:e=>String(e.message||e),pageHead:(t,d)=>t+d});
+vm.runInContext(jsFile('AppCashFlow'),ctx);
+vm.runInContext(jsFile('AppCashFlowGrid'),ctx);
+const read=s=>vm.runInContext(s,ctx);
+ctx.cashFlowOpen_();
+assert.equal(calls.length,1);
+assert.equal(calls[0].method,'getCashFlowYear');
+calls[0].success(result);
+const initial=ctx.cashFlowPage_();
+assert.ok(initial.includes('12か月を横に並べて入力'));
+assert.equal((initial.match(/data-cfg-cell=/g)||[]).length,5*12);
+assert.equal((initial.match(/data-key="planIn"/g)||[]).length,12,'legacy vertical table must remain available');
+assert.ok(initial.includes('空欄は未入力、0は確認した0円'));
+const before=calls.length;
+const income=Array.from({length:12},(_,i)=>(i+1)*1000).join('\t');
+const expense=Array.from({length:12},()=> '250円').join('\t');
+const incomeActual=Array.from({length:12},(_,i)=>i===0?'0':'').join('\t');
+ctx.cashFlowGridApplyMatrix_([income,expense,incomeActual].join('\n'),0,0);
+assert.equal(read('cashFlowUi.draft.months[0].planIn'),1000);
+assert.equal(read('cashFlowUi.draft.months[0].planOut'),250);
+assert.equal(read('cashFlowUi.draft.months[0].actualIn'),0,'0 is a confirmed zero');
+assert.equal(read('cashFlowUi.draft.months[1].actualIn'),null,'empty is unknown, not zero');
+assert.equal(read('cashFlowUi.draft.months[11].planIn'),12000);
+assert.equal(calls.length,before,'pasting must be browser-only');
+assert.equal(read('cashFlowUi.dirty'),true);
+const snapshot=read('JSON.stringify(cashFlowUi.draft.months)');
+assert.throws(()=>ctx.cashFlowGridApplyMatrix_('100\t=2+5',0,0),/金額/);
+assert.equal(read('JSON.stringify(cashFlowUi.draft.months)'),snapshot,'no partial edit when pasted range has a formula');
+assert.throws(()=>ctx.cashFlowGridApplyMatrix_('500\t600',0,11),/範囲/);
+assert.equal(read('JSON.stringify(cashFlowUi.draft.months)'),snapshot,'out-of-range paste is atomic');
+assert.throws(()=>ctx.cashFlowGridApplyMatrix_('10.5',0,0),/整数/);
+assert.throws(()=>ctx.cashFlowGridApplyMatrix_('-120',0,0),/整数/);
+assert.equal(ctx.cashFlowGridNormalize_('planIn','1,450円'),1450);
+assert.equal(ctx.cashFlowGridNormalize_('planIn',''),null);
+assert.equal(ctx.cashFlowGridNormalize_('planIn','0'),0);
+ctx.cashFlowGridApplyMatrix_('<img src=x onerror=alert(1)>',4,0);
+assert.ok(ctx.cashFlowGridHtml_().includes('&lt;img src=x onerror=alert(1)&gt;'));
+assert.ok(!ctx.cashFlowGridHtml_().includes('<img src=x onerror=alert(1)>'));
+ctx.cashFlowGridCopy_();
+assert.ok(el['cfg-copy'].value.split('\n').length===5,'copy must contain five rows');
+assert.equal(el['cfg-copy'].value.split('\n')[0].split('\t').length,12,'copy must contain 12 months');
+assert.equal(ctx.cashFlowCalc_().months[0].planEnd,1000750);
+assert.equal(ctx.cashFlowCalc_().months[1].actualEnd,null,'missing actual outflow cannot infer zero');
+ctx.cashFlowSave_();
+assert.equal(calls.at(-1).method,'saveCashFlowYear');
+const key=calls.at(-1).args[1].requestKey;
+assert.equal(calls.at(-1).args[1].months[0].actualIn,0);
+calls.at(-1).failure(Error('response lost'));
+assert.equal(read('cashFlowUi.uncertain'),true);
+const prior=read('cashFlowUi.draft.months[0].planIn');
+assert.throws(()=>ctx.cashFlowGridApplyMatrix_('999',0,0),/編集できません/);
+ctx.cashFlowGridInput_({dataset:{cfgKey:'planIn',cfgMonth:'0'},value:'999'});
+assert.equal(read('cashFlowUi.draft.months[0].planIn'),prior,'editing locked after uncertain save');
+ctx.cashFlowSave_();
+assert.equal(calls.at(-1).args[1].requestKey,key,'retries use same request key');
+assert.equal(calls.at(-1).args[1].months[0].planIn,prior,'retries preserve exact financial input');
+calls.at(-1).success({ok:true,revision:1,auditRecorded:true});
+assert.equal(calls.at(-1).method,'getCashFlowYear');
+ctx.resetCashFlowUi();
+assert.equal(read('cashFlowUi.draft'),null);
+assert.ok(!/localStorage|sessionStorage/.test(jsFile('AppCashFlowGrid')));
+console.log('PASS 12-month cashflow grid: horizontal cells, TSV paste/copy, bounds, blank vs zero, local totals, safe retries and logout');

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.1
+**文書版:** 0.24.2
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2359,3 +2359,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Initial payload becomes smaller, but do not infer shorter RPC or Sheets I/O latency without production measurements.
 
 - Remove unused annual-leave demo cleanup from `AppCore.clearLocalSession`; normal logout/session cache clearing remains unchanged.
+
+
+## v0.24.2 Cashflow spreadsheet-entry architecture (2026-10-11)
+- `AppCashFlowGrid.html` defines `CF_GRID_FIELDS`, 5x12 `cashFlowGridHtml_` and `cashFlowGridApplyMatrix_`, which validates a full TSV rectangle before mutating the live `cashFlowUi.draft.months` array. Blank amount means null (unknown), numeric zero means confirmed 0. Notes are 300 chars max. No localStorage/sessionStorage.
+- `StylesCashFlowGrid.html` uses a fixed left row-label column, sticky month headers and scrolling of the table element only; old vertical entry remains under a native details disclosure. Index mounts the CSS/JS after the original annual cashflow module.
+- The original cashFlowSave_ RPC remains the only persistence path (`saveCashFlowYear`, `資金繰り年間`). On unresolved response or RPC failure `cashFlowUi.uncertain=true` disables all client edits, preserves `requestKey`, input snapshot and revision. Retry with identical payload until confirmed; success resets uncertain, invalidates cache and refreshes. Existing server ACL/revision/ScriptLock/monitoring unchanged.
+- QA `test_cashflow_grid.mjs` verifies 5x12 editing, paste atomicity, null vs zero, formula rejection, copying, recomputed balances, exact retry key after failed RPC and logout clearance. `test_cashflow_grid_viewport.mjs` uses Chromium to test 1440/1024/768/390/320 widths and two color schemes; existing cashflow, UI contract and whole-app CI tests also run.
+- Bank statements remain separately classified, partially imported transactions must not be shown as confirmed zero. DB schema v20 separate manual plan linking feature is preserved; the source Excel or bank data is not changed by manual-year edits.
