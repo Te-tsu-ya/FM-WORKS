@@ -33,9 +33,9 @@ const ctx=vm.createContext({console,Date,Number,Array,Map,Set,String,Math,Object
  UrlFetchApp:{fetch:url=>{lastExport=url;const pdf=url.includes('format=pdf'),data=Array(120).fill(0);data[0]=pdf?37:80;data[1]=pdf?80:75;return{getResponseCode:()=>200,getContent:()=>data};}},
  DriveApp:{getFileById:()=>({setTrashed(value){if(value)trash++;}})}
 });
-for(const p of ['Schema.gs','CashFlow.gs','CashFlowBank.gs','CashFlowAnalysis.gs','CashFlowReport.gs','CashFlowTaxExport.gs'])vm.runInContext(fs.readFileSync('src/'+p,'utf8'),ctx,{filename:p});
+for(const p of ['Schema.gs','CashFlow.gs','CashFlowBank.gs','CashFlowAnalysis.gs','CashFlowReport.gs','CashFlowTaxExport.gs','CashFlowPlanLink.gs'])vm.runInContext(fs.readFileSync('src/'+p,'utf8'),ctx,{filename:p});
 const specs=JSON.parse(JSON.stringify(vm.runInContext('DB_SCHEMA_SPECS',ctx)));
-for(const name of ['資金繰り年間','資金口座','資金予定','資金取引','資金月次確定','資金明細注記','資金分類ルール','資金シナリオ','資金月次照合'])
+for(const name of ['資金繰り年間','資金口座','資金予定','資金取引','資金月次確定','資金明細注記','資金分類ルール','資金シナリオ','資金月次照合','資金予定照合'])
  sheets.set(name,new Sheet(specs[name]));
 const put=(name,row)=>sheets.get(name).appendRow(row);
 const months=JSON.parse(JSON.stringify(ctx.cashFlowBlank_(2026)));
@@ -126,6 +126,51 @@ assert.throws(()=>ctx.exportCashFlowTaxAdvisorCsv('ADMIN',{fiscalYear:2026,inclu
 assert.ok(ctx.cftCsvCell_('  =HYPERLINK("x")').startsWith('"'+String.fromCharCode(39)+'  ='));
 assert.ok(ctx.cftCsvCell_('+1').startsWith('"'+String.fromCharCode(39)+'+1'));
 
+
+// Cross-boundary approval checks: bank originals are never touched.
+const manualSheet=sheets.get('資金予定照合');
+sheets.delete('資金予定照合');
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'}).linkReady,false,
+ 'v19 data stores remain usable while plan-link storage is not installed');
+sheets.set('資金予定照合',manualSheet);
+const originalBank=JSON.stringify(sheets.get('資金取引').rows);
+const planSheet=sheets.get('資金予定'),priorPlanCount=planSheet.rows.length;
+put('資金予定',['P-MANUAL','ABC入金予定','IN',90,'A','売上','MONTHLY',
+ '2025-12','2026-11',10,'TRUE','',1,'','','']);
+const bankTx=ctx.cfpRows_('tx',false).rows.find(x=>Number(x.incoming)===90);
+const link={action:'APPROVE',transactionId:bankTx.id,planId:'P-MANUAL',
+ plannedDate:'2026-04-10',reason:'架空入金と予定を画面で確認',
+ revision:0,requestKey:'MANUAL-APR-00000001'};
+assert.throws(()=>ctx.saveCashFlowPlanLink('EMPLOYEE',link),/管理者/);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{...link,plannedDate:'2026-04-11',requestKey:'MANUAL-APR-BAD0001'}),/金額・口座・予定日/);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{...link,planId:'P1',requestKey:'MANUAL-APR-BAD0002'}),/金額・口座・予定日/);
+put('資金予定照合',['TX-OTHER','P-MANUAL','2026-04-10','APPROVED','hash','hash','別取引',
+ 1,'2026-10-11','A','OTHER-LINK-000001']);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',link),/別の明細で承認済み/);
+manualSheet.rows.pop();
+const saved=ctx.saveCashFlowPlanLink('ADMIN',link);
+assert.equal(saved.ok,true);assert.equal(saved.status,'APPROVED');assert.equal(saved.revision,1);
+assert.equal(ctx.saveCashFlowPlanLink('ADMIN',link).duplicate,true,'same request can be safely retried');
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{...link,reason:'changed'}),/送信識別子/);
+const linked=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'});
+assert.equal(linked.linkReady,true);
+assert.equal(linked.rows.find(x=>x.id===bankTx.id).planLink.status,'APPROVED');
+const record=ctx.cfmlRows_(false).rows.find(x=>x.transactionId===bankTx.id),
+ bankPlan=ctx.cfpRows_('plan',false).rows.find(x=>x.id==='P-MANUAL');
+assert.equal(ctx.cfmlReadLink_(record,bankTx,[{...bankPlan,title:'名称変更'}]).status,'STALE');
+assert.equal(ctx.cfmlReadLink_(record,{...bankTx,description:'別の銀行明細'},[bankPlan]).status,'STALE');
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{action:'UNLINK',transactionId:bankTx.id,revision:0,
+ reason:'取消',requestKey:'MANUAL-UNLINK-BAD1'}),/変更/);
+const unlink={action:'UNLINK',transactionId:bankTx.id,reason:'照合のやり直し',
+ revision:1,requestKey:'MANUAL-UNLINK-0001'};
+assert.equal(ctx.saveCashFlowPlanLink('ADMIN',unlink).status,'UNLINKED');
+assert.equal(ctx.saveCashFlowPlanLink('ADMIN',unlink).duplicate,true);
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
+ .rows.find(x=>x.id===bankTx.id).planLink.status,'NONE');
+assert.equal(JSON.stringify(sheets.get('資金取引').rows),originalBank,'approval must never mutate imported bank rows');
+assert.equal(planSheet.rows.length,priorPlanCount+1);
+planSheet.rows.pop();
+
 const baseline=ctx.getCashFlowProjection('ADMIN',{fiscalYear:2026});
 assert.equal(baseline.rows[0].forecastEnd,1060);
 assert.equal(baseline.rows.find(x=>x.month==='2026-04').source,'予定','unreconciled bank rows must not replace forecast');
@@ -156,6 +201,7 @@ assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{accountId:'A',rows:[{date:
 assert.equal(ctx.getCashFlowProjection('ADMIN',{fiscalYear:2026}).rows.find(r=>r.month==='2026-04').source,'確定実績');
 assert.throws(()=>ctx.setCashFlowTransfer('ADMIN',tgt,true,1),/確定済み/);
 assert.throws(()=>ctx.saveCashFlowAnnotation('ADMIN',{...note,requestKey:'ANNOTATION-0000003',revision:1}),/確定済み/);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{...link,requestKey:'MANUAL-APR-CLOSED1',revision:2}),/確定済み/);
 const exported=ctx.exportCashFlowReport('ADMIN',{fiscalYear:2026,scenarioId:scenario.id,format:'XLSX'});
 assert.equal(exported.ok,true);assert.match(lastExport,/format=xlsx/);assert.equal(trash,1);
 assert.ok(Buffer.from(exported.base64,'base64').length>=100);
