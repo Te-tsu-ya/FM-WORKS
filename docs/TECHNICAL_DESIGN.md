@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.4
+**文書版:** 0.24.5
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2396,3 +2396,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - src/AppCore.html clears search state on logout before the session object is released. Late old-session RPC results cannot restore another user's search results.
 - scripts/test_global_search.mjs uses synthetic server and browser VM data to enforce the 30-item cap, scoped IDs, ACL, callback ordering, dismissal, route changes, failure handling and logout purge. CI/deployment both run the test.
 - Static read reductions are distinct from authenticated real-world latency, which remains an E2E measurement task.
+
+
+## v0.24.5 Sparse global schedule search
+- `searchScheduleRows_` in `src/Search.gs`: for more than 300 data rows and short single-token queries, use `sheet.getRange(2,7,lastRow-1,5).createTextFinder(query).useRegularExpression(false).matchCase(false).findAll()` to find G:K cells. Deduplicate + sort hit rows via existing `contiguousRowBlocks_` and fetch `A:R` full records only for matching contiguous blocks.
+- Preserve source row order and continue `canViewScheduleRow_` authorization before any schedule entry is returned. For whitespace/cross-column terms, long terms, small sheets, over 48 disjoint row blocks, or an index exception, read 18 columns as the previous implementation did.
+- `scripts/test_search_schedule_index.mjs` has 1,000 synthetic scheduled rows and verifies 54 compared with 18,000 18-column cells in the sparse example, hidden events omitted, source order, duplicate cell matches, user strings as literals, 30-result cap and safe fallback conditions. Both CI and deployment run it.
+- This reduces transfer of unused cells for sparse lookups and is not a claim of corresponding GAS elapsed-time reduction. Read-only change; DB v20 and finance/attendance write contracts unchanged.
