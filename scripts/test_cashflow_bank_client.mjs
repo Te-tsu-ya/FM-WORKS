@@ -58,8 +58,16 @@ assert.equal(ctx.cfbForecast_().rows[4].forecastEnd,500,'provisional CSV actual 
 loaded.closing.through='2026-04';
 f=ctx.cfbForecast_();
 assert.equal(f.rows[4].source,'確定実績');
+emptyMonthly[4].reconciled=false;
+assert.equal(ctx.cfbForecast_().rows[4].source,'要照合','unreconciled prior close is not a finalized actual');
+assert.equal(ctx.cfbForecast_().rows[4].forecastEnd,null,'unknown bank actual must not be replaced by zero');
+emptyMonthly[4].reconciled=true;
 assert.equal(f.rows[4].actualIn,500);
 assert.equal(f.rows[4].forecastEnd,850,'four prior planned outflows of 100, followed by 500 minus 250 actual');
+months[0].actualIn=900;months[0].actualOut=100;emptyMonthly[0].reconciled=true;
+assert.equal(ctx.cfbForecast_().rows[0].actualIn,0,'zero-transaction month must override legacy manual actual');
+assert.equal(ctx.cfbForecast_().rows[0].actualOut,0);
+months[0].actualIn=null;months[0].actualOut=null;emptyMonthly[0].reconciled=undefined;
 ctx.cfbSection_('schedules');
 assert.ok(ctx.cfbPage_().includes('毎月の家賃'));
 ctx.cfbNewPlan_();
