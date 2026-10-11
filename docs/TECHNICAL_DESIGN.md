@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.2
+**文書版:** 0.23.3
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.2`
+`APP.version = 0.23.3`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2211,3 +2211,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - In `cfrMonthTotals_`, `hasPlan` is true only when the bank workspace reports a scheduled occurrence for that month, the active scenario introduces an amount, or the user explicitly entered both manual inflow and outflow amounts (including 0). Existence of a plan in another month must not initialize unknown periods.
 - Keep `cfbForecast_` preview consistent with the server for ordinary schedules and manual values. Warn explicitly about overlapping scheduled and manual amounts; validate annual sums and scenario differences against safe integer limits.
 - Previously published reports and source records are not mutated; app release requires all financial and UI regressions in CI.
+
+
+## v0.23.3 Loss-of-ack financial save recovery
+- The transient annotation, rule and scenario drafts retain their request key after a failed or ambiguous RPC, clearing only on user changes. Success handlers require `ok===true` before dismissing forms.
+- Reconciliation keeps a keyed pending payload and restores its amount and note in the rendered form after failure. Server idempotency rejects the same reconciliation key with changed note, bank fingerprint or balance.
+- No persistent browser storage, DB migration or source workbook modification.

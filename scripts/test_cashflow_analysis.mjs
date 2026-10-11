@@ -85,6 +85,7 @@ for(const month of ['2025-12','2026-01','2026-02','2026-03']){
 }
 assert.throws(()=>ctx.saveCashFlowClosedThrough('ADMIN',{fiscalYear:2026,through:'2026-04',revision:0,requestKey:'CLOSE-RECON-000001'}),/照合/);
 ctx.saveCashFlowBankReconciliation('ADMIN',{fiscalYear:2026,month:'2026-04',accountId:'A',closingBalance:1080,note:'Web残高を照合',revision:0,requestKey:'RECON-2026-04-00001'});
+assert.throws(()=>ctx.saveCashFlowBankReconciliation('ADMIN',{fiscalYear:2026,month:'2026-04',accountId:'A',closingBalance:1080,note:'別根拠',revision:0,requestKey:'RECON-2026-04-00001'}),/識別子/,'changing reconciliation evidence with the same request identity must be rejected');
 const closed=ctx.saveCashFlowClosedThrough('ADMIN',{fiscalYear:2026,through:'2026-04',revision:0,requestKey:'CLOSE-RECON-000001'});
 assert.equal(closed.ok,true);
 const afterClose=ctx.getCashFlowProjection('ADMIN',{fiscalYear:2026});

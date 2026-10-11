@@ -2,12 +2,12 @@
 /* CASH FLOW ANALYSIS: no persistent browser storage; never trust browser totals. */
 let cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
  loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:0,monthSeq:0,projectionSeq:0,
- scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,error:'',notice:''};
+ scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,error:'',notice:''};
 function cfaReset_(){
  cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
   loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:cfaUi.seq+1,
   monthSeq:cfaUi.monthSeq+1,projectionSeq:cfaUi.projectionSeq+1,scenarioId:'',projection:null,
-  editor:null,ruleDraft:null,scenarioDraft:null,error:'',notice:''};
+  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,error:'',notice:''};
 }
 function cfaKey_(){return 'CFA-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,16);}
 function cfaMoney_(amount){return amount===null||amount===undefined?'未入力':Number(amount).toLocaleString('ja-JP')+'円';}
@@ -70,41 +70,51 @@ function cfaLoadProjection_(force){
 }
 function cfaChangeMonth_(value){
  if(cfaUi.busy)return;
- cfaUi.month=String(value||'');cfaUi.rows=null;cfaUi.editor=null;cfaUi.page=0;cfaUi.monthSeq++;cfaUi.loadingMonth=false;
+ cfaUi.reconcilePending=null;cfaUi.month=String(value||'');cfaUi.rows=null;cfaUi.editor=null;cfaUi.page=0;cfaUi.monthSeq++;cfaUi.loadingMonth=false;
  renderPageIfActive('finance');cfaLoadMonth_(true);
 }
 function cfaPageIndex_(index){
+ if(cfaUi.busy)return;
  const last=Math.max(0,Math.ceil(cfaUi.total/100)-1);
  cfaUi.page=Math.max(0,Math.min(last,Number(index)||0));cfaUi.rows=null;cfaUi.editor=null;cfaUi.loadingMonth=false;
  cfaUi.monthSeq++;renderPageIfActive('finance');cfaLoadMonth_(true);
 }
 function cfaOpenEditor_(id){
  const r=(cfaUi.rows||[]).find(x=>x.id===id);if(!r)return;
- cfaUi.editor={id:r.id,category:r.reviewed?r.category:r.suggested?r.category:'',tags:r.tags,note:r.note,revision:r.revision};
+ cfaUi.editor={id:r.id,category:r.reviewed?r.category:r.suggested?r.category:'',tags:r.tags,note:r.note,revision:r.revision,requestKey:''};
  renderPageIfActive('finance');
 }
-function cfaEditorField_(name,value){if(cfaUi.editor)cfaUi.editor[name]=String(value);}
+function cfaEditorField_(name,value){
+ const d=cfaUi.editor;if(!d)return;
+ const next=String(value);if(d[name]!==next){d[name]=next;d.requestKey='';}
+}
 function cfaSaveAnnotation_(){
  const u=cfaUi,d=u.editor;if(!d||u.busy||cfbUi.demo)return;
- const key=cfaKey_();
+ if(!d.requestKey)d.requestKey=cfaKey_();
+ const key=d.requestKey;
  u.busy=true;u.error='';
  cfbRpc_('saveCashFlowAnnotation',{transactionId:d.id,category:d.category,tags:d.tags,note:d.note,revision:d.revision,requestKey:key},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'保存結果を確認できません。再試行してください。'});return;}
   u.busy=false;u.editor=null;u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'分類・メモを保存しました。';
   u.rows=null;cfaLoadMonth_(true);cfaLoad_(true);
  },e=>cfaShowError_(e,'分類・メモを保存できませんでした。'));
 }
 function cfaRuleNew_(id){
  const source=(cfaUi.workspace&&cfaUi.workspace.rules||[]).find(x=>x.id===id);
- cfaUi.ruleDraft=source?{...source}:{id:'',keyword:'',direction:'ANY',accountId:'',category:'',tags:'',priority:50,active:true,revision:0};
+ cfaUi.ruleDraft=source?{...source}:{id:'',keyword:'',direction:'ANY',accountId:'',category:'',tags:'',priority:50,active:true,revision:0,requestKey:''};
  renderPageIfActive('finance');
 }
 function cfaRuleChange_(field,val){
- if(cfaUi.ruleDraft)cfaUi.ruleDraft[field]=field==='priority'?Number(val):field==='active'?!!val:val;
+ if(!cfaUi.ruleDraft)return;
+ const d=cfaUi.ruleDraft,next=field==='priority'?Number(val):field==='active'?!!val:val;
+ if(d[field]!==next){d[field]=next;d.requestKey='';}
 }
 function cfaSaveRule_(){
  const u=cfaUi;if(!u.ruleDraft||u.busy||cfbUi.demo)return;
+ if(!u.ruleDraft.requestKey)u.ruleDraft.requestKey=cfaKey_();
  u.busy=true;u.error='';
- cfbRpc_('saveCashFlowRule',{...u.ruleDraft,requestKey:cfaKey_()},res=>{
+ cfbRpc_('saveCashFlowRule',{...u.ruleDraft},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'ルール保存結果が不明です。再試行してください。'});return;}
   u.busy=false;u.ruleDraft=null;u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'自動分類ルールを保存しました。';cfaLoad_(true);
  },e=>cfaShowError_(e,'分類ルールを保存できませんでした。'));
 }
@@ -123,11 +133,15 @@ function cfaReconcile_(index){
  const balance=document.getElementById('cfa-bank-balance-'+index);
  const note=document.getElementById('cfa-bank-note-'+index);
  if(!balance||balance.value.trim()===''){u.error='銀行サイトの月末残高を入力してください。';renderPageIfActive('finance');return;}
- const payload={fiscalYear:cashFlowUi.year,month:u.month,accountId:r.accountId,closingBalance:balance.value,note:note?note.value:'',
-  revision:r.revision,requestKey:cfaKey_()};
+ const signature=JSON.stringify([cashFlowUi.year,u.month,r.accountId,r.revision,balance.value,note?note.value:'']);
+ if(!u.reconcilePending||u.reconcilePending.signature!==signature)
+  u.reconcilePending={signature,payload:{fiscalYear:cashFlowUi.year,month:u.month,accountId:r.accountId,
+   closingBalance:balance.value,note:note?note.value:'',revision:r.revision,requestKey:cfaKey_()}};
+ const payload=u.reconcilePending.payload;
  openConfirmDialog('銀行月次照合','銀行のWeb画面ですべての入出金が取り込まれ、表示残高が一致することを確認しましたか？','照合結果を保存',()=>{
   u.busy=true;cfbRpc_('saveCashFlowBankReconciliation',payload,res=>{
-   u.busy=false;u.notice=res.auditRecorded===false?'照合済みですが監査履歴を確認してください。':'照合結果を保存しました。';
+   if(!res||res.ok!==true){cfaShowError_({message:'照合の保存結果が不明です。再試行してください。'});return;}
+   u.busy=false;u.reconcilePending=null;u.notice=res.auditRecorded===false?'照合済みですが監査履歴を確認してください。':'照合結果を保存しました。';
    cfaLoad_(true);cfbLoadAfterWrite_();
   },e=>cfaShowError_(e,'照合結果を保存できませんでした。'));
  });
@@ -142,7 +156,7 @@ function cfaScenarioNew_(id){
   {id:'',revision:0,name:'',changes:[]};
  renderPageIfActive('finance');
 }
-function cfaScenarioName_(v){if(cfaUi.scenarioDraft)cfaUi.scenarioDraft.name=v;}
+function cfaScenarioName_(v){const d=cfaUi.scenarioDraft;if(d&&d.name!==v){d.name=v;d.requestKey='';}}
 function cfaScenarioAdd_(type){
  const d=cfaUi.scenarioDraft,plans=cfbUi.loaded&&cfbUi.loaded.plans||[];
  if(!d||d.changes.length>=30)return;
@@ -151,20 +165,23 @@ function cfaScenarioAdd_(type){
  const change=type==='EXTRA'?{type,month,direction:'OUT',amount:0,title:'臨時支出'}:
   type==='SCALE'?{type,month,planId:first.id||'',percent:80}:
   type==='SHIFT'?{type,month,planId:first.id||'',monthsDelta:1}:{type:'OMIT',month,planId:first.id||''};
- d.changes.push(change);renderPageIfActive('finance');
+ d.changes.push(change);d.requestKey='';renderPageIfActive('finance');
 }
 function cfaScenarioField_(index,name,value){
  const d=cfaUi.scenarioDraft;if(!d||!d.changes[index])return;
- d.changes[index][name]=['monthsDelta','percent','amount'].includes(name)?Number(value):String(value);
+ const next=['monthsDelta','percent','amount'].includes(name)?Number(value):String(value);
+ if(d.changes[index][name]!==next){d.changes[index][name]=next;d.requestKey='';}
 }
 function cfaScenarioRemove_(index){
- const d=cfaUi.scenarioDraft;if(!d)return;d.changes.splice(index,1);renderPageIfActive('finance');
+ const d=cfaUi.scenarioDraft;if(!d)return;d.changes.splice(index,1);d.requestKey='';renderPageIfActive('finance');
 }
 function cfaScenarioSave_(){
  const u=cfaUi;if(!u.scenarioDraft||u.busy||cfbUi.demo)return;
- const d=u.scenarioDraft;u.busy=true;u.error='';
+ const d=u.scenarioDraft;if(!d.requestKey)d.requestKey=cfaKey_();
+ u.busy=true;u.error='';
  cfbRpc_('saveCashFlowScenario',{id:d.id,fiscalYear:cashFlowUi.year,name:d.name,changes:d.changes,
-  revision:d.revision,requestKey:cfaKey_()},res=>{
+  revision:d.revision,requestKey:d.requestKey},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'シナリオ保存結果が不明です。再試行してください。'});return;}
   u.busy=false;u.scenarioDraft=null;u.scenarioId=res.id;u.projection=null;u.loadingProjection=false;u.projectionSeq++;
   u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'条件別の資金繰りを保存しました。';
   cfaLoad_(true);cfaLoadProjection_(true);
@@ -205,11 +222,15 @@ function cfaAnalysisPage_(){
     '<button class="primary-button" type="button" onclick="cfaSaveAnnotation_()"'+(u.busy?' disabled':'')+'>分類とメモを保存</button>'+
     '<button class="secondary-button" type="button" onclick="cfaUi.editor=null;renderPageIfActive(\'finance\')">閉じる</button></div></td></tr>':'');
  }).join('');
- const reconciliation=check.map((r,i)=>'<div class="cfa-reconcile-item"><div><strong>'+cfaEsc_(r.accountName)+'</strong><span>'+
+ const reconciliation=check.map((r,i)=>{
+  const pending=u.reconcilePending&&u.reconcilePending.payload,
+   draft=pending&&pending.month===u.month&&pending.accountId===r.accountId?pending:null;
+  return '<div class="cfa-reconcile-item"><div><strong>'+cfaEsc_(r.accountName)+'</strong><span>'+
    (r.verified?'照合済':r.outdated?'要再照合':'未照合')+'／入金 '+cfaMoney_(r.actualIn)+'・出金 '+cfaMoney_(r.actualOut)+'／ '+r.importedCount+'件</span></div>'+
-   '<label>銀行Webの月末残高（円）<input type="number" id="cfa-bank-balance-'+i+'" value="'+(r.latestBalance!==null?cfaEsc_(r.latestBalance):'')+'" placeholder="銀行サイトで確認" /></label>'+
-   '<label>照合根拠・補足<input type="text" maxlength="500" id="cfa-bank-note-'+i+'" value="'+cfaEsc_(r.note||'')+'" placeholder="取引がない月も確認根拠を記入" /></label>'+
-   '<button class="secondary-button" onclick="cfaReconcile_('+i+')"'+(u.busy?' disabled':'')+'>照合して保存</button></div>').join('');
+   '<label>銀行Webの月末残高（円）<input type="number" id="cfa-bank-balance-'+i+'" value="'+(draft?cfaEsc_(draft.closingBalance):r.latestBalance!==null?cfaEsc_(r.latestBalance):'')+'" placeholder="銀行サイトで確認" /></label>'+
+   '<label>照合根拠・補足<input type="text" maxlength="500" id="cfa-bank-note-'+i+'" value="'+cfaEsc_(draft?draft.note:r.note||'')+'" placeholder="取引がない月も確認根拠を記入" /></label>'+
+   '<button class="secondary-button" onclick="cfaReconcile_('+i+')"'+(u.busy?' disabled':'')+'>照合して保存</button></div>';
+ }).join('');
  return '<section class="card cfa-panel"><div class="cfa-toolbar"><label>対象月 <select onchange="cfaChangeMonth_(this.value)">'+months+'</select></label>'+
   '<div>未確定の分類：<strong>'+Number(w.unreviewedCount||0)+'件</strong></div>'+
   '<button type="button" class="secondary-button" onclick="cfaApplyCurrentRules_()"'+(u.busy?' disabled':'')+'>このページの自動分類候補を確定</button></div>'+
