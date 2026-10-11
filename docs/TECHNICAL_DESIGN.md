@@ -2310,3 +2310,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ## Existing Apps Script deployment verification hardening (2026-10-11)
 - The pipeline compares the `clasp create-deployment` response deployment ID and `@version` against a **single corresponding line** of `clasp list-deployments` that also carries `GitHub $GITHUB_SHA`. It retries only the read (three attempts, no repeat deployment).
 - Bash `read` and a here-string avoid `grep -q` / `pipefail` broken-pipe false failures on large deployment lists; preflight uses a single-shell string membership check. Failure remains fail-closed. A mocked clasp shell regression runs the exact release step against long listings, wrong versions, unrelated commit rows, missing deployments and wrong creation IDs.
+
+- The release-step fixture escapes mock Bash parameter expansion in the Node template literal, ensuring the mock executes in Bash rather than trying JavaScript interpolation.

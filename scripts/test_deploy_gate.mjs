@@ -40,7 +40,7 @@ try{
  const fake=path.join(dir,'clasp');
  writeFileSync(fake,`#!/usr/bin/env bash
 if [[ "$1" == "create-deployment" ]]; then
-  printf "Deployed %s @174\\n" "${MOCK_RESPONSE_ID:-$FM_WORKS_DEPLOYMENT_ID}"
+  printf "Deployed %s @174\\n" "\${MOCK_RESPONSE_ID:-$FM_WORKS_DEPLOYMENT_ID}"
 elif [[ "$1" == "list-deployments" ]]; then
   printf "%s\\n" "$MOCK_LISTING"
 else
