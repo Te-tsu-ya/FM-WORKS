@@ -22,7 +22,7 @@ const sheets=new Map(),audit=[];let idSeq=0,trash=0,spreadsheet=null,lastExport=
 const utils={DigestAlgorithm:{SHA_256:'SHA_256'},Charset:{UTF_8:'UTF_8'},
  getUuid:()=>String(++idSeq),formatDate:()=> '2026-10-11 15:00:00',
  computeDigest:(_alg,text)=>[...createHash('sha256').update(text).digest()].map(x=>x>127?x-256:x),
- base64Encode:bytes=>Buffer.from(bytes).toString('base64')};
+ base64Encode:bytes=>Buffer.from(bytes).toString('base64'),newBlob:text=>({getBytes:()=>[...Buffer.from(text,'utf8')]})};
 const ctx=vm.createContext({console,Date,Number,Array,Map,Set,String,Math,Object,JSON,RegExp,
  DB:{timeZone:'Asia/Tokyo'},getDb_:()=>({getSheetByName:name=>sheets.get(name)||null}),
  safeSheetText_:v=>String(v).startsWith('=')?"'"+v:String(v),
@@ -33,7 +33,7 @@ const ctx=vm.createContext({console,Date,Number,Array,Map,Set,String,Math,Object
  UrlFetchApp:{fetch:url=>{lastExport=url;const pdf=url.includes('format=pdf'),data=Array(120).fill(0);data[0]=pdf?37:80;data[1]=pdf?80:75;return{getResponseCode:()=>200,getContent:()=>data};}},
  DriveApp:{getFileById:()=>({setTrashed(value){if(value)trash++;}})}
 });
-for(const p of ['Schema.gs','CashFlow.gs','CashFlowBank.gs','CashFlowAnalysis.gs','CashFlowReport.gs'])vm.runInContext(fs.readFileSync('src/'+p,'utf8'),ctx,{filename:p});
+for(const p of ['Schema.gs','CashFlow.gs','CashFlowBank.gs','CashFlowAnalysis.gs','CashFlowReport.gs','CashFlowTaxExport.gs'])vm.runInContext(fs.readFileSync('src/'+p,'utf8'),ctx,{filename:p});
 const specs=JSON.parse(JSON.stringify(vm.runInContext('DB_SCHEMA_SPECS',ctx)));
 for(const name of ['資金繰り年間','資金口座','資金予定','資金取引','資金月次確定','資金明細注記','資金分類ルール','資金シナリオ','資金月次照合'])
  sheets.set(name,new Sheet(specs[name]));
@@ -101,6 +101,23 @@ const notSaved=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026
 const applied=ctx.applyCashFlowRules('ADMIN',{transactionIds:[notSaved.id],requestKey:'RULEAPPLY-0000001'});
 assert.equal(applied.added,0,'nonmatching rule must never force classification');
 assert.equal(ctx.getCashFlowAnalysisWorkspace('ADMIN',2026).unreviewedCount,1);
+
+assert.throws(()=>ctx.exportCashFlowTaxAdvisorCsv('EMPLOYEE',{fiscalYear:2026}),/管理者/);
+const redacted=ctx.exportCashFlowTaxAdvisorCsv('ADMIN',{fiscalYear:2026});
+assert.equal(redacted.ok,true);assert.equal(redacted.count,2);assert.equal(redacted.includeMemo,false);
+const csv0=Buffer.from(redacted.base64,'base64').toString('utf8');
+assert.ok(csv0.startsWith('\uFEFF'));assert.ok(csv0.includes('個別メモ（省略）'));
+assert.ok(!csv0.includes('請求書と一致（架空）'),'private notes must be hidden by default');
+assert.equal(redacted.attentionCount,1);
+const full=ctx.exportCashFlowTaxAdvisorCsv('ADMIN',{fiscalYear:2026,includeMemo:true});
+const csv1=Buffer.from(full.base64,'base64').toString('utf8');
+assert.ok(csv1.includes('請求書と一致（架空）'));
+assert.ok(csv1.includes('説明記録あり・税理士未確認'));
+assert.ok(csv1.includes('説明待ち'));
+assert.throws(()=>ctx.exportCashFlowTaxAdvisorCsv('ADMIN',{fiscalYear:2026,includeMemo:'yes'}),/指定/);
+assert.ok(ctx.cftCsvCell_('  =HYPERLINK("x")').startsWith('"'+String.fromCharCode(39)+'  ='));
+assert.ok(ctx.cftCsvCell_('+1').startsWith('"'+String.fromCharCode(39)+'+1'));
+
 const baseline=ctx.getCashFlowProjection('ADMIN',{fiscalYear:2026});
 assert.equal(baseline.rows[0].forecastEnd,1060);
 assert.equal(baseline.rows.find(x=>x.month==='2026-04').source,'予定','unreconciled bank rows must not replace forecast');

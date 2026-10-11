@@ -2,12 +2,12 @@
 /* CASH FLOW ANALYSIS: no persistent browser storage; never trust browser totals. */
 let cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
  loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:0,monthSeq:0,projectionSeq:0,
- scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,error:'',notice:''};
+ scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,error:'',notice:''};
 function cfaReset_(){
  cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
   loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:cfaUi.seq+1,
   monthSeq:cfaUi.monthSeq+1,projectionSeq:cfaUi.projectionSeq+1,scenarioId:'',projection:null,
-  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,error:'',notice:''};
+  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,error:'',notice:''};
 }
 function cfaKey_(){return 'CFA-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,16);}
 function cfaMoney_(amount){return amount===null||amount===undefined?'未入力':Number(amount).toLocaleString('ja-JP')+'円';}
@@ -210,6 +210,30 @@ function cfaDownloadReport_(format){
  },e=>{if(current())cfaShowError_(e,'帳票の出力に失敗しました。');});
 }
 
+function cfaDownloadTaxCsv_(){
+ const u=cfaUi;if(u.exporting||!cashFlowAllowed_()||!u.workspace||u.workspace.setupRequired||cfbUi.demo)return;
+ const token=state.sessionToken,year=cashFlowUi.year,seq=u.seq,includeMemo=u.taxIncludeMemo===true;
+ const valid=()=>token===state.sessionToken&&year===cashFlowUi.year&&seq===cfaUi.seq&&cashFlowUi.open;
+ u.exporting=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('exportCashFlowTaxAdvisorCsv',{fiscalYear:year,includeMemo},res=>{
+  if(!valid())return;
+  u.exporting=false;
+  if(!res||res.ok!==true||!res.base64){cfaShowError_({message:'CSVの出力結果が不明です。'});return;}
+  let href='';
+  try{
+   const bin=atob(res.base64),bytes=new Uint8Array(bin.length);
+   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+   href=URL.createObjectURL(new Blob([bytes],{type:'text/csv;charset=utf-8'}));
+   const a=document.createElement('a');a.href=href;a.download=res.filename;
+   document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(href),15000);
+   u.notice='取込明細'+Number(res.count||0)+'件を出力。'+Number(res.attentionCount||0)+
+    '件は説明・振替が要確認です。税理士への送付前に必ず見直してください。';
+  }catch(error){if(href)URL.revokeObjectURL(href);u.error='CSVを保存できませんでした。再試行してください。';}
+  renderPageIfActive('finance');
+ },e=>{if(valid())cfaShowError_(e,'取引説明CSVを出力できませんでした。');});
+}
+
 function cfaPlanMatchHtml_(match){
  const m=match||{},total=Number(m.total)||0;
  if(m.status==='TRANSFER')return '<span class="cfa-plan-match-none">振替・対象外</span>';
@@ -344,7 +368,10 @@ function cfaReportsPage_(){
   '<div class="cfa-export"><p>帳票には「予定／確定実績」の区別、比較条件、月別残高、銀行月次照合、明細分類を付けます。未照合や未入力がある場合、帳票に要確認と表示されます。</p>'+
   '<button class="primary-button" onclick="cfaDownloadReport_(\'XLSX\')"'+(u.exporting||!p||p.setupRequired?' disabled':'')+'>年間資金繰りをExcel出力</button>'+
   '<button class="secondary-button" onclick="cfaDownloadReport_(\'PDF\')"'+(u.exporting||!p||p.setupRequired?' disabled':'')+'>年間資金繰りをPDF出力</button>'+
-  (u.exporting?'<span role="status">帳票を作成中です...</span>':'')+'</div></section>';
+  (u.exporting?'<span role="status">帳票を作成中です...</span>':'')+'</div>'+
+  '<div class="cfa-export"><h3>税理士向け｜銀行取引の説明一覧</h3><p>入出金明細・分類・タグ・説明状態を出力します。銀行原本・帳簿は変更せず、外部へ自動送信しません。税理士による確認済みを意味しません。</p>'+
+  '<label><input type="checkbox" onchange="cfaUi.taxIncludeMemo=this.checked"'+(u.taxIncludeMemo?' checked':'')+'>個別メモを含める（初期状態は非表示）</label>'+
+  '<button class="secondary-button" onclick="cfaDownloadTaxCsv_()"'+(u.exporting?' disabled':'')+'>取引説明をCSV出力</button></div></section>';
 }
 function cfaPage_(){
  if(cfaUi.year!==cashFlowUi.year)cfaEnsureYear_();
