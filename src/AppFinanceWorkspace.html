@@ -46,6 +46,17 @@ function financeWorkspaceActivate_(mode){
 function financeWorkspaceGo_(mode){
  if(!financeWorkspacePermitted_(mode))return;
  if(financeUi.busy||financeBulkUi.busy){showToast('登録・承認処理が終わってから画面を切り替えてください。');return;}
+ if(financeWorkspaceMode==='bulk'&&mode!=='bulk'){
+  if(financeBulkUi.locked&&!financeBulkUi.complete){
+   showToast('未確認の保存結果があります。同じ送信キーで再試行するか、登録履歴を確認してください。');return;
+  }
+  if(!financeBulkUi.complete&&(financeBulkUi.rows.some(financeGridHasRecord_)||String(financeBulkUi.raw||'').trim())){
+   openConfirmDialog('未保存の経費入力','表に入力した内容はまだスプレッドシートに保存されていません。画面を離れると消えます。',
+    '保存せず移動',()=>{financeBulkUi=financeBulkInitial_();financeWorkspaceGo_(mode);});
+   return;
+  }
+  financeBulkUi=financeBulkInitial_();
+ }
  if(['cashflow','reports','bankPaste'].includes(mode)){
    if(financeUi.demo){showToast('実データに戻ってから資金繰りを開いてください。');return;}
    financeWorkspaceMode=mode==='reports'?'reports':'cashflow';
@@ -60,16 +71,6 @@ function financeWorkspaceGo_(mode){
    if(cashFlowUi.open){financeWorkspaceMode=mode;cashFlowClose_();return;}
    financeWorkspaceActivate_(mode);
  };
- if(financeWorkspaceMode==='bulk'&&mode!=='bulk'&&financeBulkUi.rows.length&&
-    !financeBulkUi.complete&&!financeBulkUi.locked){
-   openConfirmDialog('未登録の経費入力','貼り付けて編集した内容は保存されていません。画面を離れますか？',
-     '画面を離れる',()=>{financeBulkUi=financeBulkInitial_();go();});
-   return;
- }
- if(financeWorkspaceMode==='bulk'&&mode!=='bulk'&&financeBulkUi.locked&&!financeBulkUi.complete){
-   showToast('保存結果が不明な行があります。同じ送信キーで再試行するか、登録履歴を確認してください。');
-   return;
- }
  go();
 }
 function financeWorkspaceShowKind_(kind,status,match){
@@ -171,7 +172,7 @@ function financeWorkspacePage_(){
  if(financeUi.insightMode)return financeWorkspaceFrame_('analysis',financeInsightsPage());
  if(financeWorkspaceMode==='analysis'||financeWorkspaceMode==='cashflow'||financeWorkspaceMode==='reports')
    financeWorkspaceMode='overview';
- if(financeWorkspaceMode==='bulk')return financeWorkspaceFrame_('ledger',financeBulkPage_());
+ if(financeWorkspaceMode==='bulk')return financeWorkspaceFrame_('ledger',financeGridPage_());
  if(financeWorkspaceMode==='overview')return financeWorkspaceFrame_('overview',financeWorkspaceSummary_());
  return financeWorkspaceFrame_(financeWorkspaceMode,financeWorkspaceList_());
 }
@@ -293,13 +294,19 @@ function financeBulkStart_(approved=false){
  const ui=financeBulkUi;
  if(ui.busy||ui.complete||!ui.rows.length||!financeAccessAllowed()||financeUi.demo)return;
  if(!ui.locked){
-  const errors=ui.rows.map((row,i)=>{const e=financeBulkValidateRow_(row);return e.length?(i+1)+'行目: '+e.join('・'):'';}).filter(Boolean);
+  const filled=ui.rows.map((row,i)=>({row,key:ui.keys[i],position:i+1})).filter(x=>financeGridHasRecord_(x.row));
+  if(!filled.length){ui.error='保存する経費を1行以上入力してください。空行は保存しません。';renderPageIfActive('finance');return;}
+  const errors=filled.map(({row,position})=>{const e=financeBulkValidateRow_(row);return e.length?position+'行目: '+e.join('・'):'';}).filter(Boolean);
   if(errors.length){ui.error='修正が必要です：'+errors.slice(0,4).join(' ／ ')+(errors.length>4?' ほか'+(errors.length-4)+'行':'');renderPageIfActive('finance');return;}
   const duplicates=ui.rows.filter(financeBulkSimilar_).length;
   if(duplicates&&!approved){
    openConfirmDialog('既存記録と似た行があります',duplicates+'行が読込済みの経費台帳と日付・取引先・品目・金額・支払者で一致しています。重複でないことを確認した場合のみ登録します。',
     '確認して登録',()=>financeBulkStart_(true));return;
   }
+  // Blank rows are only an editing aid. Keep each filled row paired with its
+  // original requestKey before switching to immutable retry-safe save mode.
+  ui.rows=filled.map(x=>x.row);ui.keys=filled.map(x=>x.key);
+  ui.selectedRows=[];ui.page=0;
   ui.locked=true;
  }
  ui.error='';ui.notice='登録結果を確認しています。';financeBulkNext_();
@@ -343,6 +350,10 @@ function financeBulkReset_(){
  const ui=financeBulkUi;
  if(ui.busy)return;
  const reset=()=>{financeBulkUi=financeBulkInitial_();renderPageIfActive('finance');};
+ if(!ui.locked&&!ui.complete&&(ui.rows.some(financeGridHasRecord_)||String(ui.raw||'').trim())){
+  openConfirmDialog('入力表を新しくする','保存していない経費データが消えます。必要なら先に表をコピーしてください。',
+    '入力表を破棄',reset);return;
+ }
  if(ui.locked&&!ui.complete){
   openConfirmDialog('未確認の保存結果','通信エラー前に一部保存された可能性があります。登録履歴を確認せず破棄すると、再度貼り付けた際に二重登録する危険があります。',
     '入力を破棄',reset);return;

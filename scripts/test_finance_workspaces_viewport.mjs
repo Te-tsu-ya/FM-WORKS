@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 const root=process.cwd();
 const client=name=>fs.readFileSync(path.join(root,'src',name+'.html'),'utf8')
  .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-const css=['Styles','StylesWorkflowV15','StylesFinanceAdvisor','StylesFinanceWorkspace'].map(name=>
+const css=['Styles','StylesWorkflowV15','StylesFinanceAdvisor','StylesFinanceWorkspace','StylesFinanceGrid'].map(name=>
  fs.readFileSync(path.join(root,'src',name+'.html'),'utf8')).join('\n');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const data={setupRequired:false,expenses:[
@@ -25,7 +25,7 @@ const data={setupRequired:false,expenses:[
 const runs=[
  [1440,900,'overview','light'],[390,844,'overview','dark'],[320,700,'overview','light'],
  [1440,900,'approvals','light'],[390,844,'ledger','light'],
- [1440,900,'bulk','light'],[390,844,'bulk','dark']
+ [1440,900,'bulk','light'],[390,844,'bulk','dark'],[320,700,'bulk','light']
 ];
 function generate(mode){
  const state={sessionToken:'QA_SYNTHETIC',page:'finance',data:{
@@ -39,6 +39,7 @@ function generate(mode){
  });
  vm.runInContext(client('AppFinance'),cx,{filename:'AppFinance.html'});
  vm.runInContext(client('AppFinanceWorkspace'),cx,{filename:'AppFinanceWorkspace.html'});
+ vm.runInContext(client('AppFinanceGrid'),cx,{filename:'AppFinanceGrid.html'});
  cx.qaData=data;
  vm.runInContext('financeUi.overview=qaData; financeWorkspaceMode='+JSON.stringify(mode)+';',cx);
  if(mode==='bulk'){
@@ -52,7 +53,7 @@ function generate(mode){
  }
  const html=vm.runInContext('financePage()',cx);
  if(!html.includes('fw-navigation'))throw Error('finance menu not rendered');
- if(mode==='bulk'&&!html.includes('fw-grid'))throw Error('editable ledger not rendered');
+ if(mode==='bulk'&&(!html.includes('fg-grid')||!html.includes('data-fin-cell')))throw Error('direct spreadsheet grid not rendered');
  if(mode==='approvals'&&!html.includes('financeSelectedDetail'))throw Error('approvals inspector not rendered');
  if(mode==='ledger'&&!html.includes('経費台帳'))throw Error('ledger entry not rendered');
  return html;
