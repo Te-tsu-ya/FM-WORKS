@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.7
+**文書版:** 0.23.8
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.7`
+`APP.version = 0.23.8`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2249,3 +2249,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ### v0.23.7 Synthetic transfer-review fixture
 - `cfbDemoCreate_` seeds one two-bank reciprocal transfer and one one-sided transfer. `cfbDemoTransferReview_` calculates unique matching hints and missing or ambiguous entries from local in-memory transactions during `cfbDemoRebuild_`; it does not call `cfpTransferPairReview_` through GAS.
 - The synthetic section is recalculated after transfer flag changes and remains `confirmed:false`. `scripts/test_cashflow_sandbox.mjs` checks the initial panel, review counts, reclassification and zero production RPCs.
+
+## v0.23.8 Ambiguous finance-save response gates
+- `AppCashFlowBank.html` checks `result && result.ok===true` before dismissing bank-account and scheduled-item edit forms, clearing the fiscal-close request key, or showing transfer classification success.
+- `cfbUnconfirmedReply_(label,retryWithSameKey)` releases the loading flag, renders an error, and preserves the existing draft and idempotency key. The transfer classification path does not offer a blind retry because that RPC is guarded by revision but has no request key.
+- `cfbFormValue_` and `cfbCloseMonth_` reject changes while a write is in flight. The session-aware RPC wrapper and existing server ACL are unchanged.
+- `scripts/test_cashflow_bank_client.mjs` covers simulated `ok:false`, null responses, preserved keys, blocked pending edits, and regular network failures for account/plan/close/transfer.

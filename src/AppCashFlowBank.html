@@ -120,7 +120,7 @@ function cfbPreviewTable_(f){
    '<td>'+cashFlowYen_(row.planEnd)+'</td><td class="cf-num">'+cashFlowYen_(row.forecastEnd)+'</td>'+
    '<td>'+row.source+'</td></tr>').join('')+'</tbody></table></div>';
 }
-function cfbCloseMonth_(value){cfbUi.closeMonth=String(value||'');cfbUi.closeKey='';}
+function cfbCloseMonth_(value){if(cfbUi.busy)return;cfbUi.closeMonth=String(value||'');cfbUi.closeKey='';}
 function cfbSaveClose_(){
  const ui=cfbUi;if(ui.busy||!ui.loaded||!cashFlowAllowed_())return;
  if(!ui.closeKey)ui.closeKey=cfbKey_();
@@ -129,6 +129,7 @@ function cfbSaveClose_(){
  openConfirmDialog('実績確定月の変更','確定月までの金融機関明細をすべて取り込み、口座間振替も確認しましたか？ 確定済みの月の見込みに実績を使います。','確定月を保存',()=>{
   ui.busy=true;renderPageIfActive('finance');
   cfbRpc_('saveCashFlowClosedThrough',payload,result=>{
+   if(!result||result.ok!==true){cfbUnconfirmedReply_('実績確定月',true);return;}
    ui.busy=false;ui.notice=result.auditRecorded===false?'保存しましたが監査ログの確認が必要です。':'実績確定月を保存しました。';
    ui.closeKey='';cfbReload_();
   },error=>{ui.busy=false;ui.error=cleanApiErrorMessage(error,'確定月を保存できませんでした。');renderPageIfActive('finance');});
@@ -156,7 +157,12 @@ function cfbOverview_(){
 }
 function cfbFormValue_(type,key,val){
  const form=type==='account'?cfbUi.accountForm:cfbUi.planForm;
- if(!form)return;form[key]=val;if(key!=='requestKey')form.requestKey='';
+ if(!form||cfbUi.busy)return;form[key]=val;if(key!=='requestKey')form.requestKey='';
+}
+function cfbUnconfirmedReply_(label,retryWithSameKey){
+ cfbUi.busy=false;
+ cfbUi.error=label+'の保存結果を確認できませんでした。'+(retryWithSameKey?'入力内容は保持しています。同じ内容・識別子で再試行してください。':'最新の明細を確認してから再試行してください。');
+ renderPageIfActive('finance');
 }
 function cfbNewAccount_(id){
  const found=id&&cfbUi.loaded&&cfbUi.loaded.accounts.find(a=>a.id===id);
@@ -169,6 +175,7 @@ function cfbSaveAccount_(){
  if(!form.requestKey)form.requestKey=cfbKey_();
  cfbUi.busy=true;cfbUi.error='';
  cfbRpc_('saveCashFlowBankAccount',form,res=>{
+  if(!res||res.ok!==true){cfbUnconfirmedReply_('金融機関',true);return;}
   cfbUi.busy=false;cfbUi.accountForm=null;cfbUi.notice='金融機関を保存しました。';cfbReload_();
  },err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'口座を登録できませんでした。');renderPageIfActive('finance');});
 }
@@ -184,6 +191,7 @@ function cfbSavePlan_(){
  if(!f.requestKey)f.requestKey=cfbKey_();
  cfbUi.busy=true;cfbUi.error='';
  cfbRpc_('saveCashFlowScheduledItem',f,res=>{
+  if(!res||res.ok!==true){cfbUnconfirmedReply_('入出金予定',true);return;}
   cfbUi.busy=false;cfbUi.planForm=null;cfbUi.notice='入出金予定を保存しました。';cfbReload_();
  },err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'入出金予定を保存できませんでした。');renderPageIfActive('finance');});
 }
@@ -391,10 +399,11 @@ function cfbLoadAfterWrite_(){
  cfbUi.tab=tab;cfbUi.notice=notice;
 }
 function cfbToggleTransfer_(id,value,revision){
+ if(cfbUi.busy)return;
  openConfirmDialog('口座間振替の区分','この明細を会社内部の口座間振替として扱いますか？ 会社全体の収支合計から除外する操作です。','分類を更新',()=>{
   if(cfbUi.demo){cfbDemoTransfer_(id,value);return;}
   cfbUi.busy=true;renderPageIfActive('finance');
-  cfbRpc_('setCashFlowTransfer',{id,value,revision},()=>{cfbUi.busy=false;cfbUi.notice='内部振替の区分を更新しました。';cfbLoadAfterWrite_();},
+  cfbRpc_('setCashFlowTransfer',{id,value,revision},res=>{if(!res||res.ok!==true){cfbUnconfirmedReply_('内部振替区分',false);return;}cfbUi.busy=false;cfbUi.notice='内部振替の区分を更新しました。';cfbLoadAfterWrite_();},
    err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'区分を変更できませんでした。');renderPageIfActive('finance');});
  });
 }
