@@ -16,7 +16,7 @@ const finance={record:{openingBalance:1000,months:months.map(month=>({month,plan
 const w={ok:true,setupRequired:false,year:2026,months,accounts:[account],rules:[],scenarios:[],
  transactionsCount:1,unreviewedCount:1,checks:[{accountId:'AC-1',accountName:'運転資金口座',month:'2026-10',
  actualIn:120,actualOut:20,latestBalance:1100,revision:0,verified:false,importedCount:1,note:''}]};
-const tx={planMatch:{status:'POSSIBLE',total:1,candidates:[{planId:'PL-1',title:'<img src=x onerror=alert(2)>',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:false}]},id:'TX-1',accountId:'AC-1',date:'2026-10-10',description:'<img src=x onerror=alert(1)>',
+const tx={planLink:{status:'NONE',revision:0},planMatch:{status:'POSSIBLE',total:1,candidates:[{planId:'PL-1',title:'<img src=x onerror=alert(2)>',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:false}]},id:'TX-1',accountId:'AC-1',date:'2026-10-10',description:'<img src=x onerror=alert(1)>',
  incoming:120,outgoing:0,category:'未分類',tags:'',note:'',revision:0,reviewed:false,suggested:false,transfer:false};
 const p={ok:true,setupRequired:false,scenarioId:'',scenarioName:'通常計画',yearEnd:2200,
  plannedIn:1200,plannedOut:0,firstShort:'',warnings:['未確定の分類1件'],rows:months.map(month=>({month,plannedIn:100,plannedOut:0,actualIn:null,actualOut:null,forecastEnd:1100,difference:0,source:'予定'}))};
@@ -38,7 +38,7 @@ const read=code=>vm.runInContext(code,ctx);
 read('cfbUi.loaded='+JSON.stringify(bank)+';cfbUi.tab="analysis";');
 ctx.cfaLoad_(true);assert.equal(calls.at(-1).method,'getCashFlowAnalysisWorkspace');
 calls.at(-1).meta.success(w);assert.equal(calls.at(-1).method,'getCashFlowAnalysisMonth');
-calls.at(-1).meta.success({ok:true,month:'2026-10',page:0,total:1,rows:[tx]});
+calls.at(-1).meta.success({ok:true,month:'2026-10',page:0,total:1,linkReady:true,rows:[tx]});
 const html=ctx.cfaPage_();
 assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'),'malicious bank description must be escaped');
 assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
@@ -46,6 +46,28 @@ assert.ok(html.includes('銀行口座別の月末残高を照合する'));
 assert.ok(html.includes('候補1件・未確定'),'tentative plan matching must be visible');
 assert.ok(html.includes('架空銀行 / 運転資金口座'),'bank identity must be visible with cashflow suggestions');
 assert.ok(html.includes('口座未指定'),'unscoped plan must be identified rather than presumed account-matched');
+
+assert.ok(html.includes('この予定を照合承認'),'candidate must require a human click');
+ctx.cfaPlanAction_('APPROVE','TX-1','PL-1','2026-10-10');
+assert.equal(typeof confirm,'function','plan approval requires explicit confirmation');
+confirm();
+let planCall=calls.at(-1);
+assert.equal(planCall.method,'saveCashFlowPlanLink');
+assert.equal(planCall.args[1].planId,'PL-1');
+const planKey=planCall.args[1].requestKey;
+planCall.meta.failure(Error('temporary network loss'));
+ctx.cfaPlanAction_('APPROVE','TX-1','PL-1','2026-10-10');
+confirm();
+planCall=calls.at(-1);
+assert.equal(planCall.args[1].requestKey,planKey,'lost acknowledgement must reuse idempotency key');
+planCall.meta.failure(Error('offline'));
+read('cfaUi.planPending=null;');
+const activeLink={status:'APPROVED',revision:1,title:'架空保守予定',plannedDate:'2026-10-10',
+ editorId:'A',updatedAt:'2026-10-11'};
+assert.ok(ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',activeLink,true).includes('照合承認済み・会計未確定'));
+assert.ok(ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',{...activeLink,status:'STALE'},true).includes('要再確認'));
+assert.ok(!ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',{status:'NONE'},false).includes('この予定を照合承認'));
+
 assert.ok(html.includes('&lt;img src=x onerror=alert(2)&gt;'),'untrusted scheduled title must be escaped');
 assert.ok(!html.includes('<img src=x onerror=alert(2)>'));
 const ambiguousHtml=ctx.cfaPlanMatchHtml_({status:'AMBIGUOUS',total:4,candidates:[{planId:'A',title:'安全な候補',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:true}]});
