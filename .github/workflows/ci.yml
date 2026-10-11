@@ -24,6 +24,8 @@ jobs:
         run: node scripts/generate_docs.mjs
       - name: Validate repository
         run: node scripts/validate.mjs
+      - name: Check initial HTML payload and test-only module exclusion
+        run: node scripts/test_initial_payload.mjs
       - name: Verify cached-row security and sheet I/O
         run: node scripts/test_data_access_performance.mjs
       - name: Verify large workspace cache, linked data and asynchronous navigation
