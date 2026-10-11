@@ -172,7 +172,7 @@ function getCashFlowProjection(token,payload){
 }
 function cfrExportCell_(value){
  if(value===null||value===undefined)return '';
- if(typeof value==='string'&&/^[=+\-@]/.test(value))return "'"+value;
+ if(typeof value==='string'&&/^[\s\u0000-\u001f]*[=+\-@]/.test(value))return "'"+value;
  return value;
 }
 function cfrColumn_(index){return String.fromCharCode(66+index);}

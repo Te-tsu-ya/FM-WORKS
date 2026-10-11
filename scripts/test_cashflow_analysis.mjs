@@ -153,4 +153,7 @@ assert.equal(transferFixture.filter(row=>row.transfer!=='TRUE').reduce((s,r)=>s+
 assert.equal(transferFixture.filter(row=>row.transfer!=='TRUE').reduce((s,r)=>s+r.outgoing,0),0,
  'company-wide cash payments exclude internal transfers');
 
+assert.equal(ctx.cfrExportCell_('  =SUM(1,2)'),"'  =SUM(1,2)",'spreadsheet formula after leading whitespace must be neutralized');
+assert.equal(ctx.cfrExportCell_('\t+1+2'),"'\t+1+2",'tab-prefixed spreadsheet formulas must be neutralized');
+assert.equal(ctx.cfrExportCell_('expense - adjustments'),'expense - adjustments','normal narrative should remain unmodified');
 console.log('PASS finance: copy import, duplicate rejection, memo, classification, what-if, reconciliation before close, XLSX and PDF signatures, ADMIN-only');
