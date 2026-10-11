@@ -2,12 +2,12 @@
 /* CASH FLOW ANALYSIS: no persistent browser storage; never trust browser totals. */
 let cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
  loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:0,monthSeq:0,projectionSeq:0,
- scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,error:'',notice:''};
+ scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,error:'',notice:''};
 function cfaReset_(){
  cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
   loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:cfaUi.seq+1,
   monthSeq:cfaUi.monthSeq+1,projectionSeq:cfaUi.projectionSeq+1,scenarioId:'',projection:null,
-  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,error:'',notice:''};
+  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,error:'',notice:''};
 }
 function cfaKey_(){return 'CFA-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,16);}
 function cfaMoney_(amount){return amount===null||amount===undefined?'未入力':Number(amount).toLocaleString('ja-JP')+'円';}
@@ -45,7 +45,7 @@ function cfaLoadMonth_(force){
  if(!force&&u.rows)return;
  const y=cashFlowUi.year,month=u.month,page=u.page,seq=++u.monthSeq;
  u.loadingMonth=true;
- cfbRpc_('getCashFlowAnalysisMonth',{fiscalYear:y,month,page},data=>{
+ cfbRpc_('getCashFlowAnalysisMonth',{fiscalYear:y,month,page,onlyUnreviewed:u.reviewOnly===true},data=>{
   if(seq!==u.monthSeq||cashFlowUi.year!==y||u.month!==month)return;
   u.loadingMonth=false;
   if(u.monthForceAfter){u.monthForceAfter=false;cfaLoadMonth_(true);return;}
@@ -72,6 +72,11 @@ function cfaChangeMonth_(value){
  if(cfaUi.busy)return;
  cfaUi.reconcilePending=null;cfaUi.month=String(value||'');cfaUi.rows=null;cfaUi.editor=null;cfaUi.page=0;cfaUi.monthSeq++;cfaUi.loadingMonth=false;
  renderPageIfActive('finance');cfaLoadMonth_(true);
+}
+function cfaToggleReviewOnly_(checked){
+ const u=cfaUi;if(u.busy||u.reviewOnly===!!checked)return;
+ u.reviewOnly=!!checked;u.page=0;u.rows=null;u.editor=null;u.loadingMonth=false;
+ u.monthSeq++;renderPageIfActive('finance');cfaLoadMonth_(true);
 }
 function cfaPageIndex_(index){
  if(cfaUi.busy)return;
@@ -276,12 +281,13 @@ function cfaAnalysisPage_(){
    '<button class="secondary-button" onclick="cfaReconcile_('+i+')"'+(u.busy?' disabled':'')+'>照合して保存</button></div>';
  }).join('');
  return '<section class="card cfa-panel"><div class="cfa-toolbar"><label>対象月 <select onchange="cfaChangeMonth_(this.value)">'+months+'</select></label>'+
-  '<div>未確定の分類：<strong>'+Number(w.unreviewedCount||0)+'件</strong></div>'+
+  '<label><input type="checkbox" onchange="cfaToggleReviewOnly_(this.checked)"'+(u.reviewOnly?' checked':'')+'>説明待ちのみ表示</label>'+
+  '<div>未確定の分類（年度全体）：<strong>'+Number(w.unreviewedCount||0)+'件</strong></div>'+
   '<button type="button" class="secondary-button" onclick="cfaApplyCurrentRules_()"'+(u.busy?' disabled':'')+'>このページの自動分類候補を確定</button></div>'+
   '<h2>入出金明細と個別メモ</h2><p>銀行Webの原明細は変更しません。予定照合は同額・入出金方向・口座・予定日の前後3日で候補を探します。候補は未確定で、自動承認・二重計上はしません。</p>'+
   (u.loadingMonth?'<p role="status">銀行明細を読み込み中です。</p>':
    '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>日付</th><th>金融機関</th><th>摘要</th><th>入金</th><th>出金</th><th>計上区分</th><th>タグ</th><th>メモ</th><th>予定との候補</th><th>操作</th></tr></thead><tbody>'+
-   (table||'<tr><td colspan="10">対象月の明細はまだありません。</td></tr>')+'</tbody></table></div>'+
+   (table||'<tr><td colspan="10">'+(u.reviewOnly?'対象月の説明待ち明細はありません。':'対象月の明細はまだありません。')+'</td></tr>')+'</tbody></table></div>'+
    '<div class="cfa-pagination"><span>'+(u.page*100+1)+'〜'+Math.min((u.page+1)*100,u.total)+'件 / '+u.total+'件</span>'+
     '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page-1)+')"'+(u.page===0?' disabled':'')+'>前へ</button>'+
     '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page+1)+')"'+((u.page+1)*100>=u.total?' disabled':'')+'>次へ</button></div>')+

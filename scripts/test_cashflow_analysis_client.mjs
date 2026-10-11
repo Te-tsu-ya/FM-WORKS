@@ -62,6 +62,17 @@ assert.equal(read('cfaUi.month'),'2026-09');
 ctx.cfaChangeMonth_('2026-10');assert.equal(calls.at(-1).args[1].month,'2026-10');
 calls.at(-1).meta.success({ok:true,month:'2026-10',total:1,rows:[tx]});
 assert.equal(read('cfaUi.rows[0].id'),'TX-1');
+
+assert.ok(ctx.cfaAnalysisPage_().includes('説明待ちのみ表示'));
+ctx.cfaToggleReviewOnly_(true);
+assert.equal(calls.at(-1).method,'getCashFlowAnalysisMonth');
+assert.equal(calls.at(-1).args[1].onlyUnreviewed,true);
+assert.equal(calls.at(-1).args[1].page,0);
+calls.at(-1).meta.success({ok:true,month:'2026-10',total:1,rows:[tx]});
+ctx.cfaToggleReviewOnly_(false);
+assert.equal(calls.at(-1).args[1].onlyUnreviewed,false);
+calls.at(-1).meta.success({ok:true,month:'2026-10',total:1,rows:[tx]});
+
 ctx.cfaOpenEditor_('TX-1');ctx.cfaEditorField_('category','売上入金');
 ctx.cfaEditorField_('tags','保守,完了');ctx.cfaEditorField_('note','請求確認済み');
 ctx.cfaSaveAnnotation_();assert.equal(calls.at(-1).method,'saveCashFlowAnnotation');

@@ -2314,3 +2314,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ## Tax advisor CSV export (2026-10-11)
 - ADMIN-only `src/CashFlowTaxExport.gs` reads fiscal-year `資金取引` and `資金明細注記` without mutations; it does not claim accountant approval. Quoted CSV, escaped embedded quotes, UTF-8 BOM, `cfrExportCell_` formula guard, checked nonnegative integer amounts, limits 2500 rows/3MiB; `includeMemo` strictly boolean and false by default.
 - Reports tab downloads using Blob and guards late GAS callbacks against session/year/sequence changes; server/client VM regressions cover ACL, note redaction, opt-in, CSV safety, and download.
+
+## Unreviewed bank transaction queue (2026-10-11)
+- `getCashFlowAnalysisMonth` accepts strict boolean `onlyUnreviewed`. It builds the existing annotation Map before filtering and paginating statement rows, excluding transfers and annotated entries from the optional queue without suppressing unconfirmed rule suggestions. Invalid filter types fail closed; ADMIN ACL unchanged.
+- `cfaToggleReviewOnly_` resets page/editor, bumps `monthSeq`, invalidates old callbacks, and reloads the month. The default unfiltered view remains authoritative and source statements stay immutable. VM server/client regression tests assert all-row and filtered counts, argument typing, zero-page reset and toggle behavior.
