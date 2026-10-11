@@ -102,6 +102,14 @@ const applied=ctx.applyCashFlowRules('ADMIN',{transactionIds:[notSaved.id],reque
 assert.equal(applied.added,0,'nonmatching rule must never force classification');
 assert.equal(ctx.getCashFlowAnalysisWorkspace('ADMIN',2026).unreviewedCount,1);
 
+const pendingOnly=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04',onlyUnreviewed:true});
+assert.equal(pendingOnly.total,1,'review queue must exclude separately annotated rows');
+assert.equal(pendingOnly.rows[0].id,notSaved.id);
+const fullView=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04',onlyUnreviewed:false});
+assert.equal(fullView.total,2,'default month view must retain the complete statement');
+assert.throws(()=>ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04',onlyUnreviewed:'true'}),/表示条件/);
+
+
 assert.throws(()=>ctx.exportCashFlowTaxAdvisorCsv('EMPLOYEE',{fiscalYear:2026}),/管理者/);
 const redacted=ctx.exportCashFlowTaxAdvisorCsv('ADMIN',{fiscalYear:2026});
 assert.equal(redacted.ok,true);assert.equal(redacted.count,2);assert.equal(redacted.includeMemo,false);

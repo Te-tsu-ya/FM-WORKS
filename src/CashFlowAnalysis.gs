@@ -336,10 +336,13 @@ function getCashFlowAnalysisMonth(token,payload){
  requireAdminSession_(token);
  const p=payload||{},year=cashFlowYear_(p.fiscalYear),month=cfpMonth_(p.month,'対象月',false),page=Number(p.page||0);
  if(!cashFlowMonths_(year).includes(month)||!Number.isInteger(page)||page<0||page>10000)throw Error('対象月・ページを確認してください。');
+ if(p.onlyUnreviewed!==undefined&&typeof p.onlyUnreviewed!=='boolean')throw Error('表示条件が不正です。');
  if(!cfaReady_())return {ok:true,setupRequired:true,rows:[],total:0};
- const tx=cfpRows_('tx',false).rows.filter(r=>cfaTxMonth_(r,month))
+ const notes=new Map(cfaRows_('note',false).rows.map(r=>[r.transactionId,r]));
+ const tx=cfpRows_('tx',false).rows.filter(r=>cfaTxMonth_(r,month)&&
+  (p.onlyUnreviewed!==true||(r.transfer!=='TRUE'&&!notes.has(r.id))))
   .sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.rowNo-a.rowNo);
- const notes=new Map(cfaRows_('note',false).rows.map(r=>[r.transactionId,r])),rules=cfaRulesSorted_(cfaRows_('rule',false).rows);
+ const rules=cfaRulesSorted_(cfaRows_('rule',false).rows);
  const plans=tx.length?cfpRows_('plan',false).rows:[],occurrences=cfaPlanOccurrences_(plans,month);
  return {ok:true,month,page,total:tx.length,rows:tx.slice(page*100,(page+1)*100).map(r=>{
   const row=cfaAnnotated_(r,notes.get(r.id),rules);row.planMatch=cfaPlanMatch_(r,occurrences);return row;
