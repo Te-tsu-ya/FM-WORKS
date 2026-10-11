@@ -75,6 +75,10 @@ function saveCashFlowPlanLink(token,payload){
    planId=plan.id;plannedDate=requestedDate;status='APPROVED';
    txFingerprint=cfmlTxFingerprint_(tx);planFingerprint=cfmlPlanFingerprint_(plan,match);
   }else{
+   if(old&&old.status==='UNLINKED'&&old.requestKey===requestKey){
+    if(old.reason===reason)return {ok:true,status:'UNLINKED',revision:Number(old.revision),duplicate:true,auditRecorded:null};
+    throw Error('同じ送信識別子で異なる解除理由を保存できません。');
+   }
    if(!old||old.status!=='APPROVED')throw Error('解除できる承認済みの紐づけがありません。');
    planId=old.planId;plannedDate=old.plannedDate;status='UNLINKED';
    txFingerprint=old.txFingerprint;planFingerprint=old.planFingerprint;
