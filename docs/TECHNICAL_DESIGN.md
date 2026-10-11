@@ -2270,3 +2270,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `AppFinance.html`の既存 `financePage` は `financeWorkspacePage_` へ委譲。旧描画を `financeLegacyPage` に退避し、ルート表との互換を保つ。
 
 - `scripts/test_client_contract.mjs` のVMソース一覧に `AppFinanceWorkspace.html` を追加し、既存の `financePage()` から画面を生成するテストに参加させる。
+
+- 経理トップの `navigate` 属性はHTML実体参照でクォートを区別し、JS文字列を中断させない。

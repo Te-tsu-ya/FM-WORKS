@@ -1763,3 +1763,5 @@ ADMINだけ区切り線の下へ「管理」を表示する。
 - 既存 `financePage()` は経理専用ワークスペースに委譲し、旧一覧描画を `financeLegacyPage()` として利用する。ナビゲーションの公開契約を変えない。
 
 - 既存client contract検証に新しい `AppFinanceWorkspace.html` も読み込み、実経理ルートから参照できるか試験する。
+
+- 経理トップの社員申請導線はHTML属性引用符を安全に扱い、ブラウザVM/CIで構文を確認する。
