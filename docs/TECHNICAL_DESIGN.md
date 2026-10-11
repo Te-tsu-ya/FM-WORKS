@@ -2329,3 +2329,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 - Additional loss-prevention gate: cashFlowClose_ blocks navigation when cfbUi.importPending is set and asks for confirmation if a bank preview exists; cfbReload_, cfbChooseFile_, cfbPastePreview_ and cfbBankGridSetAccount_ require explicit discard confirmation for edited staging data.
 - The permitted flow is staged preview -> all-row validation -> immutable importPending -> resume same requestKey until confirmation. Neither navigation nor remapping may destroy an uncertain import batch.
+
+- `cashFlowChangeYear_` checks `cfbUi.importPending` before resetting the bank UI, including the legacy cashflow view and paused imports.

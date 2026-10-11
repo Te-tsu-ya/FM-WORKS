@@ -94,6 +94,8 @@ assert.ok(dialog&&/編集済み/.test(dialog.title),'refresh must ask before dro
 dialog=null;cx.cfbPastePreview_();
 assert.ok(dialog&&/編集済み/.test(dialog.title),'new paste cannot silently erase an edited preview');
 dialog=null;
+assert.match(fs.readFileSync('src/AppCashFlow.html','utf8'),/function cashFlowChangeYear_\([\s\S]{0,160}importPending/,
+ 'fiscal-year switch must not discard paused import');
 assert.match(fs.readFileSync('src/AppCashFlow.html','utf8'),/cfbUi\.importPending/,
  'cashflow close must protect unresolved bank import state');
 
