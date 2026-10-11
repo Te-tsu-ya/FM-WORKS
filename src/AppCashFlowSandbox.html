@@ -64,7 +64,7 @@ function cfbDemoPlanApplies_(plan,month){
 function cfbDemoRebuild_(){
  if(!cfbUi.demo||!cfbUi.loaded)return;
  const data=cfbUi.loaded,months=cfbDemoMonths_(cashFlowUi.year),summaries=new Map(data.accounts.map(a=>[a.id,
-  {accountId:a.id,bank:a.bank,name:a.name,incoming:0,outgoing:0,importedCount:0,latestBalance:null,latestDate:''}]));
+  {accountId:a.id,bank:a.bank,name:a.name,incoming:0,outgoing:0,statementIn:0,statementOut:0,transferIn:0,transferOut:0,importedCount:0,latestBalance:null,latestDate:''}]));
  const calendar=new Map(months.map(m=>[m,{month:m,scheduledIn:0,scheduledOut:0,actualIn:0,actualOut:0,
   transferIn:0,transferOut:0,importedCount:0,scheduledCount:0}]));
  data.plans.forEach(p=>months.forEach(m=>{
@@ -77,7 +77,9 @@ function cfbDemoRebuild_(){
   const item=calendar.get(tx.date.slice(0,7)),bank=summaries.get(tx.accountId);
   if(!item||!bank)return;
   item.importedCount++;bank.importedCount++;
-  if(tx.transfer){item.transferIn+=tx.incoming;item.transferOut+=tx.outgoing;}
+  bank.statementIn+=tx.incoming;bank.statementOut+=tx.outgoing;
+  if(tx.transfer){item.transferIn+=tx.incoming;item.transferOut+=tx.outgoing;
+   bank.transferIn+=tx.incoming;bank.transferOut+=tx.outgoing;}
   else{item.actualIn+=tx.incoming;item.actualOut+=tx.outgoing;bank.incoming+=tx.incoming;bank.outgoing+=tx.outgoing;}
   if(tx.balance!=null&&(!bank.latestDate||tx.date>=bank.latestDate)){
    bank.latestDate=tx.date;bank.latestBalance=tx.balance;
