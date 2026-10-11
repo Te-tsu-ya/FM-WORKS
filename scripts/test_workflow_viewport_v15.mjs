@@ -58,7 +58,7 @@ function renderScreen(kind){
          item:'交通費',amount:3000,method:'会社カード',note:''}]};
      vm.runInContext('financeUi.insightMode=true;financeUi.insights=qaIns;financeUi.insightYear=2026;',cx);
    }
-   return vm.runInContext('financePage()',cx);
+   return vm.runInContext(kind==='financeInsights'?'financeInsightsPage()':'financeLegacyPage()',cx);
   }
   cx.qaKind=kind;
   cx.qaDraft=kind==='expense'?
@@ -192,7 +192,7 @@ function verifyFinanceClicks(width,height){
   function showToast(){}
   function pageHead(title){return '<h1>'+escapeHtml(title)+'</h1>';}
   function cleanApiErrorMessage(){return '検証用エラー';}
-  function renderPageIfActive(page){if(page===state.page)document.getElementById('content').innerHTML=financePage();}
+  function renderPageIfActive(page){if(page===state.page)document.getElementById('content').innerHTML=financeLegacyPage();}
   const google={script:{run:new Proxy({}, {get(_target,name){return (...args)=>{apiCalls.push({name,args});return this;};}})}};
   `;
   const verify=String.raw`
