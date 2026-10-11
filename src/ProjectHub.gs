@@ -216,7 +216,9 @@ function projectHubWorklogRows_(force){
  const key='fm:projectHub:worklog:v2',cached=force?null:cacheJsonGetLarge_(key);
  if(Array.isArray(cached))return cached;
  const sh=getDb_().getSheetByName('工数'),last=sh?sh.getLastRow():0;
- const rows=last>1?sh.getRange(2,1,last-1,15).getDisplayValues():[];
+ // Both the project cockpit and task-effort aggregator use columns A:M only.
+ // Do not load the write-only duplicate/updated-at fields (N:O) for read-only reporting.
+ const rows=last>1?sh.getRange(2,1,last-1,13).getDisplayValues():[];
  cacheJsonPutLarge_(key,rows,20);return rows;
 }
 function projectHubInvalidateWorklogs_(){cacheRemove_('fm:projectHub:worklog:v2');}
