@@ -2266,3 +2266,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 同じデータを再送する場合は送信識別子を維持。実データ書込の受入、口座照合、月次資金繰り帳票の実機確認は別途必要。
 
 - `resetFinanceUi()` は `financeWorkspaceReset_()` を呼び、ブラウザメモリの経費貼付表・再送キー・進捗・監査メッセージをセッション破棄時に消去する。
+
+- `AppFinance.html`の既存 `financePage` は `financeWorkspacePage_` へ委譲。旧描画を `financeLegacyPage` に退避し、ルート表との互換を保つ。
