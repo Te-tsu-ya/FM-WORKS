@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.6
+**文書版:** 0.24.7
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2410,3 +2410,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Preserve the full same-employee history before applying the deleted flag and `supersededBy`/original-punch-ID map. Avoid a last-N-row shortcut because late corrections may replace older punches. Keep a one-shot 12-column read on small sheets and the helper's 48-block fallback.
 - `scripts/test_punch_history_index.mjs` must compare indexed results to legacy all-column scan on synthetic large and sparse data, ensure no cross-user history leakage, preserve corrections, deleted punches, special-character IDs, timestamp order/limit and small-table fallback.
 - No Sheet writes, authentication or DB schema migration. This is a read-volume optimization, not verified production p50/p95 reduction.
+
+
+## v0.24.7 Project Hub worklog read projection
+- `projectHubWorklogRows_` keeps its existing 20-second large-cache semantics but reduces `工数` table `getRange` from A:O (15 columns) to A:M (13 columns). The callers `projectHubRead_` and `projectAdvancedTaskEffort_` only dereference indices 0–12, including original worklog ID, project name, minutes and tombstone status.
+- Indexes 13 and 14 (save-only auxiliary identity and last update timestamp) are not read for the project cockpit; the `Worklog.gs` save/load formats remain full-width as previously defined.
+- The existing backend project regression and project-advanced authorization suite verify task-hour linking, aggregate totals, deleted/ambiguous worklogs, visibility rules and safe save retries. Add an explicit source-range assertion for 13 columns on 1,000+ synthetic rows.
+- No database mutation or protocol change; this is 13.3% fewer loaded columns for the project hub's full-table aggregate, not proof of equivalent reduction in elapsed time.
