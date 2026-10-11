@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.3
+**文書版:** 0.23.4
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.3`
+`APP.version = 0.23.4`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2217,3 +2217,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The transient annotation, rule and scenario drafts retain their request key after a failed or ambiguous RPC, clearing only on user changes. Success handlers require `ok===true` before dismissing forms.
 - Reconciliation keeps a keyed pending payload and restores its amount and note in the rendered form after failure. Server idempotency rejects the same reconciliation key with changed note, bank fingerprint or balance.
 - No persistent browser storage, DB migration or source workbook modification.
+
+
+## v0.23.4 Bank reconciliation gross/net separation
+- `cfaBankMonth_` sums gross transaction inflows and outflows, including transfers, to reconcile actual bank statement amounts with the bank closing balance. The company-wide `CashFlowBank.gs:getCashFlowBankWorkspace` still excludes transfers from actualIn/actualOut and separately tracks transferIn/transferOut. All bank sums use safe-integer checks.
