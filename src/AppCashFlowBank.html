@@ -69,13 +69,14 @@ function cfbForecast_(){
  if(!data||data.setupRequired)return null;
  const saved=year&&year.record||{},opening=saved.openingBalance==null?null:Number(saved.openingBalance),
   old=new Map((saved.months||[]).map(x=>[x.month,x])),confirm=data.closing&&data.closing.through||'';
- const scheduledExists=(data.plans||[]).some(p=>p.active);
+ 
+  // The existence of any schedule does not certify all 12 months as explicitly planned.
  let plannedBalance=opening,actualBalance=opening,forecastBalance=opening,firstShort='',lowest=opening;
  let totalPlannedIn=0,totalPlannedOut=0,confirmedCount=0,bankMonths=0;
  const rows=data.monthly.map(row=>{
   const adjustment=old.get(row.month)||{},manualPlan=adjustment.planIn!=null&&adjustment.planOut!=null,
     manualActual=adjustment.actualIn!=null&&adjustment.actualOut!=null,hasBank=row.importedCount>0;
-  const hasPlan=scheduledExists||manualPlan,planIn=hasPlan?row.scheduledIn+(manualPlan?Number(adjustment.planIn):0):null,
+  const hasPlan=Number(row.scheduledCount||0)>0||manualPlan,planIn=hasPlan?row.scheduledIn+(manualPlan?Number(adjustment.planIn):0):null,
    planOut=hasPlan?row.scheduledOut+(manualPlan?Number(adjustment.planOut):0):null;
   const confirmed=!!confirm&&row.month<=confirm,verified=row.reconciled!==false,
    authoritative=confirmed&&row.reconciled===true;

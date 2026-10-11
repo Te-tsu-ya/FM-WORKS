@@ -134,6 +134,16 @@ assert.ok(js('cfbUi.accountForm')!==null,'failed account save keeps draft');
  assert.equal(chunk.args[1].requestKey,badResponse.args[1].requestKey);
  chunk.meta.success({ok:true,added:1,skipped:0});assert.equal(js('cfbUi.importPending'),null);
 
+ 
+ // UI must not infer zero cashflow just because a one-time payment exists elsewhere in the year.
+ js('cfbUi.loaded='+JSON.stringify({...loaded,plans:[{...loaded.plans[0],frequency:'ONCE',startMonth:'2026-10',endMonth:'2026-10'}],
+  monthly:emptyMonthly.map(x=>({...x,scheduledCount:x.month==='2026-10'?1:0,scheduledOut:x.month==='2026-10'?100:0}))})+';');
+ const unknownPreview=ctx.cfbForecast_();
+ assert.equal(unknownPreview.rows[0].planIn,null);
+ assert.equal(unknownPreview.rows[0].source,'未入力');
+ assert.equal(unknownPreview.yearEnd,null);
+ js('cfbUi.loaded='+JSON.stringify(loaded)+';');
+
  const before=calls.length;state.data.permissions.cashFlowWorkspace=false;
 ctx.cfbLoad_(true);assert.equal(calls.length,before,'unauthorized users never request bank data');
 ctx.cfbReset_();

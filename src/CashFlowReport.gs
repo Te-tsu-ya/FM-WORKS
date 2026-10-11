@@ -66,13 +66,14 @@ function cfrScenarioApply_(year,plans,changes,confirmedThrough){
  return {months:lookup,warnings,categories:[...categoryTotals.values()].filter(x=>x.amount!==0)};
 }
 function cfrMonthTotals_(months,plans,manual,schedule,bank,confirmedThrough,verifiedByMonth,opening){
- const scheduledExists=(plans||[]).some(p=>p.active),manualMap=new Map((manual||[]).map(row=>[row.month,row]));
+ const manualMap=new Map((manual||[]).map(row=>[row.month,row]));
  let balance=opening,lowest=opening,shortage='',plannedInSum=0,plannedOutSum=0;
  const rows=months.map(month=>{
   const s=schedule.months.get(month),adjustment=manualMap.get(month)||{},bankRow=bank.get(month)||{};
   const manualPlan=adjustment.planIn!==null&&adjustment.planIn!==undefined&&adjustment.planOut!==null&&adjustment.planOut!==undefined;
   const manualActual=adjustment.actualIn!==null&&adjustment.actualIn!==undefined&&adjustment.actualOut!==null&&adjustment.actualOut!==undefined;
-  const hasPlan=scheduledExists||manualPlan;
+  // A plan in a different month is not evidence that this month's missing cashflow equals zero.
+   const hasPlan=Number(bankRow.scheduledCount||0)>0||s.incoming!==0||s.outgoing!==0||manualPlan;
   const plannedIn=hasPlan?cfrMoneySafe_(s.incoming+(manualPlan?Number(adjustment.planIn):0),'予定入金'):null;
   const plannedOut=hasPlan?cfrMoneySafe_(s.outgoing+(manualPlan?Number(adjustment.planOut):0),'予定出金'):null;
   const confirmed=!!confirmedThrough&&month<=confirmedThrough;
@@ -88,7 +89,8 @@ function cfrMonthTotals_(months,plans,manual,schedule,bank,confirmedThrough,veri
   }
   const inputIn=source==='確定実績'?actualIn===null?0:actualIn:source==='予定'?plannedIn:null;
   const inputOut=source==='確定実績'?actualOut===null?0:actualOut:source==='予定'?plannedOut:null;
-  if(plannedIn!==null){plannedInSum+=plannedIn;plannedOutSum+=plannedOut;}
+  if(plannedIn!==null){plannedInSum=cfrMoneySafe_(plannedInSum+plannedIn,'年間予定入金');
+    plannedOutSum=cfrMoneySafe_(plannedOutSum+plannedOut,'年間予定出金');}
   if(balance!==null&&inputIn!==null&&inputOut!==null){
    balance=cfrMoneySafe_(balance+inputIn-inputOut,'見込み残高');
    lowest=lowest===null?balance:Math.min(lowest,balance);
@@ -127,6 +129,12 @@ function getCashFlowProjection(token,payload){
  const base=cfrMonthTotals_(months,bank.plans,annual.record.months,empty,byMonth,confirmedThrough,verifiedByMonth,opening);
  const active=cfrMonthTotals_(months,bank.plans,annual.record.months,scenario,byMonth,confirmedThrough,verifiedByMonth,opening);
  const warnings=scenario.warnings.slice();
+  const manualByMonth=new Map((annual.record.months||[]).map(x=>[x.month,x]));
+  const overlapMonths=active.rows.filter(row=>{
+   const input=manualByMonth.get(row.month)||{},bankRow=byMonth.get(row.month)||{};
+   return Number(bankRow.scheduledCount||0)>0&&(Number(input.planIn||0)!==0||Number(input.planOut||0)!==0);
+  }).map(row=>row.month);
+  if(overlapMonths.length)warnings.push('定期予定と月別調整を併用: '+overlapMonths.join(', ')+'。同一入出金の二重計上がないか確認してください。');
  if(opening===null)warnings.push('期首残高が入力されていません。');
  const missing=active.rows.filter(x=>x.source==='未入力').map(x=>x.month);
  if(missing.length)warnings.push('計画未入力: '+missing.join(', '));
@@ -153,7 +161,8 @@ function getCashFlowProjection(token,payload){
  });
  const resultRows=active.rows.map((row,i)=>Object.assign({},row,
   {baselineEnd:base.rows[i].forecastEnd,
-   difference:row.forecastEnd===null||base.rows[i].forecastEnd===null?null:row.forecastEnd-base.rows[i].forecastEnd}));
+   difference:row.forecastEnd===null||base.rows[i].forecastEnd===null?null:
+     cfrMoneySafe_(row.forecastEnd-base.rows[i].forecastEnd,'シナリオ差額')}));
  return {ok:true,setupRequired:false,fiscalYear:year,scenarioId:selected?selected.id:'',
   scenarioName:selected?selected.name:'通常計画',conditions:changes,confirmedThrough,openingBalance:opening,
   rows:resultRows,yearEnd:active.yearEnd,lowest:active.lowest,firstShort:active.firstShort,
