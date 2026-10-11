@@ -147,7 +147,7 @@ function cfaReconcile_(index){
  });
 }
 function cfaScenarioSelect_(id){
- cfaUi.scenarioId=String(id||'');cfaUi.projection=null;cfaUi.projectionSeq++;cfaUi.loadingProjection=false;
+ cfaUi.scenarioId=String(id||'');cfaUi.projection=null;cfaUi.projectionSeq++;cfaUi.loadingProjection=false;cfaUi.exporting=false;
  renderPageIfActive('finance');cfaLoadProjection_(true);
 }
 function cfaScenarioNew_(id){
@@ -189,21 +189,25 @@ function cfaScenarioSave_(){
 }
 function cfaDownloadReport_(format){
  const u=cfaUi;if(u.exporting||!cashFlowAllowed_()||!u.projection||cfbUi.demo)return;
+ const token=state.sessionToken,year=cashFlowUi.year,scenarioId=u.scenarioId,seq=u.seq;
+ const current=()=>token===state.sessionToken&&year===cashFlowUi.year&&scenarioId===cfaUi.scenarioId&&seq===cfaUi.seq&&cashFlowUi.open;
  u.exporting=true;u.error='';renderPageIfActive('finance');
- cfbRpc_('exportCashFlowReport',{fiscalYear:cashFlowUi.year,scenarioId:u.scenarioId,format},res=>{
+ cfbRpc_('exportCashFlowReport',{fiscalYear:year,scenarioId,format},res=>{
+  if(!current())return;
   u.exporting=false;
   if(!res||!res.ok||!res.base64){cfaShowError_({message:'出力データが取得できませんでした。'});return;}
+  let href='';
   try{
    const bin=atob(res.base64),bytes=new Uint8Array(bin.length);
    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
    const blob=new Blob([bytes],{type:res.mimeType});
-   const href=URL.createObjectURL(blob),a=document.createElement('a');
+   href=URL.createObjectURL(blob);const a=document.createElement('a');
    a.href=href;a.download=res.filename;document.body.appendChild(a);a.click();a.remove();
    setTimeout(()=>URL.revokeObjectURL(href),15000);
    u.notice=res.status==='要確認'?'出力しました。照合不足・未確認項目があるため、提出前に必ず確認してください。':'資金繰り帳票を出力しました。';
-  }catch(error){u.error='ブラウザーでファイルを保存できませんでした。再試行してください。';}
+  }catch(error){if(href)URL.revokeObjectURL(href);u.error='ブラウザーでファイルを保存できませんでした。再試行してください。';}
   renderPageIfActive('finance');
- },e=>cfaShowError_(e,'帳票の出力に失敗しました。'));
+ },e=>{if(current())cfaShowError_(e,'帳票の出力に失敗しました。');});
 }
 function cfaAnalysisPage_(){
  const u=cfaUi,w=u.workspace;if(!w)return '<p role="status">資金の分析情報を読み込み中です。</p>';
