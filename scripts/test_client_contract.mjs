@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppFinanceWorkspace.html','src/AppFinanceGrid.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','scripts/fixtures/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppFinanceWorkspace.html','src/AppFinanceGrid.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -1277,10 +1277,10 @@ const result=vm.runInContext(`
   state.page='requests';state.requests=createEmptyRequestsState();
   state.requests.loadedKey=requestsIdentity();
   resetCalls();
-  expect('annual leave demo is available from the requests page',
-    requestsPage().includes('有給の動作デモを見る'));
-  expect('annual leave demo is linked in employee administration',
-    adminPeopleContent().includes('架空の社員で動作を試す'));
+  expect('annual leave demo is absent from the requests page',
+    !requestsPage().includes('有給の動作デモを見る'));
+  expect('annual leave demo is absent from employee administration',
+    !adminPeopleContent().includes('架空の社員で動作を試す'));
   expect('demo opens for authenticated staff without a server call',
     leaveDemoOpen()&&apiCalls.length===0);
   const demoStart=leaveDemoCompute();

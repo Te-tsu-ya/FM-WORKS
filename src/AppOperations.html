@@ -1957,9 +1957,6 @@ function requestsPage(){
     ${requestCompactLeaveAlert()}
     ${requestAnnualLeaveNotice()}
     ${requestOverview()}
-    <section class='leave-demo-invite'><div><strong>有給がどう増減するか試せます</strong>
-      <span>架空の入社日と取得履歴を使うデモです。実際の有給残数は変更しません。</span></div>
-      <button type='button' class='secondary-button compact' onclick='leaveDemoOpen()'>有給の動作デモを見る</button></section>
     ${r.refreshing?`<div class='request-refresh-hint' role='status'>最新の申請情報を確認中です。表示中の内容はそのまま操作できます。</div>`:''}
     <div class='request-action-layout'>
       <section class='request-launch request-dashboard-launch'>

@@ -2339,3 +2339,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `AppFinanceWorkspace.html` and `AppFinance.html`: remove end-user buttons for synthetic finance mode and cashflow sandbox mode, while keeping normal workflow entrypoints intact.
 - Keep sample datasets and all test fixtures unchanged; do not alter FM WORKS DB, authorization rules, RPC interfaces, bank parser, or cashflow calculations.
 - Legacy demo-mode implementations remain in source as test dependencies until a separate integration-safe deletion pass following PR #105/#106. No measured GAS speed improvement is claimed for this UI-only change.
+
+
+### 2026-10-11 Training-only annual leave modal extraction
+- Remove `AppLeaveDemo` from `src/Index.html`, user-facing requests/admin buttons, and session reset hook. Relocate unchanged synthetic scenario from `src/AppLeaveDemo.html` to `scripts/fixtures/AppLeaveDemo.html` for Node VM test coverage; leave real accrual and request backends unchanged.
+- Strip its unused responsive CSS and keep the small `.leave-auto-actions` control style. Update `scripts/validate.mjs` to reject production inclusion while preserving isolated synthetic calculations.
+- Initial payload becomes smaller, but do not infer shorter RPC or Sheets I/O latency without production measurements.
