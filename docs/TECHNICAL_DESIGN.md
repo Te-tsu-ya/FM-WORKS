@@ -2374,3 +2374,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Replace `StylesCashFlowSandbox.html` with `StylesCashFlowPaste.html` and drop obsolete sample-mode banner styles. GAS `Index.html` excludes the synthetic controller.
 - Update bank-grid, sandbox, workspace, contract, rotary and static validation suites to load the synthetic fixture only during tests. Preserve the PR #105 editable-preview/uncertain-import safeguards and PR #106 annual grid unchanged.
 - No production database write, schema migration, authentication or financial payload change. Delivery-byte reduction does not prove actual GAS/Sheets speed improvement.
+
+
+### 2026-10-11 Initial HTML source-size regression budget
+- `scripts/test_initial_payload.mjs` scans `src/Index.html` includes and reports UTF-8 source bytes of entry HTML and each CSS/JS module. Reject duplicate/missing includes and historical test-only `AppLeaveDemo`/`AppCashFlowSandbox` in production.
+- Budgets are 1,360,000 total, 950,000 JS and 420,000 CSS source bytes. GitHub CI and production deploy run this before other tests; the eight heaviest modules are shown in logs.
+- These values are not compressed transfer size, actual render time or a GAS/Sheets RPC p50/p95 measurement.
