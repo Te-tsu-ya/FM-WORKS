@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.2
+**文書版:** 0.24.3
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2380,3 +2380,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_initial_payload.mjs` scans `src/Index.html` includes and reports UTF-8 source bytes of entry HTML and each CSS/JS module. Reject duplicate/missing includes and historical test-only `AppLeaveDemo`/`AppCashFlowSandbox` in production.
 - Budgets are 1,360,000 total, 950,000 JS and 420,000 CSS source bytes. GitHub CI and production deploy run this before other tests; the eight heaviest modules are shown in logs.
 - These values are not compressed transfer size, actual render time or a GAS/Sheets RPC p50/p95 measurement.
+
+- `AppRotaryIntegration.html` の `FMRotaryRPC` 実行時に `performance.now()` を記録し、完了/失敗時のブラウザ観測時間だけを固定上限80件×API名で集計する。`FMWorksPerformance.report()` はメソッド名/件数/失敗件数/P50/P95/直近msのみ返す。`FMRotaryActivity.reset()` で消去し、既存のRPCハンドラー・ロータリー演出・権限/保存契約を変更しない。
+
+
+## v0.24.3 Scoped worklog/task link lookup
+- `projectAdvancedWorklogIds_(items)` returns immediately for no visible worklogs (zero linked-sheet I/O). It retains schema header checks when rows exist and retrieves only visible worklog IDs using `readRowsByColumnValues_` for sparse date windows and large tables.
+- It uses the existing TextFinder / regular-expression escaping / contiguous blocks / full read fallback, with no global per-user cache. Small tables and more than 24 visible worklogs retain the old full read behavior.
+- The new `scripts/test_worklog_link_index.mjs` regression validates indexed vs full-width read counts, empty dates, missing/duplicate IDs, invalid headers, legacy optional sheet, synthetic authorization-scoped outputs, and no DB writes.
