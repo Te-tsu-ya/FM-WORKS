@@ -87,6 +87,42 @@ assert.equal(calls.at(-1).args[1].format,'XLSX');
 calls.at(-1).meta.success({ok:true,base64:Buffer.from('PK mocked spreadsheet bytes').toString('base64'),
  filename:'mock.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',status:'要確認',warnings:[]});
 assert.equal(downloads,1);
+
+ // Loss-of-acknowledgment must preserve the draft and its request identity.
+ read('cfaUi.editor={id:"TX-1",category:"売上",tags:"請求",note:"確認済",revision:0,requestKey:""};');
+ ctx.cfaSaveAnnotation_();let retryCall=calls.at(-1),retryKey=retryCall.args[1].requestKey;
+ retryCall.meta.failure(Error('lost response'));
+ ctx.cfaSaveAnnotation_();retryCall=calls.at(-1);
+ assert.equal(retryCall.args[1].requestKey,retryKey,'annotation retries reuse the key');
+ retryCall.meta.failure(Error('offline'));
+ ctx.cfaEditorField_('note','別の確認内容');ctx.cfaSaveAnnotation_();
+ assert.notEqual(calls.at(-1).args[1].requestKey,retryKey,'changed annotation requires a new key');
+ calls.at(-1).meta.failure(Error('offline'));
+ ctx.cfaRuleNew_();ctx.cfaRuleChange_('keyword','会費');ctx.cfaRuleChange_('category','売上');
+ ctx.cfaSaveRule_();retryCall=calls.at(-1);retryKey=retryCall.args[1].requestKey;
+ retryCall.meta.failure(Error('lost response'));
+ ctx.cfaSaveRule_();retryCall=calls.at(-1);
+ assert.equal(retryCall.args[1].requestKey,retryKey,'rule retries reuse the key');
+ retryCall.meta.failure(Error('offline'));
+ ctx.cfaRuleChange_('category','その他収入');ctx.cfaSaveRule_();
+ assert.notEqual(calls.at(-1).args[1].requestKey,retryKey);
+ calls.at(-1).meta.failure(Error('offline'));
+ ctx.cfaScenarioNew_();ctx.cfaScenarioName_('変更条件');
+ ctx.cfaScenarioSave_();retryCall=calls.at(-1);retryKey=retryCall.args[1].requestKey;
+ retryCall.meta.failure(Error('lost response'));
+ ctx.cfaScenarioSave_();retryCall=calls.at(-1);
+ assert.equal(retryCall.args[1].requestKey,retryKey,'scenario retries reuse the key');
+ retryCall.meta.failure(Error('offline'));
+ ctx.cfaScenarioName_('新しい条件');ctx.cfaScenarioSave_();
+ assert.notEqual(calls.at(-1).args[1].requestKey,retryKey);
+ calls.at(-1).meta.failure(Error('offline'));
+ ctx.cfaReconcile_(0);confirm();retryCall=calls.at(-1);retryKey=retryCall.args[1].requestKey;
+ retryCall.meta.failure(Error('lost response'));
+ assert.ok(ctx.cfaAnalysisPage_().includes('銀行のWeb画面と照合しました'),'reconciliation draft survives failure');
+ ctx.cfaReconcile_(0);confirm();
+ assert.equal(calls.at(-1).args[1].requestKey,retryKey,'reconciliation retries reuse the key');
+ calls.at(-1).meta.failure(Error('offline'));
+
 ctx.cfbReset_();assert.equal(read('cfaUi.workspace'),null);assert.equal(read('cfaUi.projection'),null);
 state.data.permissions.cashFlowWorkspace=false;const n=calls.length;
 ctx.cfaLoad_(true);assert.equal(calls.length,n);
