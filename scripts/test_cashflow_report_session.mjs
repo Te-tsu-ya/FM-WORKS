@@ -5,15 +5,15 @@ const source=fs.readFileSync('src/AppCashFlowAnalysis.html','utf8');
 const match=source.match(/function cfaDownloadReport_\(format\)\{[\s\S]*?\n\}\nfunction cfaAnalysisPage_/);
 assert.ok(match,'report handler exists');
 const callbacks=[];
-let downloads=0,render=0;
+let downloads=0,render=0,failClick=false,revoked=0;
 const state={sessionToken:'ADMIN'};
 const cashFlowUi={year:2026,open:true};
 const cfaUi={seq:1,scenarioId:'',projection:{ok:true},exporting:false,error:'',notice:''};
 const ctx=vm.createContext({state,cashFlowUi,cfaUi,cfbUi:{demo:false},cashFlowAllowed_:()=>true,renderPageIfActive:()=>render++,
  cfbRpc_:(method,payload,success,failure)=>callbacks.push({method,payload,success,failure}),
  atob:s=>Buffer.from(s,'base64').toString('binary'),Uint8Array,Blob,
- URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{}},
- document:{body:{appendChild:()=>{}},createElement:()=>({click(){downloads++},remove(){}})},
+ URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{revoked++;}},
+ document:{body:{appendChild:()=>{}},createElement:()=>({click(){if(failClick)throw Error('blocked');downloads++},remove(){}})},
  setTimeout:()=>0,cfaShowError_:(err)=>{cfaUi.error=err.message;cfaUi.exporting=false;}});
 vm.runInContext(match[0].replace(/\nfunction cfaAnalysisPage_$/,''),ctx);
 const result={ok:true,base64:Buffer.from('test').toString('base64'),filename:'report.pdf',mimeType:'application/pdf'};
@@ -38,4 +38,7 @@ ctx.cfaDownloadReport_('PDF');
 callbacks[3].success(result);
 assert.equal(downloads,1,'valid download succeeds');
 assert.equal(cfaUi.exporting,false);
+failClick=true;ctx.cfaDownloadReport_('PDF');callbacks[4].success(result);
+assert.ok(revoked>0,'failed download should release blob URL');
+assert.match(cfaUi.error,/再試行/);
 console.log('PASS cashflow report stale session/year/scenario guard');

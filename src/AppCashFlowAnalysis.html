@@ -196,15 +196,16 @@ function cfaDownloadReport_(format){
   if(!current())return;
   u.exporting=false;
   if(!res||!res.ok||!res.base64){cfaShowError_({message:'出力データが取得できませんでした。'});return;}
+  let href='';
   try{
    const bin=atob(res.base64),bytes=new Uint8Array(bin.length);
    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
    const blob=new Blob([bytes],{type:res.mimeType});
-   const href=URL.createObjectURL(blob),a=document.createElement('a');
+   href=URL.createObjectURL(blob);const a=document.createElement('a');
    a.href=href;a.download=res.filename;document.body.appendChild(a);a.click();a.remove();
    setTimeout(()=>URL.revokeObjectURL(href),15000);
    u.notice=res.status==='要確認'?'出力しました。照合不足・未確認項目があるため、提出前に必ず確認してください。':'資金繰り帳票を出力しました。';
-  }catch(error){u.error='ブラウザーでファイルを保存できませんでした。再試行してください。';}
+  }catch(error){if(href)URL.revokeObjectURL(href);u.error='ブラウザーでファイルを保存できませんでした。再試行してください。';}
   renderPageIfActive('finance');
  },e=>{if(current())cfaShowError_(e,'帳票の出力に失敗しました。');});
 }

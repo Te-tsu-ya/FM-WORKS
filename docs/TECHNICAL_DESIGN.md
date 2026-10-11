@@ -2222,3 +2222,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ### Cashflow report stale-callback guard
 - `cfaDownloadReport_` retains the requesting session token, fiscal year, scenario and workspace sequence, rejecting completion and failure callbacks after context changes. This prevents cross-user/period report disclosure via delayed browser download callbacks.
 - `scripts/test_cashflow_report_session.mjs` tests stale token, fiscal year and scenario responses; CI and Deploy must run it.
+
+- Failed client-side anchor downloads revoke the generated Blob URL synchronously to avoid holding sensitive financial PDF/XLSX data in browser memory.
