@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.24.5',
+  version: '0.24.6',
   locale: 'ja-JP'
 });
 
@@ -369,7 +369,11 @@ function getActivePunchRows_(employeeId, startDate, endDate) {
   if (lastRow < 2) return [];
   const source=startDate&&endDate
     ? readRowsByDateRange_(sheet,4,12,startDate,endDate)
-    : sheet.getRange(2,1,lastRow-1,12).getDisplayValues();
+    // History needs all dates for correct superseded-punch handling, but not
+    // other employees' 12-column rows. Keep cheap one-shot reads on small sheets.
+    : lastRow>250&&String(employeeId||'').trim()
+      ? readRowsByColumnValues_(sheet,2,12,[employeeId])
+      : sheet.getRange(2,1,lastRow-1,12).getDisplayValues();
   const all=source.filter(r=>r[1]===employeeId&&(!startDate||r[3]>=startDate)&&(!endDate||r[3]<=endDate));
   const superseded=new Set(all.map(r=>String(r[9]||'').trim()).filter(Boolean));
   return all.filter(r=>String(r[8]).toUpperCase()!=='TRUE'&&!superseded.has(String(r[0]||'').trim()));
