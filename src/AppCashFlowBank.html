@@ -145,9 +145,10 @@ function cfbOverview_(){
   '<section class="card cf-chart"><h2>12か月の資金残高推移</h2>'+cashFlowChartHtml_(f)+'</section>'+
   '<section class="card cf-table-card"><h2>月別の資金繰り（計画と取込明細）</h2><p>定期予定と「その他調整」を合算。実績欄は金融機関で取込んだ分です。内部振替は会社全体の実績から除外しています。</p>'+
   cfbPreviewTable_(f)+'</section>'+
-  '<section class="card cfb-bank-summary"><h2>金融機関別の入出金（当期）</h2>'+
+  '<section class="card cfb-bank-summary"><h2>金融機関別の明細（当期）</h2><p>銀行明細は内部振替を含みます。全社資金繰りでは内部振替を除外します。</p>'+
    (d.accounts.length?'<div class="cfb-bank-grid">'+d.bankSummaries.map(row=>'<div class="cfb-bank-item"><strong>'+
-    cfbEscape_(cfbAccountName_(row.accountId))+'</strong><span>入金 '+cfbMoney_(row.incoming)+' ／ 出金 '+cfbMoney_(row.outgoing)+'</span>'+
+    cfbEscape_(cfbAccountName_(row.accountId))+'</strong><span>銀行明細 入金 '+cfbMoney_(row.statementIn==null?row.incoming:row.statementIn)+' ／ 出金 '+cfbMoney_(row.statementOut==null?row.outgoing:row.statementOut)+'</span>'+ 
+    '<small>うち内部振替 入金 '+cfbMoney_(row.transferIn)+' ／ 出金 '+cfbMoney_(row.transferOut)+' ｜ 対外収支 入金 '+cfbMoney_(row.incoming)+' ／ 出金 '+cfbMoney_(row.outgoing)+'</small>'+
     '<small>取込明細 '+row.importedCount+'件'+(row.latestBalance===null?'':' ／ 直近CSV残高 '+cfbMoney_(row.latestBalance))+'</small></div>').join('')+'</div>':
     '<p class="cf-note">まだ金融機関が登録されていません。「銀行明細」から口座を追加してください。</p>')+'</section>'+
   '<p class="cf-note">※ 当期の期首残高は「12か月の手入力・期首設定」で管理します。旧画面の計画金額は「その他調整」として加算するため、同じ支払を定期予定と重複登録しないでください。</p>';

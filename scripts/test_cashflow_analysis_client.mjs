@@ -43,6 +43,7 @@ const html=ctx.cfaPage_();
 assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'),'malicious bank description must be escaped');
 assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
 assert.ok(html.includes('銀行口座別の月末残高を照合する'));
+ assert.ok(html.includes('銀行別の明細合計は自社口座間振替を含みます'),'bank vs company totals need an explicit explanation');
 ctx.cfaLoadMonth_(true);const staleMonth=calls.at(-1);
 ctx.cfaChangeMonth_('2026-09');assert.equal(calls.at(-1).args[1].month,'2026-09');
 staleMonth.meta.success({ok:true,month:'2026-10',total:1,rows:[tx]});
