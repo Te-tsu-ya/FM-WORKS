@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.1
+**文書版:** 0.23.2
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.1`
+`APP.version = 0.23.2`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2205,3 +2205,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Bank web/CSV import UI stores `importPending` frozen rows, account ID and filename plus `importIndex`, `importChunkKey` and accepted counts only in per-session memory. A lost RPC reply leaves its chunk eligible for idempotent replay, not a full 3000-row restart.
 - The client validates `ok===true`, integer added/skipped and their sum against the sent rows before advancing. An explicit new preview drops the previous pending job. Ordinary data refresh preserves it. Logout clears it.
 - No DB schema changes; on replay, the server's existing bank transaction fingerprint provides duplicate suppression. Live GAS import retry must still be validated by the administrator.
+
+
+## v0.23.2 Financial anti-assumption safeguards
+- In `cfrMonthTotals_`, `hasPlan` is true only when the bank workspace reports a scheduled occurrence for that month, the active scenario introduces an amount, or the user explicitly entered both manual inflow and outflow amounts (including 0). Existence of a plan in another month must not initialize unknown periods.
+- Keep `cfbForecast_` preview consistent with the server for ordinary schedules and manual values. Warn explicitly about overlapping scheduled and manual amounts; validate annual sums and scenario differences against safe integer limits.
+- Previously published reports and source records are not mutated; app release requires all financial and UI regressions in CI.

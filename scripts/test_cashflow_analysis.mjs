@@ -111,4 +111,21 @@ assert.match(lastExport,/format=pdf/);assert.equal(pdf.mimeType,'application/pdf
 assert.throws(()=>ctx.exportCashFlowReport('STAFF',{fiscalYear:2026,format:'PDF'}),/管理者/);
 assert.throws(()=>ctx.exportCashFlowReport('ADMIN',{fiscalYear:2026,format:'TXT'}),/形式/);
 assert.ok(audit.length>3);
+
+ // A single scheduled receipt in October does not establish zero cashflow for all preceding months.
+ const oncePlan={id:'ONCE-UNKNOWN',active:true,direction:'IN',amount:1000,
+  category:'売上入金',frequency:'ONCE',startMonth:'2026-10',endMonth:'2026-10',day:20};
+ const fiscal=JSON.parse(JSON.stringify(ctx.cashFlowMonths_(2026)));
+ const isolated=ctx.cfrScenarioApply_(2026,[oncePlan],[],'');
+ const emptyBank=new Map(fiscal.map(month=>[month,{month,scheduledCount:0,actualIn:0,actualOut:0,importedCount:0}]));
+ const unknown=ctx.cfrMonthTotals_(fiscal,[oncePlan],[],isolated,emptyBank,'',new Map(),2000);
+ assert.equal(unknown.rows[0].source,'未入力','unplanned month must not be inferred zero');
+ assert.equal(unknown.rows[0].plannedIn,null);
+ assert.equal(unknown.rows.find(row=>row.month==='2026-10').plannedIn,1000,'one-time income remains planned');
+ assert.equal(unknown.yearEnd,null,'missing months make year-end forecast unknown');
+ const manualZero=fiscal.map(month=>({month,planIn:0,planOut:0}));
+ const explicit=ctx.cfrMonthTotals_(fiscal,[oncePlan],manualZero,isolated,emptyBank,'',new Map(),2000);
+ assert.equal(explicit.rows[0].source,'予定','explicit zero is a meaningful input');
+ assert.equal(explicit.yearEnd,3000,'explicit zero for other months yields correct 12-month forecast');
+
 console.log('PASS finance: copy import, duplicate rejection, memo, classification, what-if, reconciliation before close, XLSX and PDF signatures, ADMIN-only');
