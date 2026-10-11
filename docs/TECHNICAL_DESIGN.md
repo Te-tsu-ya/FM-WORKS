@@ -2331,3 +2331,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Update the two static schema-version markers in `scripts/validate.mjs` from 19 to 20, so the full release validation guards the target schema version consistently with `Schema.gs` and `test_schema_migration.mjs`.
 
 - `scripts/test_cashflow.mjs` must assert `DB_SCHEMA_VERSION === 20`, while still validating unchanged annual cashflow calculations and administrator ACL.
+
+- `scripts/test_cashflow_bank.mjs` and `scripts/test_project_advanced.mjs` verify `DB_SCHEMA_VERSION` 20 while keeping previous balances, import deduplication and project records tests unchanged.
