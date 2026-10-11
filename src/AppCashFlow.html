@@ -1,6 +1,6 @@
 <script>
 /* v0.21 annual fiscal cashflow; amounts never use browser persistent storage. */
-let cashFlowUi={open:false,year:0,seq:0,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};
+let cashFlowUi={open:false,year:0,seq:0,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:'',uncertain:false,uncertain:false};
 function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:''};}
 function cashFlowAllowed_(){return !!(state.sessionToken&&state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace&&state.data.permissions.adminConsole);}
 function cashFlowThisYear_(){
@@ -9,7 +9,7 @@ function cashFlowThisYear_(){
 }
 function cashFlowDiscard_(next){
  if(!cashFlowUi.dirty){next();return;}
- openConfirmDialog('未保存の変更','保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
+ openConfirmDialog('未保存の変更',cashFlowUi.uncertain?'保存結果が未確認です。先に同じ内容と送信キーで再試行し、登録内容を照合してください。破棄すると再送の手掛かりがなくなります。破棄しますか？':'保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
 }
 function cashFlowOpen_(){
  if(!cashFlowAllowed_())return;
@@ -58,7 +58,7 @@ function cashFlowLoad_(force=false){
   if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}
   if(!result||result.ok!==true){ui.error='取得したデータが正しくありません。';renderPageIfActive('finance');return;}
   ui.data=result;ui.at=Date.now();ui.draft={openingBalance:result.record.openingBalance,revision:result.record.revision,months:result.record.months.map(x=>({...x}))};
-  ui.dirty=false;ui.key='';renderPageIfActive('finance');
+  ui.dirty=false;ui.key='';ui.uncertain=false;renderPageIfActive('finance');
  }).withFailureHandler(err=>{
   if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
   ui.loading=false;if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}ui.error=cleanApiErrorMessage(err,'資金繰り表を読み込めませんでした。');renderPageIfActive('finance');
@@ -125,9 +125,10 @@ function cashFlowRefresh_(){
  s.months.forEach((m,i)=>[['planEnd','plan'],['actualEnd','actual'],['forecastEnd','forecast']].forEach(pair=>{
   const cell=document.getElementById('cf-'+pair[1]+'-'+i);if(cell)cell.textContent=cashFlowYen_(m[pair[0]]);
  }));
+ if(typeof cashFlowGridSync_==='function')cashFlowGridSync_();
 }
 function cashFlowEdit_(node){
- const ui=cashFlowUi;if(!ui.draft||ui.busy||!cashFlowAllowed_())return;
+ const ui=cashFlowUi;if(!ui.draft||ui.busy||ui.uncertain||!cashFlowAllowed_())return;
  const key=node.dataset.key;
  if(key==='openingBalance')ui.draft.openingBalance=node.value;
  else{
@@ -152,12 +153,12 @@ function cashFlowSave_(){
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(res=>{
   if(token!==state.sessionToken||!cashFlowUi.open||year!==cashFlowUi.year||seq!==cashFlowUi.seq)return;
   ui.busy=false;
-  if(!res||res.ok!==true){ui.error='保存結果を確認できません。';renderPageIfActive('finance');return;}
+  if(!res||res.ok!==true){ui.uncertain=true;ui.error='保存結果を確認できません。同じ内容と送信キーで再試行してください。';renderPageIfActive('finance');return;}
   ui.auditWarning=res.auditRecorded===false?'金額は保存されましたが監査ログの記録に失敗しました。管理者が確認してください。':res.auditRecorded===null?'保存済みデータを確認しました。監査ログの状態は未確認です。':'';
-  ui.notice='保存済みです。';ui.dirty=false;ui.key='';ui.data=null;ui.draft=null;cashFlowLoad_(true);
+  ui.notice='保存済みです。';ui.dirty=false;ui.uncertain=false;ui.key='';ui.data=null;ui.draft=null;cashFlowLoad_(true);
  }).withFailureHandler(err=>{
   if(token!==state.sessionToken||!cashFlowUi.open||year!==cashFlowUi.year||seq!==cashFlowUi.seq)return;
-  ui.busy=false;ui.error=cleanApiErrorMessage(err,'保存できませんでした。入力は保持しています。');renderPageIfActive('finance');
+  ui.busy=false;ui.uncertain=true;ui.error=cleanApiErrorMessage(err,'保存結果が不明です。入力と送信キーを保持しています。')+'　すでに保存された可能性があるため、内容を変えずに再試行してください。';renderPageIfActive('finance');
  }).saveCashFlowYear(token,payload);
 }
 function cashFlowPage_(){
@@ -173,7 +174,7 @@ function cashFlowPage_(){
  if(!u.data)return '<div class="cf-workspace">'+header+'<section class="card cf-empty" role="alert">'+escapeHtml(u.error||'読み込み待ちです。')+'</section></div>';
  if(u.data.setupRequired)return '<div class="cf-workspace">'+header+'<section class="card cf-empty"><h2>初回設定が必要です</h2><p>管理・設定 → 運用・労務 からバックアップ付きDB更新を実行してください。既存Excelは変更しません。</p><button class="secondary-button" onclick="setAdminTab('+"'operation'"+')">DB更新画面を開く</button></section></div>';
  const d=u.draft,s=cashFlowCalc_();if(!d||!s)return '<div class="cf-workspace">'+header+'</div>';
- const input=(i,key,row)=>'<input data-index="'+i+'" data-key="'+key+'" type="number" inputmode="numeric" min="0" max="999999999999" step="1" value="'+escapeHtml(row[key]==null?'':row[key])+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(row.month)+' '+key+'"'+(u.busy?' disabled':'')+'>';
+ const input=(i,key,row)=>'<input data-index="'+i+'" data-key="'+key+'" type="number" inputmode="numeric" min="0" max="999999999999" step="1" value="'+escapeHtml(row[key]==null?'':row[key])+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(row.month)+' '+key+'"'+(u.busy||u.uncertain?' disabled':'')+'>';
  const rows=d.months.map((r,i)=>{
   const t=s.months[i];
   return '<tr><th scope="row">'+escapeHtml(r.month.replace('-','年')+'月')+'</th>'+
@@ -181,17 +182,17 @@ function cashFlowPage_(){
    '<td class="cf-num" id="cf-plan-'+i+'">'+cashFlowYen_(t.planEnd)+'</td>'+
    '<td class="cf-num" id="cf-actual-'+i+'">'+cashFlowYen_(t.actualEnd)+'</td>'+
    '<td class="cf-num" id="cf-forecast-'+i+'">'+cashFlowYen_(t.forecastEnd)+'</td>'+
-   '<td><input class="cf-note-input" type="text" maxlength="300" data-index="'+i+'" data-key="note" value="'+escapeHtml(r.note||'')+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(r.month)+' 備考"'+(u.busy?' disabled':'')+'></td></tr>';
+   '<td><input class="cf-note-input" type="text" maxlength="300" data-index="'+i+'" data-key="note" value="'+escapeHtml(r.note||'')+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(r.month)+' 備考"'+(u.busy||u.uncertain?' disabled':'')+'></td></tr>';
  }).join('');
  const feedback=(u.error?'<p class="finance-error" role="alert">'+escapeHtml(u.error)+'</p>':'')+
   (u.auditWarning?'<p class="finance-error" role="alert">'+escapeHtml(u.auditWarning)+'</p>':'')+
   (u.notice?'<p class="cf-success" role="status">'+escapeHtml(u.notice)+'</p>':'');
- return '<div class="cf-workspace">'+header+(typeof cfbUi!=='undefined'&&cfbUi.demo?cfbDemoBanner_():'')+'<section class="card cf-toolbar"><label>期首現預金残高（12月1日／円）<input type="number" step="1" min="-999999999999" max="999999999999" data-key="openingBalance" value="'+escapeHtml(d.openingBalance==null?'':d.openingBalance)+'" placeholder="例：1000000" oninput="cashFlowEdit_(this)"'+(u.busy?' disabled':'')+'></label>'+
-  '<div class="cf-save"><span id="cfStatus" role="status">'+(u.dirty?'未保存の変更あり':u.data.record.exists?'保存済み':'未作成')+'</span><button type="button" id="cfSave" class="primary-button" onclick="cashFlowSave_()"'+(!u.dirty||u.busy?' disabled':'')+'>'+(u.busy?'保存中…':'年度を保存')+'</button></div></section>'+feedback+
+ return '<div class="cf-workspace">'+header+(typeof cfbUi!=='undefined'&&cfbUi.demo?cfbDemoBanner_():'')+'<section class="card cf-toolbar"><label>期首現預金残高（12月1日／円）<input type="number" step="1" min="-999999999999" max="999999999999" data-key="openingBalance" value="'+escapeHtml(d.openingBalance==null?'':d.openingBalance)+'" placeholder="例：1000000" oninput="cashFlowEdit_(this)"'+(u.busy||u.uncertain?' disabled':'')+'></label>'+
+  '<div class="cf-save"><span id="cfStatus" role="status">'+(u.uncertain?'保存結果を確認中':u.dirty?'未保存の変更あり':u.data.record.exists?'保存済み':'未作成')+'</span><button type="button" id="cfSave" class="primary-button" onclick="cashFlowSave_()"'+(!u.dirty||u.busy?' disabled':'')+'>'+(u.busy?'保存中…':u.uncertain?'同じ内容で再試行':'年度を保存')+'</button></div></section>'+feedback+cashFlowGridHtml_()+
   '<div class="cf-metrics" id="cfMetrics">'+cashFlowMetricHtml_(s)+'</div>'+
   '<section class="card cf-chart"><h2>月末残高の推移</h2><div id="cfChart">'+cashFlowChartHtml_(s)+'</div></section>'+
-  '<section class="card cf-table-card"><h2>月別入出金</h2><p>計画・実績は現金ベースです。空欄＝未入力、0＝入力済み0円。入金・出金の両方が入力済みの月だけ残高を計算します（片方がない場合は0を入力）。</p>'+
-  '<div class="cf-scroll" role="region" aria-label="12か月の入出金" tabindex="0"><table class="cf-table"><thead><tr><th>対象月</th><th>計画入金</th><th>計画出金</th><th>実績入金</th><th>実績出金</th><th>計画末</th><th>実績末</th><th>見込み末</th><th>備考</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+  '<details class="cfg-legacy"><summary>従来の縦型入力表を開く（必要な場合のみ）</summary><section class="card cf-table-card"><h2>月別入出金</h2><p>計画・実績は現金ベースです。空欄＝未入力、0＝入力済み0円。入金・出金の両方が入力済みの月だけ残高を計算します（片方がない場合は0を入力）。</p>'+
+  '<div class="cf-scroll" role="region" aria-label="12か月の入出金" tabindex="0"><table class="cf-table"><thead><tr><th>対象月</th><th>計画入金</th><th>計画出金</th><th>実績入金</th><th>実績出金</th><th>計画末</th><th>実績末</th><th>見込み末</th><th>備考</th></tr></thead><tbody>'+rows+'</tbody></table></div></section></details>'+
   '<p class="cf-note">手入力の資金繰り表です。銀行口座、既存経費、試算表とは自動同期していません。年間残高は他年度へ自動引き継ぎしません。</p></div>';
 }
 </script>

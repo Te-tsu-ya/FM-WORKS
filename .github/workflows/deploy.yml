@@ -44,6 +44,18 @@ jobs:
         run: node scripts/test_cashflow.mjs
       - name: Verify annual cash flow client interactions and private-data isolation
         run: node scripts/test_cashflow_client.mjs
+      - name: Verify direct 12-month finance grid, all-cell paste and exact save retry
+        run: node scripts/test_cashflow_grid.mjs
+      - name: Verify cashflow horizontal input at desktop/mobile widths
+        run: node scripts/test_cashflow_grid_viewport.mjs
+      - name: Upload annual cashflow grid layout artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-cashflow-grid-viewport
+          path: artifacts/cashflow-grid/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify bank accounts, CSV import security and recurring cashflow
         run: node scripts/test_cashflow_bank.mjs
       - name: Verify classified receipts, what-if cash forecast and report generation
