@@ -1761,3 +1761,5 @@ ADMINだけ区切り線の下へ「管理」を表示する。
 - ログアウト・認証切替のresetFinanceUiで経費貼付下書きも破棄し、前ログイン社員の内容が残らないようにする。
 
 - 既存 `financePage()` は経理専用ワークスペースに委譲し、旧一覧描画を `financeLegacyPage()` として利用する。ナビゲーションの公開契約を変えない。
+
+- 既存client contract検証に新しい `AppFinanceWorkspace.html` も読み込み、実経理ルートから参照できるか試験する。
