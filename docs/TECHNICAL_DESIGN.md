@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.5
+**文書版:** 0.23.6
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.5`
+`APP.version = 0.23.6`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2227,3 +2227,13 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 ## v0.23.5 Bank statement and external cashflow display
 - Extend bankSummaries[] with `statementIn`, `statementOut`, `transferIn`, and `transferOut` while retaining existing net fields `incoming/outgoing`. Bank reconciliation shows account gross totals and company-wide cashflow continues to exclude internal transfers. The standalone sample model uses the same distinctions.
+
+## v0.23.6 Report export session boundary
+### Cashflow report stale-callback guard
+- `cfaDownloadReport_` retains the requesting session token, fiscal year, scenario and workspace sequence, rejecting completion and failure callbacks after context changes. This prevents cross-user/period report disclosure via delayed browser download callbacks.
+- `scripts/test_cashflow_report_session.mjs` tests stale token, fiscal year and scenario responses; CI and Deploy must run it.
+
+- Failed client-side anchor downloads revoke the generated Blob URL synchronously to avoid holding sensitive financial PDF/XLSX data in browser memory.
+
+- `cfaScenarioSelect_` clears the export-in-progress flag because the stale callback is rejected by the captured scenario ID.
+
