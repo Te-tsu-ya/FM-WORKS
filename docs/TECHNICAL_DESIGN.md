@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.9
+**文書版:** 0.25.0
 **更新日:** 2026-10-12  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2441,3 +2441,13 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_somu_client.mjs` asserts unknown stock and overdue count for synthetic incomplete loan histories; `scripts/test_somu_integration.mjs` verifies per-kind flags from >3,000 physical records.
 
 - The record-list header and in-place refresh counter share `somuCountText_` so truncated search and display counts do not imply complete results.
+
+
+## v0.25.0 Progressive General Affairs workspace loading
+- `src/AppSomu.html:somuLoad` calls `getSomuWorkspace(token,force,false)`, so the first RPC only accesses the four core ledgers and returns before the three growth sheets are read.
+- `somuScheduleGrowth_` calls the existing independent `somuGrowthLoad(force)` after first render for the home dashboard, or after core response when a growth tab is active. It respects the shared background-task scheduler and falls back to an immediate call if unavailable.
+- `somuScheduleGrowth_` rechecks session identity, current page and tab at execution time; stale tasks after logout, session switch or page navigation cannot issue another RPC. Fresh in-memory base data on re-entry also schedules missing growth information without reading the core data again.
+- Explicit refresh propagates the force flag to the separately loaded growth data. Existing backend `getSomuWorkspace` keeps its optional `includeGrowth` argument for backwards compatibility; cache, DB v20, role authorization and data contracts are unchanged.
+- `scripts/test_somu_client.mjs` asserts first-RPC argument, delayed growth sequencing, cached reentry, stale task rejection and no unnecessary prefetch from the asset tab. True GAS cold/warm performance remains to be measured.
+
+- The shared `scripts/test_business_workflows.mjs` contract now asserts the staged two-RPC sequence and zero-RPC tab switches after growth fetch, instead of the superseded combined seven-ledger RPC contract.

@@ -10,11 +10,30 @@ function somuCountText_(kind,count){
  return somuTruncated_(kind)?(count?count+'件以上':'未確定'):count+'件';
 }
 const SOMU_CLIENT_FRESH_MS=300000;
+// Render the four essential ledgers first; load the three growth ledgers only
+// after first paint, or when their own tab becomes active.
+function somuScheduleGrowth_(force){
+ if(typeof somuGrowthLoad!=='function')return;
+ const needed=()=>somuUi.tab==='home'||
+   (typeof somuGrowthTab_==='function'&&somuGrowthTab_(somuUi.tab));
+ if(!needed())return;
+ const identity=somuSessionIdentity();
+ const launch=()=>{
+  if(identity!==somuSessionIdentity()||state.page!=='office'||!needed())return;
+  somuGrowthLoad(!!force);
+ };
+ if(typeof scheduleBackgroundTask==='function')
+   scheduleBackgroundTask(launch,somuUi.tab==='home'?350:0);
+ else launch();
+}
 function somuLoad(force){
  if(!somuCanUse())return;
  if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
  // Local in-memory snapshot makes return navigation instantaneous.
- if(somuUi.loaded&&!force&&Date.now()-somuUi.loadedAt<SOMU_CLIENT_FRESH_MS)return;
+ if(somuUi.loaded&&!force&&Date.now()-somuUi.loadedAt<SOMU_CLIENT_FRESH_MS){
+   somuScheduleGrowth_(false);
+   return;
+ }
  const identity=somuSessionIdentity(),started=Date.now(),hadData=!!(somuUi.loaded&&somuUi.data);
  somuUi.loading=true;somuUi.error='';
  if(typeof somuGrowth!=='undefined'){somuGrowth.loading=true;somuGrowth.serial=(somuGrowth.serial||0)+1;somuGrowth.refreshNeeded=false;}
@@ -32,7 +51,7 @@ function somuLoad(force){
   if(typeof console!=='undefined'&&console.info)
     console.info('FM_SOMU_LOAD',JSON.stringify({elapsedMs:Date.now()-started,rows:data&&data.rowCount||0,refresh:hadData}));
   if(state.page==='office')renderPageIfActive('office');
-  if(somuUi.tab==='home'&&typeof somuGrowthLoad==='function'&&typeof scheduleBackgroundTask==='function')scheduleBackgroundTask(()=>somuGrowthLoad(false),550);
+  somuScheduleGrowth_(!!force);
  }).withFailureHandler(err=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.loading=false;
@@ -46,7 +65,7 @@ function somuLoad(force){
     somuUi.error=message;somuUi.loaded=true;
     if(state.page==='office')renderPageIfActive('office');
   }
- }).getSomuWorkspace(state.sessionToken,!!force,true);
+ }).getSomuWorkspace(state.sessionToken,!!force,false);
 }
 function somuReload(){somuLoad(true);}
 const somuTabState_=new Map();

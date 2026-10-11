@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
-const calls=[],renders=[],nodes={};
+const calls=[],renders=[],scheduled=[],nodes={};
 const node=id=>nodes[id]||(nodes[id]={value:'',disabled:false,textContent:'',hidden:false});
 const runner=(meta={})=>new Proxy({}, {get(_,method){
   if(method==='withSuccessHandler')return success=>runner({...meta,success});
@@ -12,7 +12,9 @@ const runner=(meta={})=>new Proxy({}, {get(_,method){
 const context=vm.createContext({
   state:{page:'quotes',sessionToken:'SYNTHETIC',data:{today:'2026-10-10',user:{employeeId:'QA',name:'架空社員'},permissions:{officeWorkspace:true,financeWorkspace:true}}},
   window:{},document:{getElementById:node},google:{script:{run:runner()}},
-  renderPageIfActive:page=>renders.push(page),navigate:page=>vm.runInContext('state.page='+JSON.stringify(page),context),
+  renderPageIfActive:page=>renders.push(page),
+  scheduleBackgroundTask:task=>scheduled.push(task),
+  navigate:page=>vm.runInContext('state.page='+JSON.stringify(page),context),
   cleanApiErrorMessage:error=>error.message,escapeHtml:value=>String(value??''),
   showToast(){},closeModal(){},svg(){return ''},console,Date,Map,Set,Math,Number,String,Object,Array,JSON
 });
@@ -60,16 +62,23 @@ const beforeInsights=calls.length;run('financeLoadInsights()');
 assert.equal(calls.length,beforeInsights,'returning to expense analysis reuses the result');
 
 run("state.page='office';somuLoad(false)");
-assert.equal(calls.at(-1).method,'getSomuWorkspace');
-assert.equal(calls.at(-1).args[2],true,'office asks for all seven ledgers in one round trip');
+const baseOfficeCall=calls.at(-1);
+assert.equal(baseOfficeCall.method,'getSomuWorkspace');
+assert.equal(baseOfficeCall.args[2],false,'office loads four base ledgers before optional growth');
 const beforeGrowth=calls.length;run("somuTab('contracts')");
-assert.equal(calls.length,beforeGrowth,'switching while the combined load is pending does not start another RPC');
-calls.at(-1).success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],growth:{ready:true,contracts:[],facilities:[],tickets:[]}});
+assert.equal(calls.length,beforeGrowth,'growth tab waits while base workspace is loading');
+baseOfficeCall.success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[]});
+assert.equal(calls.length,beforeGrowth,'base paint must not wait for optional growth RPC');
+assert.equal(scheduled.length,1,'optional growth fetch is deferred until base has rendered');
+scheduled.shift()();
+assert.equal(calls.at(-1).method,'getSomuGrowthData','growth is fetched in an independent RPC');
+calls.at(-1).success({ready:true,contracts:[],facilities:[],tickets:[]});
+const afterGrowth=calls.length;
 run("somuUi.query='保守';somuUi.selected='SELECTED';somuTab('assets');somuTab('contracts')");
 assert.equal(run('somuUi.query'),'保守');assert.equal(run('somuUi.selected'),'SELECTED');
-assert.equal(calls.length,beforeGrowth,'all cached office tab switches have zero RPC');
+assert.equal(calls.length,afterGrowth,'loaded growth and base tab switches have zero RPC');
 run('somuReset()');assert.equal(run('somuTabState_.size'),0,'logout clears tab information');
-console.log('PASS business workflows: five-minute return cache, draft preservation, issuance state, spreadsheet paste, finance resume, combined office read and zero-RPC tabs');
+console.log('PASS business workflows: return cache, drafts, finance resume, progressive office read and zero-RPC tabs');
 
 // A force refresh after migration must survive older in-flight maintenance reads.
 vm.runInContext(fs.readFileSync('src/AppAdmin.html','utf8').replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),context,{filename:'AppAdmin'});

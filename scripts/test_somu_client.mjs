@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
 const source=['src/AppSomu.html','src/AppSomuGrowth.html'].map(file=>fs.readFileSync(file,'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
-const calls=[],modal={innerHTML:''},nodes={};
+const calls=[],scheduled=[],modal={innerHTML:''},nodes={};
 const get=id=>nodes[id]||(nodes[id]={value:'',textContent:'',disabled:false,hidden:false});
 let success=null,failure=null,toast='',closeCount=0;
 const runner={
@@ -20,6 +20,7 @@ const ctx=vm.createContext({
  data:{today:'2026-10-10',user:{employeeId:'FM0001'},permissions:{officeWorkspace:true}}},
  google:{script:{run:proxy}},ensureModal:()=>modal,closeModal:()=>{closeCount++;},
  showToast:t=>{toast=t;},renderPageIfActive:()=>{},
+ scheduleBackgroundTask:fn=>{scheduled.push(fn);},
  pageHead:(a,b)=>escapeHtml(a)+' '+escapeHtml(b),
  cleanApiErrorMessage:()=> '処理が失敗しました',handleApiError:()=>false,
  escapeHtml,svg:()=>'',Date,Math,Number,String,Array,Object,JSON,Set,RegExp
@@ -120,6 +121,7 @@ const previousData=evaluate("somuUi.data");
 evaluate("somuLoad(false)");
 assert.equal(calls.at(-1).api,'getSomuWorkspace');
 assert.equal(calls.at(-1).args[1],false);
+assert.equal(calls.at(-1).args[2],false,'initial RPC must exclude growth tables');
 assert.equal(evaluate("somuUi.data"),previousData,'background refresh must keep old rows');
 success({setupRequired:false,assets:[],loans:[],purchases:[],documents:[],canApprove:true});
 assert.equal(evaluate("somuUi.loaded"),true);
@@ -142,5 +144,38 @@ assert.equal(evaluate("somuAvailable_(somuData().assets[0])"),null);
 evaluate("somuUi.tab='home'");
 assert.match(evaluate('somuPage()'),/未確定/,'overdue KPI must be marked incomplete');
 assert.doesNotMatch(evaluate('somuPage()'),/現在、期限が迫っている案件はありません。/);
-console.log('PASS SOMU client: saves, lending, 60-row paging, stale refresh, partial-data accuracy');
+// Progressive load: core records render before the three optional growth ledgers.
+const basePayload={setupRequired:false,assets:[],loans:[],purchases:[],documents:[],today:'2026-10-10',canApprove:true};
+evaluate("somuReset();somuUi.tab='home';somuLoad(false)");
+const firstRpc=calls.at(-1);
+assert.equal(firstRpc.api,'getSomuWorkspace');
+assert.equal(firstRpc.args[2],false,'no growth lookup in cold base RPC');
+const beforeTasks=scheduled.length;
+success(basePayload);
+assert.equal(evaluate("somuUi.loaded"),true,'core workspace must display first');
+assert.equal(scheduled.length,beforeTasks+1,'growth fetch scheduled only after first paint');
+const beforeGrowth=calls.length;
+scheduled.at(-1)();
+assert.equal(calls.length,beforeGrowth+1);
+assert.equal(calls.at(-1).api,'getSomuGrowthData');
+success({ready:true,contracts:[],facilities:[],tickets:[],today:'2026-10-10'});
+assert.equal(evaluate("somuGrowth.loaded"),true);
+assert.equal(evaluate("somuUi.loaded"),true,'growth completion must preserve base data');
+
+// Re-entry from the five-minute local cache must still recover a missing growth fetch.
+evaluate("somuReset();somuUi.loaded=true;somuUi.data="+JSON.stringify(basePayload)+";somuUi.loadedAt=Date.now()");
+const beforeCachedCalls=calls.length,beforeCachedTasks=scheduled.length;
+evaluate("somuLoad(false)");
+assert.equal(calls.length,beforeCachedCalls,'re-entry must not reload cached base tables');
+assert.equal(scheduled.length,beforeCachedTasks+1,'growth retries when base is cached');
+const pending=scheduled.at(-1);
+evaluate("state.sessionToken='DIFFERENT_SESSION'");
+pending();
+assert.equal(calls.length,beforeCachedCalls,'stale scheduled growth must not use another session');
+evaluate("state.sessionToken='SYNTHETIC_TOKEN'");
+evaluate("somuReset();somuUi.tab='assets';somuLoad(false)");
+const beforeAssetsTasks=scheduled.length;
+success(basePayload);
+assert.equal(scheduled.length,beforeAssetsTasks,'asset tab must not prefetch growth tables');
+console.log('PASS SOMU client: saves, 60-row paging, partial-data accuracy, progressive growth loading');
 
