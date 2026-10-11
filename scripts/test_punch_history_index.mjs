@@ -69,31 +69,31 @@ large[957]=make('P-FOREIGN','E-02','2026-10-09','2026-10-09 11:00:00','','P-ACTI
 active=sheet(large);
 const expected=legacy(large,'E-01');
 const actual=c.getActivePunchRows_('E-01');
-assert.deepEqual(actual.map(r=>r[0]),expected.map(r=>r[0]),'all active punches must match the original 12-column full scan');
-assert.deepEqual(actual.map(r=>r[0]),['P-ACTIVE','P-FIX'],'same-user replacement/deletion handling is preserved');
+assert.deepEqual(Array.from(actual,r=>r[0]),expected.map(r=>r[0]),'all active punches must match the original 12-column full scan');
+assert.deepEqual(Array.from(actual,r=>r[0]),['P-ACTIVE','P-FIX'],'same-user replacement/deletion handling is preserved');
 assert.equal(active.calls.whole,0,'large sparse staff history must not read the whole 12-column log');
 assert.equal(active.calls.finds,1,'look up only one employee ID');
-assert.ok(active.calls.wideCells<=24,'read only two matching twelve-column rows, got '+active.calls.wideCells);
+assert.ok(active.calls.wideCells<=48,'only four employee rows (including old/deleted for correction handling) should be fetched; got '+active.calls.wideCells);
 assert.equal(active.calls.index,1,'use bounded range-list blocks');
-assert.deepEqual(c.getPunchHistory('AUTHENTICATED-TEST',1).map(x=>x.punchId),['P-FIX'],'chronological limit and auth must be preserved');
+assert.deepEqual(Array.from(c.getPunchHistory('AUTHENTICATED-TEST',1),x=>x.punchId),['P-FIX'],'chronological limit and auth must be preserved');
 assert.ok(c.getPunchHistory('AUTHENTICATED-TEST',50).every(x=>x.employeeId==='E-01'),'other staff history must not leak');
 
 active=sheet(Array.from({length:14},(_,i)=>make('SM-'+i,i%2===0?'E-01':'E-02','2026-10-02','2026-10-02 08:00:00')));
-assert.deepEqual(c.getActivePunchRows_('E-01').map(r=>r[0]),legacy(active.rows,'E-01').map(r=>r[0]));
+assert.deepEqual(Array.from(c.getActivePunchRows_('E-01'),r=>r[0]),legacy(active.rows,'E-01').map(r=>r[0]));
 assert.equal(active.calls.whole,1,'small tables keep one-shot all-column read');
 assert.equal(active.calls.finds,0,'avoid TextFinder overhead on small tables');
 
 const meta=Array.from({length:600},(_,i)=>make('META-'+i,'E-02','2026-10-02','2026-10-02 08:00:00'));
 meta[11]=make('META-MATCH','E+([01])','2026-10-03','2026-10-03 08:00:00');
 active=sheet(meta);
-assert.deepEqual(c.getActivePunchRows_('E+([01])').map(r=>r[0]),['META-MATCH'],'escaped regex metacharacters preserve literal employee ID matching');
+assert.deepEqual(Array.from(c.getActivePunchRows_('E+([01])'),r=>r[0]),['META-MATCH'],'escaped regex metacharacters preserve literal employee ID matching');
 assert.equal(active.calls.whole,0);
 
 active=sheet(Array.from({length:600},(_,i)=>make('FRAGMENT-'+i,i%2===0?'E-01':'E-02','2026-10-02','2026-10-02 08:00:00')));
-assert.deepEqual(c.getActivePunchRows_('E-01').map(r=>r[0]),legacy(active.rows,'E-01').map(r=>r[0]),'fragmented index fallback produces the same active records');
+assert.deepEqual(Array.from(c.getActivePunchRows_('E-01'),r=>r[0]),legacy(active.rows,'E-01').map(r=>r[0]),'fragmented index fallback produces the same active records');
 assert.equal(active.calls.whole,1,'highly fragmented matches use safe full-scan fallback');
 
 active=sheet([]);
-assert.deepEqual(c.getActivePunchRows_('E-01'),[],'empty sheets return without scanning');
+assert.deepEqual(Array.from(c.getActivePunchRows_('E-01')),[],'empty sheets return without scanning');
 
 console.log('PASS: indexed employee punch history, corrected/cancelled records, auth scope, limit/order, escaped IDs and small/fragmented fallback');
