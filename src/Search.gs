@@ -5,35 +5,52 @@ function searchApp(sessionToken, query) {
   const results = [];
   const add = item => { if (results.length < 30) results.push(item); };
 
-  const employeeSheet = getDb_().getSheetByName(DB.sheets.employees);
-  if (employeeSheet.getLastRow() >= 2) {
-    employeeSheet.getRange(2,1,employeeSheet.getLastRow()-1,13).getDisplayValues().forEach(r => {
-      if (!r[0] || r[6] !== '在籍') return;
-      const hay=[r[0],r[1],r[2],r[3],r[4]].join(' ').toLowerCase();
-      if (hay.includes(q)) add({type:'社員',title:r[1],sub:[r[0],r[3],r[4]].filter(Boolean).join(' / '),route:'people'});
+  // Reuse the active employee directory already loaded during login.
+  for (const employee of getEmployees_()) {
+    if (!employee || !employee.employeeId) continue;
+    const hay = [employee.employeeId,employee.name,employee.displayName,employee.department,employee.title]
+      .join(' ').toLowerCase();
+    if (hay.includes(q)) add({
+      type:'社員',title:employee.name,
+      sub:[employee.employeeId,employee.department,employee.title].filter(Boolean).join(' / '),
+      route:'people'
     });
+    if (results.length >= 30) return results;
   }
 
-  const scheduleSheet = getDb_().getSheetByName(DB.sheets.schedule);
-  if (scheduleSheet.getLastRow() >= 2) {
-    scheduleSheet.getRange(2,1,scheduleSheet.getLastRow()-1,18).getDisplayValues().forEach(r => {
-      if (!r[0] || r[12] === '削除') return;
-      if (!canViewScheduleRow_(session.employee,r)) return;
-      const hay=[r[6],r[7],r[8],r[9],r[10]].join(' ').toLowerCase();
-      if (hay.includes(q)) add({type:'予定',title:r[7],sub:[r[1],r[2],r[6],r[9]].filter(Boolean).join(' / '),route:'schedule',date:r[1],id:r[0]});
-    });
+  const db = getDb_();
+  const scheduleSheet = db.getSheetByName(DB.sheets.schedule);
+  if (scheduleSheet && scheduleSheet.getLastRow() >= 2) {
+    const rows = scheduleSheet.getRange(2,1,scheduleSheet.getLastRow()-1,18).getDisplayValues();
+    for (const r of rows) {
+      if (!r[0] || r[12] === '削除' || !canViewScheduleRow_(session.employee,r)) continue;
+      const hay = [r[6],r[7],r[8],r[9],r[10]].join(' ').toLowerCase();
+      if (hay.includes(q)) add({
+        type:'予定',title:r[7],sub:[r[1],r[2],r[6],r[9]].filter(Boolean).join(' / '),
+        route:'schedule',date:r[1],id:r[0]
+      });
+      if (results.length >= 30) return results;
+    }
   }
 
-  const requestSheet = getDb_().getSheetByName('申請');
-  if (requestSheet.getLastRow() >= 2) {
-    const managedIds=getPermissions_(session.employee).requestApprove?getManagedEmployeeIds_(session.employee):new Set();
-    requestSheet.getRange(2,1,requestSheet.getLastRow()-1,19).getDisplayValues().forEach(r => {
-      if (!r[0]) return;
-      if (r[2]!==session.employee.employeeId&&!managedIds.has(r[2])) return;
-      const hay=[r[3],r[4],r[5],r[7],r[8],r[9]].join(' ').toLowerCase();
-      if (hay.includes(q)) add({type:'申請',title:r[4]+' / '+r[3],sub:[r[5],r[9],r[8]].filter(Boolean).join(' / '),route:'requests',id:r[0]});
-    });
+  const requestSheet = db.getSheetByName('申請');
+  if (requestSheet && requestSheet.getLastRow() >= 2) {
+    const managedIds = getPermissions_(session.employee).requestApprove
+      ? getManagedEmployeeIds_(session.employee) : new Set();
+    const allowedIds = [...new Set([session.employee.employeeId,...managedIds])];
+    // Read only the requester IDs visible to this user, and recheck ACL.
+    const rows = readRowsByColumnValues_(requestSheet,3,19,allowedIds);
+    for (const r of rows) {
+      if (!r[0] || (r[2] !== session.employee.employeeId && !managedIds.has(r[2]))) continue;
+      const hay = [r[3],r[4],r[5],r[7],r[8],r[9]].join(' ').toLowerCase();
+      if (hay.includes(q)) add({
+        type:'申請',title:r[4]+' / '+r[3],
+        sub:[r[5],r[9],r[8]].filter(Boolean).join(' / '),
+        route:'requests',id:r[0]
+      });
+      if (results.length >= 30) return results;
+    }
   }
 
-  return results.slice(0,30);
+  return results;
 }

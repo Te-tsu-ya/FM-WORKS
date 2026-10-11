@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.3
+**文書版:** 0.24.4
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2388,3 +2388,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `projectAdvancedWorklogIds_(items)` returns immediately for no visible worklogs (zero linked-sheet I/O). It retains schema header checks when rows exist and retrieves only visible worklog IDs using `readRowsByColumnValues_` for sparse date windows and large tables.
 - It uses the existing TextFinder / regular-expression escaping / contiguous blocks / full read fallback, with no global per-user cache. Small tables and more than 24 visible worklogs retain the old full read behavior.
 - The new `scripts/test_worklog_link_index.mjs` regression validates indexed vs full-width read counts, empty dates, missing/duplicate IDs, invalid headers, legacy optional sheet, synthetic authorization-scoped outputs, and no DB writes.
+
+
+## v0.24.4 Global search scoped reads and stale callback isolation
+- src/Search.gs/searchApp reuses cached active employee directory getEmployees_(), short-circuits once 30 results are collected, and reads matching request records via readRowsByColumnValues_(sheet,3,19,allowedIds). It keeps the existing per-schedule visibility and per-requester authorization checks and original employee/schedule/request ordering.
+- src/AppShell.html increments globalSearchEpoch on query change/dismiss/new request and checks epoch, session token, active route, and current query before handling success/failure. The hidden panel clears both DOM and in-memory item references.
+- src/AppCore.html clears search state on logout before the session object is released. Late old-session RPC results cannot restore another user's search results.
+- scripts/test_global_search.mjs uses synthetic server and browser VM data to enforce the 30-item cap, scoped IDs, ACL, callback ordering, dismissal, route changes, failure handling and logout purge. CI/deployment both run the test.
+- Static read reductions are distinct from authenticated real-world latency, which remains an E2E measurement task.
