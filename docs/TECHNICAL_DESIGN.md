@@ -2264,3 +2264,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - GAS `saveFinanceReceiptsBulk` は経理・総務・ADMINのみ。全行を保存前に検査しScriptLock・行別識別子による再送時重複防止。監査ログ未確認を明示。
 - 保存前はメモリ内のみ。銀行Webのコピー貼付と資金繰りは既存APIを使い、本番DB／旧Excel／銀行明細は開発時に変更しない。
 - 同じデータを再送する場合は送信識別子を維持。実データ書込の受入、口座照合、月次資金繰り帳票の実機確認は別途必要。
+
+- `resetFinanceUi()` は `financeWorkspaceReset_()` を呼び、ブラウザメモリの経費貼付表・再送キー・進捗・監査メッセージをセッション破棄時に消去する。
