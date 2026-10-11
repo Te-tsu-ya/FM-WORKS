@@ -288,6 +288,11 @@ function cfbGuessCSV_(header){
 }
 async function cfbChooseFile_(node){
  const file=node.files&&node.files[0];if(!file)return;
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='取込中・再開待ちの明細があるため別ファイルには切り替えられません。';
+  if(node&&typeof node.value==='string')node.value='';
+  renderPageIfActive('finance');return;
+ }
  const session=state.sessionToken,seq=cfbUi.seq;
  cfbUi.csvRows=null;cfbUi.preview=null;cfbUi.error='';
  try{
@@ -297,7 +302,7 @@ async function cfbChooseFile_(node){
   try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
   catch(_){text=new TextDecoder('shift_jis').decode(bytes);}
   const records=cfbParseCSV_(text);
-  if(session!==state.sessionToken||seq!==cfbUi.seq||!cashFlowAllowed_())return;
+  if(session!==state.sessionToken||seq!==cfbUi.seq||!cashFlowAllowed_()||cfbUi.importing||cfbUi.importPending)return;
   cfbUi.csvRows=records;cfbUi.csvName=file.name;cfbUi.csvMap=cfbGuessCSV_(records[0]);
   cfbUi.csvAccountId=cfbUi.csvAccountId||cfbUi.loaded.accounts[0]&&cfbUi.loaded.accounts[0].id||'';
  }catch(err){if(session!==state.sessionToken||seq!==cfbUi.seq)return;cfbUi.error=String(err.message||err);}
@@ -305,6 +310,12 @@ async function cfbChooseFile_(node){
 }
 function cfbMapCSV_(key,value){
  if(!cfbUi.csvMap)return;
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='取込中や再開待ちの明細は列対応を変更できません。';renderPageIfActive('finance');return;}
+ if(cfbUi.bankGridEdited){
+  openConfirmDialog('列対応の変更','表で修正した内容があるため、列を変更するとプレビューを再作成する必要があります。修正内容を破棄して列を変更しますか？',
+    '修正を破棄して変更',()=>{cfbUi.bankGridEdited=false;cfbMapCSV_(key,value);});
+  renderPageIfActive('finance');return;
+ }
  cfbUi.csvMap[key]=Number(value);cfbUi.preview=null;renderPageIfActive('finance');
 }
 function cfbCSVNumber_(raw,label){
@@ -315,8 +326,16 @@ function cfbCSVNumber_(raw,label){
  return Number(x);
 }
 function cfbPreviewCSV_(){
- if(cfbUi.importing)return;
- cfbUi.importPending=null;cfbUi.importChunkKey='';cfbUi.importIndex=0;
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='取込中・再開待ちの明細を新たに解析できません。まず同じ送信情報で再開してください。';
+  renderPageIfActive('finance');return;
+ }
+ if(cfbUi.bankGridEdited){
+  openConfirmDialog('編集済みの明細を再解析','現在の表の修正は消えます。銀行から貼り付けた元データに戻して再解析しますか？',
+   '修正を破棄して再解析',()=>{cfbUi.bankGridEdited=false;cfbPreviewCSV_();});
+  return;
+ }
+ cfbUi.importChunkKey='';cfbUi.importIndex=0;
  cfbUi.importAdded=0;cfbUi.importSkipped=0;
  try{
   const ui=cfbUi,map=ui.csvMap,rows=ui.csvRows;
@@ -327,7 +346,7 @@ function cfbPreviewCSV_(){
   ui.preview=rows.slice(1).map((raw,index)=>{
    const cell=key=>map[key]<0?'':String(raw[map[key]]==null?'':raw[map[key]]);
    const date=cell('date').trim();
-   if(!date)return null;
+   if(!date){if(raw.some(v=>String(v==null?'':v).trim()!==''))throw Error((index+2)+'行目の取引日が未入力です。');return null;}
    let incoming=0,outgoing=0;
    if(map.incoming>=0&&map.outgoing>=0){incoming=cfbCSVNumber_(cell('incoming'),'入金');outgoing=cfbCSVNumber_(cell('outgoing'),'出金');}
    else{
@@ -348,21 +367,34 @@ function cfbPreviewCSV_(){
    return {date,incoming,outgoing,description,balance,externalId,occurrence,transfer:false};
   }).filter(Boolean);
   if(!ui.preview.length)throw Error('取り込める明細がありません。');
+  ui.bankGridPage=0;ui.bankGridEdited=false;
+  if(typeof cfbBankGridReindex_==='function')cfbBankGridReindex_();
   ui.error='';ui.notice=ui.preview.length+'件を取込前に確認しています。まだ保存されていません。';
  }catch(err){cfbUi.error=String(err.message||err);cfbUi.preview=null;}
  renderPageIfActive('finance');
 }
 function cfbCSVTransfer_(index,checked){
- if(cfbUi.preview&&cfbUi.preview[index])cfbUi.preview[index].transfer=!!checked;
+ if(cfbUi.importing||cfbUi.importPending)return;
+ if(cfbUi.preview&&cfbUi.preview[index]){
+  cfbUi.preview[index].transfer=!!checked;cfbUi.bankGridEdited=true;
+ }
 }
 function cfbBeginImport_(){
  const ui=cfbUi;if(ui.importing)return;
  if(ui.demo){if(ui.preview&&ui.preview.length)cfbDemoImport_();return;}
  if(!ui.importPending){
   if(!ui.preview||!ui.preview.length||!ui.csvAccountId)return;
-  // The immutable snapshot prevents a resumed batch from changing account or transaction content.
-  ui.importPending={accountId:ui.csvAccountId,fileName:ui.csvName,
-   rows:ui.preview.map(row=>({...row}))};
+  const problems=ui.preview.map((row,index)=>{
+   const errors=cfbBankGridErrors_(row);return errors.length?(index+1)+'行目: '+errors.join('・'):'';
+  }).filter(Boolean);
+  if(problems.length){
+   ui.error='修正が必要です：'+problems.slice(0,4).join(' ／ ')+(problems.length>4?' ほか'+(problems.length-4)+'行':'');
+   renderPageIfActive('finance');return;
+  }
+  // Normalize and capture exactly the staged rows before locking this batch.
+  cfbBankGridReindex_();
+  const snapshot=ui.preview.map(row=>({...cfbBankGridNormalize_(row),occurrence:row.occurrence}));
+  ui.importPending={accountId:ui.csvAccountId,fileName:ui.csvName,rows:snapshot};
   ui.importIndex=0;ui.importAdded=0;ui.importSkipped=0;ui.importChunkKey='';
  }
  ui.importing=true;ui.error='';cfbImportChunk_();
@@ -373,7 +405,7 @@ function cfbImportChunk_(){
  const start=ui.importIndex,items=pending.rows;
  if(start>=items.length){
   ui.importing=false;ui.importPending=null;ui.importChunkKey='';
-  ui.preview=null;ui.csvRows=null;ui.csvMap=null;
+  ui.preview=null;ui.csvRows=null;ui.csvMap=null;ui.bankGridEdited=false;ui.bankGridPage=0;
   ui.notice='銀行明細を'+ui.importAdded+'件登録、重複'+ui.importSkipped+'件をスキップしました。';
   cfbLoadAfterWrite_();return;
  }
@@ -417,21 +449,21 @@ function cfbCSVPage_(){
  const d=cfbUi.loaded,rows=cfbUi.csvRows||[],map=cfbUi.csvMap;
  const mapping=[['date','取引日'],['incoming','入金額'],['outgoing','出金額'],['amount','金額（入出金が同じ列の場合）'],
   ['direction','入払区分（1=入、2=出）'],['description','摘要'],['balance','残高'],['externalId','銀行側の取引番号']];
- const selectors=map?'<div class="cfb-map">'+mapping.map(([k,label])=>'<label>'+label+'<select onchange="cfbMapCSV_('+"'"+k+"'"+',this.value)">'+
+ const locked=!!cfbUi.importing||!!cfbUi.importPending;
+ const selectors=map?'<div class="cfb-map">'+mapping.map(([k,label])=>'<label>'+label+'<select onchange="cfbMapCSV_('+"'"+k+"'"+',this.value)"'+(locked?' disabled':'')+'>'+
   '<option value="-1">使わない</option>'+rows[0].map((h,i)=>'<option value="'+i+'"'+(map[k]===i?' selected':'')+'>'+cfbEscape_(h||'列'+(i+1))+'</option>').join('')+
   '</select></label>').join('')+'</div>':'';
  const preview=cfbUi.preview,pending=cfbUi.importPending;
  const resumeInfo=pending?'<p role="status">処理済み '+cfbUi.importIndex+'/'+pending.rows.length+'件。通信エラー後も同じ口座・取込明細で再開します。</p>':'';
  return '<section class="card cf-table-card"><h2>CSVファイルから取り込む（任意）</h2><p>CSVがない場合は上の「Webページから貼り付ける」を使ってください。CSVをダウンロードできる場合はファイルを選択します。ここでファイルを確認し、登録操作を行うまでDBには保存されません。</p>'+
-  '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbUi.csvAccountId=this.value;cfbUi.preview=null">'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
-  '<label>CSVファイル（UTF-8 / Shift-JIS）<input type="file" accept=".csv,text/csv,text/plain" onchange="cfbChooseFile_(this)"></label></div>'+
+  '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbUi.csvAccountId=this.value;cfbUi.preview=null"'+(locked?' disabled':'')+'>'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
+  '<label>CSVファイル（UTF-8 / Shift-JIS）<input type="file" accept=".csv,text/csv,text/plain" onchange="cfbChooseFile_(this)"'+(locked?' disabled':'')+'></label></div>'+
   (rows.length?'<h3>CSV列の対応（先頭行を見出しとして利用）</h3>'+selectors+
-  '<button type="button" class="secondary-button" onclick="cfbPreviewCSV_()">内容を確認する</button>':'')+
-  (preview?resumeInfo+'<p role="status">取込対象 '+preview.length+'件（うち先頭10件表示）</p>'+
-   '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>取引日</th><th>摘要</th><th>入金</th><th>出金</th><th>口座間振替</th></tr></thead><tbody>'+
-   preview.slice(0,10).map((r,i)=>'<tr><td>'+cfbEscape_(r.date)+'</td><td>'+cfbEscape_(r.description)+'</td><td>'+cfbMoney_(r.incoming)+'</td>'+
-     '<td>'+cfbMoney_(r.outgoing)+'</td><td><input type="checkbox"'+(r.transfer?' checked':'')+' onchange="cfbCSVTransfer_('+i+',this.checked)" aria-label="口座間振替"></td></tr>').join('')+
-   '</tbody></table></div><button type="button" class="primary-button" onclick="cfbBeginImport_()"'+(cfbUi.importing?' disabled':'')+'>'+
+  '<button type="button" class="secondary-button" onclick="cfbPreviewCSV_()"'+(locked?' disabled':'')+'>内容を確認する</button>':'')+
+  (preview?resumeInfo+'<p role="status">取込対象 '+preview.length+'件。25行ごとに表で確認・修正できます。</p>'+
+   cfbBankGridPreview_()+
+   '<button type="button" id="cbg-import" class="primary-button" onclick="cfbBeginImport_()"'+
+    (cfbUi.importing||(!cfbUi.importPending&&cfbBankGridStats_().invalid)?' disabled':'')+'>'+
     (cfbUi.importing?'取込中 '+cfbUi.importIndex+'/'+preview.length:pending?'中断位置から再開（'+cfbUi.importIndex+'/'+pending.rows.length+'件）':'確認した'+preview.length+'件を取り込む')+'</button>':'')+
   '<p class="cf-note">銀行のCSV形式は統一されていません。6桁の和暦日付などは誤解釈を防ぐため取込を停止し、銀行に対応した変換が必要です。CSVをGoogle以外の外部サービスへ送信しません。</p></section>';
 }

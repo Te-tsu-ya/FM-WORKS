@@ -1,7 +1,7 @@
 import fs from 'node:fs';import vm from 'node:vm';import os from 'node:os';
 import path from 'node:path';import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';import {pathToFileURL} from 'node:url';
-const css=['Styles.html','StylesCashFlow.html','StylesCashFlowBank.html','StylesCashFlowAnalysis.html']
+const css=['Styles.html','StylesCashFlow.html','StylesCashFlowBank.html','StylesCashFlowBankGrid.html','StylesCashFlowAnalysis.html']
  .map(name=>fs.readFileSync('src/'+name,'utf8')).join('\n');
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ctx=vm.createContext({
@@ -10,7 +10,7 @@ const ctx=vm.createContext({
  cashFlowAllowed_:()=>true,renderPageIfActive(){},cleanApiErrorMessage:e=>e.message,
  pageHead:(t,s)=>'<h1>'+t+'</h1>'+s,showToast(){},console,Date,Math,Number,String,Object,Array,Map,Set,JSON,Error,RegExp
 });
-for(const name of ['AppCashFlowBank','AppCashFlowAnalysis'])
+for(const name of ['AppCashFlowBank','AppCashFlowBankGrid','AppCashFlowAnalysis'])
  vm.runInContext(fs.readFileSync('src/'+name+'.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),ctx);
 const months=Array.from({length:12},(_,i)=>i?'2026-'+String(i).padStart(2,'0'):'2025-12');
 const fixture={workspace:{ok:true,setupRequired:false,year:2026,months,unreviewedCount:2,accounts:[{id:'AC1',bank:'架空信用金庫',name:'本店 普通'}],
