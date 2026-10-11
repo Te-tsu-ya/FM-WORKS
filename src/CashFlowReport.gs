@@ -257,6 +257,7 @@ function cfrWriteReport_(spreadsheet,model){
  const rows=[['項目','説明'],['決算年度',year+'年11月期'],['対象期間',(year-1)+'年12月～'+year+'年11月'],
   ['シナリオ',cfrExportCell_(model.scenarioName)],['出力状態',model.status],['作成日時',model.generatedAt],
   ['計算方法','確定済みの月は照合済実績、その他は基本予定と条件変更を採用'],
+  ['口座間振替','銀行別月次照合の入出金には自社口座間振替を含みます。会社全体の資金繰り実績では内部振替を除外します。'],
   ['注意','予測値は資金不足を保証するものではありません。']];
  model.conditions.forEach((v,i)=>rows.push(['条件'+(i+1),cfrExportCell_(JSON.stringify(v))]));
  model.warnings.forEach((v,i)=>rows.push(['要確認'+(i+1),cfrExportCell_(v)]));

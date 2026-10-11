@@ -2221,3 +2221,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 ## v0.23.4 Bank reconciliation gross/net separation
 - `cfaBankMonth_` sums gross transaction inflows and outflows, including transfers, to reconcile actual bank statement amounts with the bank closing balance. The company-wide `CashFlowBank.gs:getCashFlowBankWorkspace` still excludes transfers from actualIn/actualOut and separately tracks transferIn/transferOut. All bank sums use safe-integer checks.
+
+- The bank reconciliation UI and the sixth exported worksheet both explain the bank-gross/company-net difference so financial report readers do not flag a correct difference as an unexplained discrepancy.

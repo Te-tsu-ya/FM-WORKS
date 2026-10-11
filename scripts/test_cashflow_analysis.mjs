@@ -100,7 +100,9 @@ assert.throws(()=>ctx.saveCashFlowAnnotation('ADMIN',{...note,requestKey:'ANNOTA
 const exported=ctx.exportCashFlowReport('ADMIN',{fiscalYear:2026,scenarioId:scenario.id,format:'XLSX'});
 assert.equal(exported.ok,true);assert.match(lastExport,/format=xlsx/);assert.equal(trash,1);
 assert.ok(Buffer.from(exported.base64,'base64').length>=100);
-assert.equal(spreadsheet.sheets.length,6);assert.equal(spreadsheet.sheets[2].name,'予定の計上区分');assert.equal(spreadsheet.sheets[3].name,'区分別月次集計');
+assert.equal(spreadsheet.sheets.length,6);
+ assert.ok(spreadsheet.sheets[5].rows.some(r=>r[0]==='口座間振替'&&String(r[1]).includes('内部振替を除外')),
+  'official report must explain difference between gross bank flows and corporate net flows');assert.equal(spreadsheet.sheets[2].name,'予定の計上区分');assert.equal(spreadsheet.sheets[3].name,'区分別月次集計');
 assert.equal(spreadsheet.sheets[3].rows[0].length,15);
 const matrixSales=spreadsheet.sheets[3].rows.find(r=>r[0]==='売上'&&r[1]==='予定入金');
 assert.ok(matrixSales,'planned revenue category must appear in 12-month matrix');
