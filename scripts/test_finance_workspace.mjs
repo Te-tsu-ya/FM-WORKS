@@ -87,5 +87,7 @@ assert.ok(cli.financeWorkspaceNav_('overview').includes('経費台帳'));
 assert.ok(cli.financeWorkspaceNav_('overview').includes('提出資料'));
 assert.ok(cli.financeWorkspacePage_().includes('今日の経理業務'));
 assert.ok(cli.financeWorkspaceSummary_().includes('銀行Web明細'));
+assert.ok(cli.financeWorkspaceSummary_().includes('証憑の要確認'),'mismatch queue must remain discoverable');
+assert.ok(cli.financeWorkspaceList_().includes('最新に更新'),'approval screen must have visible refresh');
 assert.ok(!/localStorage|sessionStorage/.test(client),'financial pasted rows must remain in memory');
 console.log('PASS finance workspace navigation, pasted ledger table, validation, one-RPC batch, retries and audit uncertainty');

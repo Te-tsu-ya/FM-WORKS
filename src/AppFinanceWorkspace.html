@@ -96,7 +96,10 @@ function financeWorkspaceFrame_(selected,body){
 }
 function financeWorkspaceSummary_(){
  const d=financeDisplayedOverview_(),ready=!!(d&&!d.setupRequired),t=d&&d.totals||{};
- const number=k=>ready?String(Number(t[k]||0)):'—';
+ const number=k=>ready?String(Number(t[k]||0))+'件':'—';
+ const issues=ready?(d.expenses||[]).filter(item=>{
+  const match=(d.receiptMatches||{})[item.id];return !match||match.status!=='MATCHED';
+ }).length:null;
  const tile=(label,value,description,action,style)=>{
   return '<button type="button" class="fw-action-card '+(style||'')+'" onclick="'+action+'">'+
    '<span>'+label+'</span><strong>'+value+'</strong><small>'+description+'</small><b>開く →</b></button>';
@@ -112,12 +115,14 @@ function financeWorkspaceSummary_(){
     '初回設定が必要です。管理者によるバックアップ付きDB更新後に実データを確認してください。':
     'データを取得すると対応件数が表示されます。')+'</p>':'')+
   '<div class="fw-priorities">'+
-  tile('経費の承認待ち',number('expensePending')+'件','確認・承認・差戻し',
+  tile('経費の承認待ち',number('expensePending'),'確認・承認・差戻し',
     "financeWorkspaceShowKind_('expense','承認待ち')",'')+
-  tile('出張の承認待ち',number('travelPending')+'件','旅費の根拠を確認',
+  tile('出張の承認待ち',number('travelPending'),'旅費の根拠を確認',
     "financeWorkspaceShowKind_('travel','承認待ち')",'')+
   tile('精算待ち',ready?String(Number(t.expenseToSettle||0)+Number(t.travelToSettle||0))+'件':'—',
     '承認済みの記録を確認',"financeWorkspaceShowKind_('expense','承認済')",'')+
+  tile('証憑の要確認',issues===null?'—':String(issues)+'件','読込済み申請の証憑を確認',
+    "financeWorkspaceShowKind_('expense','ALL','ISSUE')",'')+
   '</div><h3>業務を選ぶ</h3><div class="fw-shortcuts">'+
   tile('経費台帳を入力','表にまとめて貼り付ける','Excel・Sheetsから複数行を貼り付け',
     "financeWorkspaceGo_('bulk')",'fw-important')+
@@ -154,7 +159,9 @@ function financeWorkspaceList_(){
    '" onclick="financeTabSelect(\'travel\')">出張報告</button>';
  const toolbar='<div class="fw-list-toolbar"><div><h2>'+title+'</h2><p>'+description+'</p></div>'+
   '<div class="fw-inline-actions">'+tools+'<button type="button" class="secondary-button" onclick="financeToggleDemo()">'+
-  (financeUi.demo?'実データへ':'サンプル')+'</button></div></div>';
+  (financeUi.demo?'実データへ':'サンプル')+'</button>'+
+  '<button type="button" class="secondary-button" onclick="loadFinanceOverview({force:true})"'+
+  (financeUi.loading||financeUi.demo?' disabled':'')+'>最新に更新</button></div></div>';
  return toolbar+'<div class="fw-legacy">'+financeLegacyPage()+'</div>';
 }
 function financeWorkspacePage_(){
