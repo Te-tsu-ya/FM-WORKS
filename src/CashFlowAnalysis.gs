@@ -71,8 +71,15 @@ function cfaBankMonth_(txRows,month,accountId){
  const rows=txRows.filter(r=>cfaTxMonth_(r,month)&&r.accountId===accountId);
  let last=null;
  rows.forEach(r=>{if(r.balance!==''&&(!last||String(r.date)>String(last.date)||r.date===last.date&&r.rowNo>last.rowNo))last=r;});
- return {count:rows.length,inAmount:rows.reduce((sum,r)=>sum+(r.transfer==='TRUE'?0:Number(r.incoming)||0),0),
-  outAmount:rows.reduce((sum,r)=>sum+(r.transfer==='TRUE'?0:Number(r.outgoing)||0),0),
+ // Bank-by-bank reconciliation must use gross statement movements, including internal transfers.
+ // Company-level actual inflows/outflows exclude transfers in CashFlowBank.gs.
+ const total=field=>rows.reduce((sum,row)=>{
+  const next=sum+(Number(row[field])||0);
+  if(!Number.isSafeInteger(next))throw Error('銀行口座別の入出金合計が整数上限を超えました。');
+  return next;
+ },0);
+ return {count:rows.length,inAmount:total('incoming'),
+  outAmount:total('outgoing'),
   fingerprint:cfaTxFingerprint_(rows),latestBalance:last?Number(last.balance):null};
 }
 function cfaReviewMonth_(year,month,accounts,allTx,checks){

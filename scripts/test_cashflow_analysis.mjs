@@ -100,7 +100,9 @@ assert.throws(()=>ctx.saveCashFlowAnnotation('ADMIN',{...note,requestKey:'ANNOTA
 const exported=ctx.exportCashFlowReport('ADMIN',{fiscalYear:2026,scenarioId:scenario.id,format:'XLSX'});
 assert.equal(exported.ok,true);assert.match(lastExport,/format=xlsx/);assert.equal(trash,1);
 assert.ok(Buffer.from(exported.base64,'base64').length>=100);
-assert.equal(spreadsheet.sheets.length,6);assert.equal(spreadsheet.sheets[2].name,'予定の計上区分');assert.equal(spreadsheet.sheets[3].name,'区分別月次集計');
+assert.equal(spreadsheet.sheets.length,6);
+ assert.ok(spreadsheet.sheets[5].rows.some(r=>r[0]==='口座間振替'&&String(r[1]).includes('内部振替を除外')),
+  'official report must explain difference between gross bank flows and corporate net flows');assert.equal(spreadsheet.sheets[2].name,'予定の計上区分');assert.equal(spreadsheet.sheets[3].name,'区分別月次集計');
 assert.equal(spreadsheet.sheets[3].rows[0].length,15);
 const matrixSales=spreadsheet.sheets[3].rows.find(r=>r[0]==='売上'&&r[1]==='予定入金');
 assert.ok(matrixSales,'planned revenue category must appear in 12-month matrix');
@@ -128,5 +130,27 @@ assert.ok(audit.length>3);
  const explicit=ctx.cfrMonthTotals_(fiscal,[oncePlan],manualZero,isolated,emptyBank,'',new Map(),2000);
  assert.equal(explicit.rows[0].source,'予定','explicit zero is a meaningful input');
  assert.equal(explicit.yearEnd,3000,'explicit zero for other months yields correct 12-month forecast');
+
+
+// Bank-by-bank totals include real account transfers even though company-wide totals exclude them.
+const transferFixture=[
+ {id:'BANK-A-TRANSFER',accountId:'A',date:'2026-07-11',incoming:0,outgoing:800,
+  balance:1200,transfer:'TRUE',rowNo:100,fingerprint:'TR-A'},
+ {id:'BANK-B-TRANSFER',accountId:'B',date:'2026-07-11',incoming:800,outgoing:0,
+  balance:4400,transfer:'TRUE',rowNo:101,fingerprint:'TR-B'},
+ {id:'BANK-A-SALE',accountId:'A',date:'2026-07-12',incoming:450,outgoing:0,
+  balance:1650,transfer:'FALSE',rowNo:102,fingerprint:'SALE'}
+];
+const aJuly=ctx.cfaBankMonth_(transferFixture,'2026-07','A');
+const bJuly=ctx.cfaBankMonth_(transferFixture,'2026-07','B');
+assert.equal(aJuly.count,2);
+assert.equal(aJuly.inAmount,450);
+assert.equal(aJuly.outAmount,800,'bank A reconciliation must include outgoing transfer');
+assert.equal(bJuly.inAmount,800,'bank B reconciliation must include incoming transfer');
+assert.equal(bJuly.outAmount,0);
+assert.equal(transferFixture.filter(row=>row.transfer!=='TRUE').reduce((s,r)=>s+r.incoming,0),450,
+ 'company-wide cash receipts exclude internal transfers');
+assert.equal(transferFixture.filter(row=>row.transfer!=='TRUE').reduce((s,r)=>s+r.outgoing,0),0,
+ 'company-wide cash payments exclude internal transfers');
 
 console.log('PASS finance: copy import, duplicate rejection, memo, classification, what-if, reconciliation before close, XLSX and PDF signatures, ADMIN-only');

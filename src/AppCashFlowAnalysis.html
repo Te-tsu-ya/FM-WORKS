@@ -241,7 +241,7 @@ function cfaAnalysisPage_(){
    '<div class="cfa-pagination"><span>'+(u.page*100+1)+'〜'+Math.min((u.page+1)*100,u.total)+'件 / '+u.total+'件</span>'+
     '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page-1)+')"'+(u.page===0?' disabled':'')+'>前へ</button>'+
     '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page+1)+')"'+((u.page+1)*100>=u.total?' disabled':'')+'>次へ</button></div>')+
-  '</section><section class="card cfa-panel"><h2>銀行口座別の月末残高を照合する</h2><p>銀行のWebページで月内すべての明細を確認し、末尾残高を入力してください。未照合の月は確定実績として採用されません。</p>'+
+  '</section><section class="card cfa-panel"><h2>銀行口座別の月末残高を照合する</h2><p>銀行のWebページで月内すべての明細を確認し、末尾残高を入力してください。未照合の月は確定実績として採用されません。銀行別の明細合計は自社口座間振替を含みますが、会社全体の収支からは除外します。</p>'+
   (reconciliation||'<p>登録済み銀行口座がありません。</p>')+'</section>'+cfaRulesPage_();
 }
 function cfaRulesPage_(){
