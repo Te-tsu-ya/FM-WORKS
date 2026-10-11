@@ -2267,3 +2267,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Server and client regression tests must cover ambiguity, malicious titles, direction/account/amount mismatch, February month end, adjacent-month entries and no source mutation. DB schema, calculations, and source Excel are unchanged.
 
 - Candidate table adds an escaped active-account label (or inactive-account fallback) and distinguishes scoped versus unscoped scheduled plans. The analysis table remains horizontally scrollable on small screens.
+
+- Mobile QA keeps the existing 760px cashflow table minimum rather than widening the embedded edit form; `test_cashflow_analysis_viewport.mjs` checks 320/390px input bounds.
