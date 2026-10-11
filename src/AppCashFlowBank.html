@@ -7,6 +7,7 @@ function cfbReset_(){
  cfbUi={active:true,year:0,at:0,loaded:null,loading:false,busy:false,seq:cfbUi.seq+1,error:'',notice:'',tab:'overview',
   accountForm:null,planForm:null,closeMonth:'',closeKey:'',csvRows:null,csvName:'',csvMap:null,csvAccountId:'',preview:null,
   importing:false,importIndex:0,importAdded:0,importSkipped:0};
+ if(typeof cfaReset_==='function')cfaReset_();
 }
 function cfbKey_(){return 'CFB-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15);}
 function cfbRpc_(method,params,onSuccess,onFailure){
@@ -47,8 +48,9 @@ function cfbReload_(){
  });
 }
 function cfbSection_(name){
- if(!['overview','schedules','banks'].includes(name)||cfbUi.busy||cfbUi.importing)return;
+ if(!['overview','schedules','banks','analysis','scenarios','reports'].includes(name)||cfbUi.busy||cfbUi.importing)return;
  cfbUi.tab=name;cfbUi.accountForm=null;cfbUi.planForm=null;renderPageIfActive('finance');
+  if(['analysis','scenarios','reports'].includes(name)&&typeof cfaLoad_==='function'){cfaLoad_(false);if(name!=='analysis'&&cfaUi.workspace)cfaLoadProjection_(false);}
 }
 function cfbShowOld_(){cfbUi.active=false;renderPageIfActive('finance');}
 function cfbShowNew_(){cfbUi.active=true;renderPageIfActive('finance');cfbLoad_(false);}
@@ -73,20 +75,22 @@ function cfbForecast_(){
     manualActual=adjustment.actualIn!=null&&adjustment.actualOut!=null,hasBank=row.importedCount>0;
   const hasPlan=scheduledExists||manualPlan,planIn=hasPlan?row.scheduledIn+(manualPlan?Number(adjustment.planIn):0):null,
    planOut=hasPlan?row.scheduledOut+(manualPlan?Number(adjustment.planOut):0):null;
-  const actualReady=hasBank||manualActual,actualIn=hasBank?row.actualIn:manualActual?Number(adjustment.actualIn):null,
-   actualOut=hasBank?row.actualOut:manualActual?Number(adjustment.actualOut):null;
+  const confirmed=!!confirm&&row.month<=confirm,verified=row.reconciled!==false,
+   authoritative=confirmed&&row.reconciled===true;
+  const actualReady=authoritative||hasBank||manualActual,
+   actualIn=authoritative?Number(row.actualIn||0):hasBank?row.actualIn:manualActual?Number(adjustment.actualIn):null,
+   actualOut=authoritative?Number(row.actualOut||0):hasBank?row.actualOut:manualActual?Number(adjustment.actualOut):null;
   if(hasPlan){totalPlannedIn+=planIn;totalPlannedOut+=planOut;}
   if(hasBank)bankMonths++;
-  const confirmed=!!confirm&&row.month<=confirm;
   if(confirmed)confirmedCount++;
   plannedBalance=plannedBalance!=null&&hasPlan?plannedBalance+planIn-planOut:null;
-  actualBalance=actualBalance!=null&&confirmed&&actualReady?actualBalance+actualIn-actualOut:null;
-  const useActual=confirmed&&actualReady;
-  const estimateKnown=useActual||hasPlan;
+  actualBalance=actualBalance!=null&&confirmed&&actualReady&&verified?actualBalance+actualIn-actualOut:null;
+  const useActual=confirmed&&actualReady&&verified;
+  const estimateKnown=confirmed&&!verified?false:useActual||hasPlan;
   forecastBalance=forecastBalance!=null&&estimateKnown?forecastBalance+(useActual?actualIn:planIn)-(useActual?actualOut:planOut):null;
   if(forecastBalance!=null){lowest=lowest===null?forecastBalance:Math.min(lowest,forecastBalance);if(forecastBalance<0&&!firstShort)firstShort=row.month;}
   return {...row,planIn,planOut,actualIn,actualOut,confirmed,
-    planEnd:plannedBalance,actualEnd:actualBalance,forecastEnd:forecastBalance,source:useActual?'確定実績':hasPlan?'予定':'未入力'};
+    planEnd:plannedBalance,actualEnd:actualBalance,forecastEnd:forecastBalance,source:confirmed&&!verified?'要照合':useActual?'確定実績':hasPlan?'予定':'未入力'};
  });
  return {opening,rows,months:rows.map(x=>({month:x.month,planEnd:x.planEnd,actualEnd:x.actualEnd,forecastEnd:x.forecastEnd})),
   planIn:rows.some(r=>r.planIn!==null)?totalPlannedIn:null,planOut:rows.some(r=>r.planOut!==null)?totalPlannedOut:null,
@@ -427,10 +431,10 @@ function cfbPage_(){
  if(!ui.loaded)return '<div class="cf-workspace">'+header+feedback+'<section class="card cf-empty">資金繰り表のデータを取得してください。</section></div>';
  if(ui.loaded.setupRequired)return '<div class="cf-workspace">'+header+feedback+'<section class="card cf-empty"><h2>初回設定（管理者のみ）</h2><p>現時点では保存するためのシートがありません。下のボタンでバックアップ付きの安全確認を実行し、口座と予定の登録を利用できるようにします。</p>'+
   '<button type="button" class="primary-button" onclick="cfbSetup_()"'+(ui.busy?' disabled':'')+'>バックアップして資金管理を有効化する</button></section></div>';
- const tabs=[['overview','年間の見込み'],['schedules','毎月の入出金予定'],['banks','金融機関・明細取込']];
+ const tabs=[['overview','年間の見込み'],['schedules','毎月の入出金予定'],['banks','金融機関・明細取込'],['analysis','分類・月次照合'],['scenarios','条件別シミュレーション'],['reports','提出用Excel・PDF']];
  const nav='<div class="cfb-tabs">'+tabs.map(([key,name])=>'<button type="button" class="'+(ui.tab===key?'active':'')+'" aria-pressed="'+(ui.tab===key)+'" onclick="cfbSection_('+"'"+key+"'"+')">'+name+'</button>').join('')+
   '<button type="button" class="secondary-button" onclick="cfbShowOld_()">12か月の手入力・期首設定</button></div>';
- const body=ui.tab==='overview'?cfbOverview_():ui.tab==='schedules'?cfbScheduledPage_():cfbBanksPage_();
+ const body=ui.tab==='overview'?cfbOverview_():ui.tab==='schedules'?cfbScheduledPage_():ui.tab==='banks'?cfbBanksPage_():cfaPage_();
  return '<div class="cf-workspace cfb-workspace">'+header+(ui.demo?cfbDemoBanner_():'')+nav+feedback+body+
   '<p class="cf-note">金融機関の明細はCSVから読み込んだ分だけを表示します。取込漏れはゼロ円ではありません。銀行サイトとの自動連携や自動引落しは行いません。</p></div>';
 }

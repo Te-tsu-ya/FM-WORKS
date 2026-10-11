@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.22.2
+**文書版:** 0.23.0
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.22.2`
+`APP.version = 0.23.0`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2190,3 +2190,12 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 | 資金繰りを5分以内に開き直すRPC | 2 | 0 |
 
 回帰では断片の退去、DB切替、権限不一致、不正な別案件リンク、工数保存後の無効化、案件／年度の切替、読み込み中の再更新、入力破棄、サンプルから実データへの復帰、ログアウトを確認する。
+
+
+## v0.23.0 Financial reporting system (code integrated; operational acceptance pending)
+- Storage: DB_SCHEMA_VERSION=19, additive `資金明細注記`, `資金分類ルール`, `資金シナリオ`, `資金月次照合`. Migrations require ADMIN session, header verification and an approved backup. No automatic DB writes on page load.
+- Services: `CashFlowAnalysis.gs` provides secured classification, rules, bank reconciliation and what-if assumption CRUD. `CashFlowReport.gs` derives forecast from authenticated source records, applies conditions to actual scheduled occurrences, and exposes per-month baseline-vs-scenario differences.
+- Financial invariant: unreconciled closed months must not be silently adopted; changes/imports in a closed month require reopening the close. All active bank accounts must be reconciled to certify a month; zero-transaction months require an explanation.
+- Web: `AppCashFlowAnalysis.html` and `StylesCashFlowAnalysis.html`, mounted in Index, provide classification, monthly reconciliation, scenario editing, report preview and downloads. Cache is cleared on logout and fiscal-year switch.
+- Export: ADMIN-only `exportCashFlowReport` recomputes server-side, generates a transient Google spreadsheet with 6 worksheets (annual, categorized bank transactions, categorized plans, 12-month category matrix, bank reconciliation, assumptions), uses authenticated Google Sheets PDF/XLSX export, validates HTTP status, magic bytes and size (max 5 MiB), returns base64 via GAS, and deletes the transient spreadsheet in finally. Never creates a publicly shareable output URL.
+- Acceptance: GitHub unit/integration and client contract tests, complete deployment CI, original workbook reconciliation and actual authorized GAS operations must be distinguished. Mock file signatures do NOT prove live Drive authorization or pixel-perfect PDF/Excel compatibility.

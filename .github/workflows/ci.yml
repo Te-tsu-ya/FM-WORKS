@@ -38,6 +38,20 @@ jobs:
         run: node scripts/test_cashflow_client.mjs
       - name: Verify bank accounts, CSV import security and recurring cashflow
         run: node scripts/test_cashflow_bank.mjs
+      - name: Verify classified receipts, what-if cash forecast and report generation
+        run: node scripts/test_cashflow_analysis.mjs
+      - name: Verify cashflow data-entry UI, scenario editor and download isolation
+        run: node scripts/test_cashflow_analysis_client.mjs
+      - name: Verify finance classifications and report layouts on desktop/mobile
+        run: node scripts/test_cashflow_analysis_viewport.mjs
+      - name: Upload cashflow finance visual QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-cashflow-layout-qa
+          path: artifacts/cashflow-analysis/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify bank CSV import UI, schedules and 12-month forecast
         run: node scripts/test_cashflow_bank_client.mjs
       - name: Verify copied bank statements and isolated sample finance flows

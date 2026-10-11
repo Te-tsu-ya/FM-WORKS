@@ -28,7 +28,7 @@ const ctx=vm.createContext({
 });
 for(const path of ['src/Schema.gs','src/CashFlow.gs','src/CashFlowBank.gs'])vm.runInContext(fs.readFileSync(path,'utf8'),ctx,{filename:path});
 const js=code=>vm.runInContext(code,ctx);
-assert.equal(js('DB_SCHEMA_VERSION'),18);
+assert.equal(js('DB_SCHEMA_VERSION'),19);
 assert.throws(()=>ctx.getCashFlowBankWorkspace('STAFF',2026),/管理者/);
 assert.throws(()=>ctx.saveCashFlowScheduledItem('STAFF',{}),/管理者/);
 assert.throws(()=>ctx.saveCashFlowBankAccount('STAFF',{}),/管理者/);

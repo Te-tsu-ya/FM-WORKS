@@ -166,6 +166,7 @@ function importCashFlowBankRows(token,payload){
    add.push(Object.assign({},row,{id:cfpId_(),sourceFile,importedAt:at,editorId:admin.employeeId,revision:1}));
   });
   if(add.length){
+   if(typeof cfaReady_==='function'&&cfaReady_())add.forEach(row=>cfaAssertUnlocked_(row.date));
    // Duplicate file uploads are idempotent by account + transaction fingerprint, not by filename.
    const start=source.sheet.getLastRow()+1,end=start+add.length-1,maxRows=source.sheet.getMaxRows();
    if(end>maxRows)source.sheet.insertRowsAfter(maxRows,end-maxRows);
@@ -183,6 +184,7 @@ function setCashFlowTransfer(token,id,value,revision){
   const source=cfpRows_('tx',false),target=source.rows.find(r=>r.id===recordId);
   if(!target)throw Error('銀行明細が見つかりません。');
   if(Number(target.revision)!==expected)throw Error('他の利用者が明細を更新しました。再読込してください。');
+  if(typeof cfaReady_==='function'&&cfaReady_())cfaAssertUnlocked_(target.date);
   const updated=Object.assign({},target,{transfer:value===true?'TRUE':'FALSE',revision:expected+1,editorId:admin.employeeId});
   cfpWrite_('tx',updated,target,source.sheet);
   return {ok:true,id:recordId,revision:updated.revision,
@@ -194,6 +196,14 @@ function saveCashFlowClosedThrough(token,payload){
  if(through&&!cashFlowMonths_(year).includes(through))throw Error('確定月は対象決算年度の期間内から選択してください。');
  const revision=cfpRevision_(p.revision),key=cfpKey_(p.requestKey);
  return withScriptLock_(()=>{
+  if(through&&typeof cfaReady_==='function'&&cfaReady_()){
+   const accounts=cfpRows_('account',false).rows,transactions=cfpRows_('tx',false).rows,checks=cfaRows_('check',false).rows;
+    if(!accounts.some(account=>account.active==='TRUE'))throw Error('実績確定には有効な金融機関口座が必要です。');
+   cashFlowMonths_(year).filter(m=>m<=through).forEach(month=>{
+    if(cfaReviewMonth_(year,month,accounts,transactions,checks).some(result=>!result.verified))
+     throw Error(month+'の金融機関別明細の照合が完了していません。先にすべての口座を照合してください。');
+   });
+  }
   const source=cfpRows_('close',false),matches=source.rows.filter(r=>String(r.fiscalYear)===String(year));
   if(matches.length>1)throw Error('決算年度の月次確定設定が重複しています。');
   const old=matches[0]||null;
@@ -244,6 +254,14 @@ function getCashFlowBankWorkspace(token,fiscalYear){
  });
  data.bankSummaries=[...byBank.values()];
  data.monthly=months.map(m=>monthMap.get(m));
+ // A previously saved fiscal close is never proof that its bank rows were reconciled.
+ if(typeof cfaSheet_==='function'&&cfaSheet_('check',true)){
+  const checks=cfaRows_('check',false).rows,activeAccounts=accountRows.filter(a=>a.active==='TRUE');
+  data.monthly.forEach(row=>{
+   const results=cfaReviewMonth_(year,row.month,accountRows,txRows,checks);
+   row.reconciled=activeAccounts.length>0&&results.every(r=>r.verified);
+  });
+ }
  data.transactions=fiscalTx.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.rowNo-a.rowNo).slice(0,120)
   .map(r=>({id:r.id,accountId:r.accountId,date:r.date,incoming:Number(r.incoming||0),outgoing:Number(r.outgoing||0),
     description:r.description,balance:r.balance===''?null:Number(r.balance),transfer:r.transfer==='TRUE',revision:Number(r.revision)}));
