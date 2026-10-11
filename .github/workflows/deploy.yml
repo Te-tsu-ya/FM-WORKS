@@ -66,6 +66,8 @@ jobs:
         run: node scripts/test_cashflow_bank_client.mjs
       - name: Verify copied bank statements and isolated sample finance flows
         run: node scripts/test_cashflow_sandbox.mjs
+      - name: Verify finance workspace and bulk spreadsheet-style entry
+        run: node scripts/test_finance_workspace.mjs
       - name: Test estimates and formal document outputs
         run: node scripts/test_quote_integration.mjs
       - name: Test rotary loader lifecycle and all GAS entrypoints

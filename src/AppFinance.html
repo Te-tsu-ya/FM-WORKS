@@ -792,7 +792,7 @@ function financeOverviewRows(kind){
     '<th scope="col">状態・照合</th></tr></thead><tbody>'+rows.map(x=>x.desktop).join('')+
     '</tbody></table><div class="finance-mobile-record-list">'+rows.map(x=>x.mobile).join('')+'</div>';
 }
-function financePage(){
+function financeLegacyPage(){
   if(!financeAccessAllowed())return pageHead('経理','この画面を表示する権限がありません。');
   if(typeof cashFlowUi!=='undefined'&&cashFlowUi.open)return cashFlowPage_();
   if(financeUi.insightMode)return financeInsightsPage();

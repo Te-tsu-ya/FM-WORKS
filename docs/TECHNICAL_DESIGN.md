@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.8
+**文書版:** 0.23.9
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2255,3 +2255,12 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `cfbUnconfirmedReply_(label,retryWithSameKey)` releases the loading flag, renders an error, and preserves the existing draft and idempotency key. The transfer classification path does not offer a blind retry because that RPC is guarded by revision but has no request key.
 - `cfbFormValue_` and `cfbCloseMonth_` reject changes while a write is in flight. The session-aware RPC wrapper and existing server ACL are unchanged.
 - `scripts/test_cashflow_bank_client.mjs` covers simulated `ok:false`, null responses, preserved keys, blocked pending edits, and regular network failures for account/plan/close/transfer.
+
+
+## v0.23.9 経理ワークスペースと表貼付の一括保存（2026-10-11）
+
+- 経理: 概要／申請・精算／経費台帳／支出分析／資金繰り／提出資料の導線。申請・報告の既存社員向け画面は維持。
+- Excel/Sheets TSVまたはCSV貼付（500行まで）、ヘッダー対応・Excel旧台帳の経費種別の年月混入防止・表でのセル修正・検証、既存類似記録注意、一括登録（API20件/回）。
+- GAS `saveFinanceReceiptsBulk` は経理・総務・ADMINのみ。全行を保存前に検査しScriptLock・行別識別子による再送時重複防止。監査ログ未確認を明示。
+- 保存前はメモリ内のみ。銀行Webのコピー貼付と資金繰りは既存APIを使い、本番DB／旧Excel／銀行明細は開発時に変更しない。
+- 同じデータを再送する場合は送信識別子を維持。実データ書込の受入、口座照合、月次資金繰り帳票の実機確認は別途必要。
