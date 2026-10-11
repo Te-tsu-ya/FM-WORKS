@@ -2345,3 +2345,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Remove `AppLeaveDemo` from `src/Index.html`, user-facing requests/admin buttons, and session reset hook. Relocate unchanged synthetic scenario from `src/AppLeaveDemo.html` to `scripts/fixtures/AppLeaveDemo.html` for Node VM test coverage; leave real accrual and request backends unchanged.
 - Strip its unused responsive CSS and keep the small `.leave-auto-actions` control style. Update `scripts/validate.mjs` to reject production inclusion while preserving isolated synthetic calculations.
 - Initial payload becomes smaller, but do not infer shorter RPC or Sheets I/O latency without production measurements.
+
+- Remove unused annual-leave demo cleanup from `AppCore.clearLocalSession`; normal logout/session cache clearing remains unchanged.
