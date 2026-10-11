@@ -129,5 +129,18 @@ assert.equal(calls.at(-1).args[1],true,'explicit reload bypasses server cache');
 failure({message:'Synthetic network outage'});
 assert.equal(evaluate("somuUi.loaded"),true,'failed refresh keeps existing dataset');
 assert.ok(evaluate("somuUi.data"));
-console.log('PASS SOMU client: saves, lending, return reason, normal storage, 60-row paging, local cache and resilient refresh');
+// If historical loan rows are omitted, stock/KPI must never show a false 0/available count.
+evaluate("somuUi.data="+JSON.stringify({
+ setupRequired:false,assets:[{id:'AS-HIDDEN',code:'FA-HIDDEN',name:'架空備品',
+ quantity:3,minimum:0,status:'利用中'}],loans:[],purchases:[],documents:[],
+ truncated:true,truncatedKinds:{assets:false,loans:true,purchases:false,documents:false},
+ today:'2026-10-10',canApprove:true
+}));
+evaluate("somuUi.loaded=true;somuUi.tab='assets';somuUi.query='';somuUi.filter='all'");
+assert.match(evaluate('somuPage()'),/貸出可能数は未確定/,'partial loan list must not claim available stock');
+assert.equal(evaluate("somuAvailable_(somuData().assets[0])"),null);
+evaluate("somuUi.tab='home'");
+assert.match(evaluate('somuPage()'),/未確定/,'overdue KPI must be marked incomplete');
+assert.doesNotMatch(evaluate('somuPage()'),/現在、期限が迫っている案件はありません。/);
+console.log('PASS SOMU client: saves, lending, 60-row paging, stale refresh, partial-data accuracy');
 

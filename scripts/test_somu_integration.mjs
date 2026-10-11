@@ -180,6 +180,10 @@ assert.throws(()=>call('somuFind_','asset','UNKNOWN-ASSET'),/見つかりませ�
 assert.equal(call('somuByRequestKey_','loan','unknown-request-key'),null);
 assert.equal(fullColumnReads,wideReadStart,'single record/key search must not fetch the entire ID column');
 assert.ok(indexLookups>=lookupStart+4,'single record/key search must use the indexed finder');
+const partial=call('getSomuWorkspace','token',true);
+assert.equal(partial.truncatedKinds.assets,true,'asset list has incomplete page flag');
+assert.equal(partial.truncatedKinds.loans,true,'loan list has incomplete page flag');
+assert.equal(partial.truncated,true);
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);

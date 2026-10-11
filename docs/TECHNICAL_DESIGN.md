@@ -2432,3 +2432,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `saveSomuAsset` uses the same shared indexed reader against asset management code (column B), and `saveSomuGrowthRecord` checks facility code (column B) using the schema-verified optional sheet. Duplicate protection spans all history, ignores `廃止` rows, and excludes the target ID during revisioned updates.
 - The shared helper searches exact escaped regex matches and batches nearby row reads; a fragmented match set falls back to complete row scanning rather than an unsafe last-N cutoff. All callers preserve authenticated ScriptLock transactions, verification against latest state and audit records.
 - `scripts/test_somu_integration.mjs` and `scripts/test_somu_growth.mjs` cover old active loans, rejected overborrowing, return state, duplicate codes and legitimate records with >3,000 synthetic rows. List APIs still limit display rows, so full list pagination and P50/P95 measurements remain Q-SOMU-03.
+
+
+### v0.24.9 partial-list UX safeguard
+- `getSomuWorkspace` retains `truncated` and adds `truncatedKinds:{assets,loans,purchases,documents}` based on the source-sheet last row versus display caps. Shared snapshot key v4 prevents mixing old cache payloads that lack per-kind completeness flags.
+- `somuTruncated_` and `somuCountText_` display lower bounds or unknown values instead of treating incomplete client-side arrays as complete. `somuAvailable_` returns null when the loan ledger was truncated; `somuSummary_`, `somuHome_` and `somuGrowthHome_` show undetermined stock/overdue totals rather than a false zero.
+- The server still validates **all** matching live loans/asset codes under ScriptLock before mutations. The UI flag is for presentation, never an authorization or integrity input. The 60-row in-memory UI paging contract remains unchanged.
+- `scripts/test_somu_client.mjs` asserts unknown stock and overdue count for synthetic incomplete loan histories; `scripts/test_somu_integration.mjs` verifies per-kind flags from >3,000 physical records.

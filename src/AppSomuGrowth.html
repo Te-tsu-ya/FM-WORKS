@@ -117,12 +117,14 @@ function somuGrowthHome_(){
  const queueHtml=queue.length?queue.map(x=>'<button type="button" class="somu-task somu-focus-row" data-tab="'+x.tab+'" data-id="'+escapeHtml(String(x.id))+
    '" onclick="somuTab(this.dataset.tab);somuPick(this.dataset.id)"><span class="somu-task-dot"></span><span><strong>'+
     escapeHtml(x.name)+'</strong><small>'+escapeHtml(x.detail)+'</small></span>'+somuStatus_(x.category,x.urgent)+'<b>›</b></button>').join(''):
-   '<div class="somu-empty">'+(ready?'現在、期限が迫っている案件はありません。':'契約・設備の情報は取得後に表示されます。')+'</div>';
+   '<div class="somu-empty">'+(ready?(base.truncated||extended.truncated?
+     '台帳が一部のみ表示されています。未対応件数は確定していません。':
+     '現在、期限が迫っている案件はありません。'):'契約・設備の情報は取得後に表示されます。')+'</div>';
  return '<div class="somu-stats somu-command-stats">'+
   somuCard_('未処理の総務依頼',readyDisplay(openTickets.length),'','tickets','open')+
   somuCard_('契約・更新の確認',readyDisplay(notices.length),'warning','contracts','attention')+
-  somuCard_('返却期限超過',overdue.length+'件','danger','loans','overdue')+
-  somuCard_('購買申請待ち',purchasing.length+'件','','purchases','open')+'</div>'+
+  somuCard_('返却期限超過',somuCountText_('loans',overdue.length),'danger','loans','overdue')+
+  somuCard_('購買申請待ち',somuCountText_('purchases',purchasing.length),'','purchases','open')+'</div>'+
   '<div class="somu-home-grid somu-hub-grid"><section class="card somu-panel somu-priority-panel">'+
   '<div class="somu-panel-head"><div><div class="somu-eyebrow">ACTION CENTER</div><h2>今日、対応すること</h2>'+
   '<p>期限・承認待ち・対応依頼の優先4件を表示</p></div><button class="secondary-button" type="button" onclick="somuReload()">更新</button></div>'+

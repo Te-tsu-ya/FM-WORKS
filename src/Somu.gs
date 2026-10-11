@@ -50,7 +50,7 @@ function somuModel_(kind){
  // Stock, approval and return mutations always read Sheets under ScriptLock.
 const SOMU_VIEW_CACHE_TTL_SECONDS=20;
 function somuSnapshotCacheKey_(){
-  return 'fm:somu:workspace:v3:'+getDatabaseSpreadsheetId_();
+  return 'fm:somu:workspace:v4:'+getDatabaseSpreadsheetId_();
 }
 function somuInvalidateSnapshot_(){
   if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
@@ -189,6 +189,8 @@ function getSomuWorkspace(token,forceFresh,includeGrowth){
   const result={setupRequired:false,assets:assets.items,loans:loans.items,
     purchases:purchases.items,documents:documents.items,
     truncated:assets.truncated||loans.truncated||purchases.truncated||documents.truncated,
+    truncatedKinds:{assets:assets.truncated,loans:loans.truncated,
+      purchases:purchases.truncated,documents:documents.truncated},
     rowCount:assets.items.length+loans.items.length+purchases.items.length+documents.items.length};
   const cachedSuccessfully=somuPutCachedSnapshot_(result);
   if(typeof logPerformance_==='function')
