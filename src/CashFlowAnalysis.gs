@@ -62,6 +62,63 @@ function cfaAnnotated_(tx,note,sortedRules){
   tags:note?note.tags:rule?rule.tags:'',note:note?note.note:'',revision:note?Number(note.revision):0,
   reviewed:!!note,suggested:!note&&!!rule,ruleId:rule?rule.id:''};
 }
+
+// P0 read-only suggestions. Never writes to financial schedules or bank transactions.
+function cfaPlanOccurrences_(plans,month){
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return [];
+ const year=Number(month.slice(0,4)),numberMonth=Number(month.slice(5));
+ const neighboring=[-1,0,1].map(offset=>{
+  const d=new Date(Date.UTC(year,numberMonth-1+offset,1));
+  const y=d.getUTCFullYear(),m=d.getUTCMonth()+1;
+  return {month:y+'-'+String(m).padStart(2,'0'),year:y,numberMonth:m};
+ });
+ const occurrences=[];
+ (plans||[]).forEach(p=>{
+  const amount=Number(p.amount),day=Number(p.day);
+  if(p.active!=='TRUE'||!['IN','OUT'].includes(p.direction)||
+   !Number.isSafeInteger(amount)||amount<=0||!Number.isInteger(day)||day<1||day>31)return;
+  neighboring.forEach(m=>{
+   if(!cfpPlannedMonth_(p,m.month))return;
+   const last=new Date(Date.UTC(m.year,m.numberMonth,0)).getUTCDate();
+   const plannedDay=Math.min(day,last);
+   occurrences.push({planId:String(p.id),title:String(p.title||''),accountId:String(p.accountId||''),
+    direction:p.direction,amount,plannedDate:m.month+'-'+String(plannedDay).padStart(2,'0'),
+    epoch:Date.UTC(m.year,m.numberMonth-1,plannedDay)});
+  });
+ });
+ return occurrences;
+}
+function cfaPlanMatch_(tx,occurrences){
+ const empty={status:'NONE',total:0,candidates:[]};
+ if(tx.transfer==='TRUE')return {status:'TRANSFER',total:0,candidates:[]};
+ const date=String(tx.date||'');
+ if(!/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(date))
+  return {status:'INVALID_DATE',total:0,candidates:[]};
+ const epoch=Date.UTC(Number(date.slice(0,4)),Number(date.slice(5,7))-1,Number(date.slice(8,10)));
+ if(new Date(epoch).toISOString().slice(0,10)!==date)
+  return {status:'INVALID_DATE',total:0,candidates:[]};
+ const incoming=Number(tx.incoming)||0,outgoing=Number(tx.outgoing)||0;
+ const direction=incoming>0&&outgoing===0?'IN':outgoing>0&&incoming===0?'OUT':'';
+ const amount=direction==='IN'?incoming:outgoing;
+ if(!direction||!Number.isSafeInteger(amount))return empty;
+ const normalize=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');
+ const description=normalize(tx.description),matched=[];
+ (occurrences||[]).forEach(p=>{
+  if(p.direction!==direction||p.amount!==amount||
+   (p.accountId&&p.accountId!==String(tx.accountId)))return;
+  const gapDays=Math.abs(epoch-p.epoch)/86400000;
+  if(gapDays>3)return;
+  const title=normalize(p.title),descriptionMatch=title.length>=2&&description.includes(title);
+  matched.push({planId:p.planId,title:p.title,plannedDate:p.plannedDate,amount:p.amount,
+   accountId:p.accountId,gapDays,descriptionMatch,accountSpecified:!!p.accountId});
+ });
+ matched.sort((a,b)=>Number(b.descriptionMatch)-Number(a.descriptionMatch)||
+  Number(b.accountSpecified)-Number(a.accountSpecified)||a.gapDays-b.gapDays||
+  a.plannedDate.localeCompare(b.plannedDate)||a.planId.localeCompare(b.planId));
+ return {status:matched.length>1?'AMBIGUOUS':matched.length===1?'POSSIBLE':'NONE',
+  total:matched.length,candidates:matched.slice(0,3).map(({accountSpecified,...p})=>p)};
+}
+
 function cfaTxMonth_(tx,month){return String(tx.date||'').slice(0,7)===month;}
 function cfaTxFingerprint_(txRows){
  return cfpHash_(txRows.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id)))
@@ -283,5 +340,8 @@ function getCashFlowAnalysisMonth(token,payload){
  const tx=cfpRows_('tx',false).rows.filter(r=>cfaTxMonth_(r,month))
   .sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.rowNo-a.rowNo);
  const notes=new Map(cfaRows_('note',false).rows.map(r=>[r.transactionId,r])),rules=cfaRulesSorted_(cfaRows_('rule',false).rows);
- return {ok:true,month,page,total:tx.length,rows:tx.slice(page*100,(page+1)*100).map(r=>cfaAnnotated_(r,notes.get(r.id),rules))};
+ const plans=tx.length?cfpRows_('plan',false).rows:[],occurrences=cfaPlanOccurrences_(plans,month);
+ return {ok:true,month,page,total:tx.length,rows:tx.slice(page*100,(page+1)*100).map(r=>{
+  const row=cfaAnnotated_(r,notes.get(r.id),rules);row.planMatch=cfaPlanMatch_(r,occurrences);return row;
+ })};
 }
