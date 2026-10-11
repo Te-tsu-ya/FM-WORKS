@@ -237,8 +237,11 @@ function saveCashFlowBankReconciliation(token,payload){
    throw Error('取込明細の最終残高と照合残高が異なります。明細を確認してください。');
   if(!actual.count&&!note)throw Error('取引がない月は、明細が0件である確認根拠を記載してください。');
   const src=cfaRows_('check',false),old=src.rows.find(c=>Number(c.fiscalYear)===year&&c.month===month&&c.accountId===accountId);
-  if(old&&old.requestKey===key&&Number(old.closingBalance)===closingBalance&&old.fingerprint===actual.fingerprint)
-   return {ok:true,revision:Number(old.revision),duplicate:true};
+  if(old&&old.requestKey===key){
+   if(Number(old.closingBalance)===closingBalance&&old.fingerprint===actual.fingerprint&&old.note===note)
+    return {ok:true,revision:Number(old.revision),duplicate:true};
+   throw Error('同じ送信識別子で異なる照合内容を保存できません。');
+  }
   if((old?Number(old.revision):0)!==rev)throw Error('照合状態が変更されています。再読込してください。');
   const next={id:old?old.id:cfpId_(),fiscalYear:String(year),month,accountId,count:actual.count,
    inAmount:actual.inAmount,outAmount:actual.outAmount,fingerprint:actual.fingerprint,
