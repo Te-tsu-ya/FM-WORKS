@@ -246,6 +246,7 @@ function setProfileUi(){
 }
 
 let searchTimer=null;
+let globalSearchEpoch=0;
 function openMobileDrawer(){
   const root=document.getElementById('mobileDrawerRoot');if(!root)return;
   const nav=visibleNav();
@@ -301,9 +302,9 @@ function initTopbarInteractions(){
   if(input&&!input.dataset.bound){
     input.dataset.bound='1';
     input.addEventListener('input',()=>{
-      clearTimeout(searchTimer);
+      hideSearchResults(); // Discard stale results and any in-flight callback.
       const q=input.value.trim();
-      if(q.length<2){hideSearchResults();return}
+      if(q.length<2)return;
       searchTimer=setTimeout(()=>performGlobalSearch(q),220);
     });
     input.addEventListener('keydown',e=>{if(e.key==='Escape')hideSearchResults()});
@@ -316,11 +317,20 @@ function initTopbarInteractions(){
 }
 
 function performGlobalSearch(query){
-  if(!state.sessionToken)return;
+  const q=String(query||'').trim();
+  const input=document.getElementById('globalSearchInput');
+  const session=state.sessionToken,route=state.page;
+  if(!session||q.length<2||!input||input.value.trim()!==q)return;
+  const epoch=++globalSearchEpoch;
+  const current=()=>{
+    const active=document.getElementById('globalSearchInput');
+    return epoch===globalSearchEpoch&&state.sessionToken===session&&state.page===route&&
+      !!active&&active.value.trim()===q;
+  };
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
-    .withSuccessHandler(renderSearchResults)
-    .withFailureHandler(err=>handleApiError(err,'検索できませんでした'))
-    .searchApp(state.sessionToken,query);
+    .withSuccessHandler(items=>{if(current())renderSearchResults(items)})
+    .withFailureHandler(err=>{if(current())handleApiError(err,'検索できませんでした')})
+    .searchApp(session,q);
 }
 
 function renderSearchResults(items){
@@ -333,8 +343,16 @@ function renderSearchResults(items){
 }
 
 function hideSearchResults(){
+  globalSearchEpoch++;
+  clearTimeout(searchTimer);
+  searchTimer=null;
   const box=document.getElementById('globalSearchResults');
-  if(box)box.hidden=true;
+  if(box){box.hidden=true;box._items=[];box.innerHTML='';}
+}
+function resetGlobalSearch_(){
+  hideSearchResults();
+  const input=document.getElementById('globalSearchInput');
+  if(input)input.value='';
 }
 
 function openSearchResult(index){
