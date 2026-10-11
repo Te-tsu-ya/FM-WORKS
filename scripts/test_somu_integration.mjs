@@ -14,12 +14,15 @@ const headers={
  '総務購買':['購買ID','品名','数量','概算単価','希望日','申請理由','申請者ID','申請者名','状態','関連備品ID','発注日','入荷日','備考','登録日時','更新日時','送信識別子','承認者ID','承認日時'],
  '総務書類':['書類ID','書類名','分類','保管場所','HTTPSリンク','期限','備考','状態','登録者ID','登録日時','更新日時','送信識別子']
 };
-let serial=0,rangeReads=0;const logs=[],sheets={},snapshotCache=new Map();let employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者',department:'総務'};
+let serial=0,rangeReads=0,fullColumnReads=0,indexLookups=0;const logs=[],sheets={},snapshotCache=new Map();let employee={role:'ADMIN',employeeId:'FM0001',name:'架空管理者',department:'総務'};
 function sheet(rows){return{
  rows,getLastRow(){return this.rows.length;},
  getRange(r,c,n,w){return{
- getDisplayValues:()=>{rangeReads++;return this.rows.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w).map(v=>String(v??'')));},
- setValues:values=>{for(let i=0;i<values.length;i++){if(!this.rows[r-1+i])this.rows[r-1+i]=[];for(let j=0;j<values[i].length;j++)this.rows[r-1+i][c-1+j]=values[i][j];}}
+ getDisplayValues:()=>{rangeReads++;if(r===2&&w===1&&n>1)fullColumnReads++;return this.rows.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w).map(v=>String(v??'')));},
+ setValues:values=>{for(let i=0;i<values.length;i++){if(!this.rows[r-1+i])this.rows[r-1+i]=[];for(let j=0;j<values[i].length;j++)this.rows[r-1+i][c-1+j]=values[i][j];}},
+ createTextFinder:value=>{indexLookups++;return {matchEntireCell(){return this;},
+   findNext(){const idx=rows.findIndex((row,i)=>i>=r-1&&i<r-1+n&&String(row[c-1])===String(value));
+     return idx<0?null:{getRow:()=>idx+1};}}}
  };},
  appendRow(row){this.rows.push(row)}
 };}
@@ -37,6 +40,16 @@ const ctx=vm.createContext({
  logPerformance_:()=>{},
 
  getDb_:()=>({getSheetByName:n=>sheets[n]||null}),
+ // The shared DataAccess helper is separately tested for moved-row hints and DB isolation.
+ // Here, keep its live-row verification contract while exercising the Somu workflows.
+ findVerifiedSheetRow_:(sheet,column,width,value)=>{
+   const last=sheet.getLastRow();if(last<2)return null;
+   const cell=sheet.getRange(2,column,last-1,1).createTextFinder(String(value))
+     .matchEntireCell(true).findNext();
+   if(!cell)return null;
+   const rowNumber=cell.getRow(),row=sheet.getRange(rowNumber,1,1,width).getDisplayValues()[0];
+   return String(row[column-1])===String(value)?{rowNumber,row}:null;
+ },
  schemaHeaderIssues_:(a,b)=>a.flatMap((v,i)=>v===b[i]?[]:[i]),
  safeSheetText_:(x,max)=>String(x??'').trim().slice(0,max||200),
  normalizeDate_:s=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!Number.isFinite(Date.parse(s))||new Date(s).toISOString().slice(0,10)!==s)throw Error('日付不正');return s;},
@@ -126,6 +139,18 @@ assert.throws(()=>call('resubmitSomuPurchase','token',secondRequest.record.id,
 assert.throws(()=>call('createSomuLoan','token',{
   assetId,borrower:'別社員',quantity:1,loanDate:'2026-10-10',dueDate:'2026-10-20',
   requestKey:'somu-test-key-001'}),/送信識別子の重複/);
+// More than 3,000 historical rows must not trigger full-column transfers for a single ID/key.
+const lookupStart=indexLookups,wideReadStart=fullColumnReads;
+for(let i=0;i<3001;i++){
+  sheets['総務備品'].rows.push(['AST-HISTORY-'+i,...Array(14).fill('')]);
+  sheets['総務貸出'].rows.push(['LON-HISTORY-'+i,...Array(13).fill('')]);
+}
+assert.equal(call('somuFind_','asset',assetId).item.id,assetId);
+assert.equal(call('somuByRequestKey_','loan','somu-test-key-001').id,loan.record.id);
+assert.throws(()=>call('somuFind_','asset','UNKNOWN-ASSET'),/見つかりません/);
+assert.equal(call('somuByRequestKey_','loan','unknown-request-key'),null);
+assert.equal(fullColumnReads,wideReadStart,'single record/key search must not fetch the entire ID column');
+assert.ok(indexLookups>=lookupStart+4,'single record/key search must use the indexed finder');
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);

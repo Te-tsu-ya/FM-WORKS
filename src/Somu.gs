@@ -121,15 +121,14 @@ function somuRows_(kind,limit,preverifiedSheet){
   return {items:items,total:count,truncated:count>max};
 }
 function somuFind_(kind,id){
-  const m=somuModel_(kind),sheet=somuSheet_(kind),last=sheet.getLastRow();
-  if(last<2)throw new Error('対象の記録が見つかりません。');
-  const ids=sheet.getRange(2,1,last-1,1).getDisplayValues();
-  const idx=ids.findIndex(row=>String(row[0])===String(id));
-  if(idx<0)throw new Error('対象の記録が見つかりません。再読込してください。');
-  const rowNumber=idx+2;
-  return {sheet:sheet,rowNumber:rowNumber,item:somuRecord_(kind,
-    sheet.getRange(rowNumber,1,1,m.keys.length).getDisplayValues()[0])};
+  const m=somuModel_(kind),sheet=somuSheet_(kind),key=String(id||'');
+  if(!key)throw new Error('対象の記録が見つかりません。');
+  // Cache is only a row-number hint. DataAccess verifies the live ID on every read.
+  const match=findVerifiedSheetRow_(sheet,1,m.keys.length,key,'somu:'+kind+':id',true);
+  if(!match)throw new Error('対象の記録が見つかりません。再読込してください。');
+  return {sheet:sheet,rowNumber:match.rowNumber,item:somuRecord_(kind,match.row)};
 }
+
 function somuWrite_(kind,target,item){
   target.sheet.getRange(target.rowNumber,1,1,somuModel_(kind).keys.length).setValues([somuArray_(kind,item)]);
   somuInvalidateSnapshot_();
@@ -140,13 +139,14 @@ function somuNew_(kind,item){
 }
 function somuByRequestKey_(kind,key){
   const m=somuModel_(kind),idx=m.keys.indexOf('requestKey');
-  if(idx<0)return null;
-  const sheet=somuSheet_(kind),last=sheet.getLastRow();
-  if(last<2)return null;
-  const keys=sheet.getRange(2,idx+1,last-1,1).getDisplayValues();
-  const row=keys.findIndex(entry=>String(entry[0])===key);
-  return row<0?null:somuRecord_(kind,sheet.getRange(row+2,1,1,m.keys.length).getDisplayValues()[0]);
+  if(idx<0||!String(key||''))return null;
+  const sheet=somuSheet_(kind);
+  // Same verified search is used for idempotency: never trust stale cache contents.
+  const match=findVerifiedSheetRow_(sheet,idx+1,m.keys.length,String(key),
+    'somu:'+kind+':requestKey',true);
+  return match?somuRecord_(kind,match.row):null;
 }
+
 function somuOpenLoans_(assetId){
   const loans=somuRows_('loan',2500);
   if(loans.truncated)throw new Error('貸出台帳が上限を超えています。管理者に確認してください。');
