@@ -2224,3 +2224,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_cashflow_report_session.mjs` tests stale token, fiscal year and scenario responses; CI and Deploy must run it.
 
 - Failed client-side anchor downloads revoke the generated Blob URL synchronously to avoid holding sensitive financial PDF/XLSX data in browser memory.
+
+- `cfaScenarioSelect_` clears the export-in-progress flag because the stale callback is rejected by the captured scenario ID.

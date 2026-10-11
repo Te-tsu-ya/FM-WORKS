@@ -147,7 +147,7 @@ function cfaReconcile_(index){
  });
 }
 function cfaScenarioSelect_(id){
- cfaUi.scenarioId=String(id||'');cfaUi.projection=null;cfaUi.projectionSeq++;cfaUi.loadingProjection=false;
+ cfaUi.scenarioId=String(id||'');cfaUi.projection=null;cfaUi.projectionSeq++;cfaUi.loadingProjection=false;cfaUi.exporting=false;
  renderPageIfActive('finance');cfaLoadProjection_(true);
 }
 function cfaScenarioNew_(id){
