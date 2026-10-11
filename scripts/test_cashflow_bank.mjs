@@ -96,6 +96,8 @@ assert.equal(bankTotals.statementOut,53000,'bank statement totals include transf
 assert.equal(bankTotals.transferOut,20000);
 assert.equal(bankTotals.statementIn,bankTotals.incoming+bankTotals.transferIn,'bank gross receipts equal external receipts plus transfers');
 assert.equal(bankTotals.statementOut,bankTotals.outgoing+bankTotals.transferOut,'bank gross payments equal external payments plus transfers');
+assert.equal(state.transferReview.total,1,'a one-sided transfer must be surfaced for review');
+assert.equal(state.transferReview.missingCount,1);
 const transferId=state.transactions.find(x=>x.transfer).id;
 const change=ctx.setCashFlowTransfer('ADMIN',transferId,false,1);
 assert.equal(change.revision,2);
@@ -121,4 +123,33 @@ failedAudit=true;
 const noAudit=ctx.saveCashFlowBankAccount('ADMIN',{...accBase,id:account.id,revision:1,bank:'架空信用金庫の変更',
  requestKey:'CFB-AUDIT-FALLBACK-001'});
 assert.equal(noAudit.auditRecorded,false,'audit failures must be visible');
+// Pairing is read-only: unique opposite-bank equal-amount transfers near in date are hints, not confirmed links.
+const transferRows=[
+ {id:'OUT-A',accountId:'A',date:'2026-03-31',incoming:0,outgoing:1200,transfer:'TRUE'},
+ {id:'IN-B',accountId:'B',date:'2026-04-03',incoming:1200,outgoing:0,transfer:'TRUE'},
+ {id:'OUT-AMB',accountId:'A',date:'2026-06-15',incoming:0,outgoing:5000,transfer:'TRUE'},
+ {id:'IN-AMB-B',accountId:'B',date:'2026-06-15',incoming:5000,outgoing:0,transfer:'TRUE'},
+ {id:'IN-AMB-C',accountId:'C',date:'2026-06-16',incoming:5000,outgoing:0,transfer:'TRUE'},
+ {id:'OUT-SELF',accountId:'A',date:'2026-07-05',incoming:0,outgoing:3700,transfer:'TRUE'},
+ {id:'IN-SELF',accountId:'A',date:'2026-07-05',incoming:3700,outgoing:0,transfer:'TRUE'},
+ {id:'OUT-LATE',accountId:'A',date:'2026-08-01',incoming:0,outgoing:9300,transfer:'TRUE'},
+ {id:'IN-LATE',accountId:'B',date:'2026-08-05',incoming:9300,outgoing:0,transfer:'TRUE'},
+ {id:'INVALID',accountId:'A',date:'2026-09-04',incoming:'not-a-number',outgoing:0,transfer:'TRUE'},
+ {id:'OUT-YEAR',accountId:'A',date:'2025-11-30',incoming:0,outgoing:800,transfer:'TRUE'},
+ {id:'IN-YEAR',accountId:'B',date:'2025-12-01',incoming:800,outgoing:0,transfer:'TRUE'},
+ {id:'ORDINARY',accountId:'A',date:'2026-09-05',incoming:400,outgoing:0,transfer:'FALSE'}
+];
+const hints=ctx.cfpTransferPairReview_(transferRows,new Set(transferRows.map(x=>x.id)));
+assert.equal(hints.confirmed,false,'matching hints are never automatically approved');
+assert.equal(hints.candidateCount,2,'near-date pairs include fiscal-boundary matches');
+assert.equal(hints.candidates.find(x=>x.outId==='OUT-A').inId,'IN-B');
+assert.equal(hints.ambiguousCount,3,'same amount with multiple opposite-bank candidates must not auto-pair');
+assert.equal(hints.missingCount,4,'same-account or four-day-apart entries remain unpaired');
+assert.equal(hints.invalidCount,1,'corrupted source rows are not silently treated as valid');
+assert.equal(hints.attentionCount,8);
+const crossBoundary=ctx.cfpTransferPairReview_(transferRows,new Set(['IN-YEAR']));
+assert.equal(crossBoundary.candidateCount,1,'neighboring fiscal-year rows can supply a pairing hint');
+assert.equal(crossBoundary.total,1,'only the selected fiscal-year side is counted');
+const untouched=transferRows.find(x=>x.id==='OUT-AMB');
+assert.equal(untouched.transfer,'TRUE','suggestions cannot mutate original statements');
 console.log('PASS: financial ADMIN ACL, 11-month fiscal year, monthly/quarterly/annual/once, bank CSV dedup, per-account totals, transfers, confirmation, revision and audit');

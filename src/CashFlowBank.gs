@@ -216,6 +216,88 @@ function saveCashFlowClosedThrough(token,payload){
    auditRecorded:cfpAudit_(admin,'資金月次確定変更','close',String(year),old?{through:old.through}:null,{through})};
  },30000);
 }
+// Read-only hints: never silently mark transfers as reconciled or modify source bank rows.
+// Indexed by amount and calendar day to avoid comparing every transfer with every other one.
+function cfpTransferPairReview_(rows,eligibleIds){
+ const all=[],invalid=[];
+ (rows||[]).forEach(r=>{
+  if(r.transfer!=='TRUE')return;
+  const id=String(r.id||''),accountId=String(r.accountId||''),date=String(r.date||'');
+  const incoming=Number(r.incoming||0),outgoing=Number(r.outgoing||0);
+  const day=/^\d{4}-\d{2}-\d{2}$/.test(date)?Date.parse(date+'T00:00:00Z'):NaN;
+  if(!id||!accountId||!Number.isFinite(day)||new Date(day).toISOString().slice(0,10)!==date||
+     !Number.isSafeInteger(incoming)||!Number.isSafeInteger(outgoing)||incoming<0||outgoing<0||
+     (incoming>0)===(outgoing>0)){
+   invalid.push({id,accountId,date,amount:0,direction:'',reason:'振替明細の金額または日付が不正です。'});
+   return;
+  }
+  all.push({id,accountId,date,day,amount:incoming||outgoing,direction:incoming>0?'IN':'OUT'});
+ });
+ function index(direction){
+  const buckets=new Map();
+  all.filter(r=>r.direction===direction).forEach(r=>{
+   const key=r.amount+'|'+r.date;
+   let b=buckets.get(key);
+   if(!b){b={total:0,accounts:new Map(),first:null,secondAccount:null};buckets.set(key,b);}
+   b.total++;
+   b.accounts.set(r.accountId,(b.accounts.get(r.accountId)||0)+1);
+   if(!b.first)b.first=r;
+   else if(!b.secondAccount&&b.first.accountId!==r.accountId)b.secondAccount=r;
+  });
+  return buckets;
+ }
+ const incomingIndex=index('IN'),outgoingIndex=index('OUT');
+ function lookup(r,otherIndex){
+  let count=0,otherId='';
+  for(let offset=-3;offset<=3;offset++){
+   const day=new Date(r.day+offset*86400000).toISOString().slice(0,10);
+   const b=otherIndex.get(r.amount+'|'+day);
+   if(!b)continue;
+   const available=b.total-(b.accounts.get(r.accountId)||0);
+   if(available===1){
+    const found=b.first.accountId!==r.accountId?b.first:b.secondAccount;
+    if(found)otherId=found.id;
+   }
+   count+=available;
+   if(count>1)return {count:2,otherId:''};
+  }
+  return {count,otherId:count===1?otherId:''};
+ }
+ const hits=new Map();
+ all.forEach(r=>hits.set(r.id,lookup(r,r.direction==='OUT'?incomingIndex:outgoingIndex)));
+ const byId=new Map(all.map(r=>[r.id,r])), paired=new Set(),candidates=[];
+ let candidateCount=0;
+ all.filter(r=>r.direction==='OUT').forEach(r=>{
+  const hit=hits.get(r.id);
+  if(!hit||hit.count!==1)return;
+  const other=byId.get(hit.otherId),back=other&&hits.get(other.id);
+  if(!other||other.direction!=='IN'||!back||back.count!==1||back.otherId!==r.id)return;
+  if(eligibleIds&&!eligibleIds.has(r.id)&&!eligibleIds.has(other.id))return;
+  candidateCount++;paired.add(r.id);paired.add(other.id);
+  if(candidates.length<12)candidates.push({outId:r.id,inId:other.id,
+   fromAccountId:r.accountId,toAccountId:other.accountId,amount:r.amount,
+   fromDate:r.date,toDate:other.date});
+ });
+ const attention=[];let missingCount=0,ambiguousCount=0,invalidCount=0,total=0;
+ const attentionAdd=item=>{if(attention.length<12)attention.push(item);};
+ all.forEach(r=>{
+  if(eligibleIds&&!eligibleIds.has(r.id))return;
+  total++;if(paired.has(r.id))return;
+  const hit=hits.get(r.id),missing=!hit||hit.count===0;
+  if(missing)missingCount++;else ambiguousCount++;
+  attentionAdd({transactionId:r.id,accountId:r.accountId,date:r.date,amount:r.amount,
+   direction:r.direction,reason:missing?'相手側の振替明細がありません。':'同額・近接日の候補が重複しています。'});
+ });
+ invalid.forEach(r=>{
+  if(eligibleIds&&!eligibleIds.has(r.id))return;
+  total++;invalidCount++;attentionAdd({transactionId:r.id,accountId:r.accountId,
+   date:r.date,amount:0,direction:'',reason:r.reason});
+ });
+ return {total,candidateCount,missingCount,ambiguousCount,invalidCount,
+  attentionCount:missingCount+ambiguousCount+invalidCount,candidates,attention,
+  confirmed:false,windowDays:3};
+}
+
 function getCashFlowBankWorkspace(token,fiscalYear){
  requireAdminSession_(token);
  const year=cashFlowYear_(fiscalYear),months=cashFlowMonths_(year),data={ok:true,year,setupRequired:false,accounts:[],plans:[],transactions:[],monthly:[],closing:{through:'',revision:0}};
@@ -242,6 +324,7 @@ function getCashFlowBankWorkspace(token,fiscalYear){
  const byBank=new Map(data.accounts.map(a=>[a.id,{accountId:a.id,bank:a.bank,name:a.name,incoming:0,outgoing:0,statementIn:0,statementOut:0,transferIn:0,transferOut:0,
    importedCount:0,latestBalance:null,latestDate:''}]));
  const fiscalTx=txRows.filter(r=>monthMap.has(String(r.date).slice(0,7)));
+ data.transferReview=cfpTransferPairReview_(txRows,new Set(fiscalTx.map(r=>r.id)));
  fiscalTx.forEach(r=>{
   const s=monthMap.get(String(r.date).slice(0,7)),bank=byBank.get(r.accountId),incoming=Number(r.incoming||0),outgoing=Number(r.outgoing||0);
   if(!s||!bank)throw Error('銀行明細の口座情報が一致しません。');

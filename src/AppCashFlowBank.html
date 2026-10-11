@@ -139,6 +139,7 @@ function cfbOverview_(){
  if(!f)return '';
  const choices=['<option value="">未確定（すべて予定を使用）</option>',...d.monthly.map(x=>'<option value="'+x.month+'"'+(x.month===cfbUi.closeMonth?' selected':'')+'>'+cfbMonthLabel_(x.month)+'まで</option>')].join('');
  return '<div class="cf-metrics">'+cfbSummary_(f)+'</div>'+
+  (d.transferReview&&d.transferReview.attentionCount?'<p class="cf-note" role="status">口座間振替に '+Number(d.transferReview.attentionCount)+'件の要確認明細があります。「金融機関・明細取込」で両側の入出金を確認してください。</p>':'')+
   '<section class="card cfb-confirm"><div><h2>実績に切り替える月</h2><p>銀行CSVを読み込んだだけでは月全体の実績は確定しません。すべての銀行口座の明細を確認後、月を選択してください。</p></div>'+
   '<select aria-label="実績確定月" onchange="cfbCloseMonth_(this.value)"'+(cfbUi.busy?' disabled':'')+'>'+choices+'</select>'+
   '<button class="secondary-button" type="button" onclick="cfbSaveClose_()"'+(cfbUi.busy?' disabled':'')+'>確定月を保存</button></section>'+
@@ -419,6 +420,23 @@ function cfbCSVPage_(){
     (cfbUi.importing?'取込中 '+cfbUi.importIndex+'/'+preview.length:pending?'中断位置から再開（'+cfbUi.importIndex+'/'+pending.rows.length+'件）':'確認した'+preview.length+'件を取り込む')+'</button>':'')+
   '<p class="cf-note">銀行のCSV形式は統一されていません。6桁の和暦日付などは誤解釈を防ぐため取込を停止し、銀行に対応した変換が必要です。CSVをGoogle以外の外部サービスへ送信しません。</p></section>';
 }
+function cfbTransferReviewPanel_(){
+ const r=cfbUi.loaded&&cfbUi.loaded.transferReview;if(!r||!r.total)return '';
+ const candidates=r.candidates||[],attention=r.attention||[];
+ const name=id=>cfbEscape_(cfbAccountName_(id));
+ return '<section class="card cf-table-card"><h2>口座間振替の両側確認（候補）</h2>'+
+  '<p>当期の内部振替について、別の自社口座で同額・前後3日以内の反対方向の明細を探します。銀行の原本や振替区分は変更しません。<strong>候補は未承認であり、照合済みではありません。</strong></p>'+
+  '<p role="status">確認対象 '+Number(r.total||0)+'件 ／ 組み合わせ候補 '+Number(r.candidateCount||0)+'組 ／ 要確認 '+Number(r.attentionCount||0)+'件</p>'+
+  (candidates.length?'<h3>見つかった組み合わせ候補</h3><div class="cf-scroll"><table class="cf-table"><thead><tr><th>出金日</th><th>出金元</th><th>入金日</th><th>入金先</th><th>同額</th><th>判定</th></tr></thead><tbody>'+
+    candidates.map(x=>'<tr><td>'+cfbEscape_(x.fromDate)+'</td><td>'+name(x.fromAccountId)+'</td><td>'+cfbEscape_(x.toDate)+'</td><td>'+name(x.toAccountId)+'</td><td>'+cfbMoney_(x.amount)+'</td><td>候補・未確認</td></tr>').join('')+
+    '</tbody></table></div>':'')+
+  (attention.length?'<h3>確認が必要な明細</h3><div class="cf-scroll"><table class="cf-table"><thead><tr><th>取引日</th><th>金融機関</th><th>区分</th><th>金額</th><th>確認理由</th></tr></thead><tbody>'+
+    attention.map(x=>'<tr><td>'+cfbEscape_(x.date)+'</td><td>'+name(x.accountId)+'</td><td>'+(x.direction==='IN'?'入金':x.direction==='OUT'?'出金':'要確認')+'</td><td>'+cfbMoney_(x.amount)+'</td><td>'+cfbEscape_(x.reason)+'</td></tr>').join('')+
+    '</tbody></table></div>':'')+
+  ((r.candidateCount>candidates.length||r.attentionCount>attention.length)?'<p class="cf-note">表示は各12件までです。集計件数には残りの明細も含まれます。</p>':'')+
+  '<p class="cf-note">確認は両方の銀行Web明細で行ってください。同額の取引を自動確定しません。振替の両側の確認記録を保存する機能は今後の対応範囲です。</p></section>';
+}
+
 function cfbBanksPage_(){
  const data=cfbUi.loaded;
  const accounts='<section class="card cf-table-card"><h2>登録した金融機関</h2><div class="cfb-actions"><button type="button" class="secondary-button" onclick="cfbNewAccount_()">＋ 口座を登録</button></div>'+
@@ -435,7 +453,7 @@ function cfbBanksPage_(){
     '<td>'+(r.transfer?'内部振替':'通常取引')+'</td><td><button type="button" class="secondary-button" data-id="'+cfbEscape_(r.id)+'" data-rev="'+r.revision+'" onclick="cfbToggleTransfer_(this.dataset.id,'+(!r.transfer)+',Number(this.dataset.rev))">'+
     (r.transfer?'通常取引に戻す':'内部振替にする')+'</button></td></tr>').join('')||
     '<tr><td colspan="7">明細はまだありません。</td></tr>')+'</tbody></table></div></section>';
- return accounts+(data.accounts.length?cfbPastePanel_()+cfbCSVPage_():'')+transactions;
+ return accounts+(data.accounts.length?cfbPastePanel_()+cfbCSVPage_():'')+cfbTransferReviewPanel_()+transactions;
 }
 function cfbSetup_(){
  if(cfbUi.demo||cfbUi.busy||!cashFlowAllowed_())return;
