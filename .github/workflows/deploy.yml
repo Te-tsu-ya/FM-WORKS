@@ -64,6 +64,8 @@ jobs:
           retention-days: 14
       - name: Verify bank CSV import UI, schedules and 12-month forecast
         run: node scripts/test_cashflow_bank_client.mjs
+      - name: Verify editable bank statement grid, all-row validation and retry guards
+        run: node scripts/test_cashflow_bank_grid.mjs
       - name: Verify copied bank statements and isolated sample finance flows
         run: node scripts/test_cashflow_sandbox.mjs
       - name: Verify finance workspace and bulk spreadsheet-style entry
