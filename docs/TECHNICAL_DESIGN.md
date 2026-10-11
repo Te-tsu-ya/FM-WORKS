@@ -2449,3 +2449,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `somuScheduleGrowth_` rechecks session identity, current page and tab at execution time; stale tasks after logout, session switch or page navigation cannot issue another RPC. Fresh in-memory base data on re-entry also schedules missing growth information without reading the core data again.
 - Explicit refresh propagates the force flag to the separately loaded growth data. Existing backend `getSomuWorkspace` keeps its optional `includeGrowth` argument for backwards compatibility; cache, DB v20, role authorization and data contracts are unchanged.
 - `scripts/test_somu_client.mjs` asserts first-RPC argument, delayed growth sequencing, cached reentry, stale task rejection and no unnecessary prefetch from the asset tab. True GAS cold/warm performance remains to be measured.
+
+- The shared `scripts/test_business_workflows.mjs` contract now asserts the staged two-RPC sequence and zero-RPC tab switches after growth fetch, instead of the superseded combined seven-ledger RPC contract.
