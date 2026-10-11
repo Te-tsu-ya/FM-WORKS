@@ -145,7 +145,7 @@ function somuRecords_(kind){
  const filterOptions=[['all','すべて'],['open','進行中'],['closed','完了・終了']];if(kind==='loans')filterOptions.splice(1,0,['overdue','期限超過']);
  if(!somuUi.selected&&rows.length)somuUi.selected=String(rows[0].id);
  const selected=rows.find(x=>String(x.id)===somuUi.selected)||rows[0];
- return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+somuCountText_(kind,rows.length)</p></div>'+
+ return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+somuCountText_(kind,rows.length)+'</p></div>'+
  ('<button class="primary-button" onclick="somuOpenForm(\''+({assets:'asset',loans:'loan',purchases:'purchase',documents:'document'})[kind]+'\')">＋ 新規登録</button>')+'</div>'+
  '<div class="somu-filters"><label><span class="visually-hidden">総務記録を検索</span><input aria-label="総務記録を検索" id="somuQuery" placeholder="番号・品名・担当者で検索" value="'+escapeHtml(somuUi.query)+'" oninput="somuSearch(this.value)"></label><label><span class="visually-hidden">状態を絞り込む</span><select aria-label="状態を絞り込む" onchange="somuFilter(this.value)">'+filterOptions.map(([value,label])=>'<option value="'+value+'" '+(somuUi.filter===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label></div>'+
  '<div id="somuList" class="somu-items">'+somuListMarkup_(kind,rows)+'</div></section><section class="card somu-record-detail" aria-label="選択した記録の詳細"><div id="somuDetail">'+somuDetailMarkup_(kind,selected)+'</div></section></div>';

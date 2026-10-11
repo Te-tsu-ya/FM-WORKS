@@ -2439,3 +2439,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `somuTruncated_` and `somuCountText_` display lower bounds or unknown values instead of treating incomplete client-side arrays as complete. `somuAvailable_` returns null when the loan ledger was truncated; `somuSummary_`, `somuHome_` and `somuGrowthHome_` show undetermined stock/overdue totals rather than a false zero.
 - The server still validates **all** matching live loans/asset codes under ScriptLock before mutations. The UI flag is for presentation, never an authorization or integrity input. The 60-row in-memory UI paging contract remains unchanged.
 - `scripts/test_somu_client.mjs` asserts unknown stock and overdue count for synthetic incomplete loan histories; `scripts/test_somu_integration.mjs` verifies per-kind flags from >3,000 physical records.
+
+- The record-list header and in-place refresh counter share `somuCountText_` so truncated search and display counts do not imply complete results.
