@@ -32,7 +32,7 @@ const cx=vm.createContext({console,Date,Math,Number,Array,Object,Map,Set,String,
 });
 vm.runInContext(read('AppCashFlowBank'),cx);
 vm.runInContext(read('AppCashFlowBankGrid'),cx);
-vm.runInContext(read('AppCashFlowSandbox'),cx);
+vm.runInContext(read('AppCashFlowPaste'),cx);
 const js=expression=>vm.runInContext(expression,cx);
 cx.cfbUi; // bank state is declared as let inside VM.
 js("cfbUi.loaded={ok:true,accounts:[{id:'A1',bank:'架空銀行',name:'普通預金',active:true}],transactions:[],plans:[]};cfbUi.csvAccountId='A1';");

@@ -101,7 +101,7 @@ assert.equal(ui.snapshot().pending.region,0,'old route does not cover the new pa
 invoke('FMRotaryActivity.reset()');
 assert.equal(ui.snapshot().pending.page+ui.snapshot().pending.region+ui.snapshot().pending.inline,0);
 assert.ok(actions.every(a=>a.method!=='withSuccessHandler'),'only GAS method names are dispatched');
-const offlineCashflow=fs.readFileSync('src/AppCashFlowSandbox.html','utf8');
+const offlineCashflow=fs.readFileSync('scripts/fixtures/AppCashFlowDemo.html','utf8')+fs.readFileSync('src/AppCashFlowPaste.html','utf8');
 for(const forbidden of ['google.script.run','SpreadsheetApp','localStorage','sessionStorage']){
  assert.ok(!offlineCashflow.includes(forbidden),'The demo must stay offline rather than wrapping an RPC: '+forbidden);
 }

@@ -10,7 +10,7 @@ const ctx=vm.createContext({state,financeUi:{demo:false,insightMode:false},googl
  renderPageIfActive:()=>{renders++;},openConfirmDialog:(_a,_b,_c,cb)=>{confirm=cb;},
  escapeHtml,pageHead:(x,y)=>x+y,showToast:()=>{},cleanApiErrorMessage:e=>e.message,
  window:{},document:{getElementById:()=>null},Date,Number,Math,String,Array,Set,Map,JSON,RegExp,Promise,Error,console});
-for(const path of ['src/AppCashFlow.html','src/AppCashFlowGrid.html','src/AppCashFlowBank.html','src/AppCashFlowBankGrid.html','src/AppCashFlowSandbox.html']){
+for(const path of ['src/AppCashFlow.html','src/AppCashFlowGrid.html','src/AppCashFlowBank.html','src/AppCashFlowBankGrid.html','src/AppCashFlowPaste.html','scripts/fixtures/AppCashFlowDemo.html']){
  const html=fs.readFileSync(path,'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
  vm.runInContext(html,ctx,{filename:path});
 }
