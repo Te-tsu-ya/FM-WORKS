@@ -214,6 +214,7 @@ function cfbParseBankPaste_(text){
  return records;
 }
 function cfbPasteSample_(){
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の銀行明細の取込を完了してから操作してください。';renderPageIfActive('finance');return;}
  cfbUi.pasteText='取引日\t摘要\t出金額\t入金額\t残高\n'+
   cashFlowUi.year+'-02-25\t架空の業務入金\t\t120000\t1450000\n'+
   cashFlowUi.year+'-02-26\t架空の通信費\t7500\t\t1442500';
@@ -221,6 +222,12 @@ function cfbPasteSample_(){
 }
 function cfbPasteText_(value){cfbUi.pasteText=String(value||'');}
 function cfbPastePreview_(){
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の取込を再開してから解析してください。';renderPageIfActive('finance');return;}
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集済みの銀行明細を置き換え','新しいコピー内容を解析すると、修正中のプレビューが消えます。続行しますか？',
+   '修正を破棄して解析',()=>{cfbUi.bankGridEdited=false;cfbPastePreview_();});return;
+ }
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の銀行明細の取込を完了してから操作してください。';renderPageIfActive('finance');return;}
  try{
   cfbUi.csvRows=cfbParseBankPaste_(cfbUi.pasteText);
   cfbUi.csvName='Web画面コピー';cfbUi.csvMap=cfbGuessCSV_(cfbUi.csvRows[0]);

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','scripts/fixtures/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppFinanceWorkspace.html','src/AppFinanceGrid.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','scripts/fixtures/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppFinanceWorkspace.html','src/AppFinanceGrid.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowBankGrid.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){

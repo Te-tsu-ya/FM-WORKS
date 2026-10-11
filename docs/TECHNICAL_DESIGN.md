@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.0
+**文書版:** 0.24.1
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2318,6 +2318,18 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 ## Unreviewed bank transaction queue (2026-10-11)
 - `getCashFlowAnalysisMonth` accepts strict boolean `onlyUnreviewed`. It builds the existing annotation Map before filtering and paginating statement rows, excluding transfers and annotated entries from the optional queue without suppressing unconfirmed rule suggestions. Invalid filter types fail closed; ADMIN ACL unchanged.
 - `cfaToggleReviewOnly_` resets page/editor, bumps `monthSeq`, invalidates old callbacks, and reloads the month. The default unfiltered view remains authoritative and source statements stay immutable. VM server/client regression tests assert all-row and filtered counts, argument typing, zero-page reset and toggle behavior.
+
+## v0.24.1 Bank staging-grid architecture (2026-10-11)
+- AppCashFlowBankGrid.html: preview page size 25, editing/paste/copy/exclude, cfbBankGridNormalize_ and cfbBankGridErrors_. StylesCashFlowBankGrid.html: spreadsheet styles with sticky header and table-only horizontal scrolling. Index.html includes both after the bank module.
+- AppCashFlowBank.html retains the parser and server contract. Recompute per-fingerprint occurrence after edits. Before first import RPC, validate all rows, normalize and freeze a snapshot containing accountId, fileName and row values; retries must use this snapshot and the same importChunkKey.
+- If cfbUi.importPending or importing is true, refuse file replacement, remapping, paste reparse, row edits and exclusions. A refresh must not silently discard a paused import.
+- Reparse after a user edit requires explicit confirmation. Original bank site data and FM WORKS historic bank rows remain unmodified until the existing admin-only import API is called.
+- test_cashflow_bank_grid.mjs verifies date/amount/length validation, TSV bounds, occurrence reindex, interrupted import retry protection, HTML escaping and pagination; existing bank client regression tests continue to run.
+
+- Additional loss-prevention gate: cashFlowClose_ blocks navigation when cfbUi.importPending is set and asks for confirmation if a bank preview exists; cfbReload_, cfbChooseFile_, cfbPastePreview_ and cfbBankGridSetAccount_ require explicit discard confirmation for edited staging data.
+- The permitted flow is staged preview -> all-row validation -> immutable importPending -> resume same requestKey until confirmation. Neither navigation nor remapping may destroy an uncertain import batch.
+
+- `cashFlowChangeYear_` checks `cfbUi.importPending` before resetting the bank UI, including the legacy cashflow view and paused imports.
 
 ## Bank-to-planned-cashflow approval records, schema v20
 - Add only `資金予定照合` (11 columns) without modifying `資金取引` or `資金予定`, using the existing backup-first administrator-only additive `migrateDatabaseToCurrent` routine.

@@ -32,6 +32,7 @@ const ctx=vm.createContext({state,financeUi:{demo:false},cashFlowUi,google:{scri
  window:{},TextDecoder,Date,JSON,Array,String,Number,Math,Set,Map,RegExp,Promise,Error,console});
 const source=fs.readFileSync('src/AppCashFlowBank.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 vm.runInContext(source,ctx);
+vm.runInContext(fs.readFileSync('src/AppCashFlowBankGrid.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),ctx);
 const js=e=>vm.runInContext(e,ctx);
 assert.ok(source.includes("FMRotaryRPC():google.script.run"),'real GAS RPC uses rotary integration');
 assert.equal(js('cfbUi.active'),true);
