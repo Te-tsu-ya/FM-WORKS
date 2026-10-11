@@ -2265,3 +2265,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `cfaPlanMatch_` compares exact safe-integer amount, IN/OUT direction, optional account, and +/-3 UTC days. Description/title only sorts candidates, not a proof of identity. Result statuses: NONE, POSSIBLE, AMBIGUOUS, TRANSFER, INVALID_DATE. Return max 3 suggestions plus the total count.
 - ADMIN-only `getCashFlowAnalysisMonth` reads the schedule when there are bank rows and enriches the paginated response. The client renders escaped native `details/summary` with no extra RPC and no persistent writes. The match is never treated as an accounting reconciliation or approved link.
 - Server and client regression tests must cover ambiguity, malicious titles, direction/account/amount mismatch, February month end, adjacent-month entries and no source mutation. DB schema, calculations, and source Excel are unchanged.
+
+- Candidate table adds an escaped active-account label (or inactive-account fallback) and distinguishes scoped versus unscoped scheduled plans. The analysis table remains horizontally scrollable on small screens.

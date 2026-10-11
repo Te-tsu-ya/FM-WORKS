@@ -44,6 +44,8 @@ assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'),'malicious bank de
 assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
 assert.ok(html.includes('銀行口座別の月末残高を照合する'));
 assert.ok(html.includes('候補1件・未確定'),'tentative plan matching must be visible');
+assert.ok(html.includes('架空銀行 / 運転資金口座'),'bank identity must be visible with cashflow suggestions');
+assert.ok(html.includes('口座未指定'),'unscoped plan must be identified rather than presumed account-matched');
 assert.ok(html.includes('&lt;img src=x onerror=alert(2)&gt;'),'untrusted scheduled title must be escaped');
 assert.ok(!html.includes('<img src=x onerror=alert(2)>'));
 const ambiguousHtml=ctx.cfaPlanMatchHtml_({status:'AMBIGUOUS',total:4,candidates:[{planId:'A',title:'安全な候補',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:true}]});
