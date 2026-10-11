@@ -2286,3 +2286,13 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `.github/workflows/deploy.yml` validates the target ID with `clasp list-deployments` **before** `clasp push`. `DEPLOYMENT_ID` secret / `FM_WORKS_DEPLOYMENT_ID` repo variable takes precedence over the project-known published URL's ID. A missing or mismatched ID fails the workflow.
 - Only after a matching deployment is confirmed does the pipeline run `clasp push --force`, then `clasp create-deployment --deploymentId ... --description "GitHub ${GITHUB_SHA}"`; a second deployment listing must contain both the ID and SHA description. No silent success when only source push completed.
 - CI static gate `scripts/test_deploy_gate.mjs` rejects regression to `DEPLOYMENT_ID is not configured` success and checks that preflight precedes push.
+
+## Plan-to-bank-transaction suggestion contract (2026-10-11)
+- `cfaPlanOccurrences_` expands adjacent calendar months using the existing `cfpPlannedMonth_` recurrence policy; requested days 29–31 are capped to the actual month end using UTC.
+- `cfaPlanMatch_` compares exact safe-integer amount, IN/OUT direction, optional account, and +/-3 UTC days. Description/title only sorts candidates, not a proof of identity. Result statuses: NONE, POSSIBLE, AMBIGUOUS, TRANSFER, INVALID_DATE. Return max 3 suggestions plus the total count.
+- ADMIN-only `getCashFlowAnalysisMonth` reads the schedule when there are bank rows and enriches the paginated response. The client renders escaped native `details/summary` with no extra RPC and no persistent writes. The match is never treated as an accounting reconciliation or approved link.
+- Server and client regression tests must cover ambiguity, malicious titles, direction/account/amount mismatch, February month end, adjacent-month entries and no source mutation. DB schema, calculations, and source Excel are unchanged.
+
+- Candidate table adds an escaped active-account label (or inactive-account fallback) and distinguishes scoped versus unscoped scheduled plans. The analysis table remains horizontally scrollable on small screens.
+
+- Mobile QA keeps the existing 760px cashflow table minimum rather than widening the embedded edit form; `test_cashflow_analysis_viewport.mjs` checks 320/390px input bounds.

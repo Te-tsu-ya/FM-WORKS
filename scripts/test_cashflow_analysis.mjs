@@ -54,6 +54,40 @@ const ws=ctx.getCashFlowAnalysisWorkspace('ADMIN',2026);
 assert.equal(ws.transactionsCount,2);assert.equal(ws.unreviewedCount,2);
 const april=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'});
 assert.equal(april.total,2);assert.equal(april.rows[0].reviewed,false);
+
+assert.throws(()=>ctx.getCashFlowAnalysisMonth('EMPLOYEE',{fiscalYear:2026,month:'2026-04'}),/管理者/);
+assert.equal(april.rows[0].planMatch.status,'NONE','month API returns safe nonmatching status');
+const fixturePlans=[
+ {id:'P-MATCH',title:'保守料',direction:'IN',amount:'100',accountId:'A',frequency:'MONTHLY',startMonth:'2025-12',endMonth:'2026-11',day:'25',active:'TRUE'},
+ {id:'P-OTHER-BANK',title:'別口座の保守',direction:'IN',amount:'100',accountId:'B',frequency:'MONTHLY',startMonth:'2025-12',endMonth:'2026-11',day:'25',active:'TRUE'}
+];
+const originalPlans=JSON.stringify(fixturePlans);
+const aprilOccurrences=ctx.cfaPlanOccurrences_(fixturePlans,'2026-04');
+const fixtureTx={accountId:'A',date:'2026-04-26',incoming:100,outgoing:0,description:'保守料 入金',transfer:'FALSE'};
+const originalTx=JSON.stringify(fixtureTx);
+const matchedPlan=ctx.cfaPlanMatch_(fixtureTx,aprilOccurrences);
+assert.equal(matchedPlan.status,'POSSIBLE');
+assert.equal(matchedPlan.total,1);
+assert.equal(matchedPlan.candidates[0].planId,'P-MATCH');
+assert.equal(matchedPlan.candidates[0].gapDays,1);
+assert.equal(matchedPlan.candidates[0].descriptionMatch,true);
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,accountId:'C'},aprilOccurrences).status,'NONE');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,incoming:99},aprilOccurrences).status,'NONE');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,incoming:0,outgoing:100},aprilOccurrences).status,'NONE');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,date:'2026-04-29'},aprilOccurrences).status,'NONE');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,transfer:'TRUE'},aprilOccurrences).status,'TRANSFER');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,date:'2026-02-30'},aprilOccurrences).status,'INVALID_DATE');
+const ambiguousPlans=ctx.cfaPlanOccurrences_([fixturePlans[0],{...fixturePlans[0],id:'P-ALSO',title:'別の保守料'}],'2026-04');
+const ambiguous=ctx.cfaPlanMatch_(fixtureTx,ambiguousPlans);
+assert.equal(ambiguous.status,'AMBIGUOUS');
+assert.equal(ambiguous.total,2);
+const janEnd=[{...fixturePlans[0],id:'P-MONTH-END',day:'31'}];
+const febMatches=ctx.cfaPlanOccurrences_(janEnd,'2026-02');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,date:'2026-02-28'},febMatches).candidates[0].plannedDate,'2026-02-28');
+assert.equal(ctx.cfaPlanMatch_({...fixtureTx,date:'2026-03-01'},febMatches).status,'POSSIBLE');
+assert.equal(JSON.stringify(fixturePlans),originalPlans,'matching never changes the stored plan');
+assert.equal(JSON.stringify(fixtureTx),originalTx,'matching never changes the bank original');
+
 const rule=ctx.saveCashFlowRule('ADMIN',{keyword:'ABC',direction:'IN',category:'売上入金',tags:'定期請求',priority:90,revision:0,requestKey:'RULE-FINANCE-00001'});
 assert.equal(rule.ok,true);
 assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'}).rows.find(r=>r.description.includes('ABC')).suggested,true);

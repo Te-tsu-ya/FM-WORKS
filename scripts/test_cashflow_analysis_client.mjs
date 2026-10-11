@@ -16,7 +16,7 @@ const finance={record:{openingBalance:1000,months:months.map(month=>({month,plan
 const w={ok:true,setupRequired:false,year:2026,months,accounts:[account],rules:[],scenarios:[],
  transactionsCount:1,unreviewedCount:1,checks:[{accountId:'AC-1',accountName:'運転資金口座',month:'2026-10',
  actualIn:120,actualOut:20,latestBalance:1100,revision:0,verified:false,importedCount:1,note:''}]};
-const tx={id:'TX-1',accountId:'AC-1',date:'2026-10-10',description:'<img src=x onerror=alert(1)>',
+const tx={planMatch:{status:'POSSIBLE',total:1,candidates:[{planId:'PL-1',title:'<img src=x onerror=alert(2)>',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:false}]},id:'TX-1',accountId:'AC-1',date:'2026-10-10',description:'<img src=x onerror=alert(1)>',
  incoming:120,outgoing:0,category:'未分類',tags:'',note:'',revision:0,reviewed:false,suggested:false,transfer:false};
 const p={ok:true,setupRequired:false,scenarioId:'',scenarioName:'通常計画',yearEnd:2200,
  plannedIn:1200,plannedOut:0,firstShort:'',warnings:['未確定の分類1件'],rows:months.map(month=>({month,plannedIn:100,plannedOut:0,actualIn:null,actualOut:null,forecastEnd:1100,difference:0,source:'予定'}))};
@@ -43,6 +43,16 @@ const html=ctx.cfaPage_();
 assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'),'malicious bank description must be escaped');
 assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
 assert.ok(html.includes('銀行口座別の月末残高を照合する'));
+assert.ok(html.includes('候補1件・未確定'),'tentative plan matching must be visible');
+assert.ok(html.includes('架空銀行 / 運転資金口座'),'bank identity must be visible with cashflow suggestions');
+assert.ok(html.includes('口座未指定'),'unscoped plan must be identified rather than presumed account-matched');
+assert.ok(html.includes('&lt;img src=x onerror=alert(2)&gt;'),'untrusted scheduled title must be escaped');
+assert.ok(!html.includes('<img src=x onerror=alert(2)>'));
+const ambiguousHtml=ctx.cfaPlanMatchHtml_({status:'AMBIGUOUS',total:4,candidates:[{planId:'A',title:'安全な候補',plannedDate:'2026-10-10',amount:120,gapDays:0,descriptionMatch:true}]});
+assert.ok(ambiguousHtml.includes('候補4件・要確認'));
+assert.ok(ambiguousHtml.includes('他にも候補があります'));
+assert.ok(ctx.cfaPlanMatchHtml_({status:'TRANSFER',total:0,candidates:[]}).includes('振替・対象外'));
+
  assert.ok(html.includes('銀行別の明細合計は自社口座間振替を含みます'),'bank vs company totals need an explicit explanation');
 ctx.cfaLoadMonth_(true);const staleMonth=calls.at(-1);
 ctx.cfaChangeMonth_('2026-09');assert.equal(calls.at(-1).args[1].month,'2026-09');
