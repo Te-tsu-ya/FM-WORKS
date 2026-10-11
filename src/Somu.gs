@@ -50,7 +50,7 @@ function somuModel_(kind){
  // Stock, approval and return mutations always read Sheets under ScriptLock.
 const SOMU_VIEW_CACHE_TTL_SECONDS=20;
 function somuSnapshotCacheKey_(){
-  return 'fm:somu:workspace:v3:'+getDatabaseSpreadsheetId_();
+  return 'fm:somu:workspace:v4:'+getDatabaseSpreadsheetId_();
 }
 function somuInvalidateSnapshot_(){
   if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
@@ -148,9 +148,13 @@ function somuByRequestKey_(kind,key){
 }
 
 function somuOpenLoans_(assetId){
-  const loans=somuRows_('loan',2500);
-  if(loans.truncated)throw new Error('貸出台帳が上限を超えています。管理者に確認してください。');
-  return loans.items.filter(x=>x.assetId===assetId&&x.status==='貸出中');
+  // Include all historical open loans, not only the most recent 2,500 rows.
+  const key=String(assetId||'').trim();
+  if(!key)return [];
+  const model=somuModel_('loan'),sheet=somuSheet_('loan');
+  return readRowsByColumnValues_(sheet,2,model.keys.length,[key])
+    .filter(row=>String(row[0]||'')&&String(row[1]||'')===key&&String(row[8]||'')==='貸出中')
+    .map(row=>somuPublic_('loan',somuRecord_('loan',row)));
 }
 function somuAudit_(employee,action,kind,id,before,after){
   appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
@@ -185,6 +189,8 @@ function getSomuWorkspace(token,forceFresh,includeGrowth){
   const result={setupRequired:false,assets:assets.items,loans:loans.items,
     purchases:purchases.items,documents:documents.items,
     truncated:assets.truncated||loans.truncated||purchases.truncated||documents.truncated,
+    truncatedKinds:{assets:assets.truncated,loans:loans.truncated,
+      purchases:purchases.truncated,documents:documents.truncated},
     rowCount:assets.items.length+loans.items.length+purchases.items.length+documents.items.length};
   const cachedSuccessfully=somuPutCachedSnapshot_(result);
   if(typeof logPerformance_==='function')
@@ -207,12 +213,12 @@ function somuAssetFields_(p){
 function saveSomuAsset(token,payload){
   const actor=somuOperator_(token),p=payload||{},fields=somuAssetFields_(p);
   return withScriptLock_(function(){
-    somuSheet_('asset');
-    const existing=somuRows_('asset',2500);
-    if(existing.truncated)throw new Error('備品台帳の件数が上限を超えています。管理者に確認してください。');
-    const id=String(p.id||'');
-    if(existing.items.some(item=>item.code===fields.code&&item.status!=='廃止'&&item.id!==id))
-      throw new Error('同じ管理番号の備品が既に存在します。');
+    const sheet=somuSheet_('asset'),id=String(p.id||'');
+    // Duplicate codes are checked over the complete ledger, not a truncated list.
+    const duplicate=readRowsByColumnValues_(sheet,2,SOMU_MODELS.asset.keys.length,[fields.code])
+      .some(row=>String(row[0]||'')&&String(row[0])!==id&&
+        String(row[1]||'')===fields.code&&String(row[9]||'')!=='廃止');
+    if(duplicate)throw new Error('同じ管理番号の備品が既に存在します。');
     const now=somuNow_(),target=id?somuFind_('asset',id):null,old=target&&target.item;
     if(old){
       if(Number(old.revision)!==Number(p.revision))throw new Error('別の担当者が備品を更新しました。再読込してください。');

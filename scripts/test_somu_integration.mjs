@@ -40,6 +40,13 @@ const ctx=vm.createContext({
  logPerformance_:()=>{},
 
  getDb_:()=>({getSheetByName:n=>sheets[n]||null}),
+ // The production reader is covered by indexed-data tests; this mock preserves
+ // complete per-asset/per-code results rather than the display page limit.
+ readRowsByColumnValues_:(sheet,column,width,values)=>{
+   const wanted=new Set((values||[]).map(String));
+   return sheet.rows.slice(1).filter(row=>wanted.has(String(row[column-1]??'')))
+     .map(row=>row.slice(0,width).map(v=>String(v??'')));
+ },
  // The shared DataAccess helper is separately tested for moved-row hints and DB isolation.
  // Here, keep its live-row verification contract while exercising the Somu workflows.
  findVerifiedSheetRow_:(sheet,column,width,value)=>{
@@ -139,18 +146,44 @@ assert.throws(()=>call('resubmitSomuPurchase','token',secondRequest.record.id,
 assert.throws(()=>call('createSomuLoan','token',{
   assetId,borrower:'別社員',quantity:1,loanDate:'2026-10-10',dueDate:'2026-10-20',
   requestKey:'somu-test-key-001'}),/送信識別子の重複/);
-// More than 3,000 historical rows must not trigger full-column transfers for a single ID/key.
+// Old active loans and duplicate asset codes must remain visible to server-side
+// stock checks even when 3,001 newer records hide them from the UI list.
 const lookupStart=indexLookups,wideReadStart=fullColumnReads;
+const historicalLoan=['LON-EARLY-OPEN',assetId,'AS-001','架空の長期貸出',
+  '1','2025-01-01','2025-01-31','','貸出中','','FM0001','','',''];
+sheets['総務貸出'].rows.splice(1,0,historicalLoan);
+const historicalAsset=['AST-EARLY','AS-OLD','架空の旧備品','','','','',
+  '5','0','利用中','','','','FM0001','1'];
+sheets['総務備品'].rows.splice(1,0,historicalAsset);
 for(let i=0;i<3001;i++){
   sheets['総務備品'].rows.push(['AST-HISTORY-'+i,...Array(14).fill('')]);
-  sheets['総務貸出'].rows.push(['LON-HISTORY-'+i,...Array(13).fill('')]);
+  sheets['総務貸出'].rows.push(['LON-HISTORY-'+i,'OTHER-ASSET','','架空利用者',
+    '1','2025-01-01','2025-01-31','2025-01-31','返却済','','FM0001','','','']);
 }
+assert.equal(call('somuOpenLoans_',assetId).length,1,'old live loan cannot be truncated');
+assert.throws(()=>call('createSomuLoan','token',{assetId,borrower:'在庫超過',
+  quantity:3,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-scale-denied-001'}),/不足/);
+const allowedLoan=call('createSomuLoan','token',{assetId,borrower:'在庫範囲',
+  quantity:2,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-scale-allowed-001'});
+assert.equal(allowedLoan.record.quantity,2);
+assert.throws(()=>call('saveSomuAsset','token',{id:assetId,revision:1,code:'AS-001',
+  name:'架空PC',quantity:2,minimum:0}),/貸出中/);
+assert.equal(call('returnSomuLoan','token','LON-EARLY-OPEN').record.status,'返却済');
+assert.equal(call('somuOpenLoans_',assetId).length,1,'returned old loan not counted');
+assert.throws(()=>call('saveSomuAsset','token',{code:'AS-OLD',name:'重複',
+  quantity:1,minimum:0}),/同じ管理番号/);
+assert.equal(call('saveSomuAsset','token',{code:'AS-NEW',name:'新規備品',
+  quantity:1,minimum:0}).ok,true);
 assert.equal(call('somuFind_','asset',assetId).item.id,assetId);
 assert.equal(call('somuByRequestKey_','loan','somu-test-key-001').id,loan.record.id);
 assert.throws(()=>call('somuFind_','asset','UNKNOWN-ASSET'),/見つかりません/);
 assert.equal(call('somuByRequestKey_','loan','unknown-request-key'),null);
 assert.equal(fullColumnReads,wideReadStart,'single record/key search must not fetch the entire ID column');
 assert.ok(indexLookups>=lookupStart+4,'single record/key search must use the indexed finder');
+const partial=call('getSomuWorkspace','token',true);
+assert.equal(partial.truncatedKinds.assets,true,'asset list has incomplete page flag');
+assert.equal(partial.truncatedKinds.loans,true,'loan list has incomplete page flag');
+assert.equal(partial.truncated,true);
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);

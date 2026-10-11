@@ -41,6 +41,9 @@ const ctx=vm.createContext({
    const idx=sheet.rows.findIndex((row,i)=>i>0&&String(row[column-1])===String(value));
    return idx<0?null:{rowNumber:idx+1,row:sheet.getRange(idx+1,1,1,width).getDisplayValues()[0]};
  },
+ readRowsByColumnValues_:(sheet,column,width,values)=>sheet.rows.slice(1)
+   .filter(row=>(values||[]).includes(String(row[column-1]??'')))
+   .map(row=>row.slice(0,width).map(v=>String(v??''))),
  getDatabaseSpreadsheetId_:()=> 'DUMMY_DB',
  cacheJsonGet_:key=>cache.get(key)||null,
  cacheJsonPut_:(key,value)=>{cache.set(key,JSON.parse(JSON.stringify(value)));return true;},
@@ -107,6 +110,19 @@ const done=call('saveSomuGrowthRecord','auth','ticket',{...ticket,id:t.record.id
 assert.equal(done.record.resolvedOn,'2026-10-10');
 const reopened=call('saveSomuGrowthRecord','auth','ticket',{...ticket,id:t.record.id,revision:2,status:'対応中'});
 assert.equal(reopened.record.resolvedOn,'');
+// Historical entries beyond 2,500 rows cannot hide active duplicate codes.
+const facilityRows=sheets['総務施設設備'].rows;
+const historicalFacility=Array(17).fill('');
+historicalFacility[0]='FCL-OLD';historicalFacility[1]='FM-OLD-CODE';historicalFacility[9]='稼働中';
+facilityRows.splice(1,0,historicalFacility);
+for(let i=0;i<3001;i++){
+  const row=Array(17).fill('');row[0]='FCL-HISTORY-'+i;row[1]='CODE-'+i;
+  row[9]='廃止';facilityRows.push(row);
+}
+assert.throws(()=>call('saveSomuGrowthRecord','auth','facility',{
+  code:'FM-OLD-CODE',name:'重複設備',requestKey:'key-long-scale-denied'}),/同じ管理番号/);
+assert.equal(call('saveSomuGrowthRecord','auth','facility',{
+  code:'FM-NEW-CODE',name:'新規設備',requestKey:'key-long-scale-allowed'}).ok,true);
 assert.ok(audit.length>=5);
 assert.deepEqual(new Set(Object.keys(specs)).size,7);
 

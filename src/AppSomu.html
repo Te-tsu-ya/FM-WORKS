@@ -5,6 +5,10 @@ function somuReset(){somuTabState_.clear();window.somuActiveForm=null;somuUi={lo
 function somuSessionIdentity(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function somuCanUse(){return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace&&state.sessionToken);}
 function somuData(){return (somuUi.data||{assets:[],loans:[],purchases:[],documents:[]});}
+function somuTruncated_(kind){return !!(somuData().truncatedKinds&&somuData().truncatedKinds[kind]);}
+function somuCountText_(kind,count){
+ return somuTruncated_(kind)?(count?count+'件以上':'未確定'):count+'件';
+}
 const SOMU_CLIENT_FRESH_MS=300000;
 function somuLoad(force){
  if(!somuCanUse())return;
@@ -71,7 +75,7 @@ function somuRefreshLists(){
  const kind=somuUi.tab==='assets'?'assets':somuUi.tab==='loans'?'loans':somuUi.tab==='purchases'?'purchases':'documents',rows=somuRows(kind);
  if(!rows.some(x=>String(x.id)===somuUi.selected))somuUi.selected=rows.length?String(rows[0].id):'';
  list.innerHTML=somuListMarkup_(kind,rows);if(detail)detail.innerHTML=somuDetailMarkup_(kind,rows.find(x=>String(x.id)===somuUi.selected));
- if(count)count.textContent=rows.length+'件'; 
+ if(count)count.textContent=somuCountText_(kind,rows.length); 
 }
 function somuStatus_(s,warning){return '<span class="somu-pill '+(warning?'danger':['申請中','貸出中'].includes(s)?'warn':['入荷済','返却済','有効'].includes(s)?'good':'')+'">'+escapeHtml(s||'未設定')+'</span>';}
 function somuCard_(label,value,tone,tab,filter){return '<button type="button" class="somu-kpi '+tone+'" onclick="somuTab(\''+tab+'\');somuFilter(\''+(filter||'all')+'\')"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong><small>詳細を見る ›</small></button>';}
@@ -79,10 +83,11 @@ function somuHome_(){
  const d=somuData(),today=d.today||state.data&&state.data.today||'2026-10-10',loans=d.loans||[],assets=d.assets||[],purchases=d.purchases||[];
  const late=loans.filter(x=>x.status==='貸出中'&&x.dueDate<today),open=purchases.filter(x=>x.status==='申請中');
  const outstanding=somuOutstanding_();
- const stock=assets.filter(x=>x.status!=='廃止'&&(Number(x.quantity||0)-Number(outstanding[x.id]||0))<=Number(x.minimum||0));
+ const loansTruncated=somuTruncated_('loans');
+ const stock=loansTruncated?[]:assets.filter(x=>x.status!=='廃止'&&(Number(x.quantity||0)-Number(outstanding[x.id]||0))<=Number(x.minimum||0));
  const queue=[...late.map(x=>({kind:'loans',id:x.id,title:x.assetCode+' / '+x.borrower,desc:'返却期限 '+x.dueDate,type:'期限超過'})),...open.map(x=>({kind:'purchases',id:x.id,title:x.name+' / '+x.requesterName,desc:'購買承認待ち',type:'申請中'})),...stock.map(x=>({kind:'assets',id:x.id,title:x.name,desc:'在庫下限に到達',type:'要確認'}))];
- const tasks=queue.length?queue.slice(0,8).map(x=>'<button class="somu-task" type="button" data-tab="'+x.kind+'" data-id="'+escapeHtml(x.id)+'" onclick="somuTab(this.dataset.tab);somuPick(this.dataset.id)"><span class="somu-task-dot"></span><span><strong>'+escapeHtml(x.title)+'</strong><small>'+escapeHtml(x.desc)+'</small></span>'+somuStatus_(x.type,x.type==='期限超過')+'<b>›</b></button>').join(''):'<div class="somu-empty">対応待ちはありません。</div>';
- return '<div class="somu-stats">'+somuCard_('登録備品',assets.length+'件','','assets')+somuCard_('返却期限超過',late.length+'件','danger','loans','overdue')+somuCard_('購買申請中',open.length+'件','warning','purchases','open')+somuCard_('在庫下限',stock.length+'件','warning','assets')+'</div>'+
+ const tasks=queue.length?queue.slice(0,8).map(x=>'<button class="somu-task" type="button" data-tab="'+x.kind+'" data-id="'+escapeHtml(x.id)+'" onclick="somuTab(this.dataset.tab);somuPick(this.dataset.id)"><span class="somu-task-dot"></span><span><strong>'+escapeHtml(x.title)+'</strong><small>'+escapeHtml(x.desc)+'</small></span>'+somuStatus_(x.type,x.type==='期限超過')+'<b>›</b></button>').join(''):'<div class="somu-empty">'+(d.truncated?'一部の台帳のみ表示しています。対応待ちの全件は未確認です。':'対応待ちはありません。')+'</div>';
+ return '<div class="somu-stats">'+somuCard_('登録備品',somuCountText_('assets',assets.length),'','assets')+somuCard_('返却期限超過',somuCountText_('loans',late.length),'danger','loans','overdue')+somuCard_('購買申請中',somuCountText_('purchases',open.length),'warning','purchases','open')+somuCard_('在庫下限',loansTruncated?'確認必要':stock.length+'件','warning','assets')+'</div>'+
  '<div class="somu-home-grid"><section class="card somu-panel"><div class="somu-panel-head"><div><h2>優先して対応する業務</h2><p>期限切れ・申請・在庫の順に表示</p></div><button class="secondary-button" type="button" onclick="somuReload()">更新</button></div><div class="somu-queue">'+tasks+'</div></section>'+
  '<section class="card somu-panel"><div class="somu-panel-head"><div><h2>よく使う操作</h2><p>必要な仕事を直接開けます</p></div></div><div class="somu-shortcuts">'+
  [['備品台帳','assets','i-briefcase'],['貸出・返却','loans','i-file'],['購買申請','purchases','i-chart'],['書類整理','documents','i-doc']].map(x=>'<button type="button" onclick="somuTab(\''+x[1]+'\')">'+svg(x[2])+'<strong>'+x[0]+'</strong><span>開く ›</span></button>').join('')+'</div>'+
@@ -102,9 +107,11 @@ function somuOutstanding_(){
  return totals;
 }
 function somuAvailable_(asset){
+ if(somuTruncated_('loans'))return null;
  return Math.max(0,Number(asset.quantity||0)-Number(somuOutstanding_()[asset.id]||0));
 }
-function somuSummary_(kind,x){if(kind==='assets')return [x.code,x.location||'保管先なし',x.quantity+'点（貸出可能 '+somuAvailable_(x)+'点）'];if(kind==='loans')return [x.assetCode,x.borrower,'期限 '+x.dueDate];if(kind==='purchases')return [x.name,x.requesterName||'',x.quantity+'点・'+Number(x.estimatedPrice||0).toLocaleString('ja-JP')+'円/点'];return [x.name,x.category||'',x.location||'保管場所未登録'];}
+function somuSummary_(kind,x){if(kind==='assets'){const available=somuAvailable_(x);
+ return [x.code,x.location||'保管先なし',x.quantity+'点（'+(available===null?'貸出可能数は未確定':'貸出可能 '+available+'点')+'）'];}if(kind==='loans')return [x.assetCode,x.borrower,'期限 '+x.dueDate];if(kind==='purchases')return [x.name,x.requesterName||'',x.quantity+'点・'+Number(x.estimatedPrice||0).toLocaleString('ja-JP')+'円/点'];return [x.name,x.category||'',x.location||'保管場所未登録'];}
 function somuListMarkup_(kind,rows){
  if(!rows.length)return '<div class="somu-empty">条件に一致するデータはありません。検索条件を変更してください。</div>';
  const today=somuData().today||state.data&&state.data.today||'2026-10-10';
@@ -138,7 +145,7 @@ function somuRecords_(kind){
  const filterOptions=[['all','すべて'],['open','進行中'],['closed','完了・終了']];if(kind==='loans')filterOptions.splice(1,0,['overdue','期限超過']);
  if(!somuUi.selected&&rows.length)somuUi.selected=String(rows[0].id);
  const selected=rows.find(x=>String(x.id)===somuUi.selected)||rows[0];
- return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+rows.length+'件</p></div>'+
+ return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+somuCountText_(kind,rows.length)+'</p></div>'+
  ('<button class="primary-button" onclick="somuOpenForm(\''+({assets:'asset',loans:'loan',purchases:'purchase',documents:'document'})[kind]+'\')">＋ 新規登録</button>')+'</div>'+
  '<div class="somu-filters"><label><span class="visually-hidden">総務記録を検索</span><input aria-label="総務記録を検索" id="somuQuery" placeholder="番号・品名・担当者で検索" value="'+escapeHtml(somuUi.query)+'" oninput="somuSearch(this.value)"></label><label><span class="visually-hidden">状態を絞り込む</span><select aria-label="状態を絞り込む" onchange="somuFilter(this.value)">'+filterOptions.map(([value,label])=>'<option value="'+value+'" '+(somuUi.filter===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label></div>'+
  '<div id="somuList" class="somu-items">'+somuListMarkup_(kind,rows)+'</div></section><section class="card somu-record-detail" aria-label="選択した記録の詳細"><div id="somuDetail">'+somuDetailMarkup_(kind,selected)+'</div></section></div>';
