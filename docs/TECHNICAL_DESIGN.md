@@ -2329,3 +2329,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - New contract tests extend `scripts/test_cashflow_analysis.mjs` to exercise linked-plan v20 fallback, approval, duplicate schedule occurrence, stale hashes, cancellation, retry idempotency, ACL and source invariance; the browser harness covers the confirm dialog, idempotent retry and accessible state labels. `test_schema_migration.mjs` expects the new sheet and v20 while preserving all preexisting headers.
 
 - Update the two static schema-version markers in `scripts/validate.mjs` from 19 to 20, so the full release validation guards the target schema version consistently with `Schema.gs` and `test_schema_migration.mjs`.
+
+- `scripts/test_cashflow.mjs` must assert `DB_SCHEMA_VERSION === 20`, while still validating unchanged annual cashflow calculations and administrator ACL.
