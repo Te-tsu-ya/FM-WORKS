@@ -93,11 +93,24 @@ calls.at(-1).meta.success({...p,scenarioId:'SC1'});
 assert.equal(read('cfaUi.projection.scenarioId'),'SC1');
 ctx.cfaScenarioSelect_('');calls.at(-1).meta.success(p);
 assert.ok(ctx.cfaReportsPage_().includes('年間資金繰りをExcel出力'));
+
+assert.ok(ctx.cfaReportsPage_().includes('取引説明をCSV出力'));
+ctx.cfaDownloadTaxCsv_();
+assert.equal(calls.at(-1).method,'exportCashFlowTaxAdvisorCsv');
+assert.equal(calls.at(-1).args[1].includeMemo,false);
+calls.at(-1).meta.success({ok:true,base64:Buffer.from('csv test').toString('base64'),
+ filename:'tax.csv',mimeType:'text/csv;charset=utf-8',count:2,attentionCount:1});
+assert.equal(downloads,1);
+read('cfaUi.taxIncludeMemo=true;');ctx.cfaDownloadTaxCsv_();
+assert.equal(calls.at(-1).args[1].includeMemo,true);
+calls.at(-1).meta.failure(Error('offline'));
+read('cfaUi.taxIncludeMemo=false;cfaUi.exporting=false;');
+
 ctx.cfaDownloadReport_('XLSX');assert.equal(calls.at(-1).method,'exportCashFlowReport');
 assert.equal(calls.at(-1).args[1].format,'XLSX');
 calls.at(-1).meta.success({ok:true,base64:Buffer.from('PK mocked spreadsheet bytes').toString('base64'),
  filename:'mock.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',status:'要確認',warnings:[]});
-assert.equal(downloads,1);
+assert.equal(downloads,2);
 
  // Loss-of-acknowledgment must preserve the draft and its request identity.
  read('cfaUi.editor={id:"TX-1",category:"売上",tags:"請求",note:"確認済",revision:0,requestKey:""};');

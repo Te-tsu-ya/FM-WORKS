@@ -2310,3 +2310,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 ## clasp 3.x deployment proof improvement (2026-10-11)
 - `clasp list-deployments` may omit or reformat the deployment's `description` despite a successful `create-deployment`. To prevent a false negative, capture the CLI acknowledgment `Deployed ID @version`, verify the exact protected deployment ID, and poll `list-deployments` up to three times for the same `ID @version`. If either ID/version cannot be confirmed, the workflow fails rather than reports publication success. The GitHub commit description is submitted as metadata but its presence in `list-deployments` is not used as a mandatory verification field.
+
+## Tax advisor CSV export (2026-10-11)
+- ADMIN-only `src/CashFlowTaxExport.gs` reads fiscal-year `資金取引` and `資金明細注記` without mutations; it does not claim accountant approval. Quoted CSV, escaped embedded quotes, UTF-8 BOM, `cfrExportCell_` formula guard, checked nonnegative integer amounts, limits 2500 rows/3MiB; `includeMemo` strictly boolean and false by default.
+- Reports tab downloads using Blob and guards late GAS callbacks against session/year/sequence changes; server/client VM regressions cover ACL, note redaction, opt-in, CSV safety, and download.
