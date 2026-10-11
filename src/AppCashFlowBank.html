@@ -111,12 +111,18 @@ function cfbYearOptions_(){
   '<label>決算年度 <input id="cfYear" type="number" min="2000" max="2100" step="1" value="'+cashFlowUi.year+'" onchange="cashFlowChangeYear_(this.value)"></label>'+
   '<button class="secondary-button" type="button" onclick="cashFlowChangeYear_('+(cashFlowUi.year+1)+')">翌期 ›</button></div>';
 }
+function cfbActualCell_(row,direction){
+ const amount=direction==='IN'?row.actualIn:row.actualOut;
+ if(row.source==='確定実績')return cfbMoney_(amount==null?0:amount);
+ if(row.importedCount>0)return '取込途中 '+cfbMoney_(amount||0);
+ return '未取込・未照合';
+}
 function cfbPreviewTable_(f){
  return '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>対象月</th><th>予定入金</th><th>予定出金</th><th>銀行入金（取込分）</th><th>銀行出金（取込分）</th><th>計画末残高</th><th>見込み末残高</th><th>採用値</th></tr></thead><tbody>'+
   f.rows.map(row=>'<tr><th>'+cfbMonthLabel_(row.month)+'</th>'+
    '<td class="cf-num">'+(row.planIn===null?'未登録':cfbMoney_(row.planIn))+'</td>'+
    '<td class="cf-num">'+(row.planOut===null?'未登録':cfbMoney_(row.planOut))+'</td>'+
-   '<td>'+cfbMoney_(row.actualIn||0)+'</td><td>'+cfbMoney_(row.actualOut||0)+'</td>'+
+   '<td>'+cfbActualCell_(row,'IN')+'</td><td>'+cfbActualCell_(row,'OUT')+'</td>'+
    '<td>'+cashFlowYen_(row.planEnd)+'</td><td class="cf-num">'+cashFlowYen_(row.forecastEnd)+'</td>'+
    '<td>'+row.source+'</td></tr>').join('')+'</tbody></table></div>';
 }

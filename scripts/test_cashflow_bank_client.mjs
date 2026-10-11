@@ -42,6 +42,11 @@ assert.equal(calls.at(-1).args[1],2026);
 calls.at(-1).meta.success(loaded);
 assert.equal(js('cfbUi.loaded.accounts.length'),1);
 let f=ctx.cfbForecast_();
+assert.equal(ctx.cfbActualCell_(f.rows[0],'IN'),'未取込・未照合');
+assert.equal(ctx.cfbActualCell_({...f.rows[0],importedCount:2,actualIn:450},'IN'),'取込途中 450円');
+assert.equal(ctx.cfbActualCell_({...f.rows[0],source:'確定実績',actualIn:0},'IN'),'0円');
+assert.ok(ctx.cfbPreviewTable_(f).includes('未取込・未照合'));
+
 assert.equal(f.rows.length,12);
 assert.equal(f.rows[0].planOut,100);
 assert.equal(f.rows[0].forecastEnd,900);
