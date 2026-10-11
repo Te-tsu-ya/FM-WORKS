@@ -2306,3 +2306,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 ## Cashflow statement coverage disclosure (2026-10-11)
 - `cfbActualCell_` formats imported-but-unreconciled movement as partial, zero unimported rows as unknown, and verified fiscal-closed zero as an actual zero. The financial numerical projection remains unchanged; this is presentation-only. Client regression checks test all three cases.
+
+
+## clasp 3.x deployment proof improvement (2026-10-11)
+- `clasp list-deployments` may omit or reformat the deployment's `description` despite a successful `create-deployment`. To prevent a false negative, capture the CLI acknowledgment `Deployed ID @version`, verify the exact protected deployment ID, and poll `list-deployments` up to three times for the same `ID @version`. If either ID/version cannot be confirmed, the workflow fails rather than reports publication success. The GitHub commit description is submitted as metadata but its presence in `list-deployments` is not used as a mandatory verification field.
