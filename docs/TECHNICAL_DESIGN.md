@@ -1,7 +1,7 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.7
-**更新日:** 2026-10-10  
+**文書版:** 0.24.8
+**更新日:** 2026-10-11  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -2417,3 +2417,11 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Indexes 13 and 14 (save-only auxiliary identity and last update timestamp) are not read for the project cockpit; the `Worklog.gs` save/load formats remain full-width as previously defined.
 - The existing backend project regression and project-advanced authorization suite verify task-hour linking, aggregate totals, deleted/ambiguous worklogs, visibility rules and safe save retries. Add an explicit source-range assertion for 13 columns on 1,000+ synthetic rows.
 - No database mutation or protocol change; this is 13.3% fewer loaded columns for the project hub's full-table aggregate, not proof of equivalent reduction in elapsed time.
+
+
+## v0.24.8 Indexed verified lookup for General Affairs records
+- `src/Somu.gs:somuFind_` and `somuByRequestKey_` now call the existing `findVerifiedSheetRow_` in `src/DataAccess.gs` with an exact-column TextFinder. Only the matched row of the model's full width is transferred, rather than all IDs or request keys.
+- Scopes are `somu:<kind>:id` and `somu:<kind>:requestKey`, isolated per model and spreadsheet. The common cache stores a row-number hint, never the record contents. Each lookup verifies the live target cell; a changed, moved or deleted row falls back to exact TextFinder or returns not found.
+- The calling mutation continues to use `somuSheet_` header verification, ScriptLock, latest record revision/status, role and requester authorization, and audit logging. No row is written during lookup, and duplicate retries cannot be accepted from a stale cached payload.
+- `scripts/test_somu_integration.mjs` runs all create/return/approval/duplicate and unauthorized-access flows, plus synthetic tables larger than 3,000 rows and zero full-ID-column reads on targeted lookup. `scripts/test_somu_growth.mjs` covers the three optional models; `scripts/test_data_access_performance.mjs` covers real helper row movement, revocation and DB switching.
+- This reduces transferred cells for point lookups but does not claim an elapsed-time improvement until authenticated production GAS P50/P95 measurements. Existing asset listing, 2,500-loan safety bound, database schema and demo data are unchanged.

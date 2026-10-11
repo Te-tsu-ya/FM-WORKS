@@ -36,6 +36,11 @@ const ctx=vm.createContext({
  requireSession_:()=>({employee}),
  assertPermission_:(e,p)=>{if(p!=='officeWorkspace'||(e.role!=='ADMIN'&&e.department!=='総務'))throw Error('権限なし');},
  getDb_:()=>({getSheetByName:name=>sheets[name]||null}),
+ // The indexed row helper's stale-hint behavior is exercised in test_data_access_performance.
+ findVerifiedSheetRow_:(sheet,column,width,value)=>{
+   const idx=sheet.rows.findIndex((row,i)=>i>0&&String(row[column-1])===String(value));
+   return idx<0?null:{rowNumber:idx+1,row:sheet.getRange(idx+1,1,1,width).getDisplayValues()[0]};
+ },
  getDatabaseSpreadsheetId_:()=> 'DUMMY_DB',
  cacheJsonGet_:key=>cache.get(key)||null,
  cacheJsonPut_:(key,value)=>{cache.set(key,JSON.parse(JSON.stringify(value)));return true;},
