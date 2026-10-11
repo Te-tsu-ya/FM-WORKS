@@ -110,7 +110,31 @@ assert.equal(calls.at(-1).method,'saveCashFlowBankAccount');
 assert.equal(calls.at(-1).args[1].name,'事業口座');
 calls.at(-1).meta.failure(Error('failed save'));
 assert.ok(js('cfbUi.accountForm')!==null,'failed account save keeps draft');
-const before=calls.length;state.data.permissions.cashFlowWorkspace=false;
+
+ // Resume an interrupted multi-chunk import without replaying already acknowledged rows.
+ js('cfbUi.loaded='+JSON.stringify(loaded)+';cfbUi.csvAccountId="A1";cfbUi.csvName="retry.csv";');
+ const bankRows=Array.from({length:202},(_,i)=>({date:'2026-04-10',description:'架空'+i,
+ incoming:i+1,outgoing:0,balance:10000+i,externalId:'N'+i,occurrence:1,transfer:false}));
+ js('cfbUi.preview='+JSON.stringify(bankRows)+';');
+ ctx.cfbBeginImport_();let chunk=calls.at(-1);assert.equal(chunk.args[1].rows.length,200);
+ chunk.meta.success({ok:true,added:200,skipped:0});chunk=calls.at(-1);
+ assert.equal(chunk.args[1].rows.length,2);const retryKey=chunk.args[1].requestKey;
+ chunk.meta.failure(Error('lost response'));assert.equal(js('cfbUi.importIndex'),200);
+ js('cfbUi.csvAccountId="WRONG";');ctx.cfbBeginImport_();
+ chunk=calls.at(-1);assert.equal(chunk.args[1].accountId,'A1');
+ assert.equal(chunk.args[1].requestKey,retryKey);
+ chunk.meta.success({ok:true,added:0,skipped:2});
+ assert.equal(js('cfbUi.importPending'),null);assert.equal(js('cfbUi.importIndex'),202);
+ js('cfbUi.loaded='+JSON.stringify(loaded)+';cfbUi.csvAccountId="A1";cfbUi.csvName="bad.csv";cfbUi.preview='+JSON.stringify(bankRows.slice(0,1))+';');
+ ctx.cfbBeginImport_();const badResponse=calls.at(-1);
+ badResponse.meta.success({ok:true,added:0,skipped:0});
+ assert.equal(js('cfbUi.importIndex'),0,'invalid response cannot advance checkpoint');
+ assert.equal(js('cfbUi.importing'),false);
+ ctx.cfbBeginImport_();chunk=calls.at(-1);
+ assert.equal(chunk.args[1].requestKey,badResponse.args[1].requestKey);
+ chunk.meta.success({ok:true,added:1,skipped:0});assert.equal(js('cfbUi.importPending'),null);
+
+ const before=calls.length;state.data.permissions.cashFlowWorkspace=false;
 ctx.cfbLoad_(true);assert.equal(calls.length,before,'unauthorized users never request bank data');
 ctx.cfbReset_();
 const lateRead=ctx.cfbChooseFile_({files:[{name:'late.csv',size:512,arrayBuffer:()=>Promise.resolve(new TextEncoder().encode(csv).buffer)}]});

@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.0
+**文書版:** 0.23.1
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.0`
+`APP.version = 0.23.1`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2199,3 +2199,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Web: `AppCashFlowAnalysis.html` and `StylesCashFlowAnalysis.html`, mounted in Index, provide classification, monthly reconciliation, scenario editing, report preview and downloads. Cache is cleared on logout and fiscal-year switch.
 - Export: ADMIN-only `exportCashFlowReport` recomputes server-side, generates a transient Google spreadsheet with 6 worksheets (annual, categorized bank transactions, categorized plans, 12-month category matrix, bank reconciliation, assumptions), uses authenticated Google Sheets PDF/XLSX export, validates HTTP status, magic bytes and size (max 5 MiB), returns base64 via GAS, and deletes the transient spreadsheet in finally. Never creates a publicly shareable output URL.
 - Acceptance: GitHub unit/integration and client contract tests, complete deployment CI, original workbook reconciliation and actual authorized GAS operations must be distinguished. Mock file signatures do NOT prove live Drive authorization or pixel-perfect PDF/Excel compatibility.
+
+
+## v0.23.1 Resumable bank import
+- Bank web/CSV import UI stores `importPending` frozen rows, account ID and filename plus `importIndex`, `importChunkKey` and accepted counts only in per-session memory. A lost RPC reply leaves its chunk eligible for idempotent replay, not a full 3000-row restart.
+- The client validates `ok===true`, integer added/skipped and their sum against the sent rows before advancing. An explicit new preview drops the previous pending job. Ordinary data refresh preserves it. Logout clears it.
+- No DB schema changes; on replay, the server's existing bank transaction fingerprint provides duplicate suppression. Live GAS import retry must still be validated by the administrator.
