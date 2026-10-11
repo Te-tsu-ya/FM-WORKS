@@ -2280,3 +2280,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - 経理優先カードの証憑要確認は `receiptMatches` が未一致／未登録の読込済み `expenses` の件数を表示。タイル操作は従来 `financeJumpTo` の照合フィルターへ委譲。一覧に明示的なキャッシュ強制再取得ボタンを備える。
 
 - `StylesFinanceWorkspace.html` は経理6業務ナビゲーションを狭い表示で2段/3段のグリッドに変更し、`test_finance_workspaces_viewport.mjs` が320px・390pxの表示列数を検証する。
+
+
+## Release gate for existing Apps Script Web App
+- `.github/workflows/deploy.yml` validates the target ID with `clasp list-deployments` **before** `clasp push`. `DEPLOYMENT_ID` secret / `FM_WORKS_DEPLOYMENT_ID` repo variable takes precedence over the project-known published URL's ID. A missing or mismatched ID fails the workflow.
+- Only after a matching deployment is confirmed does the pipeline run `clasp push --force`, then `clasp create-deployment --deploymentId ... --description "GitHub ${GITHUB_SHA}"`; a second deployment listing must contain both the ID and SHA description. No silent success when only source push completed.
+- CI static gate `scripts/test_deploy_gate.mjs` rejects regression to `DEPLOYMENT_ID is not configured` success and checks that preflight precedes push.

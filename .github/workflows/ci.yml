@@ -18,6 +18,8 @@ jobs:
           node-version: '24'
       - name: Enforce design document sync
         run: node scripts/check_docs_sync.mjs
+      - name: Validate protected GAS web app deployment gate
+        run: node scripts/test_deploy_gate.mjs
       - name: Generate in-app design documents
         run: node scripts/generate_docs.mjs
       - name: Validate repository

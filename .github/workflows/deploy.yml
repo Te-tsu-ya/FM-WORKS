@@ -115,15 +115,33 @@ jobs:
           test -n "$CLASP_JSON" || (echo "CLASP_JSON is not configured" && exit 1)
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           printf '%s' "$CLASP_JSON" > .clasp.json
+      - name: Validate production deployment preflight
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID || vars.FM_WORKS_DEPLOYMENT_ID }}
+          FM_WORKS_KNOWN_DEPLOYMENT_ID: AKfycbw7oWIZkrOE-ClTVNeI0Kq4hzsZrYaKSC0CqNVsV4bwpufgBVR5-7MYxVEuj_51A9YgvQ
+        run: |
+          set -euo pipefail
+          target="${DEPLOYMENT_ID:-$FM_WORKS_KNOWN_DEPLOYMENT_ID}"
+          if ! [[ "$target" =~ ^[A-Za-z0-9_-]{40,}$ ]]; then
+            echo "::error::Production deployment ID is not configured or has an invalid format."
+            exit 1
+          fi
+          known_deployments="$(clasp list-deployments)"
+          if ! printf '%s\n' "$known_deployments" | grep -Fq -- "$target"; then
+            echo "::error::The specified FM WORKS web app deployment is not in this Apps Script project. Refusing to push."
+            exit 1
+          fi
+          echo "FM_WORKS_DEPLOYMENT_ID=$target" >> "$GITHUB_ENV"
       - name: Push source to Apps Script
         run: clasp push --force
-      - name: Update existing web app deployment
-        env:
-          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+      - name: Update and verify existing web app deployment
         run: |
-          if [ -n "$DEPLOYMENT_ID" ]; then
-            clasp create-deployment --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
-          else
-            echo "DEPLOYMENT_ID is not configured; source was pushed but web app deployment was not updated."
+          set -euo pipefail
+          : "${FM_WORKS_DEPLOYMENT_ID:?Preflight did not select a deployment}"
+          clasp create-deployment --deploymentId "$FM_WORKS_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
+          deployed="$(clasp list-deployments)"
+          if ! printf '%s\n' "$deployed" | grep -Fq -- "$FM_WORKS_DEPLOYMENT_ID" || ! printf '%s\n' "$deployed" | grep -Fq -- "GitHub ${GITHUB_SHA}"; then
+            echo "::error::Existing web app deployment could not be confirmed at this commit."
+            exit 1
           fi
-
+          echo 'Production web app deployment updated and verified against GitHub commit.'
