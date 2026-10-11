@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.4
+**文書版:** 0.23.5
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.4`
+`APP.version = 0.23.5`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2223,3 +2223,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `cfaBankMonth_` sums gross transaction inflows and outflows, including transfers, to reconcile actual bank statement amounts with the bank closing balance. The company-wide `CashFlowBank.gs:getCashFlowBankWorkspace` still excludes transfers from actualIn/actualOut and separately tracks transferIn/transferOut. All bank sums use safe-integer checks.
 
 - The bank reconciliation UI and the sixth exported worksheet both explain the bank-gross/company-net difference so financial report readers do not flag a correct difference as an unexplained discrepancy.
+
+
+## v0.23.5 Bank statement and external cashflow display
+- Extend bankSummaries[] with `statementIn`, `statementOut`, `transferIn`, and `transferOut` while retaining existing net fields `incoming/outgoing`. Bank reconciliation shows account gross totals and company-wide cashflow continues to exclude internal transfers. The standalone sample model uses the same distinctions.

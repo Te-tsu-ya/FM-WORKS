@@ -239,14 +239,19 @@ function getCashFlowBankWorkspace(token,fiscalYear){
   if(p.direction==='IN')s.scheduledIn+=amount;else s.scheduledOut+=amount;
   s.scheduledCount++;
  }));
- const byBank=new Map(data.accounts.map(a=>[a.id,{accountId:a.id,bank:a.bank,name:a.name,incoming:0,outgoing:0,
+ const byBank=new Map(data.accounts.map(a=>[a.id,{accountId:a.id,bank:a.bank,name:a.name,incoming:0,outgoing:0,statementIn:0,statementOut:0,transferIn:0,transferOut:0,
    importedCount:0,latestBalance:null,latestDate:''}]));
  const fiscalTx=txRows.filter(r=>monthMap.has(String(r.date).slice(0,7)));
  fiscalTx.forEach(r=>{
   const s=monthMap.get(String(r.date).slice(0,7)),bank=byBank.get(r.accountId),incoming=Number(r.incoming||0),outgoing=Number(r.outgoing||0);
   if(!s||!bank)throw Error('銀行明細の口座情報が一致しません。');
   s.importedCount++;bank.importedCount++;
-  if(r.transfer==='TRUE'){s.transferIn+=incoming;s.transferOut+=outgoing;}
+  bank.statementIn+=incoming;bank.statementOut+=outgoing;
+  if(!Number.isSafeInteger(bank.statementIn)||!Number.isSafeInteger(bank.statementOut))
+   throw Error('銀行別明細の合計が安全な整数範囲を超えました。');
+  if(r.transfer==='TRUE'){
+   s.transferIn+=incoming;s.transferOut+=outgoing;bank.transferIn+=incoming;bank.transferOut+=outgoing;
+  }
   else{s.actualIn+=incoming;s.actualOut+=outgoing;bank.incoming+=incoming;bank.outgoing+=outgoing;}
   if(r.balance!==''&&(!bank.latestDate||r.date>=bank.latestDate)){
    bank.latestDate=r.date;bank.latestBalance=Number(r.balance);
