@@ -26,6 +26,7 @@ const ctx=vm.createContext({state,financeUi:{demo:false},cashFlowUi,google:{scri
  renderPageIfActive:()=>renders++,cleanApiErrorMessage:e=>e.message,escapeHtml,
  pageHead:(a,b)=>a+' '+b,cashFlowLoad_:()=>{},cashFlowYen_:v=>v===null?'—':String(v)+'円',
  cashFlowChartHtml_:()=>'<svg></svg>',cashFlowClose_:()=>{},
+ cfbPastePanel_:()=>'',cfbCSVPage_:()=>'', // The standalone VM does not load the separate bank-import HTML module.
  cashFlowChangeYear_:()=>{},openConfirmDialog:(_t,_m,_label,cb)=>{confirmAction=cb;},
  showToast:m=>status.push(m),document:{getElementById:()=>null},
  window:{},TextDecoder,Date,JSON,Array,String,Number,Math,Set,Map,RegExp,Promise,Error,console});
