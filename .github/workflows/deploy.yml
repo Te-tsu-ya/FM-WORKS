@@ -140,10 +140,31 @@ jobs:
         run: |
           set -euo pipefail
           : "${FM_WORKS_DEPLOYMENT_ID:?Preflight did not select a deployment}"
-          clasp create-deployment --deploymentId "$FM_WORKS_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
-          deployed="$(clasp list-deployments)"
-          if ! printf '%s\n' "$deployed" | grep -Fq -- "$FM_WORKS_DEPLOYMENT_ID" || ! printf '%s\n' "$deployed" | grep -Fq -- "GitHub ${GITHUB_SHA}"; then
-            echo "::error::Existing web app deployment could not be confirmed at this commit."
+          # The CLI may not return deployment descriptions from list-deployments.
+          # Match the update acknowledgement *and* the immutable deployed version
+          # of the same existing deployment instead of relying on description text.
+          result="$(clasp create-deployment --deploymentId "$FM_WORKS_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}")"
+          if ! printf '%s\n' "$result" | grep -Fq -- "$FM_WORKS_DEPLOYMENT_ID"; then
+            echo "::error::clasp did not acknowledge the protected deployment ID."
             exit 1
           fi
-          echo 'Production web app deployment updated and verified against GitHub commit.'
+          number="$(printf '%s\n' "$result" | grep -oE '@[0-9]+' | tail -n 1 | tr -d '@' || true)"
+          if ! [[ "$number" =~ ^[0-9]+$ ]]; then
+            echo "::error::clasp did not return a valid immutable deployment version."
+            exit 1
+          fi
+          verified=false
+          for attempt in 1 2 3; do
+            deployed="$(clasp list-deployments)"
+            line="$(printf '%s\n' "$deployed" | grep -F -- "$FM_WORKS_DEPLOYMENT_ID" | head -n 1 || true)"
+            if printf '%s\n' "$line" | grep -Eq "@${number}([^0-9]|$)"; then
+              verified=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$verified" != true ]; then
+            echo "::error::Protected deployment did not report its new @version after three checks."
+            exit 1
+          fi
+          echo "Production FM WORKS web app is deployed at @${number} for GitHub ${GITHUB_SHA}."

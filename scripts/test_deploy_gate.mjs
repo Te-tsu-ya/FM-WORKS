@@ -9,6 +9,9 @@ assert.ok(pre>0&&push>pre&&release>push,'preflight must run before modifying GAS
 assert.match(deploy,/clasp list-deployments/,'existing deployment must be listed');
 assert.match(deploy,/create-deployment --deploymentId/,'must update an existing deployment');
 assert.match(deploy,/GITHUB_SHA/,'deployed version must carry the commit SHA');
+assert.match(deploy,/grep -oE '@\[0-9\]\+'/,'verification must extract deployed @version');
+assert.match(deploy,/clasp did not acknowledge the protected deployment ID/,'acknowledged ID must match');
+assert.ok(!deploy.includes('grep -Fq -- "GitHub ${GITHUB_SHA}"'),'deployment list description cannot be used as the sole proof of a version');
 assert.match(deploy,/FM_WORKS_KNOWN_DEPLOYMENT_ID/,'the previously supplied FM WORKS URL is the fallback target');
 assert.match(deploy,/FM_WORKS_DEPLOYMENT_ID:?\b/,'deployment identity must be passed to subsequent steps');
 assert.match(deploy,/exit 1/,'invalid deployment must stop the workflow');
