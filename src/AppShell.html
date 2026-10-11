@@ -142,7 +142,6 @@ function acceptLogin(result){
 
 function mountAuthenticatedApp(data,mustChangePin){
   Object.keys(pageCache).forEach(key=>delete pageCache[key]);pendingLoads.clear();
-  resetLeaveDemoSession();
   resetFinanceUi();
   if(typeof somuReset==='function')somuReset();
   resetQuoteUi();
