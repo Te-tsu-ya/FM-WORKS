@@ -26,6 +26,7 @@ const ctx=vm.createContext({state,financeUi:{demo:false},cashFlowUi,google:{scri
  renderPageIfActive:()=>renders++,cleanApiErrorMessage:e=>e.message,escapeHtml,
  pageHead:(a,b)=>a+' '+b,cashFlowLoad_:()=>{},cashFlowYen_:v=>v===null?'—':String(v)+'円',
  cashFlowChartHtml_:()=>'<svg></svg>',cashFlowClose_:()=>{},
+ cfbPastePanel_:()=>'',cfbCSVPage_:()=>'', // The standalone VM does not load the separate bank-import HTML module.
  cashFlowChangeYear_:()=>{},openConfirmDialog:(_t,_m,_label,cb)=>{confirmAction=cb;},
  showToast:m=>status.push(m),document:{getElementById:()=>null},
  window:{},TextDecoder,Date,JSON,Array,String,Number,Math,Set,Map,RegExp,Promise,Error,console});
@@ -47,11 +48,25 @@ assert.equal(f.rows[0].forecastEnd,900);
 assert.equal(f.yearEnd,-200);
 assert.equal(f.firstShort,'2026-10');
 loaded.bankSummaries[0]={...loaded.bankSummaries[0],statementIn:300,statementOut:280,transferIn:100,transferOut:200,incoming:200,outgoing:80};
+loaded.transferReview={total:4,candidateCount:1,attentionCount:2,missingCount:1,ambiguousCount:1,invalidCount:0,
+ confirmed:false,windowDays:3,
+ candidates:[{outId:'T1',inId:'T2',fromAccountId:'A1',toAccountId:'B2',amount:25000,fromDate:'2026-06-10',toDate:'2026-06-11'}],
+ attention:[{transactionId:'T3',accountId:'A1',date:'2026-06-12',amount:999,direction:'OUT',reason:'<svg onload=alert(1)>'}]};
 const preview=ctx.cfbPage_();
 assert.ok(preview.includes('金融機関・明細取込'));
 assert.ok(preview.includes('銀行明細 入金 300円'));
 assert.ok(preview.includes('うち内部振替 入金 100円 ／ 出金 200円'));
 assert.ok(preview.includes('対外収支 入金 200円 ／ 出金 80円'));
+assert.ok(preview.includes('口座間振替に 2件の要確認明細'),'overview warns about unpaired movements');
+ctx.cfbSection_('banks');
+const transferPanel=ctx.cfbPage_();
+assert.ok(transferPanel.includes('口座間振替の両側確認（候補）'));
+assert.ok(transferPanel.includes('組み合わせ候補 1組'));
+assert.ok(transferPanel.includes('候補・未確認'));
+assert.ok(transferPanel.includes('25,000円'));
+assert.ok(transferPanel.includes('&lt;svg onload=alert(1)&gt;'),'untrusted transfer warning must be escaped');
+assert.ok(!transferPanel.includes('<svg onload=alert(1)>'));
+ctx.cfbSection_('overview');
 assert.ok(preview.includes('毎月の入出金予定'));
 assert.ok(preview.includes('年間の予定出金'));
 assert.ok(!preview.includes('銀行へ直接ログイン'));

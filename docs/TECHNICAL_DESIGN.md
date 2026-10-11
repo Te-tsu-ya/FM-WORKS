@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.23.6
+**文書版:** 0.23.7
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -65,7 +65,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.6`
+`APP.version = 0.23.7`
 
 DBスキーマ: 18。  
 認証スキーマ: 3。  
@@ -2237,3 +2237,15 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 - `cfaScenarioSelect_` clears the export-in-progress flag because the stale callback is rejected by the captured scenario ID.
 
+## v0.23.7 Transfer counterpart hints without bank data mutation
+- `src/CashFlowBank.gs:cfpTransferPairReview_` runs after reading bank transactions in the existing ADMIN-gated `getCashFlowBankWorkspace` call. It uses amount+calendar-day indexes and scans a fixed seven-day (±3 days) window rather than all transaction pairs.
+- A candidate is proposed only if an OUT row in account A matches exactly one IN row in a different account and the IN row also has exactly one reciprocal OUT candidate. Other cases are marked missing/ambiguous/invalid; the matching result is `confirmed:false`. The routine never updates `資金取引` or any other sheet.
+- It considers all accessible source transaction rows so that a movement spanning the end of a fiscal year can still be recognized; only the selected fiscal-year side contributes to that year's transfer review counts.
+- Workspace response adds `transferReview={total,candidateCount,missingCount,ambiguousCount,invalidCount,attentionCount,candidates,attention,confirmed:false,windowDays:3}`. Lists are each limited to 12 rows; counts are never truncated.
+- `src/AppCashFlowBank.html` shows a brief alert on the annual overview and a separate read-only, HTML-escaped candidate review table on the bank tab. No extra network call, data mutation, or persistent linked-transfer assertion is added.
+- Tests: `scripts/test_cashflow_bank.mjs` exercises unique reciprocal, duplicate-amount ambiguity, same-account, more-than-3-day gap, invalid row, and fiscal-year crossing. `scripts/test_cashflow_bank_client.mjs` checks warning visibility and HTML escaping.
+- Manual bilateral confirmation and its audit history remain an explicit future scope; neither the hints nor an absence of warning is a substitute for the existing per-bank monthly reconciliation.
+
+### v0.23.7 Synthetic transfer-review fixture
+- `cfbDemoCreate_` seeds one two-bank reciprocal transfer and one one-sided transfer. `cfbDemoTransferReview_` calculates unique matching hints and missing or ambiguous entries from local in-memory transactions during `cfbDemoRebuild_`; it does not call `cfpTransferPairReview_` through GAS.
+- The synthetic section is recalculated after transfer flag changes and remains `confirmed:false`. `scripts/test_cashflow_sandbox.mjs` checks the initial panel, review counts, reclassification and zero production RPCs.
