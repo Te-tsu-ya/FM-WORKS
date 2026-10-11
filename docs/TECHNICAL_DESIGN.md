@@ -2367,3 +2367,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The original cashFlowSave_ RPC remains the only persistence path (`saveCashFlowYear`, `資金繰り年間`). On unresolved response or RPC failure `cashFlowUi.uncertain=true` disables all client edits, preserves `requestKey`, input snapshot and revision. Retry with identical payload until confirmed; success resets uncertain, invalidates cache and refreshes. Existing server ACL/revision/ScriptLock/monitoring unchanged.
 - QA `test_cashflow_grid.mjs` verifies 5x12 editing, paste atomicity, null vs zero, formula rejection, copying, recomputed balances, exact retry key after failed RPC and logout clearance. `test_cashflow_grid_viewport.mjs` uses Chromium to test 1440/1024/768/390/320 widths and two color schemes; existing cashflow, UI contract and whole-app CI tests also run.
 - Bank statements remain separately classified, partially imported transactions must not be shown as confirmed zero. DB schema v20 separate manual plan linking feature is preserved; the source Excel or bank data is not changed by manual-year edits.
+
+
+### 2026-10-11 Bank pasted-text parser separated from finance demo
+- Move synthetic `cfbDemo...` controller from GAS runtime `src/AppCashFlowSandbox.html` into `scripts/fixtures/AppCashFlowDemo.html` (VM testing only), and keep actual `cfbParseBankPaste_`, `cfbPasteSample_`, `cfbPastePreview_`, `cfbPastePanel_` in `src/AppCashFlowPaste.html`.
+- Replace `StylesCashFlowSandbox.html` with `StylesCashFlowPaste.html` and drop obsolete sample-mode banner styles. GAS `Index.html` excludes the synthetic controller.
+- Update bank-grid, sandbox, workspace, contract, rotary and static validation suites to load the synthetic fixture only during tests. Preserve the PR #105 editable-preview/uncertain-import safeguards and PR #106 annual grid unchanged.
+- No production database write, schema migration, authentication or financial payload change. Delivery-byte reduction does not prove actual GAS/Sheets speed improvement.
