@@ -30,6 +30,8 @@ jobs:
         run: node scripts/test_data_access_performance.mjs
       - name: Verify indexed project/task links for visible worklogs
         run: node scripts/test_worklog_link_index.mjs
+      - name: Verify scoped punch history index and correction semantics
+        run: node scripts/test_punch_history_index.mjs
       - name: Verify large workspace cache, linked data and asynchronous navigation
         run: node scripts/test_workspace_loading.mjs
       - name: Run logic tests

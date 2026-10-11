@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.5
+**文書版:** 0.24.6
 **更新日:** 2026-10-10  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2403,3 +2403,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - Preserve source row order and continue `canViewScheduleRow_` authorization before any schedule entry is returned. For whitespace/cross-column terms, long terms, small sheets, over 48 disjoint row blocks, or an index exception, read 18 columns as the previous implementation did.
 - `scripts/test_search_schedule_index.mjs` has 1,000 synthetic scheduled rows and verifies 54 compared with 18,000 18-column cells in the sparse example, hidden events omitted, source order, duplicate cell matches, user strings as literals, 30-result cap and safe fallback conditions. Both CI and deployment run it.
 - This reduces transfer of unused cells for sparse lookups and is not a claim of corresponding GAS elapsed-time reduction. Read-only change; DB v20 and finance/attendance write contracts unchanged.
+
+
+## v0.24.6 Scoped punch-history retrieval
+- `getActivePunchRows_(employeeId,startDate,endDate)` keeps the existing date-range indexed path unchanged. For history requests without a date range and over 250 physical rows, call `readRowsByColumnValues_(sheet,2,12,[employeeId])` to fetch only matching employee rows using escaped regular-expression TextFinder and bounded range blocks.
+- Preserve the full same-employee history before applying the deleted flag and `supersededBy`/original-punch-ID map. Avoid a last-N-row shortcut because late corrections may replace older punches. Keep a one-shot 12-column read on small sheets and the helper's 48-block fallback.
+- `scripts/test_punch_history_index.mjs` must compare indexed results to legacy all-column scan on synthetic large and sparse data, ensure no cross-user history leakage, preserve corrections, deleted punches, special-character IDs, timestamp order/limit and small-table fallback.
+- No Sheet writes, authentication or DB schema migration. This is a read-volume optimization, not verified production p50/p95 reduction.
