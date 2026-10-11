@@ -2306,3 +2306,7 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 
 ## Cashflow statement coverage disclosure (2026-10-11)
 - `cfbActualCell_` formats imported-but-unreconciled movement as partial, zero unimported rows as unknown, and verified fiscal-closed zero as an actual zero. The financial numerical projection remains unchanged; this is presentation-only. Client regression checks test all three cases.
+
+## Existing Apps Script deployment verification hardening (2026-10-11)
+- The pipeline compares the `clasp create-deployment` response deployment ID and `@version` against a **single corresponding line** of `clasp list-deployments` that also carries `GitHub $GITHUB_SHA`. It retries only the read (three attempts, no repeat deployment).
+- Bash `read` and a here-string avoid `grep -q` / `pipefail` broken-pipe false failures on large deployment lists; preflight uses a single-shell string membership check. Failure remains fail-closed. A mocked clasp shell regression runs the exact release step against long listings, wrong versions, unrelated commit rows, missing deployments and wrong creation IDs.

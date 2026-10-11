@@ -106,6 +106,8 @@ jobs:
         run: node scripts/test_business_workflows.mjs
       - name: Test light and dark modal dialog contrast before publication
         run: node scripts/test_modal_theme.mjs
+      - name: Verify deployment release guard
+        run: node scripts/test_deploy_gate.mjs
       - name: Install clasp
         run: npm install --global @google/clasp@latest
       - name: Restore clasp credentials
@@ -129,7 +131,7 @@ jobs:
             exit 1
           fi
           known_deployments="$(clasp list-deployments)"
-          if ! printf '%s\n' "$known_deployments" | grep -Fq -- "$target"; then
+          if [[ "$known_deployments" != *"$target"* ]]; then
             echo "::error::The specified FM WORKS web app deployment is not in this Apps Script project. Refusing to push."
             exit 1
           fi
@@ -140,10 +142,32 @@ jobs:
         run: |
           set -euo pipefail
           : "${FM_WORKS_DEPLOYMENT_ID:?Preflight did not select a deployment}"
-          clasp create-deployment --deploymentId "$FM_WORKS_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
-          deployed="$(clasp list-deployments)"
-          if ! printf '%s\n' "$deployed" | grep -Fq -- "$FM_WORKS_DEPLOYMENT_ID" || ! printf '%s\n' "$deployed" | grep -Fq -- "GitHub ${GITHUB_SHA}"; then
-            echo "::error::Existing web app deployment could not be confirmed at this commit."
+          response="$(clasp create-deployment --deploymentId "$FM_WORKS_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}")"
+          if [[ "$response" != *"$FM_WORKS_DEPLOYMENT_ID"* || ! "$response" =~ @[0-9]+ ]]; then
+            echo "::error::clasp did not confirm an update to the existing deployment."
+            exit 1
+          fi
+          version="${BASH_REMATCH[0]}"
+          # Avoid grep -q pipelines with pipefail: clasp may list enough deployments to trigger SIGPIPE.
+          verified=false
+          for attempt in 1 2 3; do
+            deployed="$(clasp list-deployments)"
+            while IFS= read -r line; do
+              if [[ "$line" != *"$FM_WORKS_DEPLOYMENT_ID"* || "$line" != *"GitHub ${GITHUB_SHA}"* ]]; then
+                continue
+              fi
+              if [[ "$line" =~ @[0-9]+ ]] && [[ "${BASH_REMATCH[0]}" == "$version" ]]; then
+                verified=true
+                break
+              fi
+            done <<< "$deployed"
+            if [[ "$verified" == true ]]; then
+              break
+            fi
+            if (( attempt < 3 )); then sleep "${FM_WORKS_VERIFY_DELAY_SECONDS:-2}"; fi
+          done
+          if [[ "$verified" != true ]]; then
+            echo "::error::Existing web app deployment version and commit could not be confirmed."
             exit 1
           fi
           echo 'Production web app deployment updated and verified against GitHub commit.'
