@@ -139,9 +139,8 @@ function financeWorkspaceSummary_(){
    tile('金融機関提出資料','Excel / PDF','照合・条件を確認して出力',
      "financeWorkspaceGo_('reports')",''):'')+
   '</div><div class="fw-subtools"><button type="button" class="secondary-button" onclick="navigate(&quot;requests&quot;)">自分の経費・出張を申請</button>'+
-  '<button type="button" class="secondary-button" onclick="financeToggleDemo()">'+
-  (financeUi.demo?'実データに戻る':'経理記録のサンプル表示')+'</button>'+
-  (cashFlowAllowed_()?'<button type="button" class="secondary-button" onclick="cashFlowOpenDemo_()">架空資金繰りを確認</button>':'')+
+
+
   '</div></div>';
 }
 function financeWorkspaceList_(){
@@ -159,8 +158,7 @@ function financeWorkspaceList_(){
   '<button type="button" class="'+(financeUi.tab==='travel'?'primary-button':'secondary-button')+
    '" onclick="financeTabSelect(\'travel\')">出張報告</button>';
  const toolbar='<div class="fw-list-toolbar"><div><h2>'+title+'</h2><p>'+description+'</p></div>'+
-  '<div class="fw-inline-actions">'+tools+'<button type="button" class="secondary-button" onclick="financeToggleDemo()">'+
-  (financeUi.demo?'実データへ':'サンプル')+'</button>'+
+  '<div class="fw-inline-actions">'+tools+
   '<button type="button" class="secondary-button" onclick="loadFinanceOverview({force:true})"'+
   (financeUi.loading||financeUi.demo?' disabled':'')+'>最新に更新</button></div></div>';
  return toolbar+'<div class="fw-legacy">'+financeLegacyPage()+'</div>';

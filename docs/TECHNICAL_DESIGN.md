@@ -2333,3 +2333,9 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_cashflow.mjs` must assert `DB_SCHEMA_VERSION === 20`, while still validating unchanged annual cashflow calculations and administrator ACL.
 
 - `scripts/test_cashflow_bank.mjs` and `scripts/test_project_advanced.mjs` verify `DB_SCHEMA_VERSION` 20 while keeping previous balances, import deduplication and project records tests unchanged.
+
+
+## 2026-10-11 Sample-mode navigation cleanup (phase 1)
+- `AppFinanceWorkspace.html` and `AppFinance.html`: remove end-user buttons for synthetic finance mode and cashflow sandbox mode, while keeping normal workflow entrypoints intact.
+- Keep sample datasets and all test fixtures unchanged; do not alter FM WORKS DB, authorization rules, RPC interfaces, bank parser, or cashflow calculations.
+- Legacy demo-mode implementations remain in source as test dependencies until a separate integration-safe deletion pass following PR #105/#106. No measured GAS speed improvement is claimed for this UI-only change.
