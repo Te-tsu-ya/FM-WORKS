@@ -1,7 +1,7 @@
 # FM WORKS 技術設計書
 
-**文書版:** 0.24.8
-**更新日:** 2026-10-11  
+**文書版:** 0.24.9
+**更新日:** 2026-10-12  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -2425,3 +2425,10 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The calling mutation continues to use `somuSheet_` header verification, ScriptLock, latest record revision/status, role and requester authorization, and audit logging. No row is written during lookup, and duplicate retries cannot be accepted from a stale cached payload.
 - `scripts/test_somu_integration.mjs` runs all create/return/approval/duplicate and unauthorized-access flows, plus synthetic tables larger than 3,000 rows and zero full-ID-column reads on targeted lookup. `scripts/test_somu_growth.mjs` covers the three optional models; `scripts/test_data_access_performance.mjs` covers real helper row movement, revocation and DB switching.
 - This reduces transferred cells for point lookups but does not claim an elapsed-time improvement until authenticated production GAS P50/P95 measurements. Existing asset listing, 2,500-loan safety bound, database schema and demo data are unchanged.
+
+
+## v0.24.9 Safe General Affairs integrity on large ledgers
+- `somuOpenLoans_` uses `readRowsByColumnValues_` against column B of the entire loan sheet to read all rows matching an asset ID; it then validates the physical loan ID and `貸出中` status. This replaces the prior refusal once 2,500 history rows existed, which could not safely distinguish old active loans from closed ones.
+- `saveSomuAsset` uses the same shared indexed reader against asset management code (column B), and `saveSomuGrowthRecord` checks facility code (column B) using the schema-verified optional sheet. Duplicate protection spans all history, ignores `廃止` rows, and excludes the target ID during revisioned updates.
+- The shared helper searches exact escaped regex matches and batches nearby row reads; a fragmented match set falls back to complete row scanning rather than an unsafe last-N cutoff. All callers preserve authenticated ScriptLock transactions, verification against latest state and audit records.
+- `scripts/test_somu_integration.mjs` and `scripts/test_somu_growth.mjs` cover old active loans, rejected overborrowing, return state, duplicate codes and legitimate records with >3,000 synthetic rows. List APIs still limit display rows, so full list pagination and P50/P95 measurements remain Q-SOMU-03.

@@ -141,10 +141,10 @@ function saveSomuGrowthRecord(token,kind,payload){
     const fields=kind==='contract'?somuGrowthContractFields_(p):
       kind==='facility'?somuGrowthFacilityFields_(p):somuGrowthTicketFields_(p,actor,old);
     if(kind==='facility'){
-      const all=somuRows_('facility',2500,status.sheets.facility);
-      if(all.truncated)throw new Error('台帳が2500件を超えています。管理者に確認してください。');
-      if(all.items.some(x=>x.id!==id&&x.code===fields.code&&x.status!=='廃止'))
-        throw new Error('同じ管理番号が既に登録されています。');
+      const duplicate=readRowsByColumnValues_(status.sheets.facility,2,SOMU_MODELS.facility.keys.length,[fields.code])
+        .some(row=>String(row[0]||'')&&String(row[0])!==id&&
+          String(row[1]||'')===fields.code&&String(row[9]||'')!=='廃止');
+      if(duplicate)throw new Error('同じ管理番号が既に登録されています。');
     }
     const now=somuNow_();
     const record=Object.assign({},old||{},fields,{
