@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
+const clientFiles=['src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','src/AppLeaveDemo.html','src/AppQuotes.html','src/AppDocuments.html','src/AppCompanyDocs.html','src/AppOffice.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppFinanceWorkspace.html','src/AppCashFlow.html','src/AppCashFlowBank.html','src/AppCashFlowSandbox.html','src/AppAdmin.html','src/AppShell.html'];
 const apiCalls=[];
 
 function makeStorage(){
@@ -430,9 +430,10 @@ const result=vm.runInContext(`
   financeUi.overview={setupRequired:false,expenses:[financeFakeExpense,pendingFake],travels:[],
     receipts:[],totals:{expensePending:1,travelPending:0,expenseToSettle:0,
       receipt:0,expenseHidden:0,travelHidden:0,receiptHidden:0}};
+  expect('new accounting portal prioritizes pending work and bulk entry',financePage().includes('今日の経理業務')&&financePage().includes('表にまとめて貼り付ける')&&financePage().includes('承認待ち')&&financePage().includes('1件'));
   expect('accounting dashboard reads real response totals rather than hardcoded sample values',
-    financePage().includes('v15-finance-dashboard')&&financePage().includes('承認待ち')&&
-    financePage().includes('1件')&&financePage().includes('financeTableRows'));
+    financeLegacyPage().includes('v15-finance-dashboard')&&financeLegacyPage().includes('承認待ち')&&
+    financeLegacyPage().includes('1件')&&financeLegacyPage().includes('financeTableRows'));
   resetCalls();
   financeSearchVisible('No matching record');
   expect('accounting query filter is local and has a proper empty state',
@@ -447,16 +448,16 @@ const result=vm.runInContext(`
   expect('finance selection updates local selected detail without GAS roundtrip',
     financeUi.selectedIds.expense==='EXP-PENDING'&&apiCalls.length===0);
   expect('finance screen has table + inline inspector + date filter',
-    financePage().includes('financeSelectedDetail')&&financePage().includes('finance-ledger-table')&&
-    financePage().includes('financeSetMonthFilter('));
+    financeLegacyPage().includes('financeSelectedDetail')&&financeLegacyPage().includes('finance-ledger-table')&&
+    financeLegacyPage().includes('financeSetMonthFilter('));
   const unchangedReal=financeUi.overview;
   resetCalls();financeToggleDemo();
   expect('finance demo uses fabricated data without overwriting the real cache',
     financeUi.demo===true&&financeUi.overview===unchangedReal&&financeVisibleItems_('expense').length===6);
   expect('finance demo is visibly labeled and forbids saving or approval',
-    financePage().includes('サンプル表示中｜架空データ')&&
+    financeLegacyPage().includes('サンプル表示中｜架空データ')&&
     financeInspectorHtml_('expense',financeVisibleItems_('expense')[0]).includes('サンプルでは承認')&&
-    financePage().includes('経費記録を追加'));
+    financeLegacyPage().includes('経費記録を追加'));
   financeUi.tab='expense';financeSetMonthFilter('2026-09');
   expect('demo month filter uses only loaded synthetic rows',
     financeVisibleItems_('expense').length===0&&apiCalls.length===0);
@@ -620,7 +621,7 @@ const result=vm.runInContext(`
     auditWarningExposed&&financeUi.auditWarning.includes('EXP-AUDIT-TEST')&&
     financeUi.auditWarning.includes('保存済み')&&financeUi.auditWarning.includes('重複登録'));
   expect('finance and employee screens display persistent audit warning',
-    financePage().includes('EXP-AUDIT-TEST')&&financeSelfSection().includes('EXP-AUDIT-TEST'));
+    financeLegacyPage().includes('EXP-AUDIT-TEST')&&financeSelfSection().includes('EXP-AUDIT-TEST'));
   financeUi.auditWarning='';
   const financeModal={querySelector:selector=>selector==='[data-finance-modal="true"]'?{}:null};
   financeUi.busy=true;
@@ -673,7 +674,7 @@ const result=vm.runInContext(`
     filteredInsight.includes('finance-advisor-month'));
   financeUi.insightPayer='';financeUi.insightMode=false;financeUi.insights=null;
   expect('normal finance approvals remain available after closing expense insight mode',
-    financePage().includes('経理記録の一覧'));
+    financeLegacyPage().includes('経理記録の一覧'));
   expect('travel evidence and official invoice lookup controls are visible in their correct forms',
     financeTravelEvidencePanel().includes('計算式と支給根拠を確認')&&
     financeInvoiceLookupPanel().includes('適格請求書番号'));

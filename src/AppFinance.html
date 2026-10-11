@@ -6,6 +6,7 @@ let financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:
 function resetFinanceUi(){
   if(typeof resetCashFlowUi==='function')resetCashFlowUi();
   financeActiveForm=null;
+  if(typeof financeWorkspaceReset_==='function')financeWorkspaceReset_();
   financeVisual={query:'',status:'ALL',match:'ALL',month:''};
   financeUi={tab:'expense',selectedIds:{expense:'',receipt:'',travel:''},demo:false,demoData:null,insightMode:false,insights:null,insightYear:new Date().getFullYear(),insightLoading:false,insightError:'',insightQuery:'',insightPayer:'',travelEstimate:null,invoiceIssuer:null,lastLatencyMs:null,mineLatencyMs:null,revOverview:0,revMine:0,overview:null,mine:null,error:'',ownError:'',auditWarning:'',loading:false,ownLoading:false,busy:false,identity:'',limit:160,at:0,mineAt:0,refreshNeeded:false,ownRefreshNeeded:false};
 }
@@ -792,7 +793,8 @@ function financeOverviewRows(kind){
     '<th scope="col">状態・照合</th></tr></thead><tbody>'+rows.map(x=>x.desktop).join('')+
     '</tbody></table><div class="finance-mobile-record-list">'+rows.map(x=>x.mobile).join('')+'</div>';
 }
-function financePage(){
+function financePage(){return financeWorkspacePage_();}
+function financeLegacyPage(){
   if(!financeAccessAllowed())return pageHead('経理','この画面を表示する権限がありません。');
   if(typeof cashFlowUi!=='undefined'&&cashFlowUi.open)return cashFlowPage_();
   if(financeUi.insightMode)return financeInsightsPage();

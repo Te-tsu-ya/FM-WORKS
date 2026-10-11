@@ -24,6 +24,9 @@ function invalidatePageCache(...names){names.forEach(name=>{if(name==='authAdmin
 // No business records or credentials are put in persistent browser storage.
 function invalidateBusinessViewsAfterWrite(method,result){
   if(result&&result.ok===false)return;
+  if(method==='saveFinanceReceiptsBulk'&&typeof financeUi!=='undefined'){
+    financeUi.at=0;financeUi.revOverview++;financeUi.refreshNeeded=true;
+  }
   if(/^(saveQuoteDraft|issueQuote|importQuoteVendors|configureQuoteSequence|createRelatedDocument|retryRelatedDocument)$/.test(method)&&typeof quoteUi!=='undefined'){
     quoteUi.at=0;if(quoteUi.loading)quoteUi.refreshNeeded=true;
   }

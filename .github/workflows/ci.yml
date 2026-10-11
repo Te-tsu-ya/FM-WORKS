@@ -18,6 +18,8 @@ jobs:
           node-version: '24'
       - name: Enforce design document sync
         run: node scripts/check_docs_sync.mjs
+      - name: Validate protected GAS web app deployment gate
+        run: node scripts/test_deploy_gate.mjs
       - name: Generate in-app design documents
         run: node scripts/generate_docs.mjs
       - name: Validate repository
@@ -58,6 +60,18 @@ jobs:
         run: node scripts/test_cashflow_bank_client.mjs
       - name: Verify copied bank statements and isolated sample finance flows
         run: node scripts/test_cashflow_sandbox.mjs
+      - name: Verify finance workspace and bulk spreadsheet-style entry
+        run: node scripts/test_finance_workspace.mjs
+      - name: Verify redesigned finance portal and spreadsheet grid at desktop/mobile widths
+        run: node scripts/test_finance_workspaces_viewport.mjs
+      - name: Upload redesigned finance workspace screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmworks-finance-workspace-layout-qa
+          path: artifacts/finance-workspace/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Test employee estimates and formal issuance
         run: node scripts/test_quote_integration.mjs
       - name: Test rotary loader lifecycle and all GAS entrypoints
