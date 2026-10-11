@@ -100,6 +100,7 @@ invoke('FMRotaryRPC().withSuccessHandler(()=>{}).getHomeOverview("SESSION")');
 assert.equal(ui.snapshot().pending.region,1);
 invoke('FMRotaryActivity.route("finance")');
 assert.equal(ui.snapshot().pending.region,0,'old route does not cover the new page');
+actions.at(-1).meta.success({}); // Settled after route change: timing remains measurable without keeping the old overlay.
 const rpcReport=invoke('FMWorksPerformance.report()');
 assert.equal(rpcReport.scope,'current-browser-tab');
 assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').failures,1,'RPC failure counted without exposing error message');
