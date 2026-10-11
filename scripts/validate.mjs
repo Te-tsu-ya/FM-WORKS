@@ -42,7 +42,7 @@ for (const serverFile of ['Somu.gs','SomuGrowth.gs','ProjectAdvanced.gs','Compan
   }
 }
 for(const check of [
- ["src/Schema.gs","const DB_SCHEMA_VERSION = 19"],
+ ["src/Schema.gs","const DB_SCHEMA_VERSION = 20"],
  ["src/ProjectAdvanced.gs","function getProjectAdvanced("],
  ["src/ProjectAdvanced.gs","function downloadProjectAttachment("],
  ["src/ProjectAdvanced.gs","function projectAdvancedDetectCycle_("],
@@ -393,7 +393,7 @@ if (!serverCode.includes('function auditJson_(') ||
   failed = true;
 }
 
-for (const marker of ['const DB_SCHEMA_VERSION = 19','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
+for (const marker of ['const DB_SCHEMA_VERSION = 20','function getDatabaseSchemaStatus_(','function migrateDatabaseToCurrent(','function ensureSchemaSheet_(']) {
   if (!schemaCodeText.includes(marker)) { console.error('Schema migration marker missing: '+marker); failed=true; }
 }
 if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('function migrateDatabaseFromAdmin(')) {

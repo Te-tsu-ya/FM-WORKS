@@ -2327,3 +2327,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `getCashFlowAnalysisMonth` enriches each paged item with read-only `planLink` state and `linkReady` without forcing all financial APIs to require v20. `cfaPlanMatchHtml_` renders native disclosure with accessible explicit buttons; `cfaPlanAction_` uses the existing confirmation dialog, stale-callback/session checks and stable retry idempotency keys. Deleted/changed plans produce STALE and can be unlinked; all financial totals remain unchanged.
 
 - New contract tests extend `scripts/test_cashflow_analysis.mjs` to exercise linked-plan v20 fallback, approval, duplicate schedule occurrence, stale hashes, cancellation, retry idempotency, ACL and source invariance; the browser harness covers the confirm dialog, idempotent retry and accessible state labels. `test_schema_migration.mjs` expects the new sheet and v20 while preserving all preexisting headers.
+
+- Update the two static schema-version markers in `scripts/validate.mjs` from 19 to 20, so the full release validation guards the target schema version consistently with `Schema.gs` and `test_schema_migration.mjs`.
