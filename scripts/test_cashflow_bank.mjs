@@ -94,6 +94,8 @@ assert.equal(bankTotals.outgoing,33000);
 assert.equal(bankTotals.statementIn,100000);
 assert.equal(bankTotals.statementOut,53000,'bank statement totals include transfer amounts');
 assert.equal(bankTotals.transferOut,20000);
+assert.equal(bankTotals.statementIn,bankTotals.incoming+bankTotals.transferIn,'bank gross receipts equal external receipts plus transfers');
+assert.equal(bankTotals.statementOut,bankTotals.outgoing+bankTotals.transferOut,'bank gross payments equal external payments plus transfers');
 const transferId=state.transactions.find(x=>x.transfer).id;
 const change=ctx.setCashFlowTransfer('ADMIN',transferId,false,1);
 assert.equal(change.revision,2);
