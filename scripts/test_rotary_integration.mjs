@@ -53,10 +53,11 @@ const makeRunner=(meta={})=>new Proxy({}, {get(_obj,key){
  if(key==='then')return undefined;
  return (...args)=>{actions.push({method:String(key),args,meta})};
 }});
+let perfNow=2000;
 const g={
  document:{body:{},querySelector(sel){return sel==='#app .workspace'?{}:sel==='.search-wrap'?{}:null}},
  FMRotaryLoader:FakeLoader,google:{script:{run:makeRunner()}},
- console,performance:{now:()=>2000},window:null,Map,Set,Object,Number,Math,String,Date,Error,Array,Proxy
+ console,performance:{now:()=>perfNow},window:null,Map,Set,Object,Number,Math,String,Date,Error,Array,Proxy
 };
 g.window=g;
 const ctx=vm.createContext(g);
@@ -84,6 +85,7 @@ second.meta.success({});
 assert.equal(ui.snapshot().pending.region,0);
 assert.equal(ui.loaders.region.state,'success');
 invoke('FMRotaryRPC().withFailureHandler(()=>{}).getMonthly("SESSION")');
+perfNow+=237;
 actions.at(-1).meta.failure(new Error('network offline'));
 assert.equal(ui.loaders.region.state,'error','real errors stop rotation and show failure');
 const count=actions.length;
@@ -98,8 +100,16 @@ invoke('FMRotaryRPC().withSuccessHandler(()=>{}).getHomeOverview("SESSION")');
 assert.equal(ui.snapshot().pending.region,1);
 invoke('FMRotaryActivity.route("finance")');
 assert.equal(ui.snapshot().pending.region,0,'old route does not cover the new page');
+const rpcReport=invoke('FMWorksPerformance.report()');
+assert.equal(rpcReport.scope,'current-browser-tab');
+assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').failures,1,'RPC failure counted without exposing error message');
+assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').p50Ms,237,'monotonic round-trip duration is recorded');
+assert.equal(rpcReport.methods.find(m=>m.method==='getMonthly').p95Ms,237);
+assert.ok(rpcReport.methods.find(m=>m.method==='getHomeOverview').calls>=2,'repeated RPC calls are grouped');
+assert.ok(!JSON.stringify(rpcReport).includes('SESSION'),'session tokens never enter performance data');
 invoke('FMRotaryActivity.reset()');
 assert.equal(ui.snapshot().pending.page+ui.snapshot().pending.region+ui.snapshot().pending.inline,0);
+assert.equal(invoke('FMWorksPerformance.report().methods.length'),0,'logout clears performance samples');
 assert.ok(actions.every(a=>a.method!=='withSuccessHandler'),'only GAS method names are dispatched');
 const offlineCashflow=fs.readFileSync('scripts/fixtures/AppCashFlowDemo.html','utf8')+fs.readFileSync('src/AppCashFlowPaste.html','utf8');
 for(const forbidden of ['google.script.run','SpreadsheetApp','localStorage','sessionStorage']){

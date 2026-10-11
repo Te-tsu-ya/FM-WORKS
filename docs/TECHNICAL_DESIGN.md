@@ -2380,3 +2380,5 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_initial_payload.mjs` scans `src/Index.html` includes and reports UTF-8 source bytes of entry HTML and each CSS/JS module. Reject duplicate/missing includes and historical test-only `AppLeaveDemo`/`AppCashFlowSandbox` in production.
 - Budgets are 1,360,000 total, 950,000 JS and 420,000 CSS source bytes. GitHub CI and production deploy run this before other tests; the eight heaviest modules are shown in logs.
 - These values are not compressed transfer size, actual render time or a GAS/Sheets RPC p50/p95 measurement.
+
+- `AppRotaryIntegration.html` の `FMRotaryRPC` 実行時に `performance.now()` を記録し、完了/失敗時のブラウザ観測時間だけを固定上限80件×API名で集計する。`FMWorksPerformance.report()` はメソッド名/件数/失敗件数/P50/P95/直近msのみ返す。`FMRotaryActivity.reset()` で消去し、既存のRPCハンドラー・ロータリー演出・権限/保存契約を変更しない。

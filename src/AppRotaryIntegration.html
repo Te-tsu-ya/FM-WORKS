@@ -7,6 +7,34 @@
 (function(global){
 'use strict';
 let activity=null,sequence=0;
+/* Per-method network timings: no inputs, tokens, results, employee IDs, or
+ * financial records are captured. In-memory only, reset on logout.
+ * This measures browser-observed RPC round trips, not server-only execution. */
+const rpcPerfSamples=new Map();
+function rpcPerfNow(){
+ const perf=global.performance;
+ return perf&&typeof perf.now==='function'?perf.now():Date.now();
+}
+function rpcPerfRecord(method,started,failed){
+ const elapsed=Math.max(0,Math.round(rpcPerfNow()-started));
+ if(!Number.isFinite(elapsed))return;
+ let row=rpcPerfSamples.get(method);
+ if(!row){row={calls:0,failures:0,samples:[],lastMs:0};rpcPerfSamples.set(method,row);}
+ row.calls++;
+ if(failed)row.failures++;
+ row.lastMs=elapsed;
+ row.samples.push(elapsed);
+ if(row.samples.length>80)row.samples.shift();
+}
+function rpcPerfReport(){
+ const methods=[...rpcPerfSamples.entries()].map(([method,row])=>{
+  const samples=row.samples.slice().sort((a,b)=>a-b);
+  const value=p=>samples.length?samples[Math.max(0,Math.ceil(samples.length*p)-1)]:null;
+  return {method,calls:row.calls,failures:row.failures,p50Ms:value(0.5),p95Ms:value(0.95),lastMs:row.lastMs};
+ }).sort((a,b)=>(b.p95Ms||0)-(a.p95Ms||0)||a.method.localeCompare(b.method));
+ return {scope:'current-browser-tab',sampleWindow:80,methods};
+}
+global.FMWorksPerformance=Object.freeze({report:rpcPerfReport,clear:()=>rpcPerfSamples.clear()});
 const authMethods=new Set(['getPublicAuthConfig','resumeSession','getInitialData','login','initializeFirstAdmin']);
 const quietMethods=new Set(['getNotifications','ensureDailyBackup']);
 const labels={
@@ -117,6 +145,7 @@ function reset(){
    if(loaders[zone])loaders[zone].hide();
  }
  bootstrap=false;currentRoute=null;
+ rpcPerfSamples.clear();
 }
 function route(next){
  currentRoute=next;
@@ -152,8 +181,9 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
  return (...args)=>{
    const tracking=ensureActivity();
    const task=tracking&&tracking.begin(prop);
+   const perfStarted=rpcPerfNow();
    let ended=false;
-   const finish=error=>{if(ended)return;ended=true;if(tracking)tracking.settle(task,error)};
+   const finish=error=>{if(ended)return;ended=true;rpcPerfRecord(prop,perfStarted,!!error);if(tracking)tracking.settle(task,error)};
    try{
      let runner=raw.withSuccessHandler((...values)=>{
        try{

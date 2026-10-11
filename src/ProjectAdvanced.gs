@@ -300,8 +300,20 @@ function projectAdvancedWorklogCommit_(prepared,recordId,project,actor){
 }
 
 function projectAdvancedWorklogIds_(items){
- const links=projectAdvancedRows_('プロジェクト工数対応',true),map=new Map(links.map(r=>[r[0],r[2]]));
- return items.map(item=>({...item,taskId:map.get(item.id)||''}));
+ const scoped=Array.isArray(items)?items:[];
+ // In particular, opening an empty day must not read the full worklog-task link sheet.
+ if(!scoped.length)return [];
+ const sheet=projectAdvancedSheet_('プロジェクト工数対応',true);
+ if(!sheet)return scoped.map(item=>({...item,taskId:''}));
+ const ids=[...new Set(scoped.map(item=>String(item&&item.id||'').trim()).filter(Boolean))];
+ // Use a narrow indexed read for sparse visible worklogs in a large link sheet.
+ // Large result sets and small sheets retain the existing full read semantics.
+ const count=sheet.getLastRow();
+ const rows=ids.length&&ids.length<=24&&count>250
+  ?readRowsByColumnValues_(sheet,1,DB_SCHEMA_SPECS['プロジェクト工数対応'].length,ids)
+  :projectAdvancedRows_('プロジェクト工数対応',false,sheet);
+ const map=new Map(rows.map(r=>[r[0],r[2]]));
+ return scoped.map(item=>({...item,taskId:map.get(item.id)||''}));
 }
 
 function projectAdvancedTaskOptions_(user){
