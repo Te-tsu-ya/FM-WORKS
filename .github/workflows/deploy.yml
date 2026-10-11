@@ -50,6 +50,8 @@ jobs:
         run: node scripts/test_cashflow_analysis.mjs
       - name: Verify cashflow data-entry UI, scenario editor and download isolation
         run: node scripts/test_cashflow_analysis_client.mjs
+      - name: Verify cash-flow report callback isolation
+        run: node scripts/test_cashflow_report_session.mjs
       - name: Verify finance classifications and report layouts on desktop/mobile
         run: node scripts/test_cashflow_analysis_viewport.mjs
       - name: Upload cashflow finance visual QA

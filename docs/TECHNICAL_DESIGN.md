@@ -2217,3 +2217,8 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - The transient annotation, rule and scenario drafts retain their request key after a failed or ambiguous RPC, clearing only on user changes. Success handlers require `ok===true` before dismissing forms.
 - Reconciliation keeps a keyed pending payload and restores its amount and note in the rendered form after failure. Server idempotency rejects the same reconciliation key with changed note, bank fingerprint or balance.
 - No persistent browser storage, DB migration or source workbook modification.
+
+
+### Cashflow report stale-callback guard
+- `cfaDownloadReport_` retains the requesting session token, fiscal year, scenario and workspace sequence, rejecting completion and failure callbacks after context changes. This prevents cross-user/period report disclosure via delayed browser download callbacks.
+- `scripts/test_cashflow_report_session.mjs` tests stale token, fiscal year and scenario responses; CI and Deploy must run it.
