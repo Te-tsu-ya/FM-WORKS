@@ -7,6 +7,21 @@ const CFB_GRID_FIELDS=[
 ];
 const CFB_GRID_PAGE_SIZE=25;
 function cfbBankGridEditable_(){return !cfbUi.importing&&!cfbUi.importPending&&!cfbUi.busy;}
+function cfbBankGridSetAccount_(accountId){
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='通信結果が未確認のため、別口座には切り替えられません。';
+  renderPageIfActive('finance');return;
+ }
+ const next=String(accountId||'');
+ if(next===cfbUi.csvAccountId)return;
+ const apply=()=>{cfbUi.csvAccountId=next;cfbUi.preview=null;cfbUi.bankGridEdited=false;
+  cfbUi.bankGridPage=0;cfbUi.error='';renderPageIfActive('finance');};
+ if(cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('取込先口座の変更','口座を切り替えると取込前の明細プレビューは破棄されます。元データを再度解析する必要があります。',
+   'プレビューを破棄して変更',apply);renderPageIfActive('finance');return;
+ }
+ apply();
+}
 function cfbBankGridDate_(value){
  const s=String(value==null?'':value).trim().replace(/年|[/.]/g,'-').replace(/月/g,'-').replace(/日/g,'');
  let m=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);

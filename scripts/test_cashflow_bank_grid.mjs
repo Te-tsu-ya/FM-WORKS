@@ -85,6 +85,18 @@ assert.ok(dialog&&/取込対象/.test(dialog.title),'removing staged bank rows n
 dialog.callback();
 assert.equal(js('cfbUi.preview.length'),1);
 assert.equal(js('cfbUi.preview[0].occurrence'),1,'exclusion renumbers repeated payments');
+const oldAccount=js('cfbUi.csvAccountId');
+dialog=null;cx.cfbBankGridSetAccount_('A2');
+assert.equal(js('cfbUi.csvAccountId'),oldAccount,'changing account must wait for explicit confirmation');
+assert.ok(dialog&&/口座/.test(dialog.title));
+dialog=null;cx.cfbReload_();
+assert.ok(dialog&&/編集済み/.test(dialog.title),'refresh must ask before dropping edited rows');
+dialog=null;cx.cfbPastePreview_();
+assert.ok(dialog&&/編集済み/.test(dialog.title),'new paste cannot silently erase an edited preview');
+dialog=null;
+assert.match(fs.readFileSync('src/AppCashFlow.html','utf8'),/cfbUi\.importPending/,
+ 'cashflow close must protect unresolved bank import state');
+
 cx.cfbBeginImport_();
 assert.equal(calls.at(-1).method,'importCashFlowBankRows');
 assert.equal(calls.at(-1).args[1].rows.length,1);

@@ -2326,3 +2326,6 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - If cfbUi.importPending or importing is true, refuse file replacement, remapping, paste reparse, row edits and exclusions. A refresh must not silently discard a paused import.
 - Reparse after a user edit requires explicit confirmation. Original bank site data and FM WORKS historic bank rows remain unmodified until the existing admin-only import API is called.
 - test_cashflow_bank_grid.mjs verifies date/amount/length validation, TSV bounds, occurrence reindex, interrupted import retry protection, HTML escaping and pagination; existing bank client regression tests continue to run.
+
+- Additional loss-prevention gate: cashFlowClose_ blocks navigation when cfbUi.importPending is set and asks for confirmation if a bank preview exists; cfbReload_, cfbChooseFile_, cfbPastePreview_ and cfbBankGridSetAccount_ require explicit discard confirmation for edited staging data.
+- The permitted flow is staged preview -> all-row validation -> immutable importPending -> resume same requestKey until confirmation. Neither navigation nor remapping may destroy an uncertain import batch.

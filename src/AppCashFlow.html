@@ -18,6 +18,13 @@ function cashFlowOpen_(){
  renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(false);
 }
 function cashFlowClose_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.importPending){
+  showToast('銀行明細の取込結果が未確認です。同じ送信情報で再開してから画面を閉じてください。');return;
+ }
+ if(typeof cfbUi!=='undefined'&&cfbUi.preview&&cfbUi.preview.length&&!cfbUi.demo){
+  openConfirmDialog('取込前の銀行明細を破棄','取込前の表に銀行明細が残っています。閉じると内容が失われます。続行しますか？',
+   '保存せず閉じる',()=>{cfbUi.preview=null;cfbUi.bankGridEdited=false;cashFlowClose_();});return;
+ }
  if(cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込みが終わるまでお待ちください。');return;}
  cashFlowDiscard_(()=>{
   const bank=typeof cfbUi!=='undefined'?cfbUi:null,demo=!!(bank&&bank.demo);

@@ -40,6 +40,11 @@ function cfbLoad_(force){
  });
 }
 function cfbReload_(){
+ if(cfbUi.importPending){showToast('銀行明細の保存結果が未確認です。同じ内容で取込を再開してから更新してください。');return;}
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集済み明細の破棄','再取得すると、取込前プレビューに加えた修正が失われます。先に表をコピーすることをおすすめします。',
+   '修正を破棄して更新',()=>{cfbUi.bankGridEdited=false;cfbReload_();});return;
+ }
  if(cfbUi.demo){openConfirmDialog('架空データの初期化','操作中の架空データを最初の状態に戻します。','最初から試す',()=>cfbDemoActivate_(cashFlowUi.year));return;}
  if(cfbUi.busy||cfbUi.importing||cashFlowUi.busy){showToast('保存・取り込みが終わるまでお待ちください。');return;}
  cashFlowDiscard_(()=>{
@@ -288,6 +293,10 @@ function cfbGuessCSV_(header){
 }
 async function cfbChooseFile_(node){
  const file=node.files&&node.files[0];if(!file)return;
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集中の銀行明細を破棄','別のCSVを選択すると、取込前の表で修正した値が消えます。切り替えますか？',
+    '修正を破棄して読み込む',()=>{cfbUi.bankGridEdited=false;cfbChooseFile_(node);});return;
+ }
  if(cfbUi.importing||cfbUi.importPending){
   cfbUi.error='取込中・再開待ちの明細があるため別ファイルには切り替えられません。';
   if(node&&typeof node.value==='string')node.value='';
@@ -456,7 +465,7 @@ function cfbCSVPage_(){
  const preview=cfbUi.preview,pending=cfbUi.importPending;
  const resumeInfo=pending?'<p role="status">処理済み '+cfbUi.importIndex+'/'+pending.rows.length+'件。通信エラー後も同じ口座・取込明細で再開します。</p>':'';
  return '<section class="card cf-table-card"><h2>CSVファイルから取り込む（任意）</h2><p>CSVがない場合は上の「Webページから貼り付ける」を使ってください。CSVをダウンロードできる場合はファイルを選択します。ここでファイルを確認し、登録操作を行うまでDBには保存されません。</p>'+
-  '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbUi.csvAccountId=this.value;cfbUi.preview=null"'+(locked?' disabled':'')+'>'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
+  '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbBankGridSetAccount_(this.value)"'+(locked?' disabled':'')+'>'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
   '<label>CSVファイル（UTF-8 / Shift-JIS）<input type="file" accept=".csv,text/csv,text/plain" onchange="cfbChooseFile_(this)"'+(locked?' disabled':'')+'></label></div>'+
   (rows.length?'<h3>CSV列の対応（先頭行を見出しとして利用）</h3>'+selectors+
   '<button type="button" class="secondary-button" onclick="cfbPreviewCSV_()"'+(locked?' disabled':'')+'>内容を確認する</button>':'')+
