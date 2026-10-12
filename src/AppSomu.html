@@ -16,10 +16,12 @@ function somuScheduleGrowth_(force){
  if(typeof somuGrowthLoad!=='function')return;
  const needed=()=>somuUi.tab==='home'||
    (typeof somuGrowthTab_==='function'&&somuGrowthTab_(somuUi.tab));
- if(!needed())return;
- const identity=somuSessionIdentity();
+ const defer=()=>{if(force&&typeof somuGrowth!=='undefined'){somuGrowth.forceOnNextLoad=true;somuGrowth.loadedAt=0;}};
+ if(!needed()){defer();return;}
+ const identity=somuSessionIdentity(),ui=somuUi;
  const launch=()=>{
-  if(identity!==somuSessionIdentity()||state.page!=='office'||!needed())return;
+  if(ui!==somuUi||identity!==somuSessionIdentity())return;
+  if(state.page!=='office'||!needed()){defer();return;}
   somuGrowthLoad(!!force);
  };
  if(typeof scheduleBackgroundTask==='function')
@@ -34,28 +36,31 @@ function somuLoad(force){
    somuScheduleGrowth_(false);
    return;
  }
- const identity=somuSessionIdentity(),started=Date.now(),hadData=!!(somuUi.loaded&&somuUi.data);
+ const ui=somuUi,identity=somuSessionIdentity(),started=Date.now(),hadData=!!(somuUi.loaded&&somuUi.data);
  somuUi.loading=true;somuUi.error='';
- if(typeof somuGrowth!=='undefined'){somuGrowth.loading=true;somuGrowth.serial=(somuGrowth.serial||0)+1;somuGrowth.refreshNeeded=false;}
+ // Base and growth RPCs own separate loading flags. A base refresh must not
+ // unlock or cancel a growth request already in flight.
+ if(force&&typeof somuGrowth!=='undefined'){
+  somuGrowth.loadedAt=0;if(somuGrowth.loading)somuGrowth.refreshNeeded=true;
+ }
  // Keep the previous cards and selected row visible during silent refresh.
  if(!hadData&&state.page==='office')renderPageIfActive('office');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-  if(identity!==somuSessionIdentity())return;
+  if(ui!==somuUi||identity!==somuSessionIdentity())return;
   somuUi.loading=false;
-  if(typeof somuGrowth!=='undefined')somuGrowth.loading=false;
   if(somuUi.refreshNeeded){somuUi.refreshNeeded=false;somuLoad(true);return;}
   somuUi.loaded=true;somuUi.data=data;somuUi.loadedAt=Date.now();
-  if(data&&data.growth&&typeof somuGrowth!=='undefined'){
+  if(data&&data.growth&&typeof somuGrowth!=='undefined'&&!somuGrowth.loading){
     somuGrowth.data=data.growth;somuGrowth.loaded=true;somuGrowth.loading=false;somuGrowth.loadedAt=Date.now();somuGrowth.error='';
   }
   if(typeof console!=='undefined'&&console.info)
     console.info('FM_SOMU_LOAD',JSON.stringify({elapsedMs:Date.now()-started,rows:data&&data.rowCount||0,refresh:hadData}));
   if(state.page==='office')renderPageIfActive('office');
-  somuScheduleGrowth_(!!force);
+  const forceGrowth=!!force||!!somuUi.growthRefreshNeeded;somuUi.growthRefreshNeeded=false;
+  somuScheduleGrowth_(forceGrowth);
  }).withFailureHandler(err=>{
-  if(identity!==somuSessionIdentity())return;
+  if(ui!==somuUi||identity!==somuSessionIdentity())return;
   somuUi.loading=false;
-  if(typeof somuGrowth!=='undefined')somuGrowth.loading=false;
   if(somuUi.refreshNeeded){somuUi.refreshNeeded=false;somuLoad(true);return;}
   const message=cleanApiErrorMessage(err,'総務データを読み込めませんでした。');
   if(hadData){
@@ -65,6 +70,8 @@ function somuLoad(force){
     somuUi.error=message;somuUi.loaded=true;
     if(state.page==='office')renderPageIfActive('office');
   }
+  const forceGrowth=!!force||!!somuUi.growthRefreshNeeded;somuUi.growthRefreshNeeded=false;
+  somuScheduleGrowth_(forceGrowth);
  }).getSomuWorkspace(state.sessionToken,!!force,false);
 }
 function somuReload(){somuLoad(true);}

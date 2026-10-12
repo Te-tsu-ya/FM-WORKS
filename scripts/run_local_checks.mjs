@@ -17,6 +17,11 @@ for(const file of fs.readdirSync('src').sort()){
  report.sourceHashes[file]=crypto.createHash('sha256').update(fs.readFileSync(path.join('src',file))).digest('hex');
 }
 const commands=[...plan.functional,...plan.browser];
+report.verificationHashes={};
+for(const file of [...new Set(['AGENTS.md','scripts/local-checks.json','scripts/run_local_checks.mjs','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',...commands.map(c=>c.slice(5))])]){
+ if(!/^node scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(commands.find(c=>c.slice(5)===file)||'')&&!['AGENTS.md','scripts/local-checks.json','scripts/run_local_checks.mjs','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md'].includes(file))throw Error('Unsafe test input path.');
+ report.verificationHashes[file]=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
 let failed=0,skipped=0;
 for(const command of commands){
  const match=/^node (scripts\/[A-Za-z0-9_/-]+\.mjs)$/.exec(command);

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.0',
+  version: '0.25.1',
   locale: 'ja-JP'
 });
 
@@ -614,6 +614,10 @@ function canManageEmployee_(viewer, targetEmployeeId) {
 }
 
 function getManagedEmployeeIds_(viewer) {
+  // The cached employee directory is for display, never a MANAGER's ACL.
+  const role=String(viewer&&viewer.role||'USER').toUpperCase();
+  if(role==='MANAGER')return new Set(getActiveDirectReports_(viewer.employeeId).filter(e=>e.employeeId!==viewer.employeeId).map(e=>e.employeeId));
+  if(role!=='ADMIN')return new Set();
   return new Set(getEmployees_().filter(target => canManageEmployeeRecord_(viewer, target)).map(target => target.employeeId));
 }
 

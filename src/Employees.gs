@@ -34,9 +34,7 @@ function getActiveDirectReports_(managerId) {
   const id=String(managerId||'').trim().toUpperCase();
   if(!id)return [];
   const sheet=getDb_().getSheetByName(DB.sheets.employees);
-  const lastRow=sheet.getLastRow();
-  if(lastRow<2)return [];
-  return sheet.getRange(2,1,lastRow-1,24).getDisplayValues()
+  return readRowsByColumnValues_(sheet,24,24,[id],true)
     .filter(r=>r[0]&&r[6]==='在籍'&&String(r[23]||'').toUpperCase()===id)
     .map(r=>({employeeId:r[0],name:r[1]||r[0]}));
 }

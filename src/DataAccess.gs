@@ -125,16 +125,17 @@ function findVerifiedSheetRow_(sheet,column,width,value,scope,display){
   return {rowNumber,row};
 }
 
-function readRowsByColumnValues_(sheet,column,width,values){
+function readRowsByColumnValues_(sheet,column,width,values,caseInsensitive){
   const lastRow=sheet.getLastRow();
   if(lastRow<2)return [];
-  const wanted=[...new Set((values||[]).map(v=>String(v||'').trim()).filter(Boolean))];
+  const normalize=value=>caseInsensitive?String(value||'').toUpperCase():String(value||'');
+  const wanted=[...new Set((values||[]).map(v=>normalize(String(v||'').trim())).filter(Boolean))];
   if(!wanted.length)return [];
   const wantedSet=new Set(wanted);
   const pattern='^(?:'+wanted.map(regexEscape_).join('|')+')$';
   const started=Date.now();
   if(pattern.length>5000||wanted.length>80){
-    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(String(r[column-1]||'')));
+    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(normalize(r[column-1])));
     logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',values:wanted.length});
     return rows;
   }
@@ -145,13 +146,13 @@ function readRowsByColumnValues_(sheet,column,width,values){
   }
   const blocks=contiguousRowBlocks_(cells.map(c=>c.getRow()));
   if(blocks.length>48){
-    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(String(r[column-1]||'')));
+    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>wantedSet.has(normalize(r[column-1])));
     logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',blocks:blocks.length,values:wanted.length});
     return rows;
   }
   const endCol=columnLetter_(width);
   const rows=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges().flatMap(range=>range.getDisplayValues())
-    .filter(r=>wantedSet.has(String(r[column-1]||'')));
+    .filter(r=>wantedSet.has(normalize(r[column-1])));
   logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'VALUE_INDEX',blocks:blocks.length,values:wanted.length});
   return rows;
 }

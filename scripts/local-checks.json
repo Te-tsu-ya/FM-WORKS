@@ -39,7 +39,9 @@
     "node scripts/test_schema_migration.mjs",
     "node scripts/test_project_advanced.mjs",
     "node scripts/test_business_workflows.mjs",
-    "node scripts/test_worklog_integrity.mjs"
+    "node scripts/test_worklog_integrity.mjs",
+    "node scripts/test_operational_refresh.mjs",
+    "node scripts/test_local_docs_sync.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",
