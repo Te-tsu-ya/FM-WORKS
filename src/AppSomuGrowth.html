@@ -35,21 +35,23 @@ function somuGrowthData_(){return (somuGrowth.data||{contracts:[],facilities:[],
 function somuGrowthTab_(tab){return Object.prototype.hasOwnProperty.call(SOMU_GROWTH_CONFIG,tab);}
 function somuGrowthLoad(force){
  if(!somuCanUse())return;
- if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
+ force=!!force||!!somuGrowth.forceOnNextLoad;
+ if(somuUi.loading){if(force)somuUi.growthRefreshNeeded=true;return;}
  if(somuGrowth.loading){if(force)somuGrowth.refreshNeeded=true;return;}
  if(somuGrowth.loaded&&!force&&Date.now()-somuGrowth.loadedAt<300000)return;
- const identity=somuSessionIdentity(),wasLoaded=somuGrowth.loaded;
+ const ui=somuGrowth,identity=somuSessionIdentity(),wasLoaded=somuGrowth.loaded;
  const serial=somuGrowth.serial=(somuGrowth.serial||0)+1;
+ somuGrowth.forceOnNextLoad=false;
  somuGrowth.loading=true;somuGrowth.error='';
  if(somuGrowthTab_(somuUi.tab)&&!wasLoaded&&state.page==='office')renderPageIfActive('office');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-  if(identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
+  if(ui!==somuGrowth||identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
   somuGrowth.loading=false;
   if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
   somuGrowth.data=data;somuGrowth.loaded=true;somuGrowth.loadedAt=Date.now();
   if(state.page==='office')renderPageIfActive('office');
  }).withFailureHandler(error=>{
-  if(identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
+  if(ui!==somuGrowth||identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
   somuGrowth.loading=false;
   if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
   if(!wasLoaded){somuGrowth.error=cleanApiErrorMessage(error,'総務の追加台帳を取得できませんでした。');somuGrowth.loaded=true;}

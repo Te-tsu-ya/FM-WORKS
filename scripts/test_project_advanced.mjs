@@ -32,12 +32,21 @@ const tasks=[
 const updates=[{id:'MEMO-1',projectId:'P',kind:'決定事項',body:'次の設計方針',createdBy:'O',createdAt:'2026-10-10 12:00:00'}];
 const blobData=new Map();let seq=0;let currentFolder;
 const db={};
+const hubContext=vm.createContext({});
+vm.runInContext(fs.readFileSync('src/ProjectHub.gs','utf8'),hubContext);
+const hubModels=JSON.parse(JSON.stringify(vm.runInContext('PROJECT_HUB_MODELS',hubContext)));
+const hubRecords=kind=>kind==='plan'?plans:kind==='task'?tasks:kind==='update'?updates:[];
+const hubSheet=kind=>({getLastRow:()=>hubRecords(kind).length+1,getRange:(row,col,n,width)=>({
+ getDisplayValues:()=>hubRecords(kind).slice(row-2,row-2+n).map(record=>hubModels[kind].keys.slice(col-1,col-1+width).map(k=>String(record[k]??'')))
+})});
 const gctx=vm.createContext({
  console,Date,Math,Map,Set,JSON,Number,Array,Object,String,RegExp,Boolean,Buffer,
  DB:{timeZone:'Asia/Tokyo'},getDb_:()=>({getSheetByName:n=>db[n]||null}),
  requireSession_:token=>{if(!people[token])throw Error('認証が必要');return{employee:people[token]};},
  withScriptLock_:fn=>fn(),getProjectsInternal_:()=>projects,getEmployees_:()=>Object.values(people),
- projectHubStorage_:()=>({ready:true,sheets:{plan:{},task:{},resource:{},update:{}}}),
+ PROJECT_HUB_MODELS:hubModels,
+ projectHubStorage_:()=>({ready:true,sheets:{plan:hubSheet('plan'),task:hubSheet('task'),resource:hubSheet('resource'),update:hubSheet('update')}}),
+ readRowsByColumnValues_:(sheet,col,width,ids)=>{const rows=sheet.getRange(2,1,sheet.getLastRow()-1,width).getDisplayValues();return rows.filter(r=>ids.includes(r[col-1]));},
  projectHubRows_:kind=>kind==='plan'?plans:kind==='task'?tasks:kind==='update'?updates:[],
  projectHubCanManage_:(u,p)=>u.role==='ADMIN'||p.ownerId===u.employeeId,
  projectHubWorklogRows_:()=>db['工数'].rows.slice(1).map(r=>r.map(x=>String(x??''))),

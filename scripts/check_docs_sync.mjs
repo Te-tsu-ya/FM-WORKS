@@ -1,7 +1,7 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
-function exec(command) {
-  return execSync(command, { encoding:'utf8' }).trim();
+function git(...args) {
+  return execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 }
 
 function safeRef(value) {
@@ -15,23 +15,35 @@ function resolveRange() {
 
   if(baseRef){
     try{
-      const base=exec('git merge-base HEAD origin/'+baseRef);
+      const base=git('merge-base','HEAD','origin/'+baseRef);
       if(base)return {base,after:'HEAD'};
     }catch(_){}
   }
   if(before&&!/^0+$/.test(before))return {base:before,after};
-  try{return {base:exec('git rev-parse HEAD^'),after:'HEAD'};}catch(_){return null;}
+  try{return {base:git('rev-parse','HEAD^'),after:'HEAD'};}catch(_){return null;}
 }
 
+const required=['docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md'];
+// GPT/local execution must verify pending edits too, even in a shallow snapshot.
+let worktree=[];
+try{
+  worktree=[...new Set((git('diff','--name-only','HEAD')+'\n'+git('ls-files','--others','--exclude-standard'))
+    .split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
+}catch(_){console.error('Cannot verify documentation without a Git working tree.');process.exit(1);}
+if(worktree.some(p=>p.startsWith('src/')&&p!=='src/GeneratedDocs.gs')){
+  const missing=required.filter(p=>!worktree.includes(p));
+  if(missing.length){console.error('Pending src changes must update both design documents: '+missing.join(', '));process.exit(1);}
+}
+console.log('Working-tree documentation sync gate passed.');
 const range=resolveRange();
 if(!range){
-  console.log('Documentation sync check skipped: comparison commit unavailable.');
+  console.log('Committed history unavailable; working-tree documentation gate completed.');
   process.exit(0);
 }
 
 let commits=[];
 try{
-  commits=exec('git rev-list --reverse '+range.base+'..'+range.after)
+  commits=git('rev-list','--reverse',range.base+'..'+range.after)
     .split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 }catch(_){
   console.log('Documentation sync check skipped: commit range unavailable.');
@@ -43,18 +55,17 @@ if(!commits.length){
   process.exit(0);
 }
 
-const required=['docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md'];
 const failures=[];
 
 for(const commit of commits){
   let parent='';
-  try{parent=exec('git rev-parse '+commit+'^1');}catch(_){}
+  try{parent=git('rev-parse',commit+'^1');}catch(_){}
   let changed=[];
   try{
-    const command=parent
-      ? 'git diff --name-only '+parent+' '+commit
-      : 'git diff-tree --root --no-commit-id --name-only -r '+commit;
-    changed=exec(command).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    const output=parent
+      ? git('diff','--name-only',parent,commit)
+      : git('diff-tree','--root','--no-commit-id','--name-only','-r',commit);
+    changed=output.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   }catch(_){
     failures.push(commit.slice(0,12)+': changed files could not be inspected');
     continue;
@@ -66,7 +77,7 @@ for(const commit of commits){
   const missing=required.filter(p=>!changed.includes(p));
   if(missing.length){
     let subject='';
-    try{subject=exec('git log -1 --format=%s '+commit);}catch(_){}
+    try{subject=git('log','-1','--format=%s',commit);}catch(_){}
     failures.push(commit.slice(0,12)+' '+subject+' -> missing '+missing.join(', '));
   }
 }

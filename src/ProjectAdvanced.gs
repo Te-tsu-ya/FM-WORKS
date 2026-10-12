@@ -327,15 +327,15 @@ function projectAdvancedTaskOptions_(user){
 }
 
 function projectAdvancedAlerts_(employee,includeRead){
- const ready=projectAdvancedReady_();if(!ready.ready)return [];
+ const sheets={},ready=projectAdvancedReady_(sheets);if(!ready.ready)return [];
  const storage=projectHubStorage_();if(!storage.ready)return [];
  const projects=new Map(getProjectsInternal_(false).map(p=>[p.projectId,p]));
- const plans=projectHubRows_('plan',storage.sheets.plan);
- const tasks=projectHubRows_('task',storage.sheets.task).filter(t=>t.status!=='非表示');
+ const plans=projectAdvancedAlertRows_('plan',storage.sheets.plan,3);
+ const tasks=projectAdvancedAlertRows_('task',storage.sheets.task,9).filter(t=>t.status!=='非表示');
  const memberProjects=new Set(plans.filter(p=>p.ownerId===employee.employeeId).map(p=>p.projectId));
  tasks.filter(t=>t.ownerId===employee.employeeId).forEach(t=>memberProjects.add(t.projectId));
  if(employee.role==='ADMIN')projects.forEach((_,id)=>memberProjects.add(id));
- const seen=new Set(projectAdvancedRows_('プロジェクト既読',false).filter(r=>r[0]===employee.employeeId).map(r=>r[1]));
+ const seen=new Set(projectAdvancedRows_('プロジェクト既読',false,sheets['プロジェクト既読']).filter(r=>r[0]===employee.employeeId).map(r=>r[1]));
  const today=projectHubToday_(),until=new Date(Date.parse(today+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);
  const result=[];
  tasks.filter(t=>t.ownerId===employee.employeeId&&t.status!=='完了'&&Number(t.progress)<100&&t.dueDate&&t.dueDate<=until&&projects.has(t.projectId))
@@ -345,7 +345,10 @@ function projectAdvancedAlerts_(employee,includeRead){
    result.push({type:'案件作業',title:t.title,subtitle:(projects.get(t.projectId).name||'案件')+' / 期限 '+t.dueDate,
     route:'projects',projectId:t.projectId,notificationId:event,priority:t.dueDate<today?'danger':'warning'});
   });
- const updates=projectHubRows_('update',storage.sheets.update).filter(u=>memberProjects.has(u.projectId)&&u.createdBy!==employee.employeeId&&projects.has(u.projectId));
+ const updateKeys=PROJECT_HUB_MODELS.update.keys;
+ const updates=readRowsByColumnValues_(storage.sheets.update,2,updateKeys.length,Array.from(memberProjects).filter(id=>projects.has(id)))
+  .map(row=>Object.fromEntries(updateKeys.map((key,i)=>[key,row[i]||''])))
+  .filter(u=>memberProjects.has(u.projectId)&&u.createdBy!==employee.employeeId&&projects.has(u.projectId));
  updates.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
  updates.slice(0,30).forEach(u=>{
   const event='MEMO-'+u.id;
@@ -355,6 +358,15 @@ function projectAdvancedAlerts_(employee,includeRead){
     projectId:u.projectId,notificationId:event,priority:u.kind==='決定事項'?'warning':'normal'});
  });
  return includeRead?result:result.slice(0,12);
+}
+
+// Read-only alert summaries: omit budget/notes/bodies from unrelated ledgers.
+// These objects have no _row and must never be used as write records.
+function projectAdvancedAlertRows_(kind,sheet,width){
+ const last=sheet?sheet.getLastRow():0;if(last<2)return [];
+ const keys=PROJECT_HUB_MODELS[kind].keys.slice(0,width);
+ return sheet.getRange(2,1,last-1,width).getDisplayValues()
+  .filter(row=>row[0]).map(row=>Object.fromEntries(keys.map((key,i)=>[key,row[i]||''])));
 }
 
 function markProjectAlertRead(sessionToken,notificationId){

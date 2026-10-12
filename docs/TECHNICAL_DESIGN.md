@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.0
+**文書版:** 0.25.1
 **更新日:** 2026-10-12  
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2453,3 +2453,25 @@ AppAdmin.loadMaintenanceのforce要求は実行中でもrefreshNeededに保持�
 - `scripts/test_somu_client.mjs` asserts first-RPC argument, delayed growth sequencing, cached reentry, stale task rejection and no unnecessary prefetch from the asset tab. True GAS cold/warm performance remains to be measured.
 
 - The shared `scripts/test_business_workflows.mjs` contract now asserts the staged two-RPC sequence and zero-RPC tab switches after growth fetch, instead of the superseded combined seven-ledger RPC contract.
+
+## v0.25.1 Actionsを使わない検証と取得処理の改善（2026-10-12）
+
+### 開発運用
+PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS.mdを新しい必須指示にした。新規PR・mergeには `[skip ci]` を指定する。GitHubの無料実行枠も使わない。`scripts/local-checks.json`を検査計画とし、GPT環境の`run_local_checks.mjs`がNodeで実行する。旧YAMLは履歴であり実行しない。
+
+ローカル結果にはsrc・文書・検査スクリプトのSHA-256、各検査の成功/失敗/未実行を記録する。`--functional`で除外したChrome検査を成功に含めない。出力は`artifacts/local-verification/`、gitignore対象。GitHubの成果物ストレージへアップロードしない。文書同期はコミット差分と作業中差分を確認し、Git呼出しを`execFileSync`の引数配列に変更してシェル文字列の連結を避けた。
+
+### 総務の非同期制御
+- 基本UIと追加台帳UIを別のリクエスト所有者とする。base読込の開始／完了でgrowthのloadingを変更しない。
+- `growthRefreshNeeded`は基本台帳読込中の追加台帳更新を保持する。`forceOnNextLoad`は非表示タブの更新要求を次の表示まで保持し、不要な先読みと更新要求の破棄を防ぐ。
+- 成功／失敗にはログインidentityとUIオブジェクト同一性、追加台帳にはserialも確認する。予約処理もbase UIの同一性を確認し、同じトークンでのreset後の古い応答を除外する。
+
+### 閲覧範囲と索引
+`getManagedEmployeeIds_`はMANAGERの場合に実シートの直属承認者列を索引取得し、在籍者だけを返す。USERは空の管理範囲。ADMINの表示ディレクトリ再利用は全員閲覧権限の範囲で維持する。`getActiveDirectReports_`は全員24列取得をやめ、一致行だけを取得する。直属承認者IDの従来の大文字/小文字非区別を維持するため、共通索引ヘルパーへ任意のcase-insensitive照合を追加した（他の呼出しは従来の完全一致）。
+
+案件の個人工数／個人別集計は同じ管理対象ID集合を使い、表示キャッシュから所属を判定しない。既存の5分表示キャッシュは取得済み情報の表示用であり、新しいサーバー取得時の権限とは区別する。
+
+### 通知の転送削減
+`projectAdvancedAlertRows_`はread-onlyのplan先頭3列／task先頭9列を取得し、書込み用_rowを持たない。共有メモは現在の担当案件IDによる`readRowsByColumnValues_`で選択し、無関係・停止済み案件の本文を転送しない。6拡張シートの検証済みハンドルを既読読込に再利用し、同一RPCの既読ヘッダー再検証を削除する。
+
+`scripts/test_operational_refresh.mjs`は同じログインでのreset、旧成功/失敗、独立RPC、更新の待ち合わせ、非表示タブの更新保持、通信障害、表示用ディレクトリの古い所属、直属変更、退職者、本人/案件共有範囲を確認する。600件の他案件メモを混在させても担当案件の本文だけを取得する。`test_local_docs_sync.mjs`は浅いGit履歴・未コミット/新規ソース・文書片方欠落を確認する。これらのI/O確認はGAS実測秒数を意味しない。

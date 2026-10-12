@@ -14,6 +14,7 @@ const sheets={},cache=new Map();let seq=0,auditFails=false;
 const ctx=vm.createContext({console,DB:{timeZone:'Asia/Tokyo',sheets:{projects:'プロジェクト'}},getDb_:()=>({getSheetByName:name=>sheets[name]||null}),
  requireSession_:token=>{const employee=users.find(u=>u.employeeId===token);if(!employee)throw Error('認証が必要');return {employee};},
  requireAdminSession_:token=>{if(token!=='A')throw Error('管理者のみ');return {employee:users[0]};},getEmployees_:()=>users,
+ getManagedEmployeeIds_:u=>new Set(users.filter(e=>e.managerId===u.employeeId).map(e=>e.employeeId)),
  withScriptLock_:fn=>fn(),cacheJsonGet_:key=>cache.get(key)||null,cacheJsonPut_:(key,v)=>cache.set(key,v),cacheJsonGetLarge_:key=>cache.get(key)||null,cacheJsonPutLarge_:(key,v)=>cache.set(key,v),cacheRemove_:key=>cache.delete(key),
  Utilities:{formatDate:()=> '2026-10-10'},SpreadsheetApp:{flush:()=>{}},createId_:prefix=>prefix+'-'+(++seq),toTimestamp_:()=> '2026-10-10 12:00:00',
  safeSheetText_:(v,max)=>{let s=String(v??'').trim();if(s.length>max)throw Error('長すぎます');if(/^[=+@-]/.test(s))s="'"+s;return s;},

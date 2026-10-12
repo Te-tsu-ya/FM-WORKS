@@ -127,8 +127,9 @@ function getProjectHubDetail(sessionToken,projectId,force){
  const canSeeOrderValue=u.role==='ADMIN'||!!quote;
  if(!canSeeOrderValue)delete plan.orderValue;
  const names=projectHubWorklogOwners_(r.projects,new Map(r.plans.map(record=>[record.projectId,record])));
- const logs=r.worklogs.filter(w=>{const owners=names.get(projectHubName_(w[3]));return !!owners&&owners.size===1&&owners.has(p.projectId);}),employees=getEmployees_();
- const canViewPerson=id=>u.employeeId===id||u.role==='ADMIN'||u.role==='MANAGER'&&employees.some(e=>e.employeeId===id&&e.managerId===u.employeeId);
+ const logs=r.worklogs.filter(w=>{const owners=names.get(projectHubName_(w[3]));return !!owners&&owners.size===1&&owners.has(p.projectId);});
+ const managedIds=u.role==='MANAGER'?getManagedEmployeeIds_(u):new Set();
+ const canViewPerson=id=>u.employeeId===id||u.role==='ADMIN'||managedIds.has(id);
  const tasks=r.tasks.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.ownerId===u.employeeId}));
  const resources=r.resources.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.createdBy===u.employeeId}));
  const detailLogs=logs.filter(w=>canViewPerson(w[1])).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
