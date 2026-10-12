@@ -33,6 +33,10 @@ ctx.CacheService={getScriptCache:()=>({
 class Sheet{
  constructor(headers){this.rows=[headers.slice()];this.stats={displayCells:0,displayCalls:0,headerReads:0,rawCells:0,finds:0}}
  getLastRow(){return this.rows.length}
+ getRangeList(refs){return {getRanges:()=>refs.map(ref=>{
+  const m=/^A(\d+):([A-Z]+)(\d+)$/.exec(ref);let width=0;for(const c of m[2])width=width*26+c.charCodeAt(0)-64;
+  return this.getRange(Number(m[1]),1,Number(m[3])-Number(m[1])+1,width);
+ })};}
  appendRow(values){this.rows.push(values.slice())}
  getRange(row,col,height=1,width=1){
   const sheet=this;
@@ -42,7 +46,8 @@ class Sheet{
   return {
     getValues:()=>{sheet.stats.rawCells+=height*width;return get();},
    createTextFinder(value){
-     return {matchEntireCell(){return this;},
+     let regular=false;
+     return {useRegularExpression(v){regular=v;return this;},matchEntireCell(){return this;},
        findNext(){
          sheet.stats.finds++;
          const idx=sheet.rows.findIndex((r,i)=>i>=1&&String(r[col-1]??'')===String(value));
@@ -52,7 +57,7 @@ class Sheet{
          sheet.stats.finds++;
          const found=[];
          for(let i=row-1;i<Math.min(row-1+height,sheet.rows.length);i++){
-           if(String(sheet.rows[i]?.[col-1]??'')===String(value)){
+           if(regular?new RegExp(value,'i').test(String(sheet.rows[i]?.[col-1]??'')):String(sheet.rows[i]?.[col-1]??'')===String(value)){
              const at=i+1;found.push({getRow:()=>at});
            }
          }
@@ -332,9 +337,27 @@ for(const sheet of Object.values(sheets)){
 const focused=api.getMyFinanceItems('STAFF');
 ok('only the logged-in employee records are returned with large shared sheets',
   focused.expenses.length===2&&focused.travels.length===1);
-ok('personal history reads the owner column and only the matching records',
+ok('personal history transfers only matching records without an owner-column download',
   sheets['経費精算申請'].stats.displayCells<1100&&
   sheets['経費精算申請'].stats.displayCalls<=4);
+// Eleven records previously crossed the fallback threshold and downloaded the whole sheet.
+const savedExpenseRows=sheets['経費精算申請'].rows.map(r=>r.slice());
+const expenseSheet=sheets['経費精算申請'];
+for(let i=0;i<32;i++){
+ const row=Array(models.expense.keys.length).fill('');
+ row[0]='PERSONAL-'+i;row[1]='2026-09-01 10:00:00';row[2]=members.STAFF.employeeId;
+ row[12]=i===0?'差戻し':'精算済';row[18]='2026-09-01 10:00:00';expenseSheet.rows.push(row);
+}
+expenseSheet.stats.displayCells=0;expenseSheet.stats.displayCalls=0;
+const manyMine=api.getMyFinanceItems('STAFF');
+ok('32 contiguous personal records avoid shared-sheet fallback and keep old returned requests',
+ manyMine.expenses.length===34&&manyMine.expenses.some(x=>x.id==='PERSONAL-0')&&
+ expenseSheet.stats.displayCells<1000&&expenseSheet.stats.displayCalls<=5);
+expenseSheet.stats.displayCells=0;
+const emptyMine=api.getMyFinanceItems('GENERAL');
+ok('no-match personal history transfers only the verified header',
+ emptyMine.expenses.length===0&&expenseSheet.stats.displayCells===models.expense.keys.length);
+expenseSheet.rows=savedExpenseRows;
 const beforeBulkLookup=sheets['経費精算申請'].stats.rawCells;
 const byId=vm.runInContext('financeFindRow_("expense","BULK-0")',ctx);
 ok('finance row index verifies the selected ID and only reads a full row once',

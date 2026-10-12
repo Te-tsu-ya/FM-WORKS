@@ -22,13 +22,13 @@ function loadFinanceOverview(options={}){
   if(!options.force&&financeUi.overview&&financeUi.identity===financeIdentity()&&
     now-financeUi.at<FINANCE_READ_TTL)return;
   if(financeUi.loading){if(options.force)financeUi.refreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.overview,revision=financeUi.revOverview;
-  financeUi.identity=identity;financeUi.loading=true;financeUi.error='';
+  const ui=financeUi,identity=financeIdentity(),hadData=!!financeUi.overview,revision=financeUi.revOverview;
+  financeUi.identity=identity;financeUi.loading=true;financeUi.refreshNeeded=false;financeUi.error='';
   if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
   const started=Date.now();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==financeIdentity())return;
-    if(revision!==financeUi.revOverview){
+    if(ui!==financeUi||identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview||financeUi.refreshNeeded){
       financeUi.loading=false;financeUi.refreshNeeded=false;
       loadFinanceOverview({force:true,silent:true});return;
     }
@@ -41,19 +41,17 @@ function loadFinanceOverview(options={}){
     }
     financeUi.overview=result;financeUi.at=Date.now();financeUi.loading=false;financeUi.error='';
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM PERF] finance API '+(Date.now()-started)+'ms');
-    if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
     renderPageIfActive('finance');
     renderPageIfActive('office');
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity())return;
-    if(revision!==financeUi.revOverview){
+    if(ui!==financeUi||identity!==financeIdentity())return;
+    if(revision!==financeUi.revOverview||financeUi.refreshNeeded){
       financeUi.loading=false;financeUi.refreshNeeded=false;
       loadFinanceOverview({force:true,silent:true});return;
     }
     financeUi.lastLatencyMs=Date.now()-started;
     financeUi.error=cleanApiErrorMessage(error,'経理情報を取得できませんでした。');
     financeUi.loading=false;
-    if(financeUi.refreshNeeded){financeUi.refreshNeeded=false;loadFinanceOverview({force:true,silent:true});return;}
     renderPageIfActive('finance');
     renderPageIfActive('office');
   }).getFinanceOverview(state.sessionToken,{limit:financeUi.limit||160});
@@ -64,12 +62,12 @@ function loadMyFinanceItems(options={}){
   if(!options.force&&financeUi.mine&&financeUi.identity===financeIdentity()&&
     now-financeUi.mineAt<FINANCE_READ_TTL)return;
   if(financeUi.ownLoading){if(options.force)financeUi.ownRefreshNeeded=true;return;}
-  const identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
-  financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownError='';
+  const ui=financeUi,identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
+  financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownRefreshNeeded=false;financeUi.ownError='';
   if(!hadData&&!options.silent)renderPageIfActive('requests');
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==financeIdentity())return;
-    if(revision!==financeUi.revMine){
+    if(ui!==financeUi||identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine||financeUi.ownRefreshNeeded){
       financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
       loadMyFinanceItems({force:true,silent:true});return;
     }
@@ -79,18 +77,16 @@ function loadMyFinanceItems(options={}){
       renderPageIfActive('requests');return;
     }
     financeUi.mine=result;financeUi.mineAt=Date.now();financeUi.ownLoading=false;financeUi.ownError='';
-    if(financeUi.ownRefreshNeeded){financeUi.ownRefreshNeeded=false;loadMyFinanceItems({force:true,silent:true});return;}
     renderPageIfActive('requests');
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity())return;
-    if(revision!==financeUi.revMine){
+    if(ui!==financeUi||identity!==financeIdentity())return;
+    if(revision!==financeUi.revMine||financeUi.ownRefreshNeeded){
       financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
       loadMyFinanceItems({force:true,silent:true});return;
     }
     financeUi.mineLatencyMs=Date.now()-started;
     financeUi.ownError=cleanApiErrorMessage(error,'経費・出張の履歴を取得できませんでした。');
     financeUi.ownLoading=false;
-    if(financeUi.ownRefreshNeeded){financeUi.ownRefreshNeeded=false;loadMyFinanceItems({force:true,silent:true});return;}
     renderPageIfActive('requests');
   }).getMyFinanceItems(state.sessionToken);
 }
@@ -433,7 +429,7 @@ function submitFinanceForm(){
   const method=financeActiveForm.editId?'resubmitFinanceRequest':
     {expense:'submitFinanceExpense',travel:'submitFinanceTravel',receipt:'saveFinanceReceipt'}[kind];
   const activeForm=financeActiveForm;
-  const identity=financeIdentity();
+  const ui=financeUi,identity=financeIdentity();
   // Freeze the entire input while one server write is pending. Otherwise the
   // user could edit values after the payload was sent and think they were saved.
   const frozen=Array.from(form.querySelectorAll('input,select,textarea,button')).map(el=>({el,disabled:el.disabled}));
@@ -443,7 +439,7 @@ function submitFinanceForm(){
   const button=document.getElementById('financeSubmitButton');if(button){button.disabled=true;button.textContent='登録しています…';}
   const err=document.getElementById('financeFormError');if(err)err.hidden=true;
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true||!result.id){
       const message='サーバーから登録完了を確認できませんでした。履歴を更新してから再試行してください。';
@@ -464,7 +460,7 @@ function submitFinanceForm(){
     if(kind==='receipt')loadFinanceOverview({force:true});
     else {loadMyFinanceItems({force:true});if(financeAccessAllowed())loadFinanceOverview({force:true});}
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     restore();
     const node=document.getElementById('financeFormError');
@@ -921,11 +917,11 @@ function financeSubmitDecision(kind,id,decision){
   if(financeUi.busy||!financeAccessAllowed())return;
   const el=document.getElementById('financeDecisionReason'),reason=el&&el.value||'';
   if(decision==='RETURN'&&!reason.trim()){showToast('差戻し理由を入力してください');return;}
-  const identity=financeIdentity();financeUi.busy=true;
+  const ui=financeUi,identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='処理しています…';}
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='処理結果を確認できませんでした。最新の情報を確認してください。';}
@@ -934,7 +930,7 @@ function financeSubmitDecision(kind,id,decision){
     const auditWarning=financeTrackAuditResult_(result);
     closeModal();showToast(auditWarning?'申請の処理は保存済みですが監査ログを確認できません。':'処理しました');loadFinanceOverview({force:true});
   }).withFailureHandler(err=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     const node=document.getElementById('financeDecisionError');
     if(node){node.hidden=false;node.textContent=cleanApiErrorMessage(err,'処理できませんでした。');}
@@ -961,11 +957,11 @@ function financeSubmitSettlement(kind,id){
   if(financeUi.busy||!financeAccessAllowed())return;
   const paid=document.getElementById('financePaidOn'),received=document.getElementById('financeReceivedOn');
   if(!paid||!paid.value){showToast('精算日を入力してください');return;}
-  const identity=financeIdentity();financeUi.busy=true;
+  const ui=financeUi,identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='確認を登録しています…';}
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
       if(node){node.hidden=false;node.textContent='精算登録の結果を確認できませんでした。履歴を再確認してください。';}
@@ -974,7 +970,7 @@ function financeSubmitSettlement(kind,id){
     const auditWarning=financeTrackAuditResult_(result);
     closeModal();showToast(auditWarning?'精算状態は保存済みですが監査ログを確認できません。':'精算済みに更新しました');loadFinanceOverview({force:true});
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity())return;
+    if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     const node=document.getElementById('financeDecisionError');
     if(node){node.hidden=false;node.textContent=cleanApiErrorMessage(error,'精算確認に失敗しました。');}

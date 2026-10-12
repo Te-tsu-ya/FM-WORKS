@@ -16,7 +16,7 @@ function documentSetFilter(value){docUi.filter=Object.prototype.hasOwnProperty.c
 function documentSetQuery(value){docUi.query=String(value||'').slice(0,120);renderPageIfActive('documentHistory');const input=document.getElementById('docHistorySearch');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}}
 function documentOpenRecord(id){
  if(docUi.busy||!state.sessionToken)return;
- const key=String(id),identity=quoteIdentity_();
+ const ui=docUi,key=String(id),identity=quoteIdentity_();
  if(docUi.cacheIdentity!==identity){
   docUi.cacheIdentity=identity;docUi.detailCache=new Map();
   docUi.selected=null;docUi.selectedId='';docUi.loading=false;
@@ -30,13 +30,13 @@ function documentOpenRecord(id){
  const seq=++docUi.requestSeq,entry=docUi.detailCache.get(key);
  if(entry&&revision&&entry.revision===revision){
   docUi.detailCache.delete(key);docUi.detailCache.set(key,entry);
-  docUi.loading=false;docUi.selected=entry.details;
+  docUi.loading=false;docUi.selected=entry.details;docUi.selectedRevision=revision;
   renderPageIfActive('documentHistory');
   return;
  }
  // A new selection must never display the previously selected document.
  docUi.selected=null;docUi.loading=true;renderPageIfActive('documentHistory');
- const isCurrent=()=>identity===quoteIdentity_()&&seq===docUi.requestSeq&&docUi.selectedId===key;
+ const isCurrent=()=>ui===docUi&&identity===quoteIdentity_()&&seq===docUi.requestSeq&&docUi.selectedId===key;
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
   if(!isCurrent())return;
   docUi.loading=false;
@@ -44,8 +44,9 @@ function documentOpenRecord(id){
    docUi.error='書類の詳細を確認できませんでした。更新して再試行してください。';
    renderPageIfActive('documentHistory');return;
   }
-  docUi.selected=result;
   const latest=(quoteUi.data&&quoteUi.data.relatedDocs||[]).find(row=>String(row.id)===key);
+  if(latest&&String(latest.updatedAt||'')!==revision){documentOpenRecord(key);return;}
+  docUi.selected=result;docUi.selectedRevision=revision;
   if(revision&&latest&&String(latest.updatedAt||'')===revision){
    docUi.detailCache.delete(key);
    docUi.detailCache.set(key,{revision,details:result});
@@ -59,10 +60,17 @@ function documentOpenRecord(id){
   renderPageIfActive('documentHistory');
  }).getRelatedDocument(state.sessionToken,key);
 }
+function documentReconcileList_(){
+ const ui=docUi;if(!ui.selected||ui.loading)return;
+ const latest=(quoteUi.data&&quoteUi.data.relatedDocs||[]).find(row=>String(row.id)===ui.selectedId);
+ if(latest&&String(latest.updatedAt||'')!==ui.selectedRevision){
+  ui.detailCache.delete(ui.selectedId);documentOpenRecord(ui.selectedId);
+ }
+}
 function documentPreviewHtml_(result){if(!result||!result.header)return '';const h=result.header,label=DOC_LABELS[h.kind]||'書類';let html=quotePreviewDocument_(Object.assign({},h,{quoteDate:h.documentDate,lines:result.lines}));html=html.replace('<h2>見積書</h2>','<h2>'+label+'</h2>');html=html.replace('見積番号：','書類番号：').replace('見積日：','発行日：');html=html.replace('お見積金額（税込）',h.kind==='invoice'?'ご請求金額（税込）':h.kind==='receipt'?'領収金額（税込）':'納品金額（税込）');const extra=h.kind==='receipt'?'入金確認日：'+escapeHtml(h.paidDate||''):h.kind==='invoice'?'お支払期限：'+escapeHtml(h.dueDate||''):'納品日：'+escapeHtml(h.dueDate||'');html=html.replace("<div class='qb-paper-condition'>","<div class='qb-paper-condition'><span>"+extra+"</span>");return html;}
 function documentSaveFile_(file){const decoded=atob(file.base64),bytes=new Uint8Array(decoded.length);for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);const url=URL.createObjectURL(new Blob([bytes],{type:file.mimeType})),a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-function documentDownload(id,format){if(docUi.busy||docUi.loading)return;docUi.busy=true;const identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(file=>{if(identity!==quoteIdentity_())return;docUi.busy=false;try{documentSaveFile_(file);showToast(file.name+' を保存しました');}catch(_){docUi.error='保存に失敗しました。再試行してください。';}renderPageIfActive('documentHistory');}).withFailureHandler(err=>{if(identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(err,'ファイルを取得できませんでした');renderPageIfActive('documentHistory');}).getRelatedDocumentFile(state.sessionToken,String(id),format);}
-function documentRetry(id){if(docUi.busy)return;docUi.busy=true;docUi.error='';const identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{if(identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' の書類を発行しました');loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(id);}).withFailureHandler(error=>{if(identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'再発行に失敗しました');renderPageIfActive('documentHistory');}).retryRelatedDocument(state.sessionToken,String(id));}
+function documentDownload(id,format){if(docUi.busy||docUi.loading)return;docUi.busy=true;const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(file=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;try{documentSaveFile_(file);showToast(file.name+' を保存しました');}catch(_){docUi.error='保存に失敗しました。再試行してください。';}renderPageIfActive('documentHistory');}).withFailureHandler(err=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(err,'ファイルを取得できませんでした');renderPageIfActive('documentHistory');}).getRelatedDocumentFile(state.sessionToken,String(id),format);}
+function documentRetry(id){if(docUi.busy)return;docUi.busy=true;docUi.error='';const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' の書類を発行しました');docUi.detailCache.delete(String(id));loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(id);}).withFailureHandler(error=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'再発行に失敗しました');renderPageIfActive('documentHistory');}).retryRelatedDocument(state.sessionToken,String(id));}
 function documentCreateFromQuote(kind,quoteId){
  if(docUi.busy)return;const type=DOC_LABELS[kind];if(!type||kind==='quote')return;
  const data=quoteUi.data||{};if(data.documentsSetupRequired){showToast('管理者が関連書類用DBのバックアップ付き更新を行ってください。');return;}
@@ -84,7 +92,7 @@ function documentCreateFromQuote(kind,quoteId){
    "<p class='doc-modal-note'>発行すると独立した番号でPDFとExcelを保存します。発行後は元見積を変更しません。</p>"+
    "<div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button><button type='button' class='primary-button' data-kind='"+kind+"' data-id='"+escapeHtml(quoteId)+"' onclick='documentConfirmIssue(this.dataset.kind,this.dataset.id)'>発行内容を確定</button></div></section>";
 }
-function documentConfirmIssue(kind,quoteId){if(docUi.busy)return;const date=document.getElementById('docIssueDate'),due=document.getElementById('docDueDate'),note=document.getElementById('docIssueNote'),paid=document.getElementById('docPaidConfirmed');if(!date||!date.value||!due||!due.value){showToast('発行日と必要な日付を入力してください。');return;}if(kind==='receipt'&&!(paid&&paid.checked)){showToast('実際の入金確認が必要です。');return;}const payload={requestKey:docUi.requestKey,documentDate:date.value,dueDate:kind==='receipt'?'':due.value,paidDate:kind==='receipt'?due.value:'',paidConfirmed:!!(paid&&paid.checked),note:note&&note.value||''};docUi.busy=true;closeModal();showToast('帳票ファイルを生成しています…');const identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{if(identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' を正式発行しました');docUi.filter='all';navigate('documentHistory');loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(result.id);}).withFailureHandler(error=>{if(identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'発行できませんでした');renderPageIfActive('documentHistory');showToast(docUi.error);}).createRelatedDocument(state.sessionToken,String(quoteId),kind,payload);}
+function documentConfirmIssue(kind,quoteId){if(docUi.busy)return;const date=document.getElementById('docIssueDate'),due=document.getElementById('docDueDate'),note=document.getElementById('docIssueNote'),paid=document.getElementById('docPaidConfirmed');if(!date||!date.value||!due||!due.value){showToast('発行日と必要な日付を入力してください。');return;}if(kind==='receipt'&&!(paid&&paid.checked)){showToast('実際の入金確認が必要です。');return;}const payload={requestKey:docUi.requestKey,documentDate:date.value,dueDate:kind==='receipt'?'':due.value,paidDate:kind==='receipt'?due.value:'',paidConfirmed:!!(paid&&paid.checked),note:note&&note.value||''};docUi.busy=true;closeModal();showToast('帳票ファイルを生成しています…');const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' を正式発行しました');docUi.filter='all';navigate('documentHistory');loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(result.id);}).withFailureHandler(error=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'発行できませんでした');renderPageIfActive('documentHistory');showToast(docUi.error);}).createRelatedDocument(state.sessionToken,String(quoteId),kind,payload);}
 function documentHistoryPage(){
  const data=quoteUi.data,rows=documentRowsClient_(),selected=state.sessionToken&&docUi.cacheIdentity===quoteIdentity_()&&docUi.selected&&docUi.selected.header&&docUi.selected.header.id===docUi.selectedId?docUi.selected:null;
  const filters=[['all','すべて'],['quote','見積書'],['invoice','請求書'],['delivery','納品書'],['receipt','領収書']];

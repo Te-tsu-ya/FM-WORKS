@@ -17,7 +17,7 @@ function quoteNewKey_(){
 }
 function loadQuoteWorkspace(options={}){
   if(!state.sessionToken||!state.data)return;
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   if(!options.force&&quoteUi.data&&quoteUi.identity===identity&&Date.now()-quoteUi.at<QUOTE_UI_TTL)return;
   if(quoteUi.loading){
     if(options.force)quoteUi.refreshNeeded=true;
@@ -26,7 +26,7 @@ function loadQuoteWorkspace(options={}){
   quoteUi.loading=true;quoteUi.error='';quoteUi.identity=identity;
   if(!options.silent&&state.page==='quotes')renderPageIfActive('quotes');
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-    if(identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    if(ui!==quoteUi||identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
     quoteUi.loading=false;
     // Do not render an older snapshot after a save or forced refresh.
     if(quoteUi.refreshNeeded){
@@ -41,13 +41,14 @@ function loadQuoteWorkspace(options={}){
       return;
     }
     quoteUi.data=data;quoteUi.at=Date.now();quoteUi.error='';
+    if(typeof documentReconcileList_==='function')documentReconcileList_();
     if(quoteUi.pendingVendorCode&&quoteUi.editor&&data.vendors.some(v=>v.code===quoteUi.pendingVendorCode)){
       quoteUi.editor.vendorCode=quoteUi.pendingVendorCode;quoteUi.dirty=true;quoteUi.pendingVendorCode='';
     }
     quoteRenderWorkspace_();renderPageIfActive('documentHistory');
     if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    if(ui!==quoteUi||identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
     quoteUi.loading=false;
     if(quoteUi.refreshNeeded){
       quoteUi.refreshNeeded=false;
@@ -77,13 +78,13 @@ function quoteSetupStorage_(){
 function quoteConfirmSetupStorage_(){
   if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
   closeModal();quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast('見積書の保存先を準備しました');
     loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'DB初期化に失敗しました');
     renderPageIfActive('quotes');
   }).migrateDatabaseToCurrent(state.sessionToken);
@@ -114,13 +115,13 @@ function quoteAddSingleVendor_(){
   }
   quoteUi.busy=true;quoteUi.pendingVendorCode=vendor.code;
   closeModal();
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast('取引先を登録しました。採番を確認すると正式発行できます');
     loadQuoteWorkspace({force:true,silent:true});
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');
     renderPageIfActive('quotes');
   }).importQuoteVendors(state.sessionToken,[vendor]);
@@ -155,16 +156,20 @@ function quoteBack(){
 }
 function quoteOpen(id){
   if(quoteUi.busy||!state.sessionToken)return;
+  if(quoteUi.editor&&quoteUi.dirty){
+    quoteUi.mode='edit';renderPageIfActive('quotes');
+    showToast('入力途中の見積を保存するか、取消してから別の見積を開いてください。');return;
+  }
   quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;
     quoteUi.id=String(id);quoteUi.details=result;quoteUi.editor=Object.assign({},result.header,{lines:result.lines});
     quoteUi.mode=result.header.status==='下書き'?'edit':'detail';
     quoteUi.key=quoteNewKey_();quoteUi.dirty=false;renderPageIfActive('quotes');
   }).withFailureHandler(err=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(err,'見積を開けませんでした。');renderPageIfActive('quotes');
   }).getQuote(state.sessionToken,id);
 }
@@ -308,15 +313,15 @@ function quoteSaveDraft(){
   if(!obj.vendorCode){showToast('取引先を選択してください');return;}
   if(!obj.lines.length){showToast('明細を1行以上入力してください');return;}
   quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.editor.id=result.id;quoteUi.editor.revision=result.revision;
     quoteUi.id=result.id;quoteUi.dirty=false;quoteUi.key=quoteNewKey_();
     showToast(result.duplicate?'保存済みの内容です':'下書きを保存しました');
     loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'下書きを保存できませんでした');
     renderPageIfActive('quotes');
   }).saveQuoteDraft(state.sessionToken,obj);
@@ -337,15 +342,15 @@ function quotePerformIssue(){
   if(!e||!e.id||quoteUi.busy||quoteUi.dirty)return;
   closeModal();
   quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.mode='detail';showToast('見積書 '+result.number+' を正式発行しました');
     quoteUi.editor.status='発行済';quoteUi.editor.number=result.number;
     loadQuoteWorkspace({force:true,silent:true});
     quoteOpen(result.id);
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'正式発行に失敗しました');
     loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
   }).issueQuote(state.sessionToken,e.id,e.revision);
@@ -353,9 +358,9 @@ function quotePerformIssue(){
 function quoteDownload(format){
   if(quoteUi.busy||quoteUi.mode!=='detail'||!quoteUi.id)return;
   quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;
     try{
       const decoded=atob(data.base64),bytes=new Uint8Array(decoded.length);
@@ -368,7 +373,7 @@ function quoteDownload(format){
     }catch(e){quoteUi.error='ファイルの保存に失敗しました。もう一度お試しください。';}
     renderPageIfActive('quotes');
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'ファイルを取得できませんでした');
     renderPageIfActive('quotes');
   }).getQuoteDocument(state.sessionToken,quoteUi.id,format);
@@ -494,13 +499,13 @@ function quoteImportVendors(){
     .map(r=>({name:r[0],code:r[1],invoice:r[2]||'',address:r[3]||'',industry:''}));
   if(!data.length){showToast('ExcelのA〜D列を貼り付けてください');return;}
   quoteUi.busy=true;
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast(result.created+'件追加、'+result.updated+'件更新しました');
     loadQuoteWorkspace({force:true});
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');renderPageIfActive('quotes');
   }).importQuoteVendors(state.sessionToken,data);
 }
@@ -522,12 +527,12 @@ function quoteCommitSequence(code,raw){
   if(quoteUi.busy)return;
   closeModal();
   quoteUi.busy=true;
-  const identity=quoteIdentity_();
+  const ui=quoteUi,identity=quoteIdentity_();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;showToast('採番設定を保存しました');loadQuoteWorkspace({force:true});
   }).withFailureHandler(error=>{
-    if(identity!==quoteIdentity_())return;
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
     quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'採番設定を保存できませんでした');renderPageIfActive('quotes');
   }).configureQuoteSequence(state.sessionToken,code,Number(raw));
 }

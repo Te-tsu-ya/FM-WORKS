@@ -108,17 +108,11 @@ function financeRows_(kind,employeeId,limit,verified){
   if(!sheet)throw new Error('経理シートが見つかりません。再読込してください。');
   const last=sheet.getLastRow(),cols=model.keys.length;
   if(last<2)return [];
-  let source=null;
-  // Personal history: scan the inexpensive owner-ID column first. On a large
-  // shared sheet with only a few owned records, fetch those exact rows only.
-  if(employeeId&&last>100){
-    const owners=sheet.getRange(2,3,last-1,1).getDisplayValues(),numbers=[];
-    owners.forEach((row,i)=>{if(String(row[0])===String(employeeId))numbers.push(i+2);});
-    if(numbers.length<=10){
-      source=numbers.map(n=>sheet.getRange(n,1,1,cols).getDisplayValues()[0]);
-    }
-  }
-  if(source===null)source=sheet.getRange(2,1,last-1,cols).getDisplayValues();
+  // Reuse the common verified owner index and contiguous-row batching.
+  // Reads remain fresh; only matching records cross from Sheets into GAS.
+  const source=employeeId&&last>100
+    ?readRowsByColumnValues_(sheet,3,cols,[employeeId])
+    :sheet.getRange(2,1,last-1,cols).getDisplayValues();
   const rows=source.map(row=>financeTransportRow_(kind,row))
     .filter(item=>item.id&&(!employeeId||item.employeeId===employeeId));
   rows.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));

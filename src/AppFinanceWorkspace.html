@@ -326,7 +326,7 @@ function financeBulkNext_(){
  renderPageIfActive('finance');
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
   .withSuccessHandler(result=>{
-   if(identity!==financeIdentity())return;
+   if(ui!==financeBulkUi||identity!==financeIdentity())return;
    ui.busy=false;
    if(!result||result.ok!==true||!Array.isArray(result.results)||
       result.results.length!==chunk.length||result.results.some(x=>!x.id)){
@@ -337,7 +337,7 @@ function financeBulkNext_(){
    ui.index+=chunk.length;ui.uncertain=false;ui.notice='登録結果を確認：'+ui.index+'/'+ui.rows.length+'件';
    financeBulkNext_();
   }).withFailureHandler(error=>{
-   if(identity!==financeIdentity())return;
+   if(ui!==financeBulkUi||identity!==financeIdentity())return;
    ui.busy=false;ui.uncertain=true;
    ui.error=cleanApiErrorMessage(error,'保存結果が不明です。同じ送信キーで再試行してください。')+
      '　すでに保存された行がある可能性があります。内容を変えずに「同じ内容で再試行」を押してください。';
