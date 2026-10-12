@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');
-const deploy=fs.readFileSync('.github/workflows/deploy.yml','utf8');
+const ci=fs.readFileSync('.github/workflows-disabled/ci.yml','utf8');
+const deploy=fs.readFileSync('.github/workflows-disabled/deploy.yml','utf8');
 const pre=deploy.indexOf('      - name: Validate production deployment preflight');
 const push=deploy.indexOf('      - name: Push source to Apps Script');
 const release=deploy.indexOf('      - name: Update and verify existing web app deployment');
@@ -18,5 +18,5 @@ assert.match(deploy,/exit 1/,'invalid deployment must stop the workflow');
 assert.ok(!deploy.includes('source was pushed but web app deployment was not updated.'),
  'silent green deployment after source-only push is forbidden');
 assert.ok(!deploy.includes('clasp create-deployment\n'),'unbounded new public URLs are forbidden');
-assert.match(ci,/node scripts\/test_deploy_gate\.mjs/,'CI must enforce deployment checks');
-console.log('PASS: protected existing GAS deployment preflight, linked version verification and fail-closed behavior');
+assert.match(ci,/node scripts\/test_deploy_gate\.mjs/,'archived deployment reference preserves historical safeguards');
+console.log('PASS: archived protected GAS deployment preflight, linked version verification and fail-closed behavior');

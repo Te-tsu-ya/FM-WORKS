@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 const root = path.resolve(process.cwd());
 const required = [
   'src/appsscript.json','src/Code.gs','src/CashFlow.gs','src/CashFlowBank.gs','src/CashFlowAnalysis.gs','src/CashFlowReport.gs','src/Finance.gs','src/FinanceAdvisor.gs','src/Quotes.gs','src/Documents.gs','src/AnnualLeaveAutomation.gs','src/Auth.gs','src/Worklog.gs','src/Requests.gs','src/Monthly.gs','src/MonthlySnapshot.gs','src/LeaveLedger.gs','src/Labor.gs','src/Schema.gs','src/DataAccess.gs','src/Employees.gs','src/Search.gs','src/Notifications.gs','src/Maintenance.gs','src/Holidays.gs','src/Projects.gs','src/ProjectHub.gs','src/ProjectAdvanced.gs','src/StylesProjectHub.html','src/Docs.gs','src/GeneratedDocs.gs','src/Somu.gs','src/SomuGrowth.gs','src/Index.html','src/Styles.html','src/StylesWorkflowV15.html','src/StylesFinanceAdvisor.html','src/StylesCashFlow.html','src/StylesCashFlowBank.html','src/StylesCashFlowPaste.html','src/StylesCashFlowAnalysis.html','src/StylesCompanyDocs.html','src/StylesSomu.html','src/StylesSomuGrowth.html','src/AppSomu.html','src/AppSomuGrowth.html','src/AppProjectHub.html','src/AppProjectAdvanced.html','src/AppCompanyDocs.html','src/CompanyDocs.gs','src/App.html','src/AppCore.html','src/AppHomePortal.html','src/AppOperations.html','src/AppPeopleMonthly.html','scripts/fixtures/AppLeaveDemo.html','src/AppOffice.html','src/AppQuotes.html','src/AppDocuments.html','src/AppFinance.html','src/AppFinanceAdvisor.html','src/AppCashFlow.html','src/AppCashFlowGrid.html','src/StylesCashFlowGrid.html','src/AppCashFlowBank.html','src/AppCashFlowBankGrid.html','src/StylesCashFlowBankGrid.html','src/AppCashFlowPaste.html','scripts/fixtures/AppCashFlowDemo.html','src/AppCashFlowAnalysis.html','src/AppAdmin.html','src/AppShell.html','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md','docs/UI_DESIGN_SYSTEM.md','docs/OFFICE_SOURCE_MAPPING.md',
-  '.github/workflows/ci.yml','.github/workflows/deploy.yml','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_global_search.mjs','scripts/test_search_schedule_index.mjs','scripts/test_data_access_performance.mjs','scripts/test_worklog_link_index.mjs','scripts/test_punch_history_index.mjs','scripts/test_finance_integration.mjs','scripts/test_cashflow.mjs','scripts/test_cashflow_client.mjs','scripts/test_cashflow_bank.mjs','scripts/test_cashflow_analysis.mjs','scripts/test_cashflow_analysis_client.mjs','scripts/test_cashflow_analysis_viewport.mjs','scripts/test_cashflow_bank_client.mjs','scripts/test_cashflow_sandbox.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_somu_growth.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs','src/RotaryEngine.html','src/AppRotaryIntegration.html','src/StylesRotaryLoader.html','scripts/test_rotary_integration.mjs','scripts/test_rotary_viewport.mjs'
+  'scripts/local-checks.json','scripts/local-checks.json','docs/SETUP.md','scripts/test_client_contract.mjs','scripts/test_global_search.mjs','scripts/test_search_schedule_index.mjs','scripts/test_data_access_performance.mjs','scripts/test_worklog_link_index.mjs','scripts/test_punch_history_index.mjs','scripts/test_finance_integration.mjs','scripts/test_cashflow.mjs','scripts/test_cashflow_client.mjs','scripts/test_cashflow_bank.mjs','scripts/test_cashflow_analysis.mjs','scripts/test_cashflow_analysis_client.mjs','scripts/test_cashflow_analysis_viewport.mjs','scripts/test_cashflow_bank_client.mjs','scripts/test_cashflow_sandbox.mjs','scripts/test_quote_integration.mjs','scripts/test_quote_viewport.mjs','scripts/test_modal_theme.mjs','scripts/test_office_viewport.mjs','scripts/test_workflow_viewport_v15.mjs','scripts/test_somu_integration.mjs','scripts/test_somu_client.mjs','scripts/test_somu_viewport.mjs','scripts/test_somu_growth.mjs','scripts/test_company_documents_client.mjs','scripts/test_company_documents_viewport.mjs','src/RotaryEngine.html','src/AppRotaryIntegration.html','src/StylesRotaryLoader.html','scripts/test_rotary_integration.mjs','scripts/test_rotary_viewport.mjs'
 ];
 let failed = false;
 for (const file of required) {
@@ -194,7 +194,7 @@ if(!app.includes("'quotes','書類作成'")||!app.includes("'documentHistory','�
  !indexText.includes("include_('AppQuotes')")||!indexText.includes("include_('AppDocuments')")){
  console.error('All-employee estimates must be a visible, routed application page.');failed=true;
 }
-if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8').includes('node scripts/test_quote_integration.mjs')){
+if(!fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8').includes('node scripts/test_quote_integration.mjs')){
  console.error('Quote integration must run as an enforced CI step.');failed=true;
 }
 
@@ -220,8 +220,8 @@ for(const marker of ['quoteConfirmDiscard()','quoteIssue()','quoteQuickVendorDia
   "documentCreateFromQuote('receipt'",'contrastRatio','data-theme','modal-card']){
   if(!modalQaText.includes(marker)){console.error('Theme-aware modal visual QA missing: '+marker);failed=true;}
 }
-if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8').includes('node scripts/test_modal_theme.mjs') ||
-   !fs.readFileSync(path.join(root,'.github/workflows/deploy.yml'),'utf8').includes('node scripts/test_modal_theme.mjs')){
+if(!fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8').includes('node scripts/test_modal_theme.mjs') ||
+   !fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8').includes('node scripts/test_modal_theme.mjs')){
   console.error('Modal contrast QA must gate both PR validation and production deployment.');failed=true;
 }
 
@@ -231,8 +231,8 @@ const requestCodeText = fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8'
 const employeeCodeText = fs.readFileSync(path.join(root,'src/Employees.gs'),'utf8');
 const maintenanceCodeText = fs.readFileSync(path.join(root,'src/Maintenance.gs'),'utf8');
 const notificationCodeText = fs.readFileSync(path.join(root,'src/Notifications.gs'),'utf8');
-const deployWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/deploy.yml'),'utf8');
-const ciWorkflowText = fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+const deployWorkflowText = fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8');
+const ciWorkflowText = fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8');
 
 for (const marker of [
   'const canApproveRequests = !!getPermissions_(employee).requestApprove',
@@ -296,11 +296,13 @@ if (!deployWorkflowText.includes('node scripts/test_client_contract.mjs')) {
   console.error('Deploy workflow must run client contract tests before deployment.');
   failed = true;
 }
-for (const workflow of [deployWorkflowText,ciWorkflowText]) {
-  if (!workflow.includes('actions/checkout@v5') || !workflow.includes('actions/setup-node@v6') || !workflow.includes("node-version: '24'")) {
-    console.error('GitHub Actions workflow must use Node 24-compatible action/runtime versions.');
-    failed = true;
-  }
+const localChecksPolicy=JSON.parse(ciWorkflowText);
+if(localChecksPolicy.policy!=='GPT_ONLY_NO_GITHUB_ACTIONS'){
+  console.error('Tests must run in GPT, without GitHub Actions.');failed=true;
+}
+const activeWorkflowDir=path.join(root,'.github/workflows');
+if(fs.existsSync(activeWorkflowDir)&&fs.readdirSync(activeWorkflowDir).some(p=>/\.ya?ml$/i.test(p))){
+  console.error('Active GitHub Actions workflows are forbidden by AGENTS.md.');failed=true;
 }
 for (const unlabeledClose of [
   "<button class='icon-button' onclick='closeModal()'>×</button>",
@@ -881,7 +883,7 @@ if(indexText.includes("include_('AppLeaveDemo')")||app.includes('leaveDemoOpen()
 
 /* v0.12.0 universal design-system and office scaffold guardrails */
 const officePreview=fs.readFileSync(path.join(root,'src','AppOffice.html'),'utf8');
-const workflowQa=fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+const workflowQa=fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8');
 if(!workflowQa.includes('node scripts/test_workflow_viewport_v15.mjs')){
   console.error('Unified business viewport test must run in CI.');failed=true;
 }
@@ -936,7 +938,7 @@ for(const marker of [
 ]){
  if(!styles.includes(marker)){console.error('Office responsive design missing: '+marker);failed=true;}
 }
-if(!fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8')
+if(!fs.readFileSync(path.join(root,'scripts/local-checks.json'),'utf8')
    .includes('node scripts/test_office_viewport.mjs')){
  console.error('Office browser viewport QA must be an enforced CI step.');failed=true;
 }
@@ -973,7 +975,7 @@ if(!indexText.includes("include_('StylesWorkflowV15')")||
 }
 
 /* v0.13.0 finance least-privilege and schema integration. */
-for(const workflow of ['.github/workflows/ci.yml','.github/workflows/deploy.yml']){
+for(const workflow of ['scripts/local-checks.json','scripts/local-checks.json']){
   if(!fs.readFileSync(path.join(root,workflow),'utf8').includes('node scripts/test_finance_integration.mjs')){
     console.error('Missing finance integration test in '+workflow);failed=true;
   }

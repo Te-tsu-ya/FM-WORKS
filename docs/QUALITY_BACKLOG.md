@@ -1,5 +1,7 @@
 # FM WORKS Quality Backlog
 
+> **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
+
 **基準:** 2026-10-07 v0.8.4酷評結果を、修正可能な品質バックログへ変換したもの。  
 **完了条件:** Critical=0 / High=0。その後Mediumを費用対効果順に処理する。
 
