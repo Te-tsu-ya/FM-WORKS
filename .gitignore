@@ -7,3 +7,6 @@ node_modules/
 *.log
 coverage/
 src/GeneratedDocs.gs
+
+# GPT-local verification output (never upload to Actions)
+artifacts/

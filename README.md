@@ -1,10 +1,12 @@
 # FM WORKS
 
+> **2026-10-12 運用変更:** 最初に [`AGENTS.md`](AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
+
 ## 勤怠管理アプリ（GAS公開URL）
 
 **[FM WORKS アプリを開く](https://script.google.com/macros/s/AKfycbw7oWIZkrOE-ClTVNeI0Kq4hzsZrYaKSC0CqNVsV4bwpufgBVR5-7MYxVEuj_51A9YgvQ/exec)**
 
-公開先は既存のGoogle Apps Scriptウェブアプリです。GitHub Actionsによるデプロイ後は、このURLから動作確認してください。
+公開先は既存のGoogle Apps Scriptウェブアプリです。認証済みの直接公開後に、このURLから動作確認してください。
 
 Fusion Mind社内向けの統合ワークポータルです。
 
@@ -40,7 +42,7 @@ Fusion Mind社内向けの統合ワークポータルです。
 - Data: Google Sheets「FM WORKS DB」
 - Export / Storage: Google Drive
 - Source control: GitHub
-- Deployment: clasp + GitHub Actions
+- Deployment: ローカルclasp / 認証済みApps Script直接操作（Actions禁止）
 
 ## 認証・セキュリティ
 
@@ -108,7 +110,7 @@ Fusion Mind社内向けの統合ワークポータルです。
 - 経費・出張の差戻し後再申請、承認時詳細確認、証憑番号による経費と申請の金額照合を追加。
 - DB更新前に既存の見出し不一致を検査し、想定外の構造に対する部分的更新を防止。
 - 承認待ち優先表示、追加読込、長期日付期間の範囲外混入防止を追加。
-- 変更の検証はGitHub ActionsのCIで行い、本番DBの移行・データ更新は自動実行しない。
+- 変更の検証はGPT環境のローカル実行で行い、本番DBの移行・データ更新は自動実行しない。
 
 
 ## v0.13.2 画面高速化
