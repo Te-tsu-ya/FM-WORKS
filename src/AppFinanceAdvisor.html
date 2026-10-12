@@ -14,24 +14,30 @@ function financeCloseInsights(){
 function financeInsightsYear(value){
   const year=Number(value);
   if(!Number.isInteger(year))return;
+  if(year===financeUi.insightYear){financeLoadInsights();return;}
+  financeUi.insightRefreshNeeded=false;
   financeUi.insightYear=year;financeUi.insights=null;financeUi.insightLoading=false;financeUi.insightQuery='';financeUi.insightPayer='';
   financeLoadInsights();
 }
 function financeLoadInsights(force=false){
-  if(!financeAccessAllowed()||!state.sessionToken||financeUi.insightLoading)return;
-  const identity=financeIdentity(),year=financeUi.insightYear;
+  if(!financeAccessAllowed()||!state.sessionToken)return;
+  if(financeUi.insightLoading){if(force)financeUi.insightRefreshNeeded=true;return;}
+  const ui=financeUi,identity=financeIdentity(),year=financeUi.insightYear;
   if(!force&&financeUi.insights&&financeUi.insightLoadedYear===year&&Date.now()-Number(financeUi.insightAt||0)<300000)return;
   const serial=financeUi.insightSerial=(financeUi.insightSerial||0)+1;
-  financeUi.insightLoading=true;financeUi.insightError='';
+  financeUi.insightLoading=true;financeUi.insightRefreshNeeded=false;financeUi.insightError='';
   renderPageIfActive('finance');
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-    if(identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
-    financeUi.insightLoading=false;financeUi.insights=data&&data.ok?data:null;financeUi.insightAt=Date.now();financeUi.insightLoadedYear=year;
+    if(ui!==financeUi||identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
+    financeUi.insightLoading=false;
+    if(financeUi.insightRefreshNeeded){financeUi.insightRefreshNeeded=false;financeLoadInsights(true);return;}
+    financeUi.insights=data&&data.ok?data:null;financeUi.insightAt=Date.now();financeUi.insightLoadedYear=year;
     financeUi.insightError=data&&!data.ok?data.message||'集計できませんでした。':'';
     renderPageIfActive('finance');
   }).withFailureHandler(error=>{
-    if(identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
+    if(ui!==financeUi||identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
     financeUi.insightLoading=false;
+    if(financeUi.insightRefreshNeeded){financeUi.insightRefreshNeeded=false;financeLoadInsights(true);return;}
     financeUi.insightError=cleanApiErrorMessage(error,'旧経費台帳を取得できませんでした。');
     renderPageIfActive('finance');
   }).getFinanceSpendingInsights(state.sessionToken,{year});
