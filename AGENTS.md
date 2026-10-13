@@ -23,3 +23,11 @@ CTOへの説明は `demo/data/financial.json` の架空データと `node script
 ## 改修の重点
 
 見積・経理・総務・プロジェクト・勤怠を社内業務として使いやすくする。不要な再取得と全件取得、古い非同期応答、保存後の表示更新漏れを優先して直す。認証・閲覧範囲・競合防止・監査を省いて高速化しない。
+
+
+## GASのGitHub Actions枠ゼロ運用（2026-10-13追加）
+
+- 新規 `scripts/gas_local_bridge.mjs` と `docs/GAS_NO_ACTIONS_BRIDGE.md` に、**所有者PC上の認証済みclasp** とGitHub通常ブランチによるクレジット不要の公開依頼を定義する。GitHub Actions・GitHub-hosted runner・self-hosted Actions workflowを有効にしない。
+- ユーザーの「GASへ公開」承認があり、PR統合と対象main SHAを確認した場合のみ、`deploy/gas-production` ブランチを最新main SHAへfast-forward更新する。これは**公開依頼**であり、GAS更新成功を意味しない。
+- `deploy/gas-published` はローカルブリッジが既存デプロイのバージョンとソース再取得を確認した場合だけ進む**配信受領SHA**。2つのSHAの一致でGASソース反映が確認できるが、ログイン後ブラウザー操作・DB動作の受入は別途必要。
+- 初回Google認証とMac/Windowsの起動・登録は所有者側で一度設定する必要がある。公開先を変えず、Script ID・Google OAuthトークン・社員データをGitHubやチャットへ載せない。PC停止中は待機であり、無制限・無料を保証しない。
