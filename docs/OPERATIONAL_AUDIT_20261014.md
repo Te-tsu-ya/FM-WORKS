@@ -38,7 +38,7 @@ GPT環境で `node scripts/run_local_checks.mjs --functional`: **49 PASS / 0 FAI
 
 新規合成計測: 同じ2件の取得を1件のRPCで処理。1000件中2件の一致本文だけを取得（転送データ6セル）。暖機後の静的HTML評価は0回。これらは構造上・合成データの検証であり、実GASでの秒数・P50/P95ではない。
 
-ブラウザー用Chromium実行ファイルがGPT環境にないため12画面テストは未実行。GASエディターのGoogleログインが切れており、再接続後に既存URLへ公開する。公開・実操作の完了は別のrelease記録に記載する。GitHub Actionsは使用しない。
+ブラウザー用Chromium実行ファイルがGPT環境にないため12画面テストは未実行。Googleログインを再接続し、2026-10-14 08:46 JSTに既存GASをv0.25.6／公開版194へ更新、公開URLのログイン表示と改修スクリプトの読込みを確認。業務PIN認証は安全な入力フォームの検証エラーで未完了。公開と実操作の範囲は `docs/releases/GAS_v0256_20261014_PUBLISHED.md`。GitHub Actionsは使用しない。
 
 ## 本番開始前に残る事項
 
