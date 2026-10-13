@@ -19,7 +19,7 @@ for(const file of fs.readdirSync('src').sort()){
  report.sourceHashes[file]=crypto.createHash('sha256').update(fs.readFileSync(path.join('src',file))).digest('hex');
 }
 const commands=[...plan.functional,...plan.browser];
-const extraInputs=['scripts/theme_styles.mjs'];
+const extraInputs=['scripts/theme_styles.mjs','demo/runtime.mjs','demo/server.mjs','demo/data/financial.json','scripts/start_demo.mjs','scripts/generate_repository_demo.mjs'];
 report.verificationHashes={};
 for(const file of [...new Set(['AGENTS.md','scripts/local-checks.json','scripts/run_local_checks.mjs','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',...extraInputs,...commands.map(c=>c.slice(5))])]){
  if(!/^node scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(commands.find(c=>c.slice(5)===file)||'')&&!['AGENTS.md','scripts/local-checks.json','scripts/run_local_checks.mjs','docs/REQUIREMENTS.md','docs/TECHNICAL_DESIGN.md',...extraInputs].includes(file))throw Error('Unsafe test input path.');

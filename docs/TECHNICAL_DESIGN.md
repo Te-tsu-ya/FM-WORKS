@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.3
+**文書版:** 0.25.4
 **更新日:** 2026-10-13
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2503,3 +2503,15 @@ PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS
 - 公開制約: ローカルChromeとGAS直接公開の認証は利用できない。クラウドブラウザーもfile://の確認用HTMLを安全設定で拒否した（http/httpsのみ許可）。迂回して同じHTMLを開かず、数値・コード・機能の検証で進める。GAS実表示・公開版・速度の実測は未確認として残す。
 
 - 追加検証修正: セッション削除のfixtureで日本の絶対時刻と環境ローカル時刻を混在させていたため、同じローカル基準の日時へ統一する。ローカルrunnerはGAS manifestのtimeZone（Asia/Tokyo）を各検証へ渡し、環境依存を除く。時刻ロジックそのものは変更しない。
+
+## v0.25.4 Account ledger and repository financial demonstration
+
+- `src/CashFlowLedger.gs` adds admin-only `getCashFlowLedgerRows(token,{year,accountId,kind,offset})` and `saveCashFlowLedgerRows(token,{accountId,rows})`. Reads join CFP bank transactions and CFA notes, expand active plans into fiscal month occurrences, return 50 rows plus full-period totals and an optional latest known balance anchor. Kind and offset are validated.
+- Writes normalize all 1–20 input rows before mutation; each stable request key becomes the actual bank external ID `LEDGER-<key>` and annotation key `<key>-NOTE`, or the scheduled-item request key. Existing account/transaction/plan/annotation methods retain their ScriptLock, revision, fiscal close, idempotency and audit handling. Reusing an actual key as a plan (or vice versa) is rejected.
+- The multi-row operation is **not an atomic database transaction**. A later failure can leave completed rows, or a transaction awaiting annotation. The client retains all exact input keys and resumes safely by retrying; tests inject this partial-save failure. A confirmed response must contain the expected count, kind and IDs. Saved bank source amounts remain immutable.
+- `src/AppCashFlowLedger.html` holds drafts in memory, uses the original Excel column order (date, description, OUT, IN, balance, category, note) plus kind, accepts rectangular TSV, and chunks writes into 20. Actual running balance calculation uses only a known saved anchor and rows dated at/after that anchor; planned balances and unknown anchors are not invented. Requests coalesce by year/account/kind/page, reuse a five-minute cache, and check UI object, serial, session identity and current query key. Save/manual refresh invalidate the cache. Unknown-save inputs are frozen and route/account/year changes blocked until same-key retry.
+- The bank workspace includes the vertical ledger and a fiscal-year horizontal aggregation. Actual months without imported records or a verified empty reconciliation are shown as unknown; annual actual totals explicitly cover only imported data. Existing detailed projections and reconciliation remain below.
+- `demo/server.mjs` is a loopback-only Node HTTP server with same-origin checks, bounded JSON input, an explicit RPC allowlist, and HttpOnly/SameSite browser session cookies. It assembles the real `src/Index.html` includes and injects an isolated `google.script.run` HTTP bridge. `demo/runtime.mjs` executes existing GAS business functions in a VM with in-memory Sheet/Range adapters. Finance spending reads the in-memory ledger rather than an external legacy workbook; live documentation reads the repository Markdown.
+- Each demo browser session gets a cloned `demo/data/financial.json`; writes stay in server memory and are lost on restart. The deterministic generator never reads Excel/Sheets/secrets. No original workbook values or real identifiers are imported. Production `Auth.gs` and database configuration are unchanged; demo authentication is a fake admin confined to this process. Google/Drive/HTTP service calls and unsupported RPCs fail explicitly.
+- Local demo coverage is finance/cashflow, not every business module or real exports/deployment. Full operational rollout still requires a shared persistence adapter, transaction/concurrency design, authorization, audits, backup/restore and file storage decisions with the CTO. README documents one-command startup and scope.
+- GPT-only checks add `test_repository_demo.mjs` (real GAS finance/ledger/annual calculation, idempotent/partial retry, isolated data, auth, HTTP and no external access) and `test_cashflow_ledger_client.mjs` (TSV, balances, cached/coalesced reads, stale responses, chunks, immutable retries and unknown months). Verification hashes include demo runtime, server, JSON, startup and generator. Browser rendering and authenticated GAS operations remain separate release evidence.

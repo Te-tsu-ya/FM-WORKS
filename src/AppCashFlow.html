@@ -8,6 +8,8 @@ function cashFlowThisYear_(){
  return m?Number(m[1])+(Number(m[2])===12?1:0):new Date().getFullYear();
 }
 function cashFlowDiscard_(next){
+ if(typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
+ if(typeof cflDirty_==='function'&&cflDirty_()){openConfirmDialog('台帳の未保存入力','保存していない台帳の入力を破棄して移動しますか？','入力を破棄して移動',()=>{cflUi.rows=[];cflUi.serial++;cflUi.data=null;cashFlowDiscard_(next);});return;}
  if(!cashFlowUi.dirty){next();return;}
  openConfirmDialog('未保存の変更',cashFlowUi.uncertain?'保存結果が未確認です。先に同じ内容と送信キーで再試行し、登録内容を照合してください。破棄すると再送の手掛かりがなくなります。破棄しますか？':'保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
 }
