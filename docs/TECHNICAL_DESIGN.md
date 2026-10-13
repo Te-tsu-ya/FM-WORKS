@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.4
+**文書版:** 0.25.5
 **更新日:** 2026-10-13
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2515,3 +2515,12 @@ PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS
 - Each demo browser session gets a cloned `demo/data/financial.json`; writes stay in server memory and are lost on restart. The deterministic generator never reads Excel/Sheets/secrets. No original workbook values or real identifiers are imported. Production `Auth.gs` and database configuration are unchanged; demo authentication is a fake admin confined to this process. Google/Drive/HTTP service calls and unsupported RPCs fail explicitly.
 - Local demo coverage is finance/cashflow, not every business module or real exports/deployment. Full operational rollout still requires a shared persistence adapter, transaction/concurrency design, authorization, audits, backup/restore and file storage decisions with the CTO. README documents one-command startup and scope.
 - GPT-only checks add `test_repository_demo.mjs` (real GAS finance/ledger/annual calculation, idempotent/partial retry, isolated data, auth, HTTP and no external access) and `test_cashflow_ledger_client.mjs` (TSV, balances, cached/coalesced reads, stale responses, chunks, immutable retries and unknown months). Verification hashes include demo runtime, server, JSON, startup and generator. Browser rendering and authenticated GAS operations remain separate release evidence.
+
+
+## v0.25.5 共通配色の誤置換修正と品質契約（2026-10-13）
+
+- v0.25.3の一括トークン化時、以前の白/半透明白が `var(--fill-danger)` に、淡い青/緑/灰が濃い `var(--fill-info)` / `var(--fill-success)` に誤変換され、ログイン・サイドバーやカードの背景が異常色になった。さらに一部の強い青色アクションが淡い `--info-bg` となっていた。
+- `src/Styles.html` のCSS宣言を変更前のソース（v0.25.2の既知版）と同一セレクター順・宣言位置で照合し、以前の配色の意味を復元。中立面→`--surface`/`--surface2`、淡色の状態面→`--info-bg`/`--success-bg`、実際の危険マーカー→`--fill-danger` とし、ロゴ/ログイン送信/進捗の青いグラデーションを復元する。
+- `src/StylesAccessibility.html` による可読性補強、Indexの読み込み順、DOM、GASの業務処理、v0.25.4金融機関別台帳とメモリー保存のデモ、DB/Sheetsは変更しない。
+- `scripts/test_theme_contrast.mjs` に背景の意味チェックを追加。主要な中立面で危険・強調色を使用しないこと、ログイン送信とロゴが淡すぎないこと、危険通知が赤色を維持することをCSSソース上で確認する。ブラウザーのcomputed style判定ではない。
+- GitHub Actionsを使わない。GitHubコード統合とGAS公開版更新を区別し、GAS v192はGitHubだけ変更しても更新されない。実機画面・認証付き操作・速度測定は未検証として残す。
