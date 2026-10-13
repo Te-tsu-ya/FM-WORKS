@@ -13,7 +13,7 @@ vm.runInContext(read('AppCashFlowBankGrid')+'\n'+read('AppCashFlowLedger'),ctx);
 const ui=()=>vm.runInContext('cflUi',ctx),row=(n=0)=>({date:'2026/10/13',description:'架空の入金'+n,outgoing:'',incoming:'1,000',balance:'',category:'売上',note:'',kind:'ACTUAL',requestKey:'LEDGER-CLIENT-ROW-'+n});
 ctx.cflLoad_();ctx.cflLoad_();assert.equal(calls.length,1,'coalesce repeated loads');
 calls.shift().ok({ok:true,total:1,rows:[],balanceAnchor:{date:'2026-10-12',balance:5000}});ctx.cflLoad_();assert.equal(calls.length,0,'fresh cache is reused');
-ctx.cflLoad_(true);const old=calls.shift();ctx.cashFlowUi.year=2027;old.ok({ok:true,rows:[{description:'OLD YEAR'}]});assert.equal(ui().data,null,'old-year response never replaces current data');
+ctx.cflLoad_(true);assert.equal(ui().data?.total,1,'same-page refresh retains the displayed ledger');const old=calls.shift();ctx.cashFlowUi.year=2027;old.ok({ok:true,rows:[{description:'OLD YEAR'}]});assert.equal(ui().data,null,'old-year response never replaces current data');
 ctx.cashFlowUi.year=2026;ctx.cflLoad_(true);calls.shift().ok({ok:true,total:1,rows:[],balanceAnchor:{date:'2026-10-12',balance:5000}});
 ui().rows=[row()];ctx.cflBalances_();assert.equal(ui().rows[0].balance,6000,'balance continues from the known last bank balance');
 let prevented=false;ctx.cflPaste_({clipboardData:{getData:()=> '2026/10/14\t架空出金\t250\t\t5750\t経費\tメモ\t実績'},preventDefault:()=>prevented=true},1,0);

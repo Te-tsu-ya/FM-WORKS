@@ -195,7 +195,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   if(state.page==='worklog')loadWorklogs({silent:true});
   if(state.page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
   if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
-  if(state.page==='quotes')loadQuoteWorkspace({silent:true});
+  if(state.page==='quotes'||state.page==='documentHistory')loadQuoteWorkspace({silent:true});
   if(state.page==='finance')loadFinanceOverview();
   if(state.page==='office'&&typeof somuLoad==='function')somuLoad(false);
   if(state.page==='companyDocs')loadCompanyDocs();
@@ -368,9 +368,11 @@ function openSearchResult(index){
 }
 
 function loadNotifications(){
-  if(!state.sessionToken)return;
+  if(!state.sessionToken||!state.data)return;
+  const requestToken=state.sessionToken,requestData=state.data;
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
     .withSuccessHandler(data=>{
+      if(requestToken!==state.sessionToken||requestData!==state.data)return;
       const dot=document.getElementById('notificationDot');
       if(dot)dot.hidden=!(data&&data.count);
       if(state.data&&data&&data.monthlyReview){
@@ -430,11 +432,18 @@ function toggleProfileMenu(){
 }
 function closeProfileMenu(){const menu=document.getElementById('profileMenu'),button=document.getElementById('profileButton');if(menu){menu.hidden=true}if(button)button.setAttribute('aria-expanded','false')}
 
-function performLogout(){
+function performLogout(confirmed=false){
+  if(typeof applicationWritePending_==='function'&&applicationWritePending_()){
+    showToast('保存中または保存結果が未確認です。処理を確認してからログアウトしてください。');return;
+  }
+  if(!confirmed&&typeof applicationUnsavedItems_==='function'){
+    const drafts=applicationUnsavedItems_();
+    if(drafts.length){openConfirmDialog('未保存の入力があります',drafts.join('・')+'の未保存入力は、ログアウトすると失われます。保存してから戻ることをおすすめします。','破棄してログアウト',()=>performLogout(true));return;}
+  }
   if(state.page==='companyDocs'&&typeof companyDocsConfirmLogout_==='function'&&
      !companyDocsConfirmLogout_())return;
   const token=state.sessionToken;
-  clearLocalSession();closeProfileMenu();document.getElementById('app').hidden=true;
+  clearLocalSession();closeProfileMenu();showLogin('ログアウトしました。');
   // A prior logout must not hide the application after a different user signs in.
   const completed=()=>{
     if(state.sessionToken||state.data)return;

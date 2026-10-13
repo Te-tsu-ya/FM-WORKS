@@ -12,7 +12,10 @@ let activity=null,sequence=0;
  * This measures browser-observed RPC round trips, not server-only execution. */
 const rpcPerfSamples=new Map();
 let rpcPerfGeneration=0;
-function rpcPerfReset(){rpcPerfGeneration++;rpcPerfSamples.clear();}
+let rpcCallbackGeneration=0,readGeneration=0;
+const sharedReads=new Map();
+let coalescedReads=0;
+function rpcPerfReset(){rpcPerfGeneration++;rpcPerfSamples.clear();coalescedReads=0;}
 function rpcPerfNow(){
  const perf=global.performance;
  return perf&&typeof perf.now==='function'?perf.now():Date.now();
@@ -34,7 +37,7 @@ function rpcPerfReport(){
   const value=p=>samples.length?samples[Math.max(0,Math.ceil(samples.length*p)-1)]:null;
   return {method,calls:row.calls,failures:row.failures,p50Ms:value(0.5),p95Ms:value(0.95),lastMs:row.lastMs};
  }).sort((a,b)=>(b.p95Ms||0)-(a.p95Ms||0)||a.method.localeCompare(b.method));
- return {scope:'current-browser-tab',sampleWindow:80,methods};
+ return {scope:'current-browser-tab',sampleWindow:80,coalescedReads,methods};
 }
 global.FMWorksPerformance=Object.freeze({report:rpcPerfReport,clear:rpcPerfReset});
 const authMethods=new Set(['getPublicAuthConfig','resumeSession','getInitialData','login','initializeFirstAdmin']);
@@ -142,6 +145,7 @@ if(error&&loader&&loader.state==='loading'){
 }else refresh(zone);
 }
 function reset(){
+ rpcCallbackGeneration++;readGeneration++;sharedReads.clear();
  for(const zone of ['page','region','inline']){
    pending[zone].clear();
    if(loaders[zone])loaders[zone].hide();
@@ -181,6 +185,20 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
  if(prop==='then')return undefined;
  if(typeof prop!=='string')return undefined;
  return (...args)=>{
+   const callbackGeneration=rpcCallbackGeneration;
+   const listener={success,failure,userObject,hasUserObject};
+   const read=/^(get|list|search|find)/.test(prop);
+   let key='';
+   if(read){
+     try{key=callbackGeneration+'|'+readGeneration+'|'+prop+'|'+JSON.stringify(args);}catch(_){}
+     const shared=key&&sharedReads.get(key);
+     if(shared){shared.listeners.push(listener);coalescedReads++;return;}
+   }else{
+     // A read begun before a write cannot satisfy a later refresh request.
+     readGeneration++;sharedReads.clear();
+   }
+   const entry={listeners:[listener]};
+   if(key&&sharedReads.size<32)sharedReads.set(key,entry);
    const tracking=ensureActivity();
    const task=tracking&&tracking.begin(prop);
    const perfStarted=rpcPerfNow(),perfGeneration=rpcPerfGeneration;
@@ -190,26 +208,33 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
      if(perfGeneration===rpcPerfGeneration)rpcPerfRecord(prop,perfStarted,!!error);
    };
    const finish=error=>{if(ended)return;ended=true;record(error);if(tracking)tracking.settle(task,error)};
+   const deliver=(failed,values)=>{
+     if(key&&sharedReads.get(key)===entry)sharedReads.delete(key);
+     if(callbackGeneration!==rpcCallbackGeneration){finish(null);return;}
+     record(failed?values[0]||new Error('GAS request failed'):null);
+     let thrown;
+     try{
+       if(failed&&/AUTH_REQUIRED|SESSION_EXPIRED/.test(String(values[0]&&values[0].message||values[0]))&&typeof global.handleApiError==='function')global.handleApiError(values[0]);
+       if(!failed&&typeof global.invalidateBusinessViewsAfterWrite==='function')global.invalidateBusinessViewsAfterWrite(prop,values[0]);
+       for(const target of entry.listeners){
+         if(callbackGeneration!==rpcCallbackGeneration)break;
+         const handler=failed?target.failure:target.success;
+         if(typeof handler!=='function')continue;
+         try{
+           // Shared reads give each consumer an independent snapshot.
+           const value=!failed&&entry.listeners.length>1&&values[0]!==undefined?JSON.parse(JSON.stringify(values[0])):values[0];
+           if(target.hasUserObject)handler(value,target.userObject);else handler(value);
+         }catch(error){if(!thrown)thrown=error;}
+       }
+     }finally{finish(failed?values[0]||new Error('GAS request failed'):null);}
+     if(thrown)throw thrown;
+   };
    try{
-     let runner=raw.withSuccessHandler((...values)=>{
-       record(null); // Record RPC latency before UI rendering, without changing handler timing.
-       try{
-         if(typeof global.invalidateBusinessViewsAfterWrite==='function')global.invalidateBusinessViewsAfterWrite(prop,values[0]);
-         if(typeof success==='function')return success(...values)
-       }
-       finally{finish(null)}
-     }).withFailureHandler((error,...rest)=>{
-       record(error||new Error('GAS request failed'));
-       try{
-         if(/AUTH_REQUIRED|SESSION_EXPIRED/.test(String(error&&error.message||error))&&typeof global.handleApiError==='function')global.handleApiError(error);
-         if(typeof failure==='function')return failure(error,...rest)
-       }
-       finally{finish(error||new Error('GAS request failed'))}
-     });
-     if(hasUserObject)runner=runner.withUserObject(userObject);
+     const runner=raw.withSuccessHandler((...values)=>deliver(false,values))
+       .withFailureHandler((...values)=>deliver(true,values));
      if(typeof runner[prop]!=='function')throw Error('Unknown GAS method: '+prop);
      return runner[prop](...args);
-   }catch(error){finish(error);throw error}
+   }catch(error){if(key&&sharedReads.get(key)===entry)sharedReads.delete(key);finish(error);throw error}
  };
 }});
 return proxy;

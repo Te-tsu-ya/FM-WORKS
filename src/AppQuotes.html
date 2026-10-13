@@ -136,7 +136,7 @@ function quoteFormValue_(value){return escapeHtml(String(value==null?'':value));
 function quoteEmptyEditor_(){
   const today=state.data&&state.data.today||new Date().toISOString().slice(0,10);
   return {id:'',revision:0,vendorCode:'',quoteDate:today,subject:'',delivery:'ご相談',
-    payment:'銀行振込',expires:'見積日から1か月',contact:(state.data&&state.data.user&&state.data.user.name)||'',
+    payment:'銀行振込',expires:'見積日から1か月',contact:(state.data&&state.data.user&&(state.data.user.fullName||state.data.user.displayName))||'',
     bank:'',note:'',taxRate:10,lines:[{description:'',quantity:1,unit:'式',price:0,noteOnly:false}]};
 }
 function quoteNew(){

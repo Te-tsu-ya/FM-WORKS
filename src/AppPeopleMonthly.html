@@ -415,10 +415,13 @@ function performEmployeeSave(payload){
   }).saveEmployee(state.sessionToken,payload);
 }
 function refreshAppData(callback){
-  const previous=state.data||{};
+  if(!state.sessionToken||!state.data)return;
+  const requestToken=state.sessionToken,previous=state.data;
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(data){
+    if(requestToken!==state.sessionToken||previous!==state.data)return;
     state.data={
       ...data,
+      projects:Array.isArray(data.projects)&&data.projects.length?data.projects:(previous.projects||[]),
       monthlyReview:previous.monthlyReview||data.monthlyReview||null,
       month:previous.month||data.month||null,
       tasks:Array.isArray(previous.tasks)?previous.tasks:(data.tasks||null),
@@ -428,7 +431,7 @@ function refreshAppData(callback){
     setProfileUi();renderNav();renderPage();
     loadHomeOverview({force:true,silent:true});
     if(callback)callback();
-  }).withFailureHandler(function(err){handleApiError(err,'最新情報を取得できませんでした');}).getInitialData(state.sessionToken);
+  }).withFailureHandler(function(err){if(requestToken===state.sessionToken&&previous===state.data)handleApiError(err,'最新情報を取得できませんでした');}).getInitialData(state.sessionToken);
 }
 
 // In-memory, session-scoped month result cache. Never put employee summaries in localStorage.
