@@ -657,13 +657,10 @@ for (const attendanceMarker of [
   "function attendanceTimeline(",
   "function attendanceMonthCalendar(",
   "function attendanceRecentHistory(",
-  "function buildAttendanceSamplePreview(",
   "function attendanceDisplayPreview(",
-  "function openAttendanceSampleDay(",
   "attendance-top-grid",
   "attendance-bottom-grid",
-  "attendance-one-screen",
-  "attendance-sample-badge"
+  "attendance-one-screen"
 ]) {
   if (!(app + styles).includes(attendanceMarker)) {
     console.error('Attendance workspace redesign marker missing: ' + attendanceMarker);
@@ -731,9 +728,8 @@ for (const marker of [
     failed = true;
   }
 }
-if (!app.includes("display.sample&&!realProjects.length") ||
-    !app.includes("admin&&ready&&date===state.data.today&&!realItems.length")) {
-  console.error('Worklog QA sample must remain ADMIN-only and non-persistable without real projects.');
+if (app.includes("buildWorklogSampleData") || !app.includes("const noProjects=!realProjects.length")) {
+  console.error('Worklog must use real records and guard missing projects.');
   failed = true;
 }
 for(const marker of [
@@ -1704,8 +1700,8 @@ if (!styles.includes('@media(min-width:1141px)') ||
   console.error('Attendance dashboard needs desktop one-screen rules and a narrow-screen scroll fallback.');
   failed = true;
 }
-if (!app.includes("preview&&preview._sample") || !app.includes("permissions&&state.data.permissions.adminConsole")) {
-  console.error('Attendance QA sample must be visibly marked and ADMIN-only.');
+if (app.includes("buildAttendanceSamplePreview") || !app.includes("function attendanceDisplayPreview(){return attendancePreviewData();}")) {
+  console.error('Attendance must display received data without fabricated records.');
   failed = true;
 }
 for (const homeFlowMarker of [

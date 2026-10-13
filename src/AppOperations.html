@@ -42,108 +42,14 @@ function attendancePreviewData(){
   return p&&p.data&&p.key===key?p.data:null;
 }
 
-function attendancePreviewHasMeaningfulData(preview){
-  return !!(preview&&Array.isArray(preview.daily)&&preview.daily.some(x=>
-    x&&(
-      x.clockIn||x.clockOut||Number(x.workMinutes||0)>0||x.leaveStatus||x.issue||x.worklogIssue
-    )
-  ));
-}
-
-function buildAttendanceSamplePreview(){
-  if(!state.data||!state.data.today)return null;
-  const ym=state.data.today.slice(0,7);
-  const parts=ym.split('-').map(Number);
-  const lastDay=new Date(parts[0],parts[1],0).getDate();
-  const today=state.data.today;
-  let sequence=0;
-  const daily=[];
-  for(let day=1;day<=lastDay;day++){
-    const date=ym+'-'+String(day).padStart(2,'0');
-    const dow=parseIso(date).getDay();
-    const workingDay=dow!==0&&dow!==6;
-    const row={
-      date:date,companyType:workingDay?'通常勤務':'週末',companyName:workingDay?'通常勤務':'休日',
-      workingDay:workingDay,clockIn:'',clockOut:'',workMinutes:0,overtimeMinutes:0,holidayMinutes:0,
-      lateEarlyMinutes:0,breakMinutes:0,requiredBreakMinutes:workingDay?60:0,worklogMinutes:0,
-      worklogDifferenceMinutes:0,worklogIssue:false,workLocation:'',remote:false,leaveStatus:'',
-      absence:false,source:'SAMPLE',issue:false,issueType:''
-    };
-    if(workingDay&&date<today){
-      sequence++;
-      const pattern=((sequence-1)%5)+1;
-      if(pattern===1){
-        Object.assign(row,{clockIn:'09:00',clockOut:'18:00',workMinutes:480,breakMinutes:60,worklogMinutes:480,workLocation:'出社'});
-      }else if(pattern===2){
-        Object.assign(row,{clockIn:'08:55',clockOut:'18:15',workMinutes:500,overtimeMinutes:20,breakMinutes:60,worklogMinutes:500,workLocation:'出社→在宅',remote:true});
-      }else if(pattern===3){
-        Object.assign(row,{clockIn:'09:03',clockOut:'18:05',workMinutes:482,overtimeMinutes:2,breakMinutes:60,worklogMinutes:420,worklogDifferenceMinutes:-62,worklogIssue:true,workLocation:'出社'});
-      }else if(pattern===4){
-        Object.assign(row,{leaveStatus:'有給',worklogMinutes:0});
-      }else{
-        Object.assign(row,{clockIn:'09:12',clockOut:'',workMinutes:0,breakMinutes:0,worklogMinutes:0,workLocation:'外出',issue:true,issueType:'退勤打刻がありません'});
-      }
-    }
-    daily.push(row);
-  }
-  const worked=daily.filter(x=>x.workMinutes>0);
-  const totals={
-    workDays:worked.length,
-    absenceDays:0,
-    totalMinutes:worked.reduce((s,x)=>s+Number(x.workMinutes||0),0),
-    overtimeMinutes:worked.reduce((s,x)=>s+Number(x.overtimeMinutes||0),0),
-    holidayMinutes:0,lateEarlyMinutes:0,
-    paidLeaveDays:daily.filter(x=>x.leaveStatus==='有給').length,
-    remoteDays:daily.filter(x=>x.remote).length,
-    missingPunchDays:daily.filter(x=>x.issue).length,
-    worklogMinutes:daily.reduce((s,x)=>s+Number(x.worklogMinutes||0),0),
-    worklogMismatchDays:daily.filter(x=>x.worklogIssue).length
-  };
-  return {
-    _sample:true,
-    yearMonth:ym,
-    employee:{employeeId:state.data.user.employeeId,name:state.data.user.fullName||state.data.user.displayName||'',displayName:state.data.user.displayName||''},
-    totals:totals,
-    daily:daily,
-    requests:[],
-    closeStatus:{closed:false,status:'OPEN'},
-    reviewStatus:null
-  };
-}
-
-function attendanceDisplayPreview(){
-  const real=attendancePreviewData();
-  if(attendancePreviewHasMeaningfulData(real))return real;
-  if(state.data&&state.data.permissions&&state.data.permissions.adminConsole)return buildAttendanceSamplePreview();
-  return real;
-}
-
-function openAttendanceSampleDay(date,preview){
-  const item=preview&&Array.isArray(preview.daily)?preview.daily.find(x=>x.date===date):null;
-  if(!item)return;
-  const status=item.issue?item.issueType:(item.worklogIssue?'工数差異':(item.leaveStatus||(!item.workingDay?'休日':'正常')));
-  const modal=ensureModal();
-  modal.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card attendance-sample-modal' role='dialog' aria-modal='true' aria-label='勤怠サンプル詳細'>
-    <div class='modal-head'><div><small>表示確認用サンプル</small><h2>${escapeHtml(fmtDate(item.date))}</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
-    <div class='attendance-sample-warning'>この内容は画面デザイン確認用です。Google Sheetsには保存されていません。</div>
-    <div class='attendance-sample-detail-grid'>
-      <div><span>状態</span><strong>${escapeHtml(status)}</strong></div>
-      <div><span>出勤</span><strong>${escapeHtml(item.clockIn||'—')}</strong></div>
-      <div><span>退勤</span><strong>${escapeHtml(item.clockOut||'—')}</strong></div>
-      <div><span>実働</span><strong>${formatMinutesClient(item.workMinutes)}</strong></div>
-      <div><span>休憩</span><strong>${formatMinutesClient(item.breakMinutes)}</strong></div>
-      <div><span>勤務場所</span><strong>${escapeHtml(item.workLocation||'—')}</strong></div>
-    </div>
-    <div class='button-row section-gap'><button type='button' class='secondary-button' onclick='closeModal()'>閉じる</button></div>
-  </section>`;
-}
+function attendanceDisplayPreview(){return attendancePreviewData();}
 
 function openAttendanceMonthly(view){
   const preview=attendancePreviewData();
   state.monthly.yearMonth=state.data.today.slice(0,7);
   state.monthly.employeeId=state.data.user.employeeId;
   state.monthly.view=view==='list'?'list':'calendar';
-  if(preview&&!preview._sample){
+  if(preview){
     state.monthly.data=preview;
     state.monthly.loadedKey=monthlyResultKey_(state.monthly.yearMonth,state.monthly.employeeId);
   }
@@ -151,8 +57,6 @@ function openAttendanceMonthly(view){
 }
 
 function openAttendancePreviewDay(date){
-  const display=attendanceDisplayPreview();
-  if(display&&display._sample){openAttendanceSampleDay(date,display);return}
   const preview=attendancePreviewData();if(!preview)return;
   state.monthly.yearMonth=preview.yearMonth;
   state.monthly.employeeId=state.data.user.employeeId;
@@ -218,19 +122,16 @@ function attendanceAlerts(preview){
   if(review&&review.needsAttention){
     items.push({tone:'danger',title:`${review.targetMonth}の勤怠確認が${review.stale?'再度必要です':'未完了です'}`,sub:review.message,action:"openPreviousMonthReview()"});
   }
-  if(preview&&preview._sample){
-    const punchIssue=(preview.daily||[]).find(x=>x.issue);
-    const worklogIssue=(preview.daily||[]).find(x=>x.worklogIssue);
-    if(punchIssue)items.push({tone:'danger',title:`表示例：${punchIssue.date.slice(5).replace('-','/')} 打刻確認`,sub:punchIssue.issueType+'（画面確認用サンプル）',action:`openAttendancePreviewDay('${punchIssue.date}')`});
-    if(worklogIssue)items.push({tone:'warning',title:`表示例：${worklogIssue.date.slice(5).replace('-','/')} 工数差異`,sub:`差異 ${formatMinutesClient(Math.abs(Number(worklogIssue.worklogDifferenceMinutes||0)))}（画面確認用サンプル）`,action:`openAttendancePreviewDay('${worklogIssue.date}')`});
-  }else{
-    if(today&&today.issue){
-      items.push({tone:'danger',title:today.issueType||'本日の勤怠に確認事項があります',sub:'内容を確認し、必要に応じて打刻修正を申請してください。',action:`openAttendancePreviewDay('${today.date}')`});
-    }
-    if(today&&today.worklogIssue){
-      const diff=Math.abs(Number(today.worklogDifferenceMinutes||0));
-      items.push({tone:'warning',title:'工数と実働に差異があります',sub:`差異 ${formatMinutesClient(diff)}。工数画面で確認してください。`,action:"navigate('worklog')"});
-    }
+  if(!preview&&!items.length){
+    const error=state.attendancePreview&&state.attendancePreview.error;
+    return `<div class='attendance-alert-empty' role='status'><div><strong>${error?'勤怠の確認状況を取得できませんでした':'月間の勤怠を確認しています'}</strong><small>${error?'月間カレンダーの再読込から確認してください。':'取得が終わるまで、問題の有無は未確定です。'}</small></div></div>`;
+  }
+  if(today&&today.issue){
+    items.push({tone:'danger',title:today.issueType||'本日の勤怠に確認事項があります',sub:'内容を確認し、必要に応じて打刻修正を申請してください。',action:`openAttendancePreviewDay('${today.date}')`});
+  }
+  if(today&&today.worklogIssue){
+    const diff=Math.abs(Number(today.worklogDifferenceMinutes||0));
+    items.push({tone:'warning',title:'工数と実働に差異があります',sub:`差異 ${formatMinutesClient(diff)}。工数画面で確認してください。`,action:"navigate('worklog')"});
   }
   if(!items.length)return `<div class='attendance-alert-empty'><span>✓</span><div><strong>現在、確認が必要な勤怠はありません</strong><small>問題が見つかった場合はここに表示します。</small></div></div>`;
   return items.slice(0,3).map(x=>`<button class='attendance-alert-item ${x.tone}' onclick="${x.action}"><span>!</span><div><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.sub)}</small></div><b>›</b></button>`).join('');
@@ -295,8 +196,7 @@ function attendanceRecentHistory(preview){
 
 function attendancePage(){
   const d=state.data,a=d.attendance,company=d.companyToday||null,preview=attendanceDisplayPreview();
-  const sampleBadge=preview&&preview._sample?`<span class='attendance-sample-badge' title='実データには保存されません'>表示確認用サンプル</span>`:'';
-  const dateAction=`<div class='attendance-date-actions'>${sampleBadge}<div class='attendance-date-chip'>${svg('i-calendar')}<strong>${escapeHtml(fmtDate(d.today))}</strong><span>${company?escapeHtml(company.name||company.type||'勤務日'):'会社カレンダー未登録'}</span></div></div>`;
+  const dateAction=`<div class='attendance-date-actions'><div class='attendance-date-chip'>${svg('i-calendar')}<strong>${escapeHtml(fmtDate(d.today))}</strong><span>${company?escapeHtml(company.name||company.type||'勤務日'):'会社カレンダー未登録'}</span></div></div>`;
   const stateTone=attendanceStatusTone(a);
   const currentMain=a.clockIn?`<strong class='attendance-live-value' data-live-worked>${escapeHtml(liveWorkedText(a))}</strong><span class='attendance-live-range'>${escapeHtml(a.clockIn)} 〜 ${escapeHtml(a.clockOut||'現在')}</span>`:`<strong class='attendance-live-value off-copy'>まだ出勤していません</strong><span class='attendance-live-range'>勤務を開始すると実働時間を表示します</span>`;
   return `<div class='attendance-dashboard'>
@@ -427,7 +327,13 @@ function restoreWorklogQuickDraft(){
   for(const id of WORKLOG_QUICK_FIELDS){
     const field=document.getElementById(id);
     if(!field||!(id in draft))continue;
-    if(id==='wlQuickProject'&&field.options&&!Array.from(field.options).some(option=>option.value===draft[id]))continue;
+    if(id==='wlQuickProject'){
+      field.value=field.options&&!Array.from(field.options).some(option=>option.value===draft[id])?'':draft[id];
+      // Selects discard values that are absent from their current options.
+      // Rebuild this project's tasks before restoring the linked task ID.
+      refreshWorklogTaskChoices_('wlQuickProject','wlQuickTask');
+      continue;
+    }
     field.value=draft[id];
   }
   }
@@ -605,28 +511,10 @@ function worklogMinutesToTime(value){
   return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 }
 
-function buildWorklogSampleData(date){
-  const rows=[
-    ['SAMPLE-W1','サンプル案件A','UI設計','画面改善案の検討','09:00','10:00',60],
-    ['SAMPLE-W2','サンプル案件B','資料作成','提案資料の修正','10:00','12:00',120],
-    ['SAMPLE-W3','社内MTG','打合せ','開発方針確認','13:00','15:00',120],
-    ['SAMPLE-W4','サンプル案件A','テスト','UI確認・動作確認','15:00','16:30',90]
-  ];
-  return {
-    sample:true,
-    items:rows.map(x=>({id:x[0],date:date,project:x[1],category:x[2],description:x[3],start:x[4],end:x[5],minutes:x[6],note:'',status:'表示例',_sample:true})),
-    totalMinutes:390,
-    attendanceMinutes:480,
-    projectCount:3
-  };
-}
-
 function worklogDisplayData(){
   const w=state.worklog,date=w.date||state.data.today;
   const ready=w.loadedDate===date;
   const realItems=ready?(w.items||[]).slice():[];
-  const admin=!!(state.data&&state.data.permissions&&state.data.permissions.adminConsole);
-  if(admin&&ready&&date===state.data.today&&!realItems.length)return buildWorklogSampleData(date);
   const attendanceMinutes=date===state.data.today?liveWorkedMinutes(state.data.attendance):null;
   return {
     sample:false,
@@ -644,7 +532,6 @@ function worklogProjectTone(project){
 }
 
 function worklogBreakRanges(display){
-  if(display.sample)return [{start:720,end:780}];
   const date=state.worklog.date||state.data.today;
   if(date!==state.data.today)return [];
   const history=(state.data.attendance&&state.data.attendance.history||[]).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));
@@ -661,7 +548,6 @@ function worklogBreakRanges(display){
 }
 
 function worklogTimelineBounds(display){
-  if(display.sample)return {start:540,end:1080};
   const date=state.worklog.date||state.data.today,items=display.items||[];
   if(date===state.data.today&&state.data.attendance&&state.data.attendance.clockIn){
     const start=worklogTimeToMinutes(state.data.attendance.clockIn);
@@ -681,8 +567,8 @@ function worklogTimelineBounds(display){
 
 function worklogTimelineSegments(display){
   const bounds=worklogTimelineBounds(display),items=(display.items||[]).slice(),breaks=worklogBreakRanges(display);
-  if(!display.sample&&!items.length&&(state.worklog.date||state.data.today)!==state.data.today)return [];
-  if(!display.sample&&!items.length&&!state.data.attendance.clockIn)return [];
+  if(!items.length&&(state.worklog.date||state.data.today)!==state.data.today)return [];
+  if(!items.length&&!state.data.attendance.clockIn)return [];
   const points=new Set([bounds.start,bounds.end]);
   items.forEach(x=>{points.add(Math.max(bounds.start,worklogTimeToMinutes(x.start)));points.add(Math.min(bounds.end,worklogTimeToMinutes(x.end)))});
   breaks.forEach(x=>{points.add(Math.max(bounds.start,x.start));points.add(Math.min(bounds.end,x.end))});
@@ -720,7 +606,7 @@ function worklogTimelineHtml(display){
     const start=worklogMinutesToTime(seg.start),end=worklogMinutesToTime(seg.end),duration=seg.end-seg.start;
     if(seg.type==='work'){
       const x=seg.item,tone=worklogProjectTone(x.project);
-      return `<button type='button' class='worklog-time-block ${tone}' style='--duration:${duration}' ${x._sample?'disabled':`onclick="openWorklogModal('${x.id}')"`}><span>${start} - ${end}</span><strong>${escapeHtml(x.project)}</strong><small>${escapeHtml(x.category||'未分類')}</small></button>`;
+      return `<button type='button' class='worklog-time-block ${tone}' style='--duration:${duration}' onclick="openWorklogModal('${x.id}')"><span>${start} - ${end}</span><strong>${escapeHtml(x.project)}</strong><small>${escapeHtml(x.category||'未分類')}</small></button>`;
     }
     if(seg.type==='break')return `<div class='worklog-time-block break' style='--duration:${duration}'><span>${start} - ${end}</span><strong>休憩</strong></div>`;
     return `<button type='button' class='worklog-time-block gap' style='--duration:${duration}' onclick="setQuickWorklogRange('${start}','${end}')"><span>${start} - ${end}</span><strong>未入力</strong><small>クリックして入力</small></button>`;
@@ -730,20 +616,20 @@ function worklogTimelineHtml(display){
 function worklogQuickForm(display){
   const realProjects=(state.data.projects||[]).filter(p=>!p.status||p.status==='進行中');
   const gap=worklogFirstGap(display);
-  const sampleFallback=display.sample&&!realProjects.length;
-  const options=(realProjects.length?realProjects.map(p=>p.name):['サンプル案件A','サンプル案件B','社内MTG']).map((name,i)=>`<option value='${sampleFallback?'':escapeHtml(name)}'>${escapeHtml(name)}${sampleFallback?'（表示例）':''}</option>`).join('');
+  const noProjects=!realProjects.length;
+  const options=realProjects.map(p=>`<option value='${escapeHtml(p.name)}'>${escapeHtml(p.name)}</option>`).join('');
   return `<section class='worklog-panel worklog-quick-card'>
-    <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div>${display.sample?`<span class='worklog-sample-chip'>表示確認用</span>`:''}</header>
+    <header><div><span class='eyebrow'>QUICK INPUT</span><h2>クイック入力</h2></div></header>
     ${worklogProjectIntentBanner_()}
     <div class='worklog-quick-grid'>
-      <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' onchange="refreshWorklogTaskChoices_('wlQuickProject','wlQuickTask')" ${sampleFallback?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label><label class='field full'><span>関連する作業（任意）</span><select id='wlQuickTask' ${sampleFallback?'disabled':''}>${worklogTaskOptionsHtml_(realProjects[0]&&realProjects[0].name||'')}</select><small>作業ごとの実績に紐付けます。過去工数は自動推定しません。</small></label>
+      <label class='field full'><span>プロジェクト</span><select id='wlQuickProject' onchange="refreshWorklogTaskChoices_('wlQuickProject','wlQuickTask')" ${noProjects?'disabled':''}>${options||`<option value=''>プロジェクトが未登録です</option>`}</select></label><label class='field full'><span>関連する作業（任意）</span><select id='wlQuickTask' ${noProjects?'disabled':''}>${worklogTaskOptionsHtml_(realProjects[0]&&realProjects[0].name||'')}</select><small>作業ごとの実績に紐付けます。過去工数は自動推定しません。</small></label>
       <label class='field full'><span>作業分類</span><input id='wlQuickCategory' list='wlCategorySuggestions' placeholder='設計 / 開発 / 会議 等'><datalist id='wlCategorySuggestions'><option value='設計'><option value='開発'><option value='テスト'><option value='資料作成'><option value='打合せ'><option value='顧客対応'></datalist></label>
       <label class='field'><span>開始</span><input id='wlQuickStart' type='time' value='${gap.start}'></label>
       <label class='field'><span>終了</span><input id='wlQuickEnd' type='time' value='${gap.end}'></label>
       <label class='field full'><span>作業内容</span><textarea id='wlQuickDescription' rows='2' placeholder='実施した内容を入力'></textarea></label>
     </div>
-    ${sampleFallback?`<div class='worklog-sample-note'>実プロジェクトを登録すると、このフォームからそのまま保存できます。</div>`:''}
-    <button id='wlQuickSaveButton' class='primary-button worklog-quick-save' ${sampleFallback||state.busy?'disabled':''} onclick='saveQuickWorklog()'>登録する</button>
+    ${noProjects?`<div class='worklog-input-note'>進行中のプロジェクトがありません。管理者に案件の登録を依頼してください。</div>`:''}
+    <button id='wlQuickSaveButton' class='primary-button worklog-quick-save' ${noProjects||state.busy?'disabled':''} onclick='saveQuickWorklog()'>登録する</button>
   </section>`;
 }
 
@@ -789,8 +675,8 @@ function worklogTableHtml(display){
   const rows=(display.items||[]).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
   if(!rows.length)return `<div class='worklog-empty-state compact'><strong>この日の工数はまだありません</strong><span>右のクイック入力から追加できます。</span></div>`;
   return `<div class='worklog-table-wrap'><div class='worklog-table-head'><span>時間</span><span>プロジェクト</span><span>作業分類</span><span>内容</span><span>工数</span><span>状態</span><span>操作</span></div>${rows.map(x=>{
-    const sample=!!x._sample,tone=worklogProjectTone(x.project);
-    return `<div class='worklog-table-row'><span>${escapeHtml(x.start)} - ${escapeHtml(x.end)}</span><span><i class='project-dot ${tone}'></i><strong>${escapeHtml(x.project)}</strong></span><span>${escapeHtml(x.category||'未分類')}</span><span class='truncate'>${escapeHtml(x.description||'')}</span><span><strong>${formatMinutesClient(x.minutes)}</strong></span><span><em class='${sample?'sample':'ok'}'>${sample?'表示例':'登録済み'}</em></span><span>${sample?`<span class='muted'>—</span>`:`<button class='text-button' onclick="openWorklogModal('${x.id}')">編集</button><button class='icon-text-button danger' onclick="deleteWorklogItem('${x.id}')">削除</button>`}</span></div>`;
+    const tone=worklogProjectTone(x.project);
+    return `<div class='worklog-table-row'><span>${escapeHtml(x.start)} - ${escapeHtml(x.end)}</span><span><i class='project-dot ${tone}'></i><strong>${escapeHtml(x.project)}</strong></span><span>${escapeHtml(x.category||'未分類')}</span><span class='truncate'>${escapeHtml(x.description||'')}</span><span><strong>${formatMinutesClient(x.minutes)}</strong></span><span><em class='ok'>登録済み</em></span><span><button class='text-button' onclick="openWorklogModal('${x.id}')">編集</button><button class='icon-text-button danger' onclick="deleteWorklogItem('${x.id}')">削除</button></span></div>`;
   }).join('')}</div>`;
 }
 
@@ -798,8 +684,8 @@ function worklogPage(){
   const w=state.worklog,date=w.date||state.data.today,display=worklogDisplayData();
   const attendanceMinutes=display.attendanceMinutes;
   const unentered=attendanceMinutes===null?null:Math.max(0,Number(attendanceMinutes||0)-Number(display.totalMinutes||0));
-  const action=`<div class='worklog-head-actions'>${display.sample?`<span class='worklog-sample-chip'>表示確認用サンプル</span>`:''}<button class='primary-button compact' onclick='openWorklogModal()'>＋ 工数追加</button></div>`;
-  const toolbar=`<div class='worklog-datebar'><div><button id='worklogPrevDate' type='button' class='secondary-button compact' aria-label='前の日へ' title='前の日へ' onclick='moveWorklogDate(-1)'>‹</button><button id='worklogToday' type='button' class='secondary-button compact' onclick='jumpWorklogDate(state.data.today)'>今日</button><button id='worklogNextDate' type='button' class='secondary-button compact' aria-label='次の日へ' title='次の日へ' onclick='moveWorklogDate(1)'>›</button><label class='worklog-date-picker'><span>日付</span><input id='worklogDatePicker' type='date' aria-label='表示日を選択' value='${escapeHtml(date)}' onchange='jumpWorklogDate(this.value)'></label><strong>${escapeHtml(fmtDate(date))}</strong></div>${display.sample?`<small>ダミーデータは保存されません</small>`:''}</div>`;
+  const action=`<div class='worklog-head-actions'><button class='primary-button compact' onclick='openWorklogModal()'>＋ 工数追加</button></div>`;
+  const toolbar=`<div class='worklog-datebar'><div><button id='worklogPrevDate' type='button' class='secondary-button compact' aria-label='前の日へ' title='前の日へ' onclick='moveWorklogDate(-1)'>‹</button><button id='worklogToday' type='button' class='secondary-button compact' onclick='jumpWorklogDate(state.data.today)'>今日</button><button id='worklogNextDate' type='button' class='secondary-button compact' aria-label='次の日へ' title='次の日へ' onclick='moveWorklogDate(1)'>›</button><label class='worklog-date-picker'><span>日付</span><input id='worklogDatePicker' type='date' aria-label='表示日を選択' value='${escapeHtml(date)}' onchange='jumpWorklogDate(this.value)'></label><strong>${escapeHtml(fmtDate(date))}</strong></div></div>`;
   if(w.loadedDate!==date){
     state.worklog.renderedDate=null;
     const status=w.error
@@ -812,7 +698,7 @@ function worklogPage(){
     ${pageHead('工数','勤務時間に対して、どの業務に何時間使ったかを記録します。',action)}
     ${toolbar}
     <div class='worklog-metrics'>
-      <div><span>入力済工数</span><strong>${formatMinutesClient(display.totalMinutes)}</strong><small>${attendanceMinutes?`実働の ${Math.min(100,Math.round(display.totalMinutes/attendanceMinutes*100))}%`:display.sample?'目標 8時間00分':'入力時間の合計'}</small></div>
+      <div><span>入力済工数</span><strong>${formatMinutesClient(display.totalMinutes)}</strong><small>${attendanceMinutes?`実働の ${Math.min(100,Math.round(display.totalMinutes/attendanceMinutes*100))}%`:'入力時間の合計'}</small></div>
       <div><span>本日の実働</span><strong>${attendanceMinutes===null?'—':formatMinutesClient(attendanceMinutes)}</strong><small>${date===state.data.today?'勤怠とリアルタイム連携':'当日は勤怠画面で確認'}</small></div>
       <div class='warn'><span>未入力時間</span><strong>${unentered===null?'—':formatMinutesClient(unentered)}</strong><small>${unentered>0?'空き時間をタイムラインで確認':'入力差異なし'}</small></div>
       <div><span>プロジェクト数</span><strong>${display.projectCount}件</strong><small>この日に作業した案件</small></div>

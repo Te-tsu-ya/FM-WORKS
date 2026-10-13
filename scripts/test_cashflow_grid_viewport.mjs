@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,7 +7,7 @@ import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 const client=name=>fs.readFileSync('src/'+name+'.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-const styles=['Styles','StylesCashFlow','StylesCashFlowGrid'].map(name=>fs.readFileSync('src/'+name+'.html','utf8')).join('\n');
+const styles=appStyles();
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const chrome=['google-chrome','google-chrome-stable','chromium','chromium-browser'].map(cmd=>{
  try{return execFileSync('which',[cmd],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}catch{return '';}

@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,8 +8,7 @@ import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 
 const root=process.cwd();
-const css=['Styles.html','StylesWorkflowV15.html','StylesSomu.html','StylesSomuGrowth.html']
- .map(f=>fs.readFileSync(path.join(root,'src',f),'utf8')).join('\n');
+const css=appStyles();
 const source=['AppSomu.html','AppSomuGrowth.html'].map(file=>fs.readFileSync(path.join(root,'src',file),'utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'')).join('\n');
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const demoData={

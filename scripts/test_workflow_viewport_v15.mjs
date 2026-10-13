@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import os from 'node:os';
@@ -6,9 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 
 const root=process.cwd();
-const css=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+
-  fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8')+'\n'+
-  fs.readFileSync(path.join(root,'src/StylesFinanceAdvisor.html'),'utf8');
+const css=appStyles();
 const source=name=>fs.readFileSync(path.join(root,'src/'+name+'.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({

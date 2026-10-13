@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -5,7 +6,7 @@ import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 const root=process.cwd();
-const styles=fs.readFileSync(path.join(root,'src/Styles.html'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/StylesWorkflowV15.html'),'utf8');
+const styles=appStyles();
 const source=fs.readFileSync(path.join(root,'src/AppQuotes.html'),'utf8')
   .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
 const documentSource=fs.readFileSync(path.join(root,'src/AppDocuments.html'),'utf8')

@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.2
+**文書版:** 0.25.3
 **更新日:** 2026-10-13
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2488,3 +2488,18 @@ PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS
 - `Finance.gs:financeRows_`は100行超の本人履歴に`readRowsByColumnValues_(sheet,3,width,[employeeId])`を使う。TextFinder結果の連続行をRangeListでまとめ、読み取った行を実際の社員IDで再照合する。48ブロック超は共通ヘルパーの従来フォールバックを維持する。全体経理一覧の集計・証憑照合は全件を必要とするため対象外。
 - `test_finance_quote_refresh.mjs`で実クライアントコードに応答順序を制御したRPCを与え、同じセッションのreset、旧成功/失敗、キャッシュ再利用、更新連打、不正応答、通信障害、年度変更、書類版変更・保存前入力の保持を検証する。`test_finance_integration.mjs`は実DataAccess/Financeの索引を実行し、32件の連続本人記録と無一致時の転送量・返却範囲・差戻し優先を検証する。
 - ローカル検証計画へ追加テストを登録する。生成文書はローカル生成し、GAS公開は認証済み直接操作の別工程とする。ChromeとGAS公開認証がない現環境では実画面・公開版・P50/P95を合格扱いにしない。
+
+
+## v0.25.3 テーマの配色契約と実ワークスペースの下書き（2026-10-13）
+
+- A1/R1: `StylesAccessibility.html`をIndexのCSS最終includeにする。`text/muted`、状態ごとの`*-ink/*-bg`、白文字用の`fill-*`、`control-line`を両テーマで定義する。既存CSSの固定文字色と明るい背景をこれらへ統合し、背景中の`blue/green/...`を塗り専用ロールへ分離する。rgba背景の透明度はcolor-mixで維持する。境界線・データ色・レイアウト・動作・APIは維持する。
+- A2/R2: 月次のopen/closed帯・バッジ・状態色・入力/placeholder/optionを最終共通ルールで明示。休日、他担当の予定、補足文字はopacityで文字を薄くしない。無効コントロールは淡い背景と読める文字にし、disabled自体は維持する。元のCSSの色優先度が高い無効化入力にもopacity:1を適用する。
+- A3/R3: `qb-paper`の固定紙色を移行対象から外し、両テーマで白背景・濃い文字を維持。細いフッター/空行文字は画面プレビューのみ濃くする。発行済みテンプレートのサーバー処理・保存ファイルは無変更。
+- A4/R4: `attendanceDisplayPreview()`は受信済みの`attendancePreviewData()`だけを返す。`buildAttendanceSamplePreview/openAttendanceSampleDay/buildWorklogSampleData`と自動サンプル分岐を本番ソースから撤去。未取得/エラー時は`attendanceAlerts`で問題なしと断定しない。勤怠・工数のDB/確認用レコードには書込みしない。
+- A5/R5: `worklogQuickForm`は進行中の実案件だけを選択肢にする。0件なら空の選択肢と登録不可・管理者への案内を表示する。
+- A6/R6: `restoreWorklogQuickDraft`の案件復元直後に`refreshWorklogTaskChoices_`を実行し、その後に保存済みのtask IDを設定する。消えた案件はselect.valueを空にし、最初の別案件を保存先として選ばない。消えた作業はネイティブselectの不一致処理で空にする。セッション・日付別のMapと送信キー方式は維持する。
+- A7/R7: `test_theme_contrast.mjs`は実Index順の17 CSSと最終rootトークンから両テーマの90組を計算し、4.5/3の閾値を確認する。固定文字色の残留と社員アバターも検査する。DOM実描画・全状態のcomputedStyleを検査したとは扱わない。`test_live_workspaces.mjs`は空工数の390分自動表示と作業選択の脱落を修正前に再現し、selectの実際の値設定仕様をモデル化して下書き復元・削除・社員分離を検証する。
+- 画面検証12本のCSS fixtureを`theme_styles.mjs:appStyles()`へ共通化し、GASと同じinclude順にする。ローカルrunnerはこのヘルパーもハッシュ対象へ追加する。Chrome未実行の状態は維持し、CSSだけ古いfixtureで確認済みとは表現しない。
+- 公開制約: ローカルChromeとGAS直接公開の認証は利用できない。クラウドブラウザーもfile://の確認用HTMLを安全設定で拒否した（http/httpsのみ許可）。迂回して同じHTMLを開かず、数値・コード・機能の検証で進める。GAS実表示・公開版・速度の実測は未確認として残す。
+
+- 追加検証修正: セッション削除のfixtureで日本の絶対時刻と環境ローカル時刻を混在させていたため、同じローカル基準の日時へ統一する。ローカルrunnerはGAS manifestのtimeZone（Asia/Tokyo）を各検証へ渡し、環境依存を除く。時刻ロジックそのものは変更しない。

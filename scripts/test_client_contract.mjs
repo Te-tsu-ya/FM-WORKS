@@ -33,6 +33,8 @@ function makeElement(id){
     checked:false,
     textContent:'',
     innerHTML:'',
+    get options(){return this._options||[...this.innerHTML.matchAll(/<option value="([^"]*)"/g)].map(m=>({value:m[1]}));},
+    set options(value){this._options=value;},
     hidden:false,
     disabled:false,
     type:'text',
@@ -715,9 +717,8 @@ const result=vm.runInContext(`
   state.data={today:'2026-10-08',user:{employeeId:'FM0001',displayName:'青木さん',fullName:'青木 悠真'},permissions:{adminConsole:true}};
   state.attendancePreview={data:null,key:'',at:0,loading:false,error:''};
   const attendanceSample=attendanceDisplayPreview();
-  expect('empty admin attendance gets a browser-only QA sample',attendanceSample&&attendanceSample._sample===true);
-  expect('attendance QA sample covers issue and worklog-difference states',attendanceSample.daily.some(x=>x.issue)&&attendanceSample.daily.some(x=>x.worklogIssue));
-  expect('attendance QA sample covers leave and remote-work states',attendanceSample.daily.some(x=>x.leaveStatus==='有給')&&attendanceSample.daily.some(x=>x.remote===true));
+  expect('empty admin attendance uses only received data',attendanceSample===null);
+
 
   state.data={
     today:'2026-10-08',
@@ -728,10 +729,7 @@ const result=vm.runInContext(`
   };
   state.worklog={date:'2026-10-08',loadedDate:'2026-10-08',items:[],totalMinutes:0,loading:false,error:''};
   const worklogSample=worklogDisplayData();
-  expect('empty admin worklog gets browser-only QA sample',worklogSample&&worklogSample.sample===true&&worklogSample.items.length===4);
-  const worklogSegments=worklogTimelineSegments(worklogSample);
-  expect('worklog QA sample includes a lunch break',worklogSegments.some(x=>x.type==='break'&&x.start===720&&x.end===780));
-  expect('worklog QA sample exposes a 90-minute missing interval',worklogSegments.some(x=>x.type==='gap'&&(x.end-x.start)===90));
+  expect('empty admin worklog is zero instead of invented QA records',worklogSample&&worklogSample.sample===false&&worklogSample.items.length===0&&worklogSample.totalMinutes===0);
   const worklogHtml=worklogPage();
   expect('worklog hybrid renders timeline quick input and table',worklogHtml.includes('本日のタイムライン')&&worklogHtml.includes('クイック入力')&&worklogHtml.includes('本日の工数一覧'));
 
@@ -804,7 +802,7 @@ const result=vm.runInContext(`
   expect('worklog exposes accessible direct date picker',worklogWithPicker.includes("id='worklogDatePicker'")&&worklogWithPicker.includes("aria-label='前の日へ'")&&worklogWithPicker.includes("aria-label='次の日へ'"));
   const workProject=document.getElementById('wlQuickProject');
   workProject.closest=()=>({className:'worklog-quick-card'});
-  workProject.value='テスト案件A';
+  workProject.options=[{value:'テスト案件A'}];workProject.value='テスト案件A';
   const workDesc=document.getElementById('wlQuickDescription');
   const workCategory=document.getElementById('wlQuickCategory');
   const workStart=document.getElementById('wlQuickStart');

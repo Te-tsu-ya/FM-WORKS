@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,7 +11,7 @@ const unwrap=(file,tag)=>{
  assert.ok(s.startsWith('<'+tag+'>')&&s.endsWith('</'+tag+'>'));
  return s.slice(tag.length+2,-tag.length-3);
 };
-const css=unwrap('src/StylesRotaryLoader.html','style');
+const css=appStyles();
 const engine=unwrap('src/RotaryEngine.html','script');
 const integration=unwrap('src/AppRotaryIntegration.html','script');
 const chrome=['google-chrome','google-chrome-stable','chromium','chromium-browser'].map(n=>{
