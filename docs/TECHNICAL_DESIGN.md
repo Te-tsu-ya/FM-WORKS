@@ -2,8 +2,8 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.5
-**更新日:** 2026-10-13
+**文書版:** 0.25.6
+**更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -2530,3 +2530,17 @@ PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS
 - `src/Code.gs` の `APP.version` を `0.25.5` へ更新。これは `getInitialData` の `app.version` とIndexテンプレートの `appVersion` に伝わる識別子であり、DB_SCHEMA・公開範囲・GASエンドポイントは変更しない。
 - `src/GeneratedDocs.gs` は最新版の要件定義書・技術設計書から `scripts/generate_docs.mjs` と同じ形式で再生成する。文書と実行コードの版の一致を専用の `scripts/test_app_version_contract.mjs` で検査する。
 - 実GASは引き続き公開版192（v0.25.4）。GitHub mainへv0.25.5を統合しても自動公開しない。次回の認証済み直接操作で `Styles.html`・`Code.gs`・`GeneratedDocs.gs` を照合してGAS版を更新する。ユーザー実操作は公開後に別途確認する。
+
+
+## 2026-10-14 v0.25.6 実装・性能方針
+
+Google公式のサービス呼び出し削減・キャッシュ利用・非同期応答の扱いを根拠とする。DB移行、別サービスへの移設、全ページの一括先読み、TTLの単純な引き延ばしは今回採用しない。
+
+- `getApplicationShell_`: 静的Indexの評価結果をAPP.version別のScriptCacheへ保存。UTF-8で60KB以内の分割、最大40分割、TTL6時間。UUID世代を生成し、全分割の保存後にmanifestを発行する。暖機後はテンプレート・全HTML include再評価を省き、manifest get + chunks getAllで再構成する。内容は静的ソースのみで、DB接続・認証結果は含まない。GAS独自手修正でもAPP.versionを必ず上げる。公開版ごとにキーが分離する。
+- `FMRotaryRPC`: 最大32組の進行中読み取りのみ、メソッド＋引数＋ログイン世代＋書込み世代で共有する。返却オブジェクトは消費者ごとに複製。書込みはまとめず、書込み開始時に共有索引を解除する。reset後の旧成功・旧AUTH_REQUIREDを破棄する。認証・権限はサーバーの実行ごとに従来通り実行する。引数や結果をログ・localStorageへ出さない。
+- `readRowsByColumnValues_` の6番目オプションは `{rowNumber, values}` を返す。連続ブロックと大量一致fallbackで実シート行番号を保持。既存呼び出しの配列契約を維持する。ProjectHub詳細のtask/resource/updateで共用し、plan全件の別名衝突判定は残す。
+- 通知・全体更新はtokenとdata参照を捕捉。全体更新で軽量initialDataの空projectsに既存選択肢を上書きしない。
+- `applicationUnsavedItems_` / `applicationWritePending_`: メモリー下書きのみを判定し、beforeunloadと明示破棄付きlogoutに適用。保存処理や結果未確認のlogoutは拒否する。
+- 金融台帳はキーが同じ時だけ前のデータを保持して更新し、別口座・年度・ページの旧データを表示しない。ページキャッシュ40件上限。
+
+根拠: https://developers.google.com/apps-script/guides/support/best-practices 、https://developers.google.com/apps-script/guides/html/communication 、https://developers.google.com/apps-script/reference/cache/cache 。初回のGAS起動・Google通信・認証Sheets読取は残り、常に瞬時という保証はしない。機構上の削減件数と実環境のP50/P95を別に記録する。

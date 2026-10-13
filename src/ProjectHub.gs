@@ -23,16 +23,15 @@ function projectHubRows_(kind,sh,projectId){
  const keys=PROJECT_HUB_MODELS[kind].keys,n=sh.getLastRow()-1;if(n<1)return [];
  const convert=(rows,start)=>rows.map((r,index)=>{const o={_row:start+index};keys.forEach((k,i)=>o[k]=r[i]||'');return o;}).filter(r=>r[keys[0]]);
  if(!projectId)return convert(sh.getRange(2,1,n,keys.length).getDisplayValues(),2);
- // Index the project column first; fetch document bodies only for this project.
- const ids=sh.getRange(2,kind==='plan'?1:2,n,1).getDisplayValues(),blocks=[];
- ids.forEach((r,i)=>{if(r[0]!==projectId)return;const row=i+2,last=blocks[blocks.length-1];if(last&&last.end===row-1)last.end=row;else blocks.push({start:row,end:row});});
- return blocks.flatMap(b=>convert(sh.getRange(b.start,1,b.end-b.start+1,keys.length).getDisplayValues(),b.start));
+ // Fetch only matching project records; retain physical rows for edits.
+ return readRowsByColumnValues_(sh,kind==='plan'?1:2,keys.length,[projectId],false,true)
+  .flatMap(item=>convert([item.values],item.rowNumber));
 }
 function projectHubRead_(force,detail){
  const storage=projectHubStorage_(),result={storage,plans:[],tasks:[],resources:[],updates:[],worklogs:[],projects:getProjectsInternal_(true)};
  if(storage.ready){
   result.plans=projectHubRows_('plan',storage.sheets.plan);
-  result.tasks=projectHubRows_('task',storage.sheets.task).filter(x=>x.status!=='非表示');
+  result.tasks=projectHubRows_('task',storage.sheets.task,detail).filter(x=>x.status!=='非表示');
   if(detail){result.resources=projectHubRows_('resource',storage.sheets.resource,detail).filter(x=>x.status!=='非表示');result.updates=projectHubRows_('update',storage.sheets.update,detail);}
   else{const sh=storage.sheets.resource,n=sh.getLastRow()-1;if(n>0){const ids=sh.getRange(2,1,n,2).getDisplayValues(),status=sh.getRange(2,7,n,1).getDisplayValues();result.resources=ids.map((r,i)=>({id:r[0],projectId:r[1],status:status[i][0]})).filter(r=>r.id&&r.status!=='非表示');}}
  }

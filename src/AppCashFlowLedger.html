@@ -18,14 +18,20 @@ function cflLoad_(force=false){
  const ui=cflUi;ui.accountId=ui.accountId||cfbUi.loaded.accounts.find(a=>a.active)?.id||'';if(!ui.accountId)return;
  const key=[cashFlowUi.year,ui.accountId,ui.kind,ui.offset].join('|'),cached=ui.cache.get(key);
  if(!force&&ui.loadingKey===key)return;
- if(!force&&cached&&Date.now()-cached.at<300000){ui.data=cached.data;ui.loadingKey='';ui.serial++;return;}
- ui.loadingKey=key;ui.data=null;
+ if(!force&&cached&&Date.now()-cached.at<300000){ui.data=cached.data;ui.dataKey=key;ui.loadingKey='';ui.serial++;return;}
+ ui.loadingKey=key;
+ if(ui.dataKey!==key)ui.data=null;
  const serial=++ui.serial,identity=financeIdentity();
- const current=()=>ui===cflUi&&serial===ui.serial&&identity===financeIdentity()&&key===[cashFlowUi.year,ui.accountId,ui.kind,ui.offset].join('|');
+ const current=()=>{
+  const selectedKey=[cashFlowUi.year,ui.accountId,ui.kind,ui.offset].join('|');
+  if(ui===cflUi&&identity===financeIdentity()&&ui.dataKey!==selectedKey)ui.data=null;
+  return ui===cflUi&&serial===ui.serial&&identity===financeIdentity()&&key===selectedKey;
+ };
  cfbRpc_('getCashFlowLedgerRows',{year:cashFlowUi.year,accountId:ui.accountId,kind:ui.kind,offset:ui.offset},data=>{
   if(!current())return;ui.loadingKey='';
   if(!data||data.ok!==true){ui.error='台帳の取得結果を確認できません。';renderPageIfActive('finance');return;}
-  ui.data=data;ui.cache.set(key,{data,at:Date.now()});ui.error='';renderPageIfActive('finance');
+  ui.data=data;ui.dataKey=key;ui.cache.delete(key);ui.cache.set(key,{data,at:Date.now()});
+  while(ui.cache.size>40)ui.cache.delete(ui.cache.keys().next().value);ui.error='';renderPageIfActive('finance');
  },err=>{if(!current())return;ui.loadingKey='';ui.error=cleanApiErrorMessage(err,'台帳を取得できません。');renderPageIfActive('finance');});
 }
 function cflPaste_(event,i,col){

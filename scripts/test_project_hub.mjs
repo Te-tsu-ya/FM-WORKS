@@ -12,6 +12,7 @@ class Sheet {
 const users=[{employeeId:'A',name:'管理者',role:'ADMIN'},{employeeId:'M',name:'上司',role:'MANAGER'},{employeeId:'E',name:'担当',role:'EMPLOYEE',managerId:'M'},{employeeId:'X',name:'別担当',role:'EMPLOYEE'}];
 const sheets={},cache=new Map();let seq=0,auditFails=false;
 const ctx=vm.createContext({console,DB:{timeZone:'Asia/Tokyo',sheets:{projects:'プロジェクト'}},getDb_:()=>({getSheetByName:name=>sheets[name]||null}),
+ readRowsByColumnValues_:(sh,col,width,values,_ci,withRows)=>sh.rows.flatMap((r,i)=>i>0&&values.includes(String(r[col-1]))?[(withRows?{rowNumber:i+1,values:sh.getRange(i+1,1,1,width).getDisplayValues()[0]}:sh.getRange(i+1,1,1,width).getDisplayValues()[0])]:[]),
  requireSession_:token=>{const employee=users.find(u=>u.employeeId===token);if(!employee)throw Error('認証が必要');return {employee};},
  requireAdminSession_:token=>{if(token!=='A')throw Error('管理者のみ');return {employee:users[0]};},getEmployees_:()=>users,
  getManagedEmployeeIds_:u=>new Set(users.filter(e=>e.managerId===u.employeeId).map(e=>e.employeeId)),

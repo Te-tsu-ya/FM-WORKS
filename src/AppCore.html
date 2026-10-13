@@ -283,6 +283,42 @@ function changeWorkLocation(location){
   }).recordWorkLocationChange(state.sessionToken,location);
 }
 
+// Business drafts remain memory-only; warn before a reload or confirmed logout.
+function applicationWritePending_(){
+  return !!(state.busy||
+    (typeof quoteUi!=='undefined'&&quoteUi.busy)||
+    (typeof financeUi!=='undefined'&&financeUi.busy)||
+    (typeof financeBulkUi!=='undefined'&&(financeBulkUi.busy||financeBulkUi.uncertain||financeBulkUi.locked&&!financeBulkUi.complete))||
+    (typeof somuUi!=='undefined'&&somuUi.busy)||
+    (typeof somuGrowth!=='undefined'&&somuGrowth.busy)||
+    (typeof projectHubUi!=='undefined'&&projectHubUi.busy)||
+    (typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)||
+    (typeof cashFlowUi!=='undefined'&&(cashFlowUi.busy||cashFlowUi.uncertain))||
+    (typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing||cfbUi.importPending))||
+    (typeof cflUi!=='undefined'&&(cflUi.busy||cflUi.uncertain)));
+}
+function applicationUnsavedItems_(){
+  const items=[];
+  if(typeof rememberWorklogQuickDraft==='function')rememberWorklogQuickDraft();
+  if(typeof financeRememberEntry_==='function')financeRememberEntry_();
+  if(typeof projectHubRememberDraft_==='function')projectHubRememberDraft_();
+  if(typeof quoteUi!=='undefined'&&quoteUi.dirty)items.push('見積');
+  if(typeof financeActiveForm!=='undefined'&&financeActiveForm&&financeActiveForm.changed)items.push('経費・出張申請');
+  if(typeof financeBulkUi!=='undefined'&&!financeBulkUi.complete&&
+     (String(financeBulkUi.raw||'').trim()||financeBulkUi.rows.some(r=>typeof financeGridHasRecord_==='function'&&financeGridHasRecord_(r))))items.push('経費台帳');
+  if(typeof projectHubUi!=='undefined'&&projectHubUi.editor&&projectHubUi.editor.changed)items.push('プロジェクト');
+  if(typeof cashFlowUi!=='undefined'&&cashFlowUi.dirty)items.push('年間資金繰り');
+  if(typeof cflDirty_==='function'&&cflDirty_())items.push('金融機関別台帳');
+  if(typeof cfbUi!=='undefined'&&cfbUi.preview&&cfbUi.preview.length)items.push('銀行明細の取込');
+  if(typeof worklogQuickDrafts!=='undefined'&&Array.from(worklogQuickDrafts.values()).some(d=>String(d.wlQuickProject||d.wlQuickDescription||'').trim()))items.push('工数');
+  return items;
+}
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('beforeunload',event=>{
+  if(state.sessionToken&&(applicationWritePending_()||applicationUnsavedItems_().length)){
+    event.preventDefault();event.returnValue='';
+  }
+});
+
 function performPunch(action){
   if(state.busy)return;
   state.busy=true;showToast(`${action}を登録しています...`);
@@ -407,6 +443,7 @@ function navigate(page){
   if(page!=='schedule')state.schedule.mobileDetailOpen=false;
   state.page=page;if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.route(page);history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
   const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
+  if(page==='home')loadHomeOverview({silent:true});
   if(page==='schedule')loadSchedule({silent:true});
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs({silent:true});
