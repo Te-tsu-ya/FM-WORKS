@@ -62,9 +62,10 @@ function financeWorkspaceGo_(mode){
    financeWorkspaceMode=mode==='reports'?'reports':'cashflow';
    financeUi.insightMode=false;
    if(!cashFlowUi.open)cashFlowOpen_();
+   cfbUi.active=true;
    if(mode==='reports')cfbSection_('reports');
    else if(mode==='bankPaste')cfbSection_('banks');
-   else cfbSection_('overview');
+   else cfbSection_('ledger');
    return;
  }
  const go=()=>{

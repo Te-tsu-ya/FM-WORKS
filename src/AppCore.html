@@ -384,6 +384,7 @@ function scheduleWorkspaceTabs(activeId){
   return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
 }
 function navigate(page){
+  if(state.page==='finance'&&page!==state.page&&typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
   if(page!==state.page&&((typeof quoteUi!=='undefined'&&quoteUi.busy)||
      (typeof financeUi!=='undefined'&&financeUi.busy)||
      (typeof somuUi!=='undefined'&&somuUi.busy)||
