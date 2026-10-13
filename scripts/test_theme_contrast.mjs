@@ -46,14 +46,14 @@ for(const bg of [...people.matchAll(/bg:'(#[0-9a-f]+)'/g)].map(m=>m[1]))assert.o
 const surfaceBackgrounds=selector=>rules.filter(r=>r.selector.trim()===selector).map(r=>declarations(r.body).background).filter(Boolean);
 for(const selector of ['.sidebar','.topbar','.mobile-nav','.mobile-drawer','.login-stage','.login-panel','.login-input-wrap','.secondary-button','.search-results','.profile-menu','.field input,.field select,.field textarea','.day','.month-day','.home-stat','.request-quick-card']){
  const backgrounds=surfaceBackgrounds(selector);assert.ok(backgrounds.length,'missing neutral CSS: '+selector);
- for(const background of backgrounds)assert.ok(!/var\\(--fill-danger\\)/.test(background),'danger red leaked into '+selector+': '+background);
+ for(const background of backgrounds)assert.ok(!/var\(--fill-danger\)/.test(background),'danger red leaked into '+selector+': '+background);
 }
 for(const selector of ['.sidebar','.topbar','.login-stage','.login-panel','.mobile-nav','.mobile-drawer']){
- for(const background of surfaceBackgrounds(selector))assert.ok(!/var\\(--fill-(?:info|success)\\)/.test(background),'strong action background leaked into '+selector);
+ for(const background of surfaceBackgrounds(selector))assert.ok(!/var\(--fill-(?:info|success)\)/.test(background),'strong action background leaked into '+selector);
 }
 for(const selector of ['.login-submit','.brand-mark']){
  const backgrounds=surfaceBackgrounds(selector);assert.ok(backgrounds.length,'missing brand action: '+selector);
- for(const background of backgrounds)assert.ok(!/var\\(--(?:info-bg|fill-danger|danger-bg)\\)/.test(background),'invalid faded/danger brand background '+selector);
+ for(const background of backgrounds)assert.ok(!/var\(--(?:info-bg|fill-danger|danger-bg)\)/.test(background),'invalid faded/danger brand background '+selector);
 }
 assert.ok(surfaceBackgrounds('.tone-green').some(x=>x.includes('var(--success-bg)')),'green tone must stay soft');
 assert.ok(surfaceBackgrounds('.notification-dot').some(x=>x.includes('var(--fill-danger)')),'real alert marker must stay red');
