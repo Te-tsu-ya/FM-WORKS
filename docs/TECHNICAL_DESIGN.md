@@ -2524,3 +2524,9 @@ PR122で旧CI/Deployを `.github/workflows-disabled/` へ移動し、root AGENTS
 - `src/StylesAccessibility.html` による可読性補強、Indexの読み込み順、DOM、GASの業務処理、v0.25.4金融機関別台帳とメモリー保存のデモ、DB/Sheetsは変更しない。
 - `scripts/test_theme_contrast.mjs` に背景の意味チェックを追加。主要な中立面で危険・強調色を使用しないこと、ログイン送信とロゴが淡すぎないこと、危険通知が赤色を維持することをCSSソース上で確認する。ブラウザーのcomputed style判定ではない。
 - GitHub Actionsを使わない。GitHubコード統合とGAS公開版更新を区別し、GAS v192はGitHubだけ変更しても更新されない。実機画面・認証付き操作・速度測定は未検証として残す。
+
+
+### v0.25.5 APP.version同期と静的回帰（2026-10-13）
+- `src/Code.gs` の `APP.version` を `0.25.5` へ更新。これは `getInitialData` の `app.version` とIndexテンプレートの `appVersion` に伝わる識別子であり、DB_SCHEMA・公開範囲・GASエンドポイントは変更しない。
+- `src/GeneratedDocs.gs` は最新版の要件定義書・技術設計書から `scripts/generate_docs.mjs` と同じ形式で再生成する。文書と実行コードの版の一致を専用の `scripts/test_app_version_contract.mjs` で検査する。
+- 実GASは引き続き公開版192（v0.25.4）。GitHub mainへv0.25.5を統合しても自動公開しない。次回の認証済み直接操作で `Styles.html`・`Code.gs`・`GeneratedDocs.gs` を照合してGAS版を更新する。ユーザー実操作は公開後に別途確認する。
