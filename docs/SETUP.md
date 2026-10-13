@@ -1,5 +1,7 @@
 # FM WORKS 初期・本番セットアップ
 
+> **GitHub Actions枠を消費せず、通常のChatGPTからGAS公開を予約する方法:** [`GAS_NO_ACTIONS_BRIDGE.md`](GAS_NO_ACTIONS_BRIDGE.md) に、所有者PCで動作するローカル公開ブリッジの初回設定・検証・公開・公開確認方法を記載。初回Google認証／PC常駐登録が完了するまでは「自動公開できる」と報告しない。
+
 ## 1. GPT検証と直接公開（2026-10-12以降）
 
 最初に[AGENTS.md](../AGENTS.md)を読む。GitHub Actionsは自動／手動とも禁止。無料枠の復活時も利用しない。旧ワークフローは `.github/workflows-disabled/` に保管するだけで、復元しない。

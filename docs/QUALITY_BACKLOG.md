@@ -168,3 +168,11 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - 検証の限界: GitHub実ソースをV8で検査し、90件のライト/ダーク静的コントラスト契約と4種類の改変検出、版整合契約に合格。プライベートリポジトリ全体をローカル展開できない環境のため、Node全テスト・Chromium画面12本は未実行。実ブラウザー可視性を保証しない。
 - **未公開**: GASの既存バージョン192はv0.25.4。main統合はGAS更新を意味しない。認証済み直接操作またはローカルclaspで `Styles.html` / `Code.gs` / `GeneratedDocs.gs` を照合・反映し、既存URLの公開版を更新する。GitHub Actionsは使わない。
 - **残る受入**: 管理者ログイン後のホーム・全メニュー・金融機関別縦台帳・年間資金繰り・PC/スマホのライト/ダーク表示、金融データの保存・計算の一連操作をGAS実環境で確認する。本導入の共有DB・多人数同時更新・監査・バックアップの方針はCTOとの別途合意が必要。
+
+
+## 2026-10-13 GitHub Actions課金枠に依存しないGAS公開ブリッジ
+
+- DONE（コード・ローカル模擬検証）: `scripts/gas_local_bridge.mjs` と `scripts/gas_local_bridge_core.mjs` を追加。GitHubの公開依頼ポインター `deploy/gas-production` を5分おきに所有者PCで取得し、既存GASへのclasp同期／同一デプロイID更新／配信受領 `deploy/gas-published` を行う。GitHub Actionsは使用しない。
+- DONE（模擬検証）: `scripts/test_gas_local_bridge.mjs` で、認証された既存ターゲット以外の拒否、旧SHA拒否、未管理ファイル・Google側変更時の中断、公開版更新、冪等性、文書のみ変更時のスキップ、GitHub受領ブランチ確認を実行。
+- BLOCKED（所有者PCの初回操作待ち）: Google OAuthのclasp login、既存Script ID登録、Mac LaunchAgentまたはWindowsタスクスケジューラ登録、実GASソースと公開版の更新、公開URLログイン／画面確認。完了するまでGAS v0.25.5を反映済みとは報告しない。
+- 引き継ぎ手順と安全性は `docs/GAS_NO_ACTIONS_BRIDGE.md`。GitHub Actionsは復活させず、PCが停止中の自動公開は行わない。

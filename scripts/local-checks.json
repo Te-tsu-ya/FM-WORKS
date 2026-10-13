@@ -45,6 +45,7 @@
     "node scripts/test_finance_quote_refresh.mjs",
     "node scripts/test_theme_contrast.mjs",
     "node scripts/test_app_version_contract.mjs",
+    "node scripts/test_gas_local_bridge.mjs",
     "node scripts/test_live_workspaces.mjs",
     "node scripts/test_repository_demo.mjs",
     "node scripts/test_cashflow_ledger_client.mjs"
