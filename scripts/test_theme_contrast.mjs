@@ -44,12 +44,15 @@ const people=fs.readFileSync('src/AppCore.html','utf8').split('const PERSON_COLO
 for(const bg of [...people.matchAll(/bg:'(#[0-9a-f]+)'/g)].map(m=>m[1]))assert.ok(contrast('#173452',bg)>=4.5,'employee avatar contrast on '+bg);
 // Prevent palette regressions that numerical text-contrast checks alone do not catch.
 const surfaceBackgrounds=selector=>rules.filter(r=>r.selector.trim()===selector).map(r=>declarations(r.body).background).filter(Boolean);
-for(const selector of ['.sidebar','.topbar','.mobile-nav','.mobile-drawer','.login-stage','.login-panel','.login-input-wrap','.secondary-button','.search-results','.profile-menu','.field input,.field select,.field textarea','.day','.month-day','.home-stat','.request-quick-card']){
+for(const selector of ['.sidebar','.topbar','.mobile-nav','.mobile-drawer','.login-stage','.login-panel','.login-input-wrap','.login-shell','.login-visual','.secondary-button','.search-results','.search-results button','.profile-menu','.notification-menu','.field input,.field select,.field textarea','.day','.month-day','.home-stat','.request-quick-card','.hero','.home-commandbar','.loading-card','.segmented button.active','.filter-select','.request-launch','.request-subtypes button','.company-year-select','.mini-month']){
  const backgrounds=surfaceBackgrounds(selector);assert.ok(backgrounds.length,'missing neutral CSS: '+selector);
  for(const background of backgrounds)assert.ok(!/var\(--fill-danger\)/.test(background),'danger red leaked into '+selector+': '+background);
 }
 for(const selector of ['.sidebar','.topbar','.login-stage','.login-panel','.mobile-nav','.mobile-drawer']){
  for(const background of surfaceBackgrounds(selector))assert.ok(!/var\(--fill-(?:info|success)\)/.test(background),'strong action background leaked into '+selector);
+}
+for(const selector of ['.search-box','.segmented','.progress','.loading-card','.home-loading-line,.home-loading-value,.home-loading-dot']){
+ for(const background of surfaceBackgrounds(selector))assert.ok(!/var\(--fill-info\)/.test(background),'solid action blue leaked into soft surface '+selector);
 }
 for(const selector of ['.login-submit','.brand-mark']){
  const backgrounds=surfaceBackgrounds(selector);assert.ok(backgrounds.length,'missing brand action: '+selector);
