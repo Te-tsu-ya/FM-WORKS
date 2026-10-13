@@ -2,6 +2,8 @@
 
 > **GitHub Actions枠を消費せず、通常のChatGPTからGAS公開を予約する方法:** [`GAS_NO_ACTIONS_BRIDGE.md`](GAS_NO_ACTIONS_BRIDGE.md) に、所有者PCで動作するローカル公開ブリッジの初回設定・検証・公開・公開確認方法を記載。初回Google認証／PC常駐登録が完了するまでは「自動公開できる」と報告しない。
 
+**公開専用PC（2026-10-13確定）:** Windows Dell（第11世代Core i7）。初回セットアップは [`GAS_WINDOWS_DELL_SETUP.md`](GAS_WINDOWS_DELL_SETUP.md)。Mac用の記述は代替経路に過ぎず、今回の公開ブリッジはWindowsのタスクスケジューラを使う。GitHub Actionsは無効のまま維持する。
+
 ## 1. GPT検証と直接公開（2026-10-12以降）
 
 最初に[AGENTS.md](../AGENTS.md)を読む。GitHub Actionsは自動／手動とも禁止。無料枠の復活時も利用しない。旧ワークフローは `.github/workflows-disabled/` に保管するだけで、復元しない。

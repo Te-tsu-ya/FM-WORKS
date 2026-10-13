@@ -5,7 +5,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {
-  RELEASE_BRANCH, KNOWN_DEPLOYMENT_ID, INITIAL_EXPECTED_VERSION, INITIAL_BASELINE_COMMIT, checkClaspProject,
+  RELEASE_BRANCH, KNOWN_DEPLOYMENT_ID, INITIAL_EXPECTED_VERSION, INITIAL_BASELINE_COMMIT, checkClaspProject, claspInvocation,
   extractDeployment, verifyDeployResult, validateRequestedCommit, contentHashes,
   compareInventories, assertNoRemoteDrift, assertPublishedSnapshot, sameSourceSnapshot
 } from './gas_local_bridge_core.mjs';
@@ -14,6 +14,27 @@ const old='a'.repeat(40),now='b'.repeat(40);
 assert.equal(RELEASE_BRANCH,'deploy/gas-production');
 assert.ok(KNOWN_DEPLOYMENT_ID.startsWith('AKfy'));
 assert.equal(INITIAL_EXPECTED_VERSION,192);
+assert.deepEqual(claspInvocation(['list-deployments'], 'linux'), {command:'clasp',args:['list-deployments']});
+const windowsInvocation=claspInvocation(['create-deployment','--deploymentId',KNOWN_DEPLOYMENT_ID,'--description','FM WORKS abcd'], 'win32', {ComSpec:'C:\\Windows\\System32\\cmd.exe'});
+assert.equal(windowsInvocation.args[0],'/d');
+assert.equal(windowsInvocation.args[2],'/c');
+assert.match(windowsInvocation.args[3],/clasp\.cmd create-deployment/);
+assert.match(windowsInvocation.args[3],/"FM WORKS abcd"/);
+assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
+
+// Windows registration is intentionally opt-in and runs a read-only preflight first.
+const winInstall=fs.readFileSync(new URL('./Install-GasLocalBridgeWindows.ps1',import.meta.url),'utf8');
+const winRunner=fs.readFileSync(new URL('./Run-GasLocalBridgeWindows.ps1',import.meta.url),'utf8');
+const setup=fs.readFileSync(new URL('./setup_gas_local_bridge.mjs',import.meta.url),'utf8');
+for(const marker of ['New-ScheduledTaskTrigger','-RepetitionInterval','New-TimeSpan -Minutes 5','Register-ScheduledTask','-LogonType Interactive','--preflight','-MultipleInstances IgnoreNew'])
+  assert.ok(winInstall.includes(marker),'missing Windows task safety control: '+marker);
+for(const marker of ['--once','windows-task.log','clasp.cmd'])
+  assert.ok(winRunner.includes(marker),'missing Windows task runner requirement: '+marker);
+for(const marker of ['--install-windows','--status-windows','--remove-windows'])
+  assert.ok(setup.includes(marker),'setup CLI does not expose Windows operation: '+marker);
+assert.ok(!winInstall.includes('Register-ScheduledTask -Force'),'Windows installation must not overwrite an existing task');
+
+
 assert.match(INITIAL_BASELINE_COMMIT,/^[a-f0-9]{40}$/);
 assert.deepEqual(checkClaspProject({scriptId:'S'.repeat(48),rootDir:'src/'}),{scriptId:'S'.repeat(48),rootDir:'src'});
 assert.throws(()=>checkClaspProject({scriptId:'S'.repeat(48),rootDir:'elsewhere'}),/rootDir/);
@@ -58,7 +79,7 @@ function ok(bin,args,cwd,env={}) {
  return r.stdout;
 }
 try {
- const origin=path.join(tmp,'remote.git'),work=path.join(tmp,'work'),fake=path.join(tmp,'fake-bin'),server=path.join(tmp,'fake-gas');
+ const origin=path.join(tmp,'remote with spaces.git'),work=path.join(tmp,'work with spaces'),fake=path.join(tmp,'fake bin'),server=path.join(tmp,'fake gas');
  fs.mkdirSync(fake);fs.mkdirSync(server);fs.mkdirSync(path.join(server,'source'));
  ok('git',['init','--bare','--initial-branch=main',origin],tmp);
  fs.mkdirSync(work);ok('git',['init','--initial-branch=main'],work);
@@ -78,32 +99,35 @@ try {
   fs.copyFileSync(path.join(work,'src',file),path.join(server,'source',file));
  fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.4'};\n");
  fs.writeFileSync(path.join(server,'version'),'192');
- const fakeBin=`#!/bin/sh
-set -eu
-case "$1" in
-list-deployments) echo "- $FM_FAKE_DEPLOYMENT_ID @$(cat "$FM_FAKE_GAS/version") Web app" ;;
-pull) cp "$FM_FAKE_GAS/source/"* . ;;
-push) cp src/* "$FM_FAKE_GAS/source/" ;;
-create-deployment)
-  shift
-  [ "$1" = "--deploymentId" ] || exit 4
-  [ "$2" = "$FM_FAKE_DEPLOYMENT_ID" ] || exit 5
-  old=$(cat "$FM_FAKE_GAS/version")
-  next=$((old + 1))
-  echo "$next" > "$FM_FAKE_GAS/version"
-  echo "Deployed $FM_FAKE_DEPLOYMENT_ID @$next"
-  ;;
-*) exit 7 ;;
-esac
+ const fakeCli=`import fs from 'node:fs';
+import path from 'node:path';
+const args=process.argv.slice(2),server=process.env.FM_FAKE_GAS,dep=process.env.FM_FAKE_DEPLOYMENT_ID;
+const dir=path.join(server,'source');
+if(args[0]==='list-deployments'){
+ console.log('- '+dep+' @'+fs.readFileSync(path.join(server,'version'),'utf8').trim()+' Web app');
+}else if(args[0]==='pull'){
+ for(const name of fs.readdirSync(dir))fs.copyFileSync(path.join(dir,name),path.join(process.cwd(),name));
+}else if(args[0]==='push'){
+ const source=path.join(process.cwd(),'src');
+ if(!fs.existsSync(source))process.exit(7);
+ fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir,{recursive:true});
+ for(const name of fs.readdirSync(source))if(/\.(?:gs|html|json)$/.test(name))fs.copyFileSync(path.join(source,name),path.join(dir,name));
+}else if(args[0]==='create-deployment'){
+ if(args[1]!=='--deploymentId'||args[2]!==dep)process.exit(4);
+ const n=Number(fs.readFileSync(path.join(server,'version'),'utf8'))+1;
+ fs.writeFileSync(path.join(server,'version'),String(n));console.log('Deployed '+dep+' @'+n);
+}else process.exit(7);
 `;
- fs.writeFileSync(path.join(fake,'clasp'),fakeBin,{mode:0o755});
+ fs.writeFileSync(path.join(fake,'fake-clasp.mjs'),fakeCli);
+ fs.writeFileSync(path.join(fake,'clasp'),'#!/bin/sh\nexec node "$(dirname "$0")/fake-clasp.mjs" "$@"\n',{mode:0o755});
+ fs.writeFileSync(path.join(fake,'clasp.cmd'),'@echo off\r\nnode "%~dp0fake-clasp.mjs" %*\r\n');
  ok('git',['add','scripts','src','.gitignore'],work);ok('git',['commit','-m','[skip ci] initial bridge'],work);
  const initialBaseline=ok('git',['rev-parse','HEAD'],work).trim();
  fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.5'};\n");
  ok('git',['add','src/Code.gs'],work);ok('git',['commit','-m','[skip ci] approved update'],work);
  ok('git',['branch','deploy/gas-production'],work);
  ok('git',['push','-u','origin','main','deploy/gas-production'],work);
- const env={PATH:fake+':'+process.env.PATH,FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
+ const env={PATH:fake+path.delimiter+process.env.PATH,FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
@@ -145,5 +169,5 @@ esac
  assert.notEqual(r.code,0,'unexpected external GAS edit must fail');
  assert.match(r.stderr,/outside approved publisher/);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','drift does not deploy');
- console.log('PASS local GAS bridge fake end-to-end: preflight read-only, one controlled deploy, idempotency, remote drift stops publication');
+ console.log('PASS local GAS bridge fake end-to-end: preflight read-only, one controlled deploy, idempotency, remote drift stops publication (portable Node/clasp fake)');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}

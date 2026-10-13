@@ -176,3 +176,11 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - DONE（模擬検証）: `scripts/test_gas_local_bridge.mjs` で、認証された既存ターゲット以外の拒否、旧SHA拒否、未管理ファイル・Google側変更時の中断、公開版更新、冪等性、文書のみ変更時のスキップ、GitHub受領ブランチ確認を実行。
 - BLOCKED（所有者PCの初回操作待ち）: Google OAuthのclasp login、既存Script ID登録、Mac LaunchAgentまたはWindowsタスクスケジューラ登録、実GASソースと公開版の更新、公開URLログイン／画面確認。完了するまでGAS v0.25.5を反映済みとは報告しない。
 - 引き継ぎ手順と安全性は `docs/GAS_NO_ACTIONS_BRIDGE.md`。GitHub Actionsは復活させず、PCが停止中の自動公開は行わない。
+
+
+## 2026-10-13 Windows Dell向けブリッジ移植
+
+- DONE（コード）: Windows npmの `clasp.cmd` 起動処理、PowerShellのタスクスケジューラ5分間隔登録・状態確認・登録解除、ログ保存、Windows対応の模擬Git/clasp試験、Dell用初回設定文書を追加。
+- DONE（Linux上の模擬試験）: 最新ブリッジをNode 22 + Git + 偽claspで実行し、正常公開、冪等性、Google手動変更時の停止、公開依頼のSHA不整合停止を確認。Windowsのコマンド構造・ScheduledTasks設定はソース検査。**実際のWindowsマシン上では未実行。**
+- BLOCKED: DellでNode/Git/claspを準備、Google本人認証、既存Script IDの紐付け、`--preflight` / `--once` / `--install-windows` を順に実行。既存GAS公開版192からの更新と、実ブラウザーのログイン・メニュー配色確認は未実施。
+- GitHub Actionsなど実行時間の課金対象サービスは引き続き使用禁止。権限・DB・既存公開URLは維持する。

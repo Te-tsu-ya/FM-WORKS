@@ -11,8 +11,8 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const action=process.argv[2];
 const filename=path.join(root,'.clasp.json');
 const escapeXml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
-if (process.argv.length!==3 || !['--connect','--install-macos'].includes(action)) {
-  console.error('Usage: node scripts/setup_gas_local_bridge.mjs --connect|--install-macos');process.exit(2);
+if (process.argv.length!==3 || !['--connect','--install-macos','--install-windows','--status-windows','--remove-windows'].includes(action)) {
+  console.error('Usage: node scripts/setup_gas_local_bridge.mjs --connect|--install-macos|--install-windows|--status-windows|--remove-windows');process.exit(2);
 }
 if(action==='--connect'){
   if(fs.existsSync(filename)){console.error('.clasp.json already exists. Refusing to replace your current project connection.');process.exit(1);}
@@ -51,4 +51,14 @@ if(action==='--install-macos'){
   console.log('To enable: launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/jp.fusionmind.fmworks-gas.plist"');
   console.log('To stop:   launchctl bootout gui/$(id -u) "$HOME/Library/LaunchAgents/jp.fusionmind.fmworks-gas.plist"');
   console.log('This uses local Mac resources and consumes no GitHub Actions minutes.');
+}
+
+if (['--install-windows','--status-windows','--remove-windows'].includes(action)) {
+  if (process.platform !== 'win32') throw Error('Windows Task Scheduler setup must run on Windows.');
+  const modes={'--install-windows':'Install','--status-windows':'Status','--remove-windows':'Remove'};
+  const script=path.join(root,'scripts','Install-GasLocalBridgeWindows.ps1');
+  const result=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',script,'-Mode',modes[action]],{
+    cwd:root,stdio:'inherit',windowsHide:false,timeout:600000
+  });
+  if (result.error || result.status !== 0) throw Error('Windows setup failed; inspect the preceding PowerShell message.');
 }

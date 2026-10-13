@@ -31,3 +31,10 @@ CTOへの説明は `demo/data/financial.json` の架空データと `node script
 - ユーザーの「GASへ公開」承認があり、PR統合と対象main SHAを確認した場合のみ、`deploy/gas-production` ブランチを最新main SHAへfast-forward更新する。これは**公開依頼**であり、GAS更新成功を意味しない。
 - `deploy/gas-published` はローカルブリッジが既存デプロイのバージョンとソース再取得を確認した場合だけ進む**配信受領SHA**。2つのSHAの一致でGASソース反映が確認できるが、ログイン後ブラウザー操作・DB動作の受入は別途必要。
 - 初回Google認証とMac/Windowsの起動・登録は所有者側で一度設定する必要がある。公開先を変えず、Script ID・Google OAuthトークン・社員データをGitHubやチャットへ載せない。PC停止中は待機であり、無制限・無料を保証しない。
+
+
+## Windows Dellを公開ブリッジに指定（2026-10-13）
+
+- ユーザー指定PCは **Windows Dellノート（第11世代Core i7）**。`docs/GAS_WINDOWS_DELL_SETUP.md` に、初回Google認証・既存Script ID接続・公開前の読み取り照合・Windowsタスクスケジューラへの安全な5分間隔登録を記載する。
+- WindowsのNode.jsからnpm `clasp.cmd` を起動する修正と、PowerShell ScheduledTasksでの `--install-windows` / `--status-windows` / `--remove-windows` を用いる。Mac専用の `--install-macos` をWindowsで案内しない。
+- 所有者Dellの初回接続・タスク登録・実GAS公開・認証付き操作は未実施。実際に完了するまで「自動公開が動作中」と扱わない。

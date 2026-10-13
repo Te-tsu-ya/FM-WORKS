@@ -6,6 +6,20 @@ export const INITIAL_EXPECTED_VERSION = 192;
 export const INITIAL_BASELINE_COMMIT = '067b070d2cf307d0a5aff52d716011238d8b819b';
 export const ACCEPTED_SOURCE = /^(?:[A-Za-z0-9_-]+\.(?:gs|html)|appsscript\.json)$/;
 
+// Windows npm global shims are .cmd files, which cannot be spawned as normal executables.
+// Run only this fixed, trusted CLI via cmd.exe; never interpolate user-supplied shell syntax.
+export function claspInvocation(argv, platform = process.platform, env = process.env) {
+  if (!Array.isArray(argv) || argv.length === 0) throw Error('Missing clasp arguments.');
+  const args = argv.map(arg => String(arg));
+  if (platform !== 'win32') return {command:'clasp', args};
+  const quote = arg => {
+    if (!/^[A-Za-z0-9 _./:=@+\-]+$/.test(arg)) throw Error('Unsafe clasp command argument.');
+    return arg.includes(' ') ? '"' + arg + '"' : arg;
+  };
+  const line = 'clasp.cmd ' + args.map(quote).join(' ');
+  return {command:env.ComSpec || 'cmd.exe',args:['/d','/s','/c','"' + line + '"']};
+}
+
 export function checkClaspProject(config) {
   if (!config || !/^[A-Za-z0-9_-]{20,}$/.test(String(config.scriptId || ''))) {
     throw Error('Local .clasp.json must contain the existing Apps Script project Script ID.');
