@@ -6,7 +6,7 @@
 .fw-header-aside{font-size:12px;color:var(--muted);max-width:370px;text-align:right}
 .fw-navigation{display:flex;gap:5px;border-bottom:1px solid var(--line);padding:0 0 9px;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin;min-width:0}
 .fw-nav-item{flex:0 0 auto;min-height:42px;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:10px;padding:9px 15px;cursor:pointer;font-weight:700;font-size:13px}
-.fw-nav-item.is-active{color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,var(--surface));border-color:color-mix(in srgb,var(--blue) 23%,var(--line))}
+.fw-nav-item.is-active{color:var(--blue);background:color-mix(in srgb,var(--fill-info) 10%,var(--surface));border-color:color-mix(in srgb,var(--blue) 23%,var(--line))}
 .fw-nav-item:hover:not(.is-active){background:var(--surface2);color:var(--text)}
 .fw-nav-item:focus-visible,.fw-action-card:focus-visible,.fw-grid input:focus-visible,.fw-map select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .fw-content{min-width:0;display:grid;gap:12px}
@@ -23,10 +23,10 @@
 .fw-action-card strong{grid-column:1/-1;font-size:22px;line-height:1.35;overflow-wrap:anywhere}
 .fw-action-card small{font-size:11px;line-height:1.5;color:var(--muted);min-width:0}
 .fw-action-card b{font-size:11px;color:var(--blue);white-space:nowrap;text-align:right}
-.fw-action-card:hover{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 4%,var(--surface))}
+.fw-action-card:hover{border-color:var(--blue);background:color-mix(in srgb,var(--fill-info) 4%,var(--surface))}
 .fw-shortcuts .fw-action-card{min-height:114px}
 .fw-shortcuts .fw-action-card strong{font-size:17px}
-.fw-important{background:color-mix(in srgb,var(--blue) 7%,var(--surface))}
+.fw-important{background:color-mix(in srgb,var(--fill-info) 7%,var(--surface))}
 .fw-subtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px}
 .fw-list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .fw-list-toolbar h2{font-size:18px;margin:0 0 4px}
@@ -65,8 +65,8 @@
 .fw-grid td:nth-child(2) input{width:125px}
 .fw-grid td:nth-child(7) input{width:115px;text-align:right;font-variant-numeric:tabular-nums}
 .fw-grid td:last-child{max-width:230px;white-space:normal;min-width:110px}
-.fw-grid [data-valid=false]{color:#b91c1c;font-weight:700;background:color-mix(in srgb,#b91c1c 7%,var(--surface))}
-.fw-grid [data-valid=true]{color:#08784c}
+.fw-grid [data-valid=false]{color:var(--danger-ink);font-weight:700;background:color-mix(in srgb,#b91c1c 7%,var(--surface))}
+.fw-grid [data-valid=true]{color:var(--success-ink)}
 .fw-pager{display:flex;gap:12px;align-items:center;justify-content:center;font-size:12px}
 .fw-savebar{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:13px;font-size:13px}
 .fw-savebar strong{font-variant-numeric:tabular-nums}

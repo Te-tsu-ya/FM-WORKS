@@ -1,8 +1,8 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';import vm from 'node:vm';import os from 'node:os';
 import path from 'node:path';import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';import {pathToFileURL} from 'node:url';
-const css=['Styles.html','StylesCashFlow.html','StylesCashFlowBank.html','StylesCashFlowBankGrid.html','StylesCashFlowAnalysis.html']
- .map(name=>fs.readFileSync('src/'+name,'utf8')).join('\n');
+const css=appStyles();
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ctx=vm.createContext({
  state:{sessionToken:'ADMIN_FAKE',page:'finance',data:{today:'2026-10-11',permissions:{adminConsole:true,cashFlowWorkspace:true}}},

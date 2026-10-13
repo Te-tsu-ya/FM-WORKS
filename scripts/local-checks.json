@@ -42,7 +42,9 @@
     "node scripts/test_worklog_integrity.mjs",
     "node scripts/test_operational_refresh.mjs",
     "node scripts/test_local_docs_sync.mjs",
-    "node scripts/test_finance_quote_refresh.mjs"
+    "node scripts/test_finance_quote_refresh.mjs",
+    "node scripts/test_theme_contrast.mjs",
+    "node scripts/test_live_workspaces.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,8 +8,7 @@ import {pathToFileURL} from 'node:url';
 const root=process.cwd();
 const client=name=>fs.readFileSync(path.join(root,'src',name+'.html'),'utf8')
  .replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,'');
-const css=['Styles','StylesWorkflowV15','StylesFinanceAdvisor','StylesFinanceWorkspace','StylesFinanceGrid'].map(name=>
- fs.readFileSync(path.join(root,'src',name+'.html'),'utf8')).join('\n');
+const css=appStyles();
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const data={setupRequired:false,expenses:[
  {id:'E1',employeeId:'U1',employeeName:'架空社員A',usedOn:'2026-10-10',item:'文具代',

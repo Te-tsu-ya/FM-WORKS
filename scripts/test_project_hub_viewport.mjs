@@ -1,3 +1,4 @@
+import {appStyles} from './theme_styles.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {workspace,detail,escapeHtml} from './test_project_hub.mjs';
-const css=['Styles.html','StylesWorkflowV15.html','StylesProjectHub.html'].map(f=>fs.readFileSync('src/'+f,'utf8')).join('\n');
+const css=appStyles();
 const ctx=vm.createContext({state:{page:'projects',sessionToken:'A',data:{user:{employeeId:'A'},permissions:{adminConsole:true}}},window:{addEventListener:()=>{}},document:{getElementById:()=>null},escapeHtml,renderPageIfActive:()=>{},showToast:()=>{}});
 vm.runInContext(fs.readFileSync('src/AppProjectHub.html','utf8').replace(/<\/?script>/g,''),ctx);
 vm.runInContext(fs.readFileSync('src/AppProjectAdvanced.html','utf8').replace(/<\/?script>/g,''),ctx);

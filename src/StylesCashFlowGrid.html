@@ -13,14 +13,14 @@
 .cfg-table thead th:first-child{left:0;z-index:5}
 .cfg-table tbody th{position:sticky;left:0;z-index:2;background:var(--surface2);font-weight:700;padding:8px 10px;white-space:nowrap}
 .cfg-table tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface2) 35%,var(--surface))}
-.cfg-table tbody tr:hover{background:color-mix(in srgb,var(--blue) 6%,var(--surface))}
+.cfg-table tbody tr:hover{background:color-mix(in srgb,var(--fill-info) 6%,var(--surface))}
 .cfg-table td input{border:1px solid transparent;background:transparent;color:var(--text);height:41px;min-height:41px;width:100%;min-width:0;box-sizing:border-box;
  padding:6px 8px;text-align:right;font-size:12px;font-family:inherit;font-variant-numeric:tabular-nums;border-radius:0}
 .cfg-table td input[data-cfg-key=note]{text-align:left}
 .cfg-table td input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--surface);position:relative;z-index:4}
-.cfg-table td input[aria-invalid=true]{outline:2px solid #c36528;outline-offset:-2px;background:color-mix(in srgb,#da8b19 6%,var(--surface))}
+.cfg-table td input[aria-invalid=true]{outline:2px solid #c36528;outline-offset:-2px;background:color-mix(in srgb,var(--warning-bg) 6%,var(--surface))}
 .cfg-table td input[readonly]{color:var(--muted)}
-.cfg-table tr.cfg-total th,.cfg-table tr.cfg-total td{background:color-mix(in srgb,var(--blue) 5%,var(--surface));font-size:12px;font-weight:700}
+.cfg-table tr.cfg-total th,.cfg-table tr.cfg-total td{background:color-mix(in srgb,var(--fill-info) 5%,var(--surface));font-size:12px;font-weight:700}
 .cfg-table tr.cfg-total td{text-align:right;white-space:nowrap;padding:10px 8px;font-variant-numeric:tabular-nums}
 .cfg-panel #cfg-copy:not([hidden]){min-height:72px;width:100%}
 .cfg-legacy{padding:9px 0;border-top:1px solid var(--line)}

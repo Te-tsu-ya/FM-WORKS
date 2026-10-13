@@ -24,16 +24,16 @@
 .cbg-table td:nth-child(10){min-width:170px;max-width:230px;padding:5px 9px;white-space:normal;line-height:1.4}
 .cbg-table td:last-child{min-width:76px;text-align:center;padding:4px 6px}
 .cbg-table tr:nth-child(even){background:color-mix(in srgb,var(--surface2) 35%,var(--surface))}
-.cbg-table tr:hover{background:color-mix(in srgb,var(--blue) 6%,var(--surface))}
+.cbg-table tr:hover{background:color-mix(in srgb,var(--fill-info) 6%,var(--surface))}
 .cbg-table td input[type=text]{display:block;box-sizing:border-box;width:100%;height:41px;min-height:41px;min-width:0;border:1px solid transparent;border-radius:0;padding:7px 9px;background:transparent;color:var(--text);font:12px/1.4 inherit}
 .cbg-table td.cbg-money input[type=text]{font-variant-numeric:tabular-nums;text-align:right}
 .cbg-table td input[type=text]:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--surface);position:relative;z-index:2}
 .cbg-table td input[readonly]{cursor:default;color:var(--muted)}
 .cbg-table td .cbg-check{display:inline-flex;align-items:center;gap:5px;justify-content:center;font-size:11px;min-height:40px;cursor:pointer}
 .cbg-table td input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue)}
-.cbg-table td [data-valid=false]{color:#b56b08}
-.cbg-table td[data-valid=false]{color:#b56b08;background:color-mix(in srgb,#d99419 9%,var(--surface))}
-.cbg-table td[data-valid=true]{color:#08784c}
+.cbg-table td [data-valid=false]{color:var(--warning-ink)}
+.cbg-table td[data-valid=false]{color:var(--warning-ink);background:color-mix(in srgb,var(--warning-bg) 9%,var(--surface))}
+.cbg-table td[data-valid=true]{color:var(--success-ink)}
 .cbg-table td button{min-height:34px;padding:6px 10px;font-size:11px}
 .cbg-bottom{font-size:12px;color:var(--muted)}
 .cbg-bottom>div{display:flex;gap:8px;align-items:center}
