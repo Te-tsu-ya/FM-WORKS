@@ -21,7 +21,7 @@
 7. 初回のみ、`node scripts/gas_local_bridge.mjs --once` を実行し、既存GASデプロイへ公開する。成功後に同じ既存URLで実際のログイン画面を表示し、赤色が消えたことを確認する。配色の実機検証はブリッジのソース検証とは別工程である。
 8. 自動化の有効化には `node scripts/setup_gas_local_bridge.mjs --install-macos` を実行。表示された `launchctl bootstrap ...` コマンドでLaunchAgentを登録する。Macにログインして稼働中は5分ごとに差分を確認する。
 
-Windowsは `--connect`、`--preflight`、`--once` が共通。タスクスケジューラで `node scripts/gas_local_bridge.mjs --once` を5分間隔で実行すればよい。
+**公開を担当するPCはWindowsのDellノート（第11世代Core i7）に確定。** Windows専用の初回設定・5分間隔タスク登録・状態確認・停止方法は [`GAS_WINDOWS_DELL_SETUP.md`](GAS_WINDOWS_DELL_SETUP.md) を参照。`clasp.cmd` のWindows起動を実装し、`node scripts/setup_gas_local_bridge.mjs --install-windows` でタスクスケジューラへ登録可能。最初のGoogle認証と `--preflight` が必要で、PC未設定の状態ではGAS公開済みと報告しない。
 
 **初回公開版について:** 記録上はGAS@192（v0.25.4）。現在のGASが他チャットですでに更新されていたら、初回検査は停止する。最新の実公開版を調べ、納得した場合に限りローカル環境変数 `FM_WORKS_INITIAL_GAS_VERSION` に確認した数値を指定する。値を推測して設定しない。
 
