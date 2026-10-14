@@ -1,10 +1,11 @@
 <script>
 /* CASH FLOW ANALYSIS: no persistent browser storage; never trust browser totals. */
-let cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
+const CFA_READ_TTL=300000;
+let cfaUi={workspaceAt:0,monthAt:0,projectionAt:0,year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
  loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:0,monthSeq:0,projectionSeq:0,
  scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,linkReady:false,planPending:null,error:'',notice:''};
 function cfaReset_(){
- cfaUi={year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
+ cfaUi={workspaceAt:0,monthAt:0,projectionAt:0,year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
   loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:cfaUi.seq+1,
   monthSeq:cfaUi.monthSeq+1,projectionSeq:cfaUi.projectionSeq+1,scenarioId:'',projection:null,
   editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,linkReady:false,planPending:null,error:'',notice:''};
@@ -13,60 +14,71 @@ function cfaKey_(){return 'CFA-'+Date.now().toString(36)+'-'+Math.random().toStr
 function cfaMoney_(amount){return amount===null||amount===undefined?'未入力':Number(amount).toLocaleString('ja-JP')+'円';}
 function cfaEsc_(v){return escapeHtml(String(v===null||v===undefined?'':v));}
 function cfaShowError_(e,fallback){cfaUi.error=cleanApiErrorMessage(e,fallback||'資金繰りの処理に失敗しました。');cfaUi.busy=false;cfaUi.exporting=false;renderPageIfActive('finance');}
+function cfaReadError_(e,fallback){cfaUi.error=cleanApiErrorMessage(e,fallback||'資金繰りを取得できませんでした。');renderPageIfActive('finance');}
 function cfaEnsureYear_(){
  const y=cashFlowUi.year;
  if(cfaUi.year===y)return;
  cfaReset_();cfaUi.year=y;
 }
+function cfaInvalidateReads_(){
+ const u=cfaUi;u.workspaceAt=0;u.monthAt=0;u.projectionAt=0;
+ u.seq++;u.monthSeq++;u.projectionSeq++;u.loading=false;u.loadingMonth=false;u.loadingProjection=false;
+ u.forceAfter=false;u.monthForceAfter=false;u.projectionForceAfter=false;
+}
+function cfaLoadActiveView_(force=false){
+ if(cfbUi.tab==='analysis')cfaLoadMonth_(force);
+ if(cfbUi.tab==='scenarios'||cfbUi.tab==='reports')cfaLoadProjection_(force);
+}
 function cfaLoad_(force){
  if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.demo)return;
  cfaEnsureYear_();
- const u=cfaUi,y=cashFlowUi.year;if(u.loading){u.forceAfter=true;return;}
- if(!force&&u.workspace)return;
+ const u=cfaUi,y=cashFlowUi.year;if(u.busy||u.exporting)return;
+ if(u.loading){if(force)u.forceAfter=true;return;}
+ if(!force&&u.workspace&&Date.now()-(u.workspaceAt||0)<CFA_READ_TTL){cfaLoadActiveView_();return;}
+ if(force)cfaInvalidateReads_();
  const seq=++u.seq;u.loading=true;u.error='';
  cfbRpc_('getCashFlowAnalysisWorkspace',y,data=>{
   if(seq!==cfaUi.seq||cashFlowUi.year!==y||!cashFlowUi.open)return;
   u.loading=false;if(u.forceAfter){u.forceAfter=false;cfaLoad_(true);return;}
-  if(!data||data.ok!==true){cfaShowError_({message:'分析情報が取得できません。'});return;}
-  u.workspace=data;
+  if(!data||data.ok!==true){cfaReadError_({message:'分析情報が取得できません。'});return;}
+  u.workspace=data;u.workspaceAt=Date.now();
   if(!u.month||!(data.months||[]).includes(u.month)){
    const today=String(state.data&&state.data.today||'').slice(0,7);
    u.month=(data.months||[]).includes(today)?today:(data.months||[]).at(-1)||'';
   }
   if(u.scenarioId&&!(data.scenarios||[]).some(s=>s.id===u.scenarioId))u.scenarioId='';
   renderPageIfActive('finance');
-  if(cfbUi.tab==='analysis')cfaLoadMonth_(true);
-  if(cfbUi.tab==='scenarios'||cfbUi.tab==='reports')cfaLoadProjection_(true);
- },e=>{if(seq!==cfaUi.seq)return;u.loading=false;cfaShowError_(e,'分析情報を読み込めませんでした。');});
+  cfaLoadActiveView_(true);
+ },e=>{if(seq!==cfaUi.seq)return;u.loading=false;if(u.forceAfter){u.forceAfter=false;cfaLoad_(true);return;}cfaReadError_(e,'分析情報を読み込めませんでした。');});
 }
 function cfaLoadMonth_(force){
  const u=cfaUi;if(!u.workspace||u.workspace.setupRequired||!u.month||cfbUi.demo)return;
  if(u.loadingMonth){if(force)u.monthForceAfter=true;return;}
- if(!force&&u.rows)return;
+ if(!force&&u.rows&&Date.now()-(u.monthAt||0)<CFA_READ_TTL)return;
  const y=cashFlowUi.year,month=u.month,page=u.page,seq=++u.monthSeq;
  u.loadingMonth=true;
  cfbRpc_('getCashFlowAnalysisMonth',{fiscalYear:y,month,page,onlyUnreviewed:u.reviewOnly===true},data=>{
   if(seq!==u.monthSeq||cashFlowUi.year!==y||u.month!==month)return;
   u.loadingMonth=false;
   if(u.monthForceAfter){u.monthForceAfter=false;cfaLoadMonth_(true);return;}
-  if(!data||data.ok!==true){cfaShowError_({message:'明細を取得できません。'});return;}
-  u.rows=data.rows||[];u.total=Number(data.total||0);u.linkReady=data.linkReady===true;renderPageIfActive('finance');
- },e=>{if(seq!==u.monthSeq)return;u.loadingMonth=false;cfaShowError_(e,'明細を読み込めませんでした。');});
+  if(!data||data.ok!==true){cfaReadError_({message:'明細を取得できません。'});return;}
+  u.rows=data.rows||[];u.monthAt=Date.now();u.total=Number(data.total||0);u.linkReady=data.linkReady===true;renderPageIfActive('finance');
+ },e=>{if(seq!==u.monthSeq)return;u.loadingMonth=false;cfaReadError_(e,'明細を読み込めませんでした。');});
 }
 function cfaLoadProjection_(force){
  const u=cfaUi;
  if(!u.workspace||u.workspace.setupRequired||cfbUi.demo)return;
  if(u.loadingProjection){if(force)u.projectionForceAfter=true;return;}
- if(!force&&u.projection&&u.projection.scenarioId===u.scenarioId)return;
+ if(!force&&u.projection&&u.projection.scenarioId===u.scenarioId&&Date.now()-(u.projectionAt||0)<CFA_READ_TTL)return;
  const scenario=u.scenarioId,year=cashFlowUi.year,seq=++u.projectionSeq;
  u.loadingProjection=true;
  cfbRpc_('getCashFlowProjection',{fiscalYear:year,scenarioId:scenario},data=>{
   if(seq!==u.projectionSeq||year!==cashFlowUi.year||scenario!==u.scenarioId)return;
   u.loadingProjection=false;
   if(u.projectionForceAfter){u.projectionForceAfter=false;cfaLoadProjection_(true);return;}
-  if(!data||data.ok!==true){cfaShowError_({message:'シミュレーションの結果を取得できません。'});return;}
-  u.projection=data;renderPageIfActive('finance');
- },e=>{if(seq!==u.projectionSeq)return;u.loadingProjection=false;cfaShowError_(e,'資金繰りの予測に失敗しました。');});
+  if(!data||data.ok!==true){cfaReadError_({message:'シミュレーションの結果を取得できません。'});return;}
+  u.projection=data;u.projectionAt=Date.now();renderPageIfActive('finance');
+ },e=>{if(seq!==u.projectionSeq)return;u.loadingProjection=false;cfaReadError_(e,'資金繰りの予測に失敗しました。');});
 }
 function cfaChangeMonth_(value){
  if(cfaUi.busy)return;
@@ -101,7 +113,7 @@ function cfaSaveAnnotation_(){
  cfbRpc_('saveCashFlowAnnotation',{transactionId:d.id,category:d.category,tags:d.tags,note:d.note,revision:d.revision,requestKey:key},res=>{
   if(!res||res.ok!==true){cfaShowError_({message:'保存結果を確認できません。再試行してください。'});return;}
   u.busy=false;u.editor=null;u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'分類・メモを保存しました。';
-  u.rows=null;cfaLoadMonth_(true);cfaLoad_(true);
+  u.rows=null;cfaLoad_(true);
  },e=>cfaShowError_(e,'分類・メモを保存できませんでした。'));
 }
 function cfaRuleNew_(id){
@@ -128,7 +140,7 @@ function cfaApplyCurrentRules_(){
  if(!ids.length){u.error='未確定の分類候補がありません。';renderPageIfActive('finance');return;}
  openConfirmDialog('分類ルールを反映','候補の'+ids.length+'件を明細に保存します。保存済みの個別メモ・分類は上書きしません。','選択月の候補を反映',()=>{
   u.busy=true;cfbRpc_('applyCashFlowRules',{transactionIds:ids,requestKey:cfaKey_()},res=>{
-   u.busy=false;u.rows=null;u.notice=res.added+'件に分類を反映しました。';cfaLoad_(true);cfaLoadMonth_(true);
+   u.busy=false;u.rows=null;u.notice=res.added+'件に分類を反映しました。';cfaLoad_(true);
   },e=>cfaShowError_(e,'自動分類を反映できませんでした。'));
  });
 }
@@ -147,7 +159,7 @@ function cfaReconcile_(index){
   u.busy=true;cfbRpc_('saveCashFlowBankReconciliation',payload,res=>{
    if(!res||res.ok!==true){cfaShowError_({message:'照合の保存結果が不明です。再試行してください。'});return;}
    u.busy=false;u.reconcilePending=null;u.notice=res.auditRecorded===false?'照合済みですが監査履歴を確認してください。':'照合結果を保存しました。';
-   cfaLoad_(true);cfbLoadAfterWrite_();
+   cfbLoadAfterWrite_();
   },e=>cfaShowError_(e,'照合結果を保存できませんでした。'));
  });
 }
@@ -189,7 +201,7 @@ function cfaScenarioSave_(){
   if(!res||res.ok!==true){cfaShowError_({message:'シナリオ保存結果が不明です。再試行してください。'});return;}
   u.busy=false;u.scenarioDraft=null;u.scenarioId=res.id;u.projection=null;u.loadingProjection=false;u.projectionSeq++;
   u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'条件別の資金繰りを保存しました。';
-  cfaLoad_(true);cfaLoadProjection_(true);
+  cfaLoad_(true);
  },e=>cfaShowError_(e,'シミュレーション条件を保存できませんでした。'));
 }
 function cfaDownloadReport_(format){
@@ -435,10 +447,12 @@ function cfaReportsPage_(){
 function cfaPage_(){
  if(cfaUi.year!==cashFlowUi.year)cfaEnsureYear_();
  const u=cfaUi;if(cfbUi.demo)return '<section class="card cfa-panel"><h2>資金管理</h2><p>架空データ表示では本番用の分類・照合や帳票を保存できません。実データへ戻ってください。</p></section>';
- if(!u.workspace){if(!u.loading)cfaLoad_(true);return '<section class="card cfa-panel">明細・分類ルール・照合を読み込み中です。</section>';}
+ if(!u.workspace){
+  if(u.error)return '<section class="card cfa-panel"><p class="finance-error" role="alert">'+cfaEsc_(u.error)+'</p><button class="secondary-button" type="button" onclick="cfaLoad_(true)">接続を再試行</button></section>';
+  if(!u.loading)cfaLoad_(false);return '<section class="card cfa-panel">明細・分類ルール・照合を読み込み中です。</section>';}
  if(u.workspace.setupRequired)return '<section class="card cfa-panel"><h2>初回設定が必要です</h2><p>個別メモ・分類ルール・銀行照合を保存するため、管理者によるバックアップ付きDB更新が必要です。</p>'+
   '<button class="primary-button" onclick="cfbSetup_()">バックアップして初期設定する</button></section>';
- const feedback=(u.error?'<p class="finance-error" role="alert">'+cfaEsc_(u.error)+'</p>':'')+
+ const feedback=(u.error?'<p class="finance-error" role="alert">'+cfaEsc_(u.error)+'</p><button class="secondary-button" type="button" onclick="cfaLoad_(true)">接続を再試行</button>':'')+
   (u.notice?'<p class="cf-success" role="status">'+cfaEsc_(u.notice)+'</p>':'');
  return '<div class="cfa-workspace">'+feedback+
   (cfbUi.tab==='analysis'?cfaAnalysisPage_():cfbUi.tab==='scenarios'?cfaScenariosPage_():cfaReportsPage_())+

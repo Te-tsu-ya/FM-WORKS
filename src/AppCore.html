@@ -294,6 +294,7 @@ function applicationWritePending_(){
     (typeof projectHubUi!=='undefined'&&projectHubUi.busy)||
     (typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)||
     (typeof cashFlowUi!=='undefined'&&(cashFlowUi.busy||cashFlowUi.uncertain))||
+    (typeof cfaUi!=='undefined'&&(cfaUi.busy||cfaUi.exporting))||
     (typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing||cfbUi.importPending))||
     (typeof cflUi!=='undefined'&&(cflUi.busy||cflUi.uncertain)));
 }
@@ -308,6 +309,8 @@ function applicationUnsavedItems_(){
      (String(financeBulkUi.raw||'').trim()||financeBulkUi.rows.some(r=>typeof financeGridHasRecord_==='function'&&financeGridHasRecord_(r))))items.push('経費台帳');
   if(typeof projectHubUi!=='undefined'&&projectHubUi.editor&&projectHubUi.editor.changed)items.push('プロジェクト');
   if(typeof cashFlowUi!=='undefined'&&cashFlowUi.dirty)items.push('年間資金繰り');
+  if(typeof cfaUi!=='undefined'&&(cfaUi.editor||cfaUi.ruleDraft||cfaUi.scenarioDraft))items.push('資金繰りの分類・シミュレーション');
+  if(typeof cfbUi!=='undefined'&&(cfbUi.accountForm||cfbUi.planForm))items.push('金融機関・入出金予定');
   if(typeof cflDirty_==='function'&&cflDirty_())items.push('金融機関別台帳');
   if(typeof cfbUi!=='undefined'&&cfbUi.preview&&cfbUi.preview.length)items.push('銀行明細の取込');
   if(typeof worklogQuickDrafts!=='undefined'&&Array.from(worklogQuickDrafts.values()).some(d=>String(d.wlQuickProject||d.wlQuickDescription||'').trim()))items.push('工数');

@@ -90,7 +90,7 @@ function renderLogin(message=''){
         <small class='login-device-note'>共有PCではチェックを外してください。</small>
         <button id='loginSubmit' class='login-submit' type='submit' ${state.publicConfigLoading||state.publicConfigError?'disabled':''}>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
         ${state.publicConfigError?`<button type='button' class='secondary-button' onclick='loadPublicLoginConfig()'>接続を再試行</button>`:''}
-        ${cfg.appVersion?`<small class='login-device-note' aria-label='アプリのバージョン'>v${escapeHtml(cfg.appVersion)}</small>`:''}
+        ${cfg.appVersion?`<small class='login-device-note' style='margin:8px 0 0;text-align:center' aria-label='アプリのバージョン'>v${escapeHtml(cfg.appVersion)}</small>`:''}
         <div class='login-help'>
           <button type='button' onclick='openPinHelpModal()'>PINを忘れた場合</button>
           <small>${escapeHtml(support.note||'社内のFM WORKS管理者へご連絡ください。')}</small>

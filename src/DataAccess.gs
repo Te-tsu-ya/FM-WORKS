@@ -136,6 +136,10 @@ function readRowsByColumnValues_(sheet,column,width,values,caseInsensitive,withR
     .filter(r=>wantedSet.has(normalize((withRowNumbers?r.values:r)[column-1])));
   const pattern='^(?:'+wanted.map(regexEscape_).join('|')+')$';
   const started=Date.now();
+  if(lastRow-1<=250&&(lastRow-1)*width<=10000){
+    const rows=select(sheet.getRange(2,1,lastRow-1,width).getDisplayValues(),2);
+    logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'SMALL_BATCH'});return rows;
+  }
   if(pattern.length>5000||wanted.length>80){
     const rows=select(sheet.getRange(2,1,lastRow-1,width).getDisplayValues(),2);
     logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',values:wanted.length});
@@ -152,12 +156,7 @@ function readRowsByColumnValues_(sheet,column,width,values,caseInsensitive,withR
     logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:0,source:'TEXT_FINDER',values:wanted.length});
     return [];
   }
-  const blocks=contiguousRowBlocks_(cells.map(c=>c.getRow()));
-  if(blocks.length>48){
-    const rows=select(sheet.getRange(2,1,lastRow-1,width).getDisplayValues(),2);
-    logPerformance_('indexedRead',started,PERFORMANCE_BUDGETS.indexedRead,{rows:rows.length,source:'FULL_FALLBACK',blocks:blocks.length,values:wanted.length});
-    return rows;
-  }
+  const blocks=indexedRowWindows_(cells.map(c=>c.getRow()));
   const endCol=columnLetter_(width);
   const rows=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges()
     .flatMap((range,i)=>select(range.getDisplayValues(),blocks[i].start));
@@ -172,6 +171,18 @@ function contiguousRowBlocks_(rowNumbers){
     else blocks.push({start:row,end:row});
   });
   return blocks;
+}
+
+// At most eight Sheet value reads. Keep the seven largest gaps unread: among
+// ordered row windows this minimizes extra cells for this service-call budget.
+// Callers must filter live row values again because a window may include gaps.
+function indexedRowWindows_(rowNumbers){
+  const blocks=contiguousRowBlocks_(rowNumbers);if(blocks.length<=8)return blocks;
+  const gaps=blocks.slice(1).map((b,i)=>({after:i,size:b.start-blocks[i].end-1}));
+  const cuts=new Set(gaps.sort((a,b)=>b.size-a.size||a.after-b.after).slice(0,7).map(g=>g.after));
+  const windows=[];let start=blocks[0].start;
+  blocks.forEach((b,i)=>{if(cuts.has(i)||i===blocks.length-1){windows.push({start,end:b.end});start=blocks[i+1]?.start;}});
+  return windows;
 }
 
 function columnLetter_(column){
@@ -201,6 +212,7 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
     const rows=select(sheet.getRange(2,1,lastRow-1,width).getDisplayValues());
     logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source,scoped});return rows;
   };
+  if(lastRow-1<=250&&(lastRow-1)*width<=10000)return fallback('SMALL_BATCH');
   const regex=dateRangeRegex_(start,end,370);
   if(!regex)return fallback('LONG_RANGE_FALLBACK');
   const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
@@ -214,8 +226,7 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
     }
   }catch(_){return fallback('INDEX_UNAVAILABLE');}
   if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER',scoped});return [];}
-  const blocks=contiguousRowBlocks_(cells.map(c=>c.getRow()));
-  if(blocks.length>48)return fallback('FRAGMENTED_FALLBACK');
+  const blocks=indexedRowWindows_(cells.map(c=>c.getRow()));
   const endCol=columnLetter_(width);
   const ranges=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges();
   const rows=select(ranges.flatMap(range=>range.getDisplayValues()));

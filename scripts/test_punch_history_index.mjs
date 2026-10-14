@@ -91,7 +91,8 @@ assert.equal(active.calls.whole,0);
 
 active=sheet(Array.from({length:600},(_,i)=>make('FRAGMENT-'+i,i%2===0?'E-01':'E-02','2026-10-02','2026-10-02 08:00:00')));
 assert.deepEqual(Array.from(c.getActivePunchRows_('E-01'),r=>r[0]),legacy(active.rows,'E-01').map(r=>r[0]),'fragmented index fallback produces the same active records');
-assert.equal(active.calls.whole,1,'highly fragmented matches use safe full-scan fallback');
+assert.equal(active.calls.whole,0,'fragmented matches use bounded windows instead of the entire table');
+assert.ok(active.calls.wideCells<600*12,'window gaps stay unread');
 
 active=sheet([]);
 assert.deepEqual(Array.from(c.getActivePunchRows_('E-01')),[],'empty sheets return without scanning');
