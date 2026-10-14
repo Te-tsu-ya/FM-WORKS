@@ -35,8 +35,20 @@ function projectHubRead_(force,detail){
   if(detail){result.resources=projectHubRows_('resource',storage.sheets.resource,detail).filter(x=>x.status!=='非表示');result.updates=projectHubRows_('update',storage.sheets.update,detail);}
   else{const sh=storage.sheets.resource,n=sh.getLastRow()-1;if(n>0){const ids=sh.getRange(2,1,n,2).getDisplayValues(),status=sh.getRange(2,7,n,1).getDisplayValues();result.resources=ids.map((r,i)=>({id:r[0],projectId:r[1],status:status[i][0]})).filter(r=>r.id&&r.status!=='非表示');}}
  }
- const rows=projectHubWorklogRows_(force).map(r=>r.slice(1,13));
- result.worklogs=rows.filter(r=>r[11]!=='削除'&&Number.isFinite(Number(r[8]))&&Number(r[8])>0);
+ if(detail){
+  const rows=projectHubWorklogRows_(force,false).map(r=>r.slice(1,13));
+  result.worklogs=rows.filter(r=>r[11]!=='削除'&&Number.isFinite(Number(r[8]))&&Number(r[8])>0);
+ }else{
+  // The cockpit only needs project name, minutes, and status. Do not read
+  // employee names, descriptions, timestamps, notes, or other details.
+  const rows=projectHubWorklogRows_(force,true);
+  result.worklogs=rows.filter(r=>r[8]!=='削除'&&Number.isFinite(Number(r[5]))&&Number(r[5])>0)
+    .map(r=>{
+      // Preserve the lightweight indices consumed by metrics/alias grouping.
+      const out=Array(12).fill('');
+      out[3]=r[0];out[8]=r[5];out[11]=r[8];return out;
+    });
+ }
  return result;
 }
 function projectHubName_(value){return String(value||'').trim().toLowerCase();}
@@ -212,16 +224,21 @@ function saveProjectHubRecord(sessionToken,kind,payload){
   return {ok:true,id:record.id||record.projectId,revision:record.revision,auditRecorded};
  });
 }
-function projectHubWorklogRows_(force){
- const key='fm:projectHub:worklog:v2',cached=force?null:cacheJsonGetLarge_(key);
+function projectHubWorklogRows_(force,summaryOnly){
+ const compact=!!summaryOnly;
+ const key=compact?'fm:projectHub:worklog:summary:v3':'fm:projectHub:worklog:v2';
+ const cached=force?null:cacheJsonGetLarge_(key);
  if(Array.isArray(cached))return cached;
  const sh=getDb_().getSheetByName('工数'),last=sh?sh.getLastRow():0;
- // Both the project cockpit and task-effort aggregator use columns A:M only.
- // Do not load the write-only duplicate/updated-at fields (N:O) for read-only reporting.
- const rows=last>1?sh.getRange(2,1,last-1,13).getDisplayValues():[];
+ // Detail requires A:M; the cockpit summary needs E:M only.
+ // Both paths use a single contiguous Sheets read and independent 20s caches.
+ const rows=last>1?sh.getRange(2,compact?5:1,last-1,compact?9:13).getDisplayValues():[];
  cacheJsonPutLarge_(key,rows,20);return rows;
 }
-function projectHubInvalidateWorklogs_(){cacheRemove_('fm:projectHub:worklog:v2');}
+function projectHubInvalidateWorklogs_(){
+ cacheRemove_('fm:projectHub:worklog:v2');
+ cacheRemove_('fm:projectHub:worklog:summary:v3');
+}
 function projectHubRememberRename_(projectId,oldName,newName,admin){
  const storage=projectHubStorage_();if(!storage.ready)throw new Error('工数との連携を保つため、案件名を変更する前にバックアップ付きDB更新を行ってください。');
  const rows=projectHubRows_('plan',storage.sheets.plan);if(rows.some(p=>p.projectId!==projectId&&projectHubAliases_(p).includes(newName)))throw new Error('過去の別案件名と同じ名前は使えません。');

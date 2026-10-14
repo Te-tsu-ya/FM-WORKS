@@ -79,7 +79,7 @@
 
 ## 統合前の品質ゲート
 
-- [ ] `node scripts/run_local_checks.mjs --functional` による **全63件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
+- [ ] `node scripts/run_local_checks.mjs --functional` による **全64件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
 - [ ] Node側の追加試験: `scripts/test_worklog_catalog.mjs`、`scripts/test_worklog_link_index.mjs`、`scripts/test_search_schedule_index.mjs`、`scripts/test_global_search.mjs`、`scripts/test_work1_large_cache.mjs`、`scripts/test_work1_rpc_admin.mjs`。
 - [ ] 実行環境がある場合はブラウザー12件と、データ漏えいのないモバイル/PC目視を確認する。
 - [ ] `src/Code.gs` APP.version、要件・技術文書、`src/GeneratedDocs.gs` の完全一致。
@@ -122,3 +122,6 @@
 
 ### SEC-01 同姓同名による予定の編集権限
 - 予定の編集/削除/画面canEditを共通の社員ID優先ACLへ変更。同姓同名の複数参加予定を一般社員は変更不可にし、過去の一人参加予定と旧仮予定は限定許可する。実GASで管理者/同姓同名の社員2名の受入はWork1側。
+
+### PERF-11 プロジェクト一覧の過去工数読取削減
+- 既存の案件一覧は毎回すべての工数についてA:M（13列）を読んでいた。v0.25.15で一覧はE:M（9列）、案件詳細は従来13列を維持し、独立した20秒キャッシュを使う。全行対象は引き続き残るため、実データ量によっては将来DB設計見直しも必要。GAS公開後P50/P95を実測する。

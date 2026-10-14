@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.14
+**文書版:** 0.25.15
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.14`
+`APP.version = 0.25.15`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2650,3 +2650,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.14 予定編集の共通ACL（2026-10-14）
 - Code.gs canEditScheduleRow_(viewer,row)はADMIN、登録者の社員ID完全一致を優先。source==='予定表(仮)' なら参加者ID一致も許可。その他の旧データでownerが社員名の場合は参加者が1名かつ本人ID一致だけ許可する（同姓同名の共有予定は拒否）。
 - getScheduleBundleForViewer_のcanEdit表示、saveSchedule、deleteScheduleを共通ACLへ統一。実書込は従来どおりセッション認証+ScriptLock後に直近行を読み、その行で権限を検査する。ダミー社員でID一致、同姓同名、共有予定、旧予定、管理者を単体検証。
+
+### v0.25.15 案件コックピットの工数I/O削減（2026-10-14）
+- ProjectHub.gs `projectHubRead_(force,detail)` で一覧用と詳細用を区別。詳細では従来のA:M (13列)、一覧ではE:M (9列)だけを1回getDisplayValuesで取得。E=案件、J=分数、M=削除状態を元の配列位置w[3]/w[8]/w[11]へ詰め直し、projectHubMetrics_/aliases/未紐付け判定の互換性を維持。
+- `projectHubWorklogRows_(force,summaryOnly)` は `fm:projectHub:worklog:summary:v3` と従来 `fm:projectHub:worklog:v2` を別20秒CacheServiceへ保持。`projectHubInvalidateWorklogs_` は両キーを無効化。CacheServiceは不確実なためmiss時は正本再読込。
+- 単体回帰は架空の削除済み/ゼロ工数/重複プロジェクト/一覧・詳細で読取列数と数値が一致することを検証。実GASの秒数はWork1公開後にP50/P95で測る。
