@@ -62,7 +62,8 @@
     "node scripts/test_shell_payload_budget.mjs",
     "node scripts/test_scoped_date_index.mjs",
     "node scripts/test_schedule_pending_cleanup.mjs",
-    "node scripts/test_worklog_catalog_reuse.mjs"
+    "node scripts/test_worklog_catalog_reuse.mjs",
+    "node scripts/test_schedule_acl.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

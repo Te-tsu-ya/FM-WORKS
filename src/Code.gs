@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.13',
+  version: '0.25.14',
   locale: 'ja-JP'
 });
 
@@ -818,6 +818,24 @@ function getScheduleBundle(sessionToken, params) {
   return getScheduleBundleForViewer_(session.employee,params);
 }
 
+
+// A display name is not a unique ownership identity. Only a verified employee
+// ID grants normal edit rights. Preserve narrowly scoped legacy records.
+function canEditScheduleRow_(viewer,row) {
+  if(!viewer||!row)return false;
+  if(String(viewer.role||'').toUpperCase()==='ADMIN')return true;
+  const viewerId=String(viewer.employeeId||'');
+  if(!viewerId)return false;
+  const owner=String(row[13]||'');
+  if(owner===viewerId)return true;
+  const participants=String(row[5]||'').split(',').map(id=>id.trim()).filter(Boolean);
+  const source=String(row[16]||'');
+  if(source==='予定表(仮)'&&participants.includes(viewerId))return true;
+  // Old imported data sometimes recorded only a creator name. Never grant
+  // a same-name coworker write access to a multi-employee event.
+  return owner===String(viewer.name||'')&&participants.length===1&&participants[0]===viewerId;
+}
+
 function getScheduleBundleForViewer_(viewer, params) {
   const perfStarted=Date.now();
   params = params || {};
@@ -846,10 +864,7 @@ function getScheduleBundleForViewer_(viewer, params) {
         title: r[7] || '', category: r[8] || '予定', location: r[9] || '', detail: r[10] || '',
         visibility: r[11] || '社内', status: r[12] || '有効', createdBy: r[13] || '', createdAt: r[14] || '',
         updatedAt: r[15] || '', source: r[16] || '', colorKey: r[17] || r[8] || '予定',
-        canEdit: viewer.role === 'ADMIN' ||
-          (r[13] || '') === viewer.employeeId ||
-          (r[13] || '') === viewer.name ||
-          ((r[16] || '') === '予定表(仮)' && ids.includes(viewer.employeeId))
+        canEdit: canEditScheduleRow_(viewer,r)
       });
     });
   }
@@ -865,7 +880,6 @@ function getScheduleBundleForViewer_(viewer, params) {
 function saveSchedule(sessionToken, payload) {
   payload = payload || {};
   const employee = requireSession_(sessionToken).employee;
-  const isAdmin = employee.role === 'ADMIN';
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
@@ -918,10 +932,7 @@ function saveSchedule(sessionToken, payload) {
       const old = sheet.getRange(rowNumber, 1, 1, 18).getDisplayValues()[0];
       auditBefore = auditJson_({date:old[1],start:old[2],end:old[3],allDay:old[4],employeeIds:old[5],title:old[7],category:old[8],location:old[9],detail:old[10],visibility:old[11],status:old[12]});
       const owner = old[13] || '';
-      const oldIds = String(old[5] || '').split(',').map(x => x.trim()).filter(Boolean);
-      const oldSource = old[16] || '';
-      const canEditLegacyOwn = oldSource === '予定表(仮)' && oldIds.includes(employee.employeeId);
-      if (!isAdmin && owner !== employee.employeeId && owner !== employee.name && !canEditLegacyOwn) {
+      if (!canEditScheduleRow_(employee,old)) {
         throw new Error('この予定を編集する権限がありません。');
       }
       createdBy = owner || employee.employeeId;
@@ -987,11 +998,7 @@ function deleteSchedule(sessionToken, scheduleId) {
     const row = found.getRow();
     const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
     if (values[12] === '削除') return { ok: true };
-    const owner = values[13] || '';
-    const participantIds = String(values[5] || '').split(',').map(x => x.trim()).filter(Boolean);
-    const source = values[16] || '';
-    const canEditLegacyOwn = source === '予定表(仮)' && participantIds.includes(employee.employeeId);
-    if (employee.role !== 'ADMIN' && owner !== employee.employeeId && owner !== employee.name && !canEditLegacyOwn) {
+    if (!canEditScheduleRow_(employee,values)) {
       throw new Error('この予定を削除する権限がありません。');
     }
 
