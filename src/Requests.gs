@@ -47,17 +47,24 @@ function getHomeRequestSnapshot_(employee,start,end){
   const managed=permissions.requestApprove?getManagedEmployeeIds_(employee):new Set();
   const pendingIds=permissions.requestApprove?managed:new Set([employeeId]);
   const permittedIds=new Set([employeeId,...managed]);
-  const rows=readRowsByColumnValues_(sheet,3,19,[...permittedIds]);
+  // Large approval teams are better served with a narrow ten-column count
+  // and one indexed full-width read for this employee's leave only.
+  // Small teams keep the single round-trip shared read.
+  const separate=permissions.requestApprove&&managed.size>80&&sheet.getLastRow()>250;
+  const rows=readRowsByColumnValues_(sheet,3,19,separate?[employeeId]:[...permittedIds]);
+  const pendingRows=separate?readRowsByColumnValues_(sheet,3,10,[...managed]):rows;
   const approved=[];
   let pendingCount=0;
   rows.forEach(r=>{
     if(!r||!r[0])return;
     const owner=String(r[2]||'');
     if(!permittedIds.has(owner))return;
-    if(pendingIds.has(owner)&&r[9]==='承認待ち')pendingCount++;
     if(owner!==employeeId||!['承認済','取消申請中'].includes(r[9]))return;
     if(!r[5]||!r[6]||r[5]>end||r[6]<start)return;
     approved.push({id:r[0],type:r[4],startDate:r[5],endDate:r[6],reason:r[8]});
+  });
+  pendingRows.forEach(r=>{
+    if(r&&r[0]&&pendingIds.has(String(r[2]||''))&&r[9]==='承認待ち')pendingCount++;
   });
   return {approved,pendingCount};
 }

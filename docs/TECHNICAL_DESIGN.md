@@ -2617,3 +2617,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.10 社員ディレクトリの送信範囲（2026-10-14）
 - Code.gs employeeDirectoryForViewer_(employees,viewer): ADMINは社内管理に必要な完全なgetEmployees_結果を返す。MANAGER/USER等は表示用社員ID、名前、部署、役職、roleを返す。管理者以外のhireDate、leaveBasisDate、payrollIncludedは送信禁止。MANAGERのmanagerIdはviewer自身への直属関係のみ、それ以外は空文字。
 - buildInitialDataForEmployee_とgetScheduleBundleForViewer_の両方に同一のサニタイザーを使用。getEmployees_のサーバー内キャッシュやcanManageEmployeeRecord_のライブ権限判定は変更しない。
+
+### v0.25.10 ホーム申請のデータ規模適応（2026-10-14）
+- Requests.gs `getHomeRequestSnapshot_` は managed.size>80 かつ sheet.getLastRow()>250 で2パス分離。自身の19列を1社員ID索引で取得し承認済休暇を算出。対象部署の10列を別途取得し承認待ち件数を算出。小規模では両方を1度の19列取得。どちらでも管理対象IDと本人IDの再判定を通す。
+- 既存readRowsByColumnValues_の80 ID上限超過時は大きなテーブルを全列読むため、承認人数が増えた場合に自動で幅10へ抑制。性能を推測で秒数化せず、GAS P50/P95で測定する。
