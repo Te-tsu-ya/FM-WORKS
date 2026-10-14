@@ -52,6 +52,14 @@ ok('one SpreadsheetApp.openById for repeated getDb_ calls',api.getDb_()===api.ge
 ok('first session verifies live authenticated employee',api.requireSession_(token).employee.role==='ADMIN');
 ok('warm repeated session avoids both TextFinder scans',
   api.requireSession_(token).employee.role==='ADMIN'&&first.sessions.stats.finds===1&&first.employees.stats.finds===1&&opens===1);
+// The authenticated hot path still reads live rows, but never needs the
+// configuration sheet when the five-minute idle-expiry touch is not due.
+const originalConfig=c.getAuthConfig_;
+let configCalls=0;
+c.getAuthConfig_=(...args)=>{configCalls++;return originalConfig(...args);};
+api.requireSession_(token);api.requireSession_(token);
+ok('warm auth skips settings configuration until session touch',configCalls===0);
+c.getAuthConfig_=originalConfig;
 const oldReads=first.sessions.stats.reads+first.employees.stats.reads;
 api.requireSession_(token);
 ok('warm auth still reads both live rows',first.sessions.stats.reads+first.employees.stats.reads>=oldReads+2);

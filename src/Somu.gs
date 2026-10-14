@@ -50,27 +50,25 @@ function somuModel_(kind){
  // Stock, approval and return mutations always read Sheets under ScriptLock.
 const SOMU_VIEW_CACHE_TTL_SECONDS=20;
 function somuSnapshotCacheKey_(){
-  return 'fm:somu:workspace:v4:'+getDatabaseSpreadsheetId_();
+  return 'fm:somu:workspace:v5:'+getDatabaseSpreadsheetId_();
 }
 function somuInvalidateSnapshot_(){
   if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
   if(typeof somuGrowthInvalidateCache_==='function')somuGrowthInvalidateCache_();
 }
 function somuGetCachedSnapshot_(){
-  if(typeof cacheJsonGet_!=='function')return null;
-  const result=cacheJsonGet_(somuSnapshotCacheKey_());
+  if(typeof cacheJsonGetLarge_!=='function')return null;
+  // Missing chunks are a cache miss; never return an incomplete snapshot.
+  const result=cacheJsonGetLarge_(somuSnapshotCacheKey_());
   return result&&result.setupRequired===false&&Array.isArray(result.assets)&&
     Array.isArray(result.loans)&&Array.isArray(result.purchases)&&Array.isArray(result.documents)
     ?result:null;
 }
 function somuPutCachedSnapshot_(snapshot){
-  if(typeof cacheJsonPut_!=='function')return false;
-  // CacheService has a 100 KB/item limit. Do not mistake JS UTF-16 length for UTF-8 bytes.
-  const raw=JSON.stringify(snapshot);
-  const bytes=typeof Utilities.newBlob==='function'
-    ?Utilities.newBlob(raw).getBytes().length:raw.length*3;
-  if(bytes>85000)return false;
-  return cacheJsonPut_(somuSnapshotCacheKey_(),snapshot,SOMU_VIEW_CACHE_TTL_SECONDS);
+  if(typeof cacheJsonPutLarge_!=='function')return false;
+  // Immutable 60 KB UTF-8 pieces, published only when the entire batch exists.
+  // Keep the 20-second TTL, permission checks and write-time invalidation.
+  return cacheJsonPutLarge_(somuSnapshotCacheKey_(),snapshot,SOMU_VIEW_CACHE_TTL_SECONDS);
 }
 function somuStorageStatus_(){
   const db=getDb_(),missing=[];

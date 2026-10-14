@@ -176,9 +176,15 @@ function contiguousRowBlocks_(rowNumbers){
 // At most eight Sheet value reads. Keep the seven largest gaps unread: among
 // ordered row windows this minimizes extra cells for this service-call budget.
 // Callers must filter live row values again because a window may include gaps.
-function indexedRowWindows_(rowNumbers){
-  const blocks=contiguousRowBlocks_(rowNumbers);if(blocks.length<=8)return blocks;
-  const gaps=blocks.slice(1).map((b,i)=>({after:i,size:b.start-blocks[i].end-1}));
+function indexedRowWindows_(rowNumbers,minGapRows){
+  const blocks=contiguousRowBlocks_(rowNumbers);
+  if(blocks.length<=1)return blocks;
+  // Default path preserves the existing smallest-cell, at-most-eight-window behavior.
+  // Optional minimum gap avoids paying extra Sheets round trips for tiny holes.
+  const minGap=Math.max(0,Math.floor(Number(minGapRows)||0));
+  if(blocks.length<=8&&!minGap)return blocks;
+  const gaps=blocks.slice(1).map((b,i)=>({after:i,size:b.start-blocks[i].end-1}))
+    .filter(g=>g.size>=minGap);
   const cuts=new Set(gaps.sort((a,b)=>b.size-a.size||a.after-b.after).slice(0,7).map(g=>g.after));
   const windows=[];let start=blocks[0].start;
   blocks.forEach((b,i)=>{if(cuts.has(i)||i===blocks.length-1){windows.push({start,end:b.end});start=blocks[i+1]?.start;}});
@@ -216,19 +222,30 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
   const regex=dateRangeRegex_(start,end,370);
   if(!regex)return fallback('LONG_RANGE_FALLBACK');
   const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
-  if(scoped&&(wanted.length>80||ownerRegex.length>5000))return fallback('SCOPE_LIMIT_FALLBACK');
-  let cells;
+  let cells,preselectedBlocks=null,source=scoped?'DATE_OWNER_INDEX':'DATE_INDEX';
   try{
     cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();
     if(scoped&&cells.length){
-      const matches=sheet.getRange(2,scopeColumn,lastRow-1,1).createTextFinder(ownerRegex).useRegularExpression(true).matchEntireCell(true).findAll();
-      const positions=new Set(matches.map(c=>c.getRow()));cells=cells.filter(c=>positions.has(c.getRow()));
+      // A second TextFinder scans the entire employee column. For a compact
+      // date result it is cheaper to read those few rows and check the owner
+      // in JavaScript. Index hints must never determine authorization.
+      const dateBlocks=indexedRowWindows_(cells.map(c=>c.getRow()));
+      const candidateRows=dateBlocks.reduce((total,b)=>total+b.end-b.start+1,0);
+      const compact=cells.length<=180&&candidateRows*width<=3600;
+      if(compact){
+        preselectedBlocks=dateBlocks;
+        source='DATE_INDEX_IN_MEMORY_SCOPE';
+      }else{
+        if(wanted.length>80||ownerRegex.length>5000)return fallback('SCOPE_LIMIT_FALLBACK');
+        const matches=sheet.getRange(2,scopeColumn,lastRow-1,1).createTextFinder(ownerRegex).useRegularExpression(true).matchEntireCell(true).findAll();
+        const positions=new Set(matches.map(c=>c.getRow()));cells=cells.filter(c=>positions.has(c.getRow()));
+      }
     }
   }catch(_){return fallback('INDEX_UNAVAILABLE');}
   if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER',scoped});return [];}
-  const blocks=indexedRowWindows_(cells.map(c=>c.getRow()));
+  const blocks=preselectedBlocks||indexedRowWindows_(cells.map(c=>c.getRow()));
   const endCol=columnLetter_(width);
   const ranges=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges();
   const rows=select(ranges.flatMap(range=>range.getDisplayValues()));
-  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source:scoped?'DATE_OWNER_INDEX':'DATE_INDEX',blocks:blocks.length});return rows;
+  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source,blocks:blocks.length});return rows;
 }

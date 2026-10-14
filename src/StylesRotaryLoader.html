@@ -50,4 +50,8 @@ html[data-theme="dark"] .fmr-action{background:#244366;color:var(--text);border-
 html[data-theme="dark"] .fmr-read-status{--fmr-surface:#15263b}
 @media(max-width:760px){.fmr-root.fmr-region.fmr-read-status{bottom:calc(78px + env(safe-area-inset-bottom));right:12px;width:min(300px,calc(100vw - 24px))}}
 
+/* Ordinary read cards do not intercept clicks. Only failed reads expose
+   an operable close button. */
+.fmr-root.fmr-region.fmr-read-status.fmr-error{pointer-events:auto!important}
+.fmr-read-status.fmr-error .fmr-actions{pointer-events:auto}
 </style>

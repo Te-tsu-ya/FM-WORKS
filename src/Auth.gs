@@ -543,9 +543,11 @@ function requireSession_(sessionToken) {
     throw new Error('AUTH_REQUIRED');
   }
 
-  const config = getAuthConfig_();
   const lastUsed = parseTimestamp_(row[6]);
   if (!lastUsed || (now.getTime() - lastUsed.getTime()) >= AUTH.sessionTouchMinutes * 60000) {
+    // Keep live session and employee verification on every request. The settings
+    // map is needed only for a session idle-expiry touch, not every RPC.
+    const config = getAuthConfig_();
     const nowText = toTimestamp_(now);
     const remembered = String(row[10] || '').toUpperCase() === 'TRUE' || row[10] === true;
     const idleMinutes = remembered ? config.rememberIdleMinutes : config.idleMinutes;
@@ -707,7 +709,18 @@ function hasAnyPinConfigured_() {
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return false;
-  return sheet.getRange(2, 15, lastRow - 1, 1).getDisplayValues().some(r => !!r[0]);
+  const hashes = sheet.getRange(2, 15, lastRow - 1, 1);
+  // The public login page needs only a yes/no, never PIN hashes. Search
+  // in Sheets instead of transferring the entire credential-hash column.
+  // This result is deliberately uncached: first-admin creation must recheck
+  // the live row inside the existing ScriptLock.
+  try {
+    return !!hashes.createTextFinder('.+').useRegularExpression(true)
+      .matchEntireCell(true).findNext();
+  } catch (_) {
+    // Older or mocked Sheets APIs can still read the original column.
+    return hashes.getDisplayValues().some(r => !!r[0]);
+  }
 }
 
 function getAuthConfig_(settings) {

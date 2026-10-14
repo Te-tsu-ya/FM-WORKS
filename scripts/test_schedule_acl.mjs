@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const src=fs.readFileSync('src/Code.gs','utf8');
+const a=src.indexOf('function canEditScheduleRow_(');
+const b=src.indexOf('function getScheduleBundleForViewer_(',a);
+assert.ok(a>0&&b>a,'schedule permission function exists');
+const ctx=vm.createContext({String,Array,Object,Math,RegExp,Set,Map,Date});
+vm.runInContext(src.slice(a,b),ctx);
+const check=ctx.canEditScheduleRow_;
+const row=(owner,origin,ids)=>{
+ const r=Array(18).fill('');
+ r[13]=owner;r[16]=origin;r[5]=ids;
+ return r;
+};
+const user={employeeId:'U1',name:'架空の同姓同名',role:'USER'};
+assert.equal(check(user,row('U1','FM WORKS','U1,U2')),true);
+assert.equal(check(user,row('U2','FM WORKS','U1,U2')),false);
+assert.equal(check(user,row('架空の同姓同名','FM WORKS','U1,U2')),false,'same-name coworker cannot edit shared event');
+assert.equal(check(user,row('架空の同姓同名','旧予定','U1')),true,'unambiguous single-person old event remains editable');
+assert.equal(check(user,row('架空の同姓同名','旧予定','U2')),false);
+assert.equal(check(user,row('違う人','予定表(仮)','U1,U2')),true,'old temporary schedule participant remains editable');
+assert.equal(check(user,row('違う人','予定表(仮)','U2')),false);
+assert.equal(check({...user,role:'ADMIN'},row('U2','FM WORKS','U2')),true);
+assert.ok(src.includes('canEdit: canEditScheduleRow_(viewer,r)'));
+assert.ok(src.includes('if (!canEditScheduleRow_(employee,old))'));
+assert.ok(src.includes('if (!canEditScheduleRow_(employee,values))'));
+console.log('PASS schedule ACL: id owner, same-name collision, legacy participants, admin, UI/save/delete parity');

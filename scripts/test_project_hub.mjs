@@ -124,9 +124,9 @@ for(let i=1;i<=90;i++){
 ctx.invalidateProjectCache_();ctx.projectHubInvalidateWorklogs_();
 sheets['工数'].reads=[];
 const largeWorkspace=plain(ctx.getProjectHubWorkspace('A',true));
-const aggregateReads=sheets['工数'].reads.filter(r=>r.row===2&&r.col===1);
+const aggregateReads=sheets['工数'].reads.filter(r=>r.row===2&&r.col===5);
 assert.equal(aggregateReads.length,1,'project dashboard reads the worklog table in one contiguous block');
-assert.equal(aggregateReads[0].width,13,'project dashboard loads only the 13 columns used by cockpit and task-effort totals');
+assert.equal(aggregateReads[0].width,9,'project dashboard loads E:M while personal details stay in their own snapshot');
 assert.equal(largeWorkspace.projects.length,92,'all 90 synthetic projects are included');
 for(let i=1;i<=90;i++){
  const id='PRJ-LOAD-'+String(i).padStart(3,'0');

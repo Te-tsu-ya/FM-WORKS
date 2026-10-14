@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.8
+**文書版:** 0.25.17
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.8`
+`APP.version = 0.25.17`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2566,3 +2566,104 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - 注釈／分類／シナリオ保存後の子取得をworkspace成功後へ一本化。金融台帳保存は銀行集計更新後の子取得へ一本化。cashFlowClose_で経理ローダーを呼び、未期限切れなら通信しない。
 - 共通未保存・処理中ガードに分析・条件・口座・予定を含める。年度切替／終了／銀行更新／セクション切替で分析の保存・出力中を検査する。
 - Google公式のサービス呼び出し削減・一括読取方針を適用する。合成のサービス回数を受入指標とし、実GASのP50/P95は別測定。公式根拠: https://developers.google.com/apps-script/guides/support/best-practices 。
+
+
+## v0.25.9 総務キャッシュ・通信速度の診断（2026-10-14）
+
+- Somu.gs: 共有キャッシュキーをv5にし、cacheJsonGetLarge_/cacheJsonPutLarge_を使用。既存のUTF-8 60KB分割・不変世代・最後にmanifest公開という実装を利用する。20秒TTL、最大4.8MB、断片欠損またはCacheService異常時はcache missとして正本へ戻る。更新後のmanifest削除を維持する。
+- getSomuWorkspaceは共有結果を読む前にsomuOperator_で社員セッションとofficeWorkspace権限を再確認。canApproveとtodayは利用者ごとに計算して付加する。個別の閲覧権限を共有しない。
+- AppAdmin.html: performanceセクションで既存FMWorksPerformance.report()のブラウザー往復P50/P95を表示。FMRotaryRPCからの計測値のみを使い、GASの通信を追加しない。clipboardには引数/結果のない統計JSONだけを渡す。ADMIN権限なしでは表示・コピー・消去を拒否する。
+- テスト: 大容量の分割整合性、断片紛失、更新時の無効化、社員別承認、管理者の統計表示とHTML無害化を追加。GASの公開と実機計測はこのGitHubコミットの対象外。
+
+
+### 2026-10-14 v0.25.9 段階的マスタと分散検索の改良
+- AppOperations.htmlのworklogCatalogState_はログイン識別子と取得日時のみ。正常な空配列も取得済み、最大5分再利用。画面日付の変更に影響せず、プロジェクトの書込/DB移行/再ログインで失効。別月の先行応答からもマスタを同じセッションへ反映する。
+- ProjectAdvanced.gsは1～80件の工数対応IDをreadRowsByColumnValues_によるライブ行照合付き索引で取得。81件以上または250行以下は一括読取。
+- Search.gsはindexedRowWindows_で最大8窓、取得予定の全行に対する比率が75%超なら全件取得。TextFinder障害やスペース入り複合検索時は安全なフォールバック。searchAppは取得後にACLと原文を再検査する。
+- 新規test_worklog_catalog.mjsと既存インデックス試験で、空配列、日付移動、ログイン分離、25/81件、60分散ヒットを検証する。実GASのミリ秒測定ではない。
+
+
+### v0.25.9 検索結果の安全な移動（2026-10-14）
+- Search.gsは検索した社員のemployeeIdを返し、ADMINならpeople、他ロールならscheduleをルートにする。管理情報は管理者画面でしか提供しない。
+- AppShell.htmlのopenSearchResultは管理者向け選択対象を設定する前に過去の社員検索/ロール/状態フィルターを解除。非管理者向け予定表では対象社員で絞る。予定そのものを開く際は旧社員/カテゴリ絞込をALLに戻し、日付・予定IDとモバイル詳細状態を引き継ぐ。
+- test_global_search.mjsはサーバー側ルート分離とクライアント側3遷移を合成回帰対象に追加。新規API/RPCやSheets書き込みなし。
+
+
+### v0.25.9 検索のサービス呼出しコスト（2026-10-14）
+- indexedRowWindows_(rows, minGapRows=0)に任意の最小分離行数を追加。既存呼出しは0で従来の8窓・最小セル数を維持。Search.gsは24行以上の大きなギャップのみ切り、24行未満はまとめて読む。窓内の無関係な行はsearchAppが全文・閲覧権限で除外する。
+- 合成1000行の予定60ヒット（10行おき）は1窓591行で10,638セルを読取（元の全件18,000セル、以前の8窓9,504セル）。遠い8ヒットは8窓・144セル。Google Sheets往復の実時間は未計測。
+
+
+### v0.25.9 認証ホットパスの設定取得省略（2026-10-14）
+- Auth.gs \`requireSession_\`: hashToken_、findVerifiedSheetRow_(session)、実社員行検証、絶対/無操作期限・ログイン状態は毎回実行。\`getAuthConfig_\`のみ\`sessionTouchMinutes\`経過後の延長処理ブロック内へ移動。設定値変更の適用タイミングと認証拒否の契約は不変。CacheServiceの余計なgetを毎RPCで発生させない。
+- scripts/test_data_access_performance.mjs に通常認証で設定参照を省く回帰試験を追加。実GASのセッション失効・役割変更・延長の実操作はWork1側の受入に残す。
+
+### v0.25.10 初回ホームの業務読み取り統合（2026-10-14）
+- Requests.gs getHomeRequestSnapshot_: 社員本人と担当者のID集合をreadRowsByColumnValues_(申請,3,19)で一度だけ読取。休暇例外は本人の承認済/取消申請中で月間重複した行のみ。承認待ち件数は権限有りなら担当者集合、無しなら本人集合で計算。返却前に社員IDを再照合。
+- Code.gs getHomeMonthStats_: 第3引数が配列なら既読の休暇行を利用し、それ以外は既存の月次申請取得を維持。getHomeOverviewは重複した申請シート検索を行わない。
+- AnnualLeaveAutomation.gs maybeReconcileLeave_: requireSession_が検証した同一社員レコードを第3引数で任意に受け、異なる社員のレコードは再取得する。年休付与・台帳修復が起きたら呼出側は再読取。
+- getApplicationShell_は版番号付き静的HTMLを21600秒保持する。アプリ更新時に版を変えないと古いHTMLが続くおそれがあるためv0.25.10に改版。
+
+### v0.25.10 工数マスタの非同期世代制御（2026-10-14）
+- AppOperations.html の worklogCatalogEpoch_ を保存・ログインで加算、全期間キャッシュに同梱されたマスタ配列を無効化。API発行時の epoch と ticket を取得し、最新世代かつ最新順序の応答だけを worklogCatalogState_ と state.data.projects に反映する。
+- worklogShowCachedDay は日付行のみ適用し、過去の範囲からグローバルな案件・作業選択肢をコピーしない。既存の空案件取得済み判断と1～2並列範囲、社員単位のID照合は維持する。
+- 工数変更後の画面再表示では、範囲キャッシュが新しくても案件マスタが失効していれば強制更新不要の通常取得でマスタを取り直す。旧通信で個人情報が別セッションに渡らないよう、identity/epochで防止する。
+
+### v0.25.10 読取RPCのウォッチドッグ（2026-10-14）
+- AppRotaryIntegration.htmlはget/list/search/findと、特定の冪等なresumeSession/previewRequest/healthCheckだけを45秒で時間切れにする。failure handlerは1回だけ実行、sharedReadsと表示を清掃、遅延した元のRPC成功・失敗はendedフラグで無視する。P95集計には失敗通信として1回記録する。
+- save/submit/approve/delete等の状態変更RPCはタイマーを使わず、二重書込みを防ぐ。ログアウト時は既存rpcCallbackGenerationによる旧応答破棄を維持する。
+- StylesRotaryLoader.htmlは失敗状態だけ閉じる操作を復活。表示と実際の読込み時間は別々に計測し、45秒を超える正常読取がないかGAS公開後に確認する。
+
+### v0.25.10 社員ディレクトリの送信範囲（2026-10-14）
+- Code.gs employeeDirectoryForViewer_(employees,viewer): ADMINは社内管理に必要な完全なgetEmployees_結果を返す。MANAGER/USER等は表示用社員ID、名前、部署、役職、roleを返す。管理者以外のhireDate、leaveBasisDate、payrollIncludedは送信禁止。MANAGERのmanagerIdはviewer自身への直属関係のみ、それ以外は空文字。
+- buildInitialDataForEmployee_とgetScheduleBundleForViewer_の両方に同一のサニタイザーを使用。getEmployees_のサーバー内キャッシュやcanManageEmployeeRecord_のライブ権限判定は変更しない。
+
+### v0.25.10 ホーム申請のデータ規模適応（2026-10-14）
+- Requests.gs `getHomeRequestSnapshot_` は managed.size>80 かつ sheet.getLastRow()>250 で2パス分離。自身の19列を1社員ID索引で取得し承認済休暇を算出。対象部署の10列を別途取得し承認待ち件数を算出。小規模では両方を1度の19列取得。どちらでも管理対象IDと本人IDの再判定を通す。
+- 既存readRowsByColumnValues_の80 ID上限超過時は大きなテーブルを全列読むため、承認人数が増えた場合に自動で幅10へ抑制。性能を推測で秒数化せず、GAS P50/P95で測定する。
+
+### v0.25.10 申請メニューの優先度制御（2026-10-14）
+- AppCore.html loadPageData_: requests初回はloadRequestsのみ。既存のrequestsキャッシュが有効な場合に限りqueueRequestFinanceHistory_を予約する。AppOperations.html loadRequests の成功/失敗後にqueueRequestFinanceHistory_を呼び、scheduleIdleTask(450ms)後に社員ID/セッション/表示ページを再照合してからloadMyFinanceItems({silent:true})を実行する。
+- 従来の同時2 GAS取得を、画面上部の申請処理→画面下部の経費履歴の順序へ変更し、Google script.runの同時通信枠競合を減らす。キャッシュとfinanceUi.ownLoadingの既存ガードは維持する。
+
+### v0.25.10 最初の表示とGAS往復の測定区別（2026-10-14）
+- AppRotaryIntegration.html: PerformanceNavigationTiming.responseEndとdomContentLoadedEventEndのナビゲーション開始からの経過時間を返し、AppShell.mountAuthenticatedAppではrenderNav/renderPageまでのブラウザー同期処理時間を記録。外部に送信しない。Google iframe/API非対応はnull。
+- AppAdmin.html: これら3指標を通信速度タブに表示し、別の意味の累積時刻と描画時間を混同しない。コピー可能なJSONは処理名と時間のみ。
+
+### v0.25.10 HTML元データ量の回帰テスト（2026-10-14）
+- scripts/test_shell_payload_budget.mjs はIndex.htmlからinclude_を抽出し、必須ファイル存在・重複なし、Buffer.byteLengthに基づく総ソースサイズ1,638,400bytes（1600KiB）以下、生成文書は埋め込まない契約、静的CacheService最大40分割/60000bytesキー制限を確認。
+- 2026-10-14監査時のmainは44部品・およそ1.33MBのUTF-8ソース（合成見積）。通信時のgzip転送サイズ、サーバー温/冷起動、HTMLのスクリプト実行時間はこの単体チェックでは保証しない。Work1公開後、ブラウザーNavigation TimingとRPC P50/P95で切り分ける。
+
+### v0.25.11 日付＋社員の二重TextFinderを適応化（2026-10-14）
+- DataAccess.gs readRowsByDateRange_: まず既存のdateColumn TextFinderで実候補を見つける。その行をindexedRowWindows_（最大8窓）にまとめ、件数<=180かつ `窓内行数 × 取得列数 <= 3600` の場合は2回目の社員TextFinderを使わず候補だけを読み込み、select()で社員IDと期間を確実に再検証する。
+- それ以外の大きな検索では以前のowner列TextFinderで共通部分に限定して読む。owner条件が80以上または正規表現5000文字超でフォールバックする判断は大規模経路だけに適用。ゼロ件・TextFinder失敗・スモールバッチを維持する。
+- 具体例（架空の1000行以上のデータ）: 当月42ヒット/対象21件で日付・社員列Finderは2回→1回、630セル読取。大量マッチはFinder2回に留める。実GASの時間短縮率はWork1公開後のP50/P95測定で判断する。
+
+### v0.25.12 予定表クライアント通信のcleanup（2026-10-14）
+- AppOperations.html loadSchedule: scheduleWindowRequestsの管理情報にticketを保存。invalidateScheduleWindowCacheでgeneration更新後、全pending requestにendPageLoad(ticket)を実行してからmap.clear。古いcallbackはgeneration条件で結果破棄、後着finalizeの二度目endPageLoadはSet.deleteの冪等性で安全。
+- 予定表キャッシュ・イベント再利用と認証/社員IDの確認は維持。リクエストをクライアント側で解除してもGASのサーバー処理が中断されたとは見なさない。
+
+### v0.25.13 工数案件マスタの同一RPC内再利用（2026-10-14）
+- Worklog.gs getWorklogs はincludeProjects=trueのときだけgetProjectsInternal_(false)を1回取得し、projectAdvancedTaskOptions_(employee,projects)に渡す。データ行0件/通常時の両方で同じ配列を返す。includeProjects=falseはどちらも空配列。
+- ProjectAdvanced.gs projectAdvancedTaskOptions_(user,knownProjects)は配列を受け取るとその最新取得済み内容を再利用し、引数なしの従来呼出元はgetProjectsInternal_(false)を引き続き実行。権限・ステータス判定と業務DB読み取りの仕様は変更しない。
+
+### v0.25.14 予定編集の共通ACL（2026-10-14）
+- Code.gs canEditScheduleRow_(viewer,row)はADMIN、登録者の社員ID完全一致を優先。source==='予定表(仮)' なら参加者ID一致も許可。その他の旧データでownerが社員名の場合は参加者が1名かつ本人ID一致だけ許可する（同姓同名の共有予定は拒否）。
+- getScheduleBundleForViewer_のcanEdit表示、saveSchedule、deleteScheduleを共通ACLへ統一。実書込は従来どおりセッション認証+ScriptLock後に直近行を読み、その行で権限を検査する。ダミー社員でID一致、同姓同名、共有予定、旧予定、管理者を単体検証。
+
+### v0.25.15 案件コックピットの工数I/O削減（2026-10-14）
+- ProjectHub.gs `projectHubRead_(force,detail)` で一覧用と詳細用を区別。詳細では従来のA:M (13列)、一覧ではE:M (9列)だけを1回getDisplayValuesで取得。E=案件、J=分数、M=削除状態を元の配列位置w[3]/w[8]/w[11]へ詰め直し、projectHubMetrics_/aliases/未紐付け判定の互換性を維持。
+- `projectHubWorklogRows_(force,summaryOnly)` は `fm:projectHub:worklog:summary:v3` と従来 `fm:projectHub:worklog:v2` を別20秒CacheServiceへ保持。`projectHubInvalidateWorklogs_` は両キーを無効化。CacheServiceは不確実なためmiss時は正本再読込。
+- 単体回帰は架空の削除済み/ゼロ工数/重複プロジェクト/一覧・詳細で読取列数と数値が一致することを検証。実GASの秒数はWork1公開後にP50/P95で測る。
+
+### v0.25.16 初回PIN有無のSheets側検出（2026-10-14）
+- Auth.gs hasAnyPinConfigured_: 社員マスタ15列の `Range.createTextFinder('.+').useRegularExpression(true).matchEntireCell(true).findNext()` でPINハッシュの存在のみ検査。代替として旧 `getDisplayValues().some` をtry/catchに保持。未設定の空列はfalse。
+- 結果はあえてCacheService等へ保存しない（ログイン時に初期設定の正確な有無が必要）。initializeFirstAdminはScriptLock取得後に同じライブチェックを実行し、既存の検査条件/監査を変更しない。
+
+### v0.25.17 hover RPCの負荷制限（2026-10-14）
+- AppCore.html prefetchRouteOnIntent/queueRoutePrefetch: requests/officeを先読み対象から外し、schedule/worklogだけ450msの滞在後に実行する。画面を実際に開くloadPageData_の経路は変更しない。クリック時の主RPCと申請・総務の大きなRPCが競合するのを防ぐ。
+
+### Work1統合時の修復（v0.25.16）
+- readRowsByDateRange_のownerRegexの文字列終端と完全一致アンカーを復旧。元PRの45blob一致確認後に構文不正を再現し、統合前に修正する。
+- validateの契約は案件マスタ1回・employeeDirectoryForViewer_・verifiedEmployee引数・画面と保存／削除の共通canEditScheduleRow_を検査。元のACLと個人情報最小化の条件を緩めない。
+- 一覧E:Mと詳細A:Mは独立20秒cache。総務の小規模fixtureと大規模実装試験を区別し、通常日付移動でマスタを再取得しないAPI応答形をクライアント契約で検証する。

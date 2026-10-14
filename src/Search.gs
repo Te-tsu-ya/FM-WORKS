@@ -13,7 +13,9 @@ function searchApp(sessionToken, query) {
     if (hay.includes(q)) add({
       type:'社員',title:employee.name,
       sub:[employee.employeeId,employee.department,employee.title].filter(Boolean).join(' / '),
-      route:'people'
+      employeeId:employee.employeeId,
+      // Personal details are admin-only; other roles open shared schedules.
+      route:session.employee.role==='ADMIN'?'people':'schedule'
     });
     if (results.length >= 30) return results;
   }
@@ -69,8 +71,11 @@ function searchScheduleRows_(sheet,query) {
     const found=sheet.getRange(2,7,lastRow-1,5).createTextFinder(q)
       .useRegularExpression(false).matchCase(false).findAll();
     if(!found.length)return [];
-    const blocks=contiguousRowBlocks_(found.map(r=>r.getRow()));
-    if(blocks.length>48)return full();
+    // Reading a few extra rows in one Sheets call is faster than many tiny
+    // getDisplayValues calls in a tightly clustered result set.
+    const blocks=indexedRowWindows_(found.map(r=>r.getRow()),24);
+    // The index is not worth eight round trips when nearly the full table is hit.
+    if(blocks.reduce((n,b)=>n+b.end-b.start+1,0)>(lastRow-1)*0.75)return full();
     // Stable source-row ordering, with all 18 columns to enforce visibility.
     return sheet.getRangeList(blocks.map(b=>'A'+b.start+':R'+b.end))
       .getRanges().flatMap(range=>range.getDisplayValues());

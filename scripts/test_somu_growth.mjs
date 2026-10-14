@@ -46,6 +46,8 @@ const ctx=vm.createContext({
    .map(row=>row.slice(0,width).map(v=>String(v??''))),
  getDatabaseSpreadsheetId_:()=> 'DUMMY_DB',
  cacheJsonGet_:key=>cache.get(key)||null,
+ cacheJsonGetLarge_:key=>cache.get(key)||null,
+ cacheJsonPutLarge_:(key,value)=>{cache.set(key,JSON.parse(JSON.stringify(value)));return true;},
  cacheJsonPut_:(key,value)=>{cache.set(key,JSON.parse(JSON.stringify(value)));return true;},
  cacheRemove_:key=>{cache.delete(key);},
  logPerformance_:()=>{},

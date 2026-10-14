@@ -27,7 +27,7 @@ function sheet(records,width){
   }
  };
 }
-let roster=[person('U','alpha 本人'),person('E','別人')],approve=true,dbCalls=0,peopleCalls=0,indexCalls=[];
+let roster=[person('U','alpha 本人'),person('E','別人')],approve=true,dbCalls=0,peopleCalls=0,indexCalls=[],viewerRole='MANAGER';
 let schedules=sheet([scheduleRow('EV-1','alpha 公開'),scheduleRow('EV-X','alpha 機密',false)],18);
 let requests=sheet([requestRow('RQ-U','U','alpha 本人の申請'),requestRow('RQ-M','M','alpha 部下の申請'),requestRow('RQ-X','X','alpha 閲覧不可')],19);
 const db={getSheetByName(name){
@@ -38,7 +38,7 @@ const db={getSheetByName(name){
 const server=vm.createContext({
  console,Date,Math,Set,Map,JSON,String,Number,Array,Error,
  DB:{sheets:{schedule:'予定'}},
- requireSession_:token=>{assert.equal(token,'TOKEN');return {employee:{employeeId:'U',role:'MANAGER'}};},
+ requireSession_:token=>{assert.equal(token,'TOKEN');return {employee:{employeeId:'U',role:viewerRole}};},
  getEmployees_:()=>{peopleCalls++;return roster;},
  getDb_:()=>{dbCalls++;return db;},
  getPermissions_:()=>({requestApprove:approve}),
@@ -64,6 +64,11 @@ assert.ok(results.every(x=>x.id!=='RQ-X'),'unmanaged request is not returned');
 assert.deepEqual(indexCalls[0],['U','M'],'request read is scoped before fetching rows');
 assert.equal(requests.reads,0,'request sheet never performs a broad 19-column fetch');
 assert.equal(peopleCalls,1,'shared employee directory is accessed once, no 13-column scan');
+assert.equal(results[0].employeeId,'U','employee lookup must preserve the selected ID');
+assert.equal(results[0].route,'schedule','non-admin search cannot link to admin-only people page');
+viewerRole='ADMIN';
+assert.equal(find('alpha')[0].route,'people','admin search opens the employee detail');
+viewerRole='MANAGER';
 
 approve=false;
 indexCalls=[];
@@ -94,7 +99,11 @@ const makeRunner=()=>({
  withFailureHandler(fn){this.failure=fn;return this;},
  searchApp(token,query){calls.push({token,query,success:this.success,failure:this.failure});}
 });
-const clientState={sessionToken:'CLIENT-SESSION',page:'home'};
+const clientState={sessionToken:'CLIENT-SESSION',page:'home',
+ data:{permissions:{adminConsole:true}},
+ schedule:{employeeId:'OTHER',category:'業務',date:'2026-10-14',selectedEventId:'',view:'month',mobileDetailOpen:false},
+ adminUi:{search:'stale',role:'ADMIN',status:'active',selectedEmployeeId:''}};
+const openedRoutes=[];
 const client=vm.createContext({
  console,Date,Map,Set,Math,String,JSON,Error,
  state:clientState,
@@ -105,10 +114,29 @@ const client=vm.createContext({
  google:{script:{get run(){return makeRunner();}}},
  escapeHtml:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
  handleApiError:e=>errors.push(String(e.message||e)),
+ navigate:r=>{openedRoutes.push(r);clientState.page=r;},
  clearTimeout(){},setTimeout:()=>1
 });
 vm.runInContext(fs.readFileSync('src/AppShell.html','utf8').replace(/^\s*<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),client,{filename:'AppShell.html'});
 const invoke=s=>vm.runInContext(s,client);
+invoke("renderSearchResults([{type:'社員',employeeId:'U',title:'架空の担当',route:'people'}])");
+invoke('openSearchResult(0)');
+assert.equal(openedRoutes.at(-1),'people');
+assert.equal(clientState.adminUi.selectedEmployeeId,'U');
+assert.equal(clientState.adminUi.status,'ALL','employee search resets hidden admin filters');
+clientState.page='home';
+invoke("renderSearchResults([{type:'社員',employeeId:'E',title:'架空社員',route:'schedule'}])");
+invoke('openSearchResult(0)');
+assert.equal(openedRoutes.at(-1),'schedule');
+assert.equal(clientState.schedule.employeeId,'E','ordinary user sees selected colleague on schedule');
+clientState.page='home';
+invoke("renderSearchResults([{type:'予定',id:'S42',title:'会議',route:'schedule',date:'2026-10-24'}])");
+invoke('openSearchResult(0)');
+assert.equal(clientState.schedule.date,'2026-10-24');
+assert.equal(clientState.schedule.employeeId,'ALL','event search resets previous employee filter');
+assert.equal(clientState.schedule.category,'ALL','event search resets category filter');
+assert.equal(clientState.schedule.selectedEventId,'S42','event search selects target on arrival');
+clientState.page='home';
 input.value='first';invoke("performGlobalSearch('first')");
 input.value='second';invoke("performGlobalSearch('second')");
 assert.equal(calls.length,2);
