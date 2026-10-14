@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.9
+**文書版:** 0.25.10
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.9`
+`APP.version = 0.25.10`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2597,3 +2597,9 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.9 認証ホットパスの設定取得省略（2026-10-14）
 - Auth.gs \`requireSession_\`: hashToken_、findVerifiedSheetRow_(session)、実社員行検証、絶対/無操作期限・ログイン状態は毎回実行。\`getAuthConfig_\`のみ\`sessionTouchMinutes\`経過後の延長処理ブロック内へ移動。設定値変更の適用タイミングと認証拒否の契約は不変。CacheServiceの余計なgetを毎RPCで発生させない。
 - scripts/test_data_access_performance.mjs に通常認証で設定参照を省く回帰試験を追加。実GASのセッション失効・役割変更・延長の実操作はWork1側の受入に残す。
+
+### v0.25.10 初回ホームの業務読み取り統合（2026-10-14）
+- Requests.gs getHomeRequestSnapshot_: 社員本人と担当者のID集合をreadRowsByColumnValues_(申請,3,19)で一度だけ読取。休暇例外は本人の承認済/取消申請中で月間重複した行のみ。承認待ち件数は権限有りなら担当者集合、無しなら本人集合で計算。返却前に社員IDを再照合。
+- Code.gs getHomeMonthStats_: 第3引数が配列なら既読の休暇行を利用し、それ以外は既存の月次申請取得を維持。getHomeOverviewは重複した申請シート検索を行わない。
+- AnnualLeaveAutomation.gs maybeReconcileLeave_: requireSession_が検証した同一社員レコードを第3引数で任意に受け、異なる社員のレコードは再取得する。年休付与・台帳修復が起きたら呼出側は再読取。
+- getApplicationShell_は版番号付き静的HTMLを21600秒保持する。アプリ更新時に版を変えないと古いHTMLが続くおそれがあるためv0.25.10に改版。

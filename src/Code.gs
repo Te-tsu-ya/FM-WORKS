@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.9',
+  version: '0.25.10',
   locale: 'ja-JP'
 });
 
@@ -137,14 +137,14 @@ function buildInitialDataForEmployee_(employee) {
   logPerformance_('getInitialData',perfStarted,PERFORMANCE_BUDGETS.initialData,{employees:employees.length,todayEvents:scheduleBundle.events.length});
   return data;
 }
-function getHomeMonthStats_(employee,today) {
+function getHomeMonthStats_(employee,today,approvedRequests) {
   const ym=today.slice(0,7),start=ym+'-01',end=today,targetId=employee.employeeId;
   const punches=getActivePunchRows_(targetId,start,end),byDate={};
   punches.forEach(r=>(byDate[r[3]]||(byDate[r[3]]=[])).push({id:r[0],action:r[4],timestamp:r[5],workLocation:r[6]}));
   Object.values(byDate).forEach(rows=>rows.sort((a,b)=>a.timestamp.localeCompare(b.timestamp)));
   const legacy=getLegacyDailySnapshots_(targetId,start,end);
   const calendar=getCompanyCalendarRange_(start,end),calendarMap=Object.fromEntries(calendar.map(d=>[d.date,d]));
-  const requests=getApprovedRequestsForMonth_(targetId,start,end);
+  const requests=Array.isArray(approvedRequests)?approvedRequests:getApprovedRequestsForMonth_(targetId,start,end);
   const fullDayOff=new Set();
   requests.forEach(req=>{
     if(!['有給','欠勤'].includes(req.type))return;
@@ -208,10 +208,13 @@ function getHomeOverview(sessionToken) {
   const session = requireSession_(sessionToken);
   const employee = session.employee;
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
-  maybeReconcileLeave_(employee.employeeId,today);
-  const currentLeave=getLeaveLedgerState_(getEmployee_(employee.employeeId));
-  const monthStats = getHomeMonthStats_(employee,today);
-  const pendingRequests = getPendingRequestCount_(employee);
+  const reconciled=maybeReconcileLeave_(employee.employeeId,today,employee);
+  const leaveEmployee=reconciled&&(reconciled.granted||reconciled.repaired)
+    ?getEmployee_(employee.employeeId):employee;
+  const currentLeave=getLeaveLedgerState_(leaveEmployee);
+  const requestSnapshot=getHomeRequestSnapshot_(employee,today.slice(0,7)+'-01',today);
+  const monthStats=getHomeMonthStats_(employee,today,requestSnapshot.approved);
+  const pendingRequests=requestSnapshot.pendingCount;
   const worklogGap = Math.max(0, monthStats.totalMinutes - monthStats.worklogMinutes);
   const result={
     generatedAt: new Date().toISOString(),

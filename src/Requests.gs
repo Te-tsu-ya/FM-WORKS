@@ -36,6 +36,32 @@ function getPendingRequestCount_(employee) {
   const ids=permissions.requestApprove?[...managedIds]:[employee.employeeId];
   return readRowsByColumnValues_(sheet,3,10,ids).reduce((count,r)=>count+(r[9]==='承認待ち'?1:0),0);
 }
+
+/* One home request read covers approved leave and pending approvals. */
+function getHomeRequestSnapshot_(employee,start,end){
+  if(!employee||!employee.employeeId)return {approved:[],pendingCount:0};
+  const sheet=getDb_().getSheetByName('申請');
+  if(!sheet||sheet.getLastRow()<2)return {approved:[],pendingCount:0};
+  const employeeId=String(employee.employeeId);
+  const permissions=getPermissions_(employee);
+  const managed=permissions.requestApprove?getManagedEmployeeIds_(employee):new Set();
+  const pendingIds=permissions.requestApprove?managed:new Set([employeeId]);
+  const permittedIds=new Set([employeeId,...managed]);
+  const rows=readRowsByColumnValues_(sheet,3,19,[...permittedIds]);
+  const approved=[];
+  let pendingCount=0;
+  rows.forEach(r=>{
+    if(!r||!r[0])return;
+    const owner=String(r[2]||'');
+    if(!permittedIds.has(owner))return;
+    if(pendingIds.has(owner)&&r[9]==='承認待ち')pendingCount++;
+    if(owner!==employeeId||!['承認済','取消申請中'].includes(r[9]))return;
+    if(!r[5]||!r[6]||r[5]>end||r[6]<start)return;
+    approved.push({id:r[0],type:r[4],startDate:r[5],endDate:r[6],reason:r[8]});
+  });
+  return {approved,pendingCount};
+}
+
 function assertCanApproveRequest_(approver, requesterEmployeeId) {
   const requesterId = String(requesterEmployeeId || '').trim().toUpperCase();
   if (!requesterId) throw new Error('申請者を確認できません。');
@@ -48,7 +74,7 @@ function getRequestsBundle(sessionToken) {
   const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
   const employee = session.employee;
-  maybeReconcileLeave_(employee.employeeId);
+  const reconcile=maybeReconcileLeave_(employee.employeeId,null,employee);
   const permissions = getPermissions_(employee);
   const managedIds = permissions.requestApprove ? getManagedEmployeeIds_(employee) : new Set();
   const sheet = getDb_().getSheetByName('申請');
@@ -61,7 +87,8 @@ function getRequestsBundle(sessionToken) {
   const own = items.filter(r => r.employeeId === employee.employeeId);
   const team = items.filter(r => managedIds.has(r.employeeId));
   const context=getLeaveRequestContext_(employee.employeeId,own);
-  const fresh=getEmployee_(employee.employeeId),today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
+  const fresh=reconcile&&(reconcile.granted||reconcile.repaired)?getEmployee_(employee.employeeId):employee;
+  const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
   context.fiveDay=getAnnualLeaveFiveDayStatus_(fresh,today);
   context.autoLeave=leaveAutoForecast_(fresh,today);
   const result={ own: own, team: team, context };

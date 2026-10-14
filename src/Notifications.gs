@@ -4,7 +4,7 @@ function getNotifications(sessionToken) {
   const employee = session.employee;
   const items = [];
   const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
-  maybeReconcileLeave_(employee.employeeId,today);
+  const reconcile=maybeReconcileLeave_(employee.employeeId,today,employee);
 
   const monthlyReview=getMonthlyReviewPrompt_(employee.employeeId);
   if(monthlyReview.needsAttention){
@@ -24,7 +24,8 @@ function getNotifications(sessionToken) {
     });
   }
 
-  const freshEmployee=getEmployee_(employee.employeeId);
+  const freshEmployee=reconcile&&(reconcile.granted||reconcile.repaired)
+    ?getEmployee_(employee.employeeId):employee;
   const annualLeave=getAnnualLeaveFiveDayStatus_(freshEmployee,today);
   const automatic=leaveAutoForecast_(freshEmployee,today);
   if(automatic.status==='REVIEW'){

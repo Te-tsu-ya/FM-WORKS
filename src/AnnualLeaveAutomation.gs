@@ -144,8 +144,11 @@ function reconcileLeaveUnlocked_(employee,today){
   SpreadsheetApp.flush();
   return {granted:true,date:part.date,days:part.days,balance:next};
 }
-function maybeReconcileLeave_(employeeId,asOf){
-  const employee=getEmployee_(employeeId),today=asOf||Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),
+function maybeReconcileLeave_(employeeId,asOf,verifiedEmployee){
+  // Only reuse a fresh employee verified earlier by requireSession_.
+  const employee=verifiedEmployee&&String(verifiedEmployee.employeeId)===String(employeeId)
+    ?verifiedEmployee:getEmployee_(employeeId);
+  const today=asOf||Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd'),
     policy=leaveAutoPolicy_(employeeId),plan=leaveEntitlement_(employee.hireDate,today),part=plan&&plan.due;
   if(!employee.active||!policy.enabled||!part||part.date<policy.from)return {granted:false};
   const ledger=getLeaveLedgerRows_(employee.employeeId),recorded=leaveAutoAlreadyGranted_(employee,part,ledger);
