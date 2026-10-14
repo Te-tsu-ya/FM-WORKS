@@ -309,7 +309,7 @@ function projectAdvancedWorklogIds_(items){
  // Use a narrow indexed read for sparse visible worklogs in a large link sheet.
  // Large result sets and small sheets retain the existing full read semantics.
  const count=sheet.getLastRow();
- const rows=ids.length&&ids.length<=24&&count>250
+ const rows=ids.length&&ids.length<=80&&count>250
   ?readRowsByColumnValues_(sheet,1,DB_SCHEMA_SPECS['プロジェクト工数対応'].length,ids)
   :projectAdvancedRows_('プロジェクト工数対応',false,sheet);
  const map=new Map(rows.map(r=>[r[0],r[2]]));

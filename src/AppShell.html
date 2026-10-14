@@ -160,6 +160,7 @@ function mountAuthenticatedApp(data,mustChangePin){
   state.requests=createEmptyRequestsState();
   delete pageCache.requests;
   invalidateScheduleWindowCache();
+  if(typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();
   state.data=data;
   state.workLocation=data.attendance.workLocation||'出社';
   state.schedule.date=data.today;

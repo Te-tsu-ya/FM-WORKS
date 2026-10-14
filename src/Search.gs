@@ -69,8 +69,9 @@ function searchScheduleRows_(sheet,query) {
     const found=sheet.getRange(2,7,lastRow-1,5).createTextFinder(q)
       .useRegularExpression(false).matchCase(false).findAll();
     if(!found.length)return [];
-    const blocks=contiguousRowBlocks_(found.map(r=>r.getRow()));
-    if(blocks.length>48)return full();
+    const blocks=indexedRowWindows_(found.map(r=>r.getRow()));
+    // The index is not worth eight round trips when nearly the full table is hit.
+    if(blocks.reduce((n,b)=>n+b.end-b.start+1,0)>(lastRow-1)*0.75)return full();
     // Stable source-row ordering, with all 18 columns to enforce visibility.
     return sheet.getRangeList(blocks.map(b=>'A'+b.start+':R'+b.end))
       .getRanges().flatMap(range=>range.getDisplayValues());

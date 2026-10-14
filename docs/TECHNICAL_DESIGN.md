@@ -2574,3 +2574,10 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - getSomuWorkspaceは共有結果を読む前にsomuOperator_で社員セッションとofficeWorkspace権限を再確認。canApproveとtodayは利用者ごとに計算して付加する。個別の閲覧権限を共有しない。
 - AppAdmin.html: performanceセクションで既存FMWorksPerformance.report()のブラウザー往復P50/P95を表示。FMRotaryRPCからの計測値のみを使い、GASの通信を追加しない。clipboardには引数/結果のない統計JSONだけを渡す。ADMIN権限なしでは表示・コピー・消去を拒否する。
 - テスト: 大容量の分割整合性、断片紛失、更新時の無効化、社員別承認、管理者の統計表示とHTML無害化を追加。GASの公開と実機計測はこのGitHubコミットの対象外。
+
+
+### 2026-10-14 v0.25.9 段階的マスタと分散検索の改良
+- AppOperations.htmlのworklogCatalogState_はログイン識別子と取得日時のみ。正常な空配列も取得済み、最大5分再利用。画面日付の変更に影響せず、プロジェクトの書込/DB移行/再ログインで失効。別月の先行応答からもマスタを同じセッションへ反映する。
+- ProjectAdvanced.gsは1～80件の工数対応IDをreadRowsByColumnValues_によるライブ行照合付き索引で取得。81件以上または250行以下は一括読取。
+- Search.gsはindexedRowWindows_で最大8窓、取得予定の全行に対する比率が75%超なら全件取得。TextFinder障害やスペース入り複合検索時は安全なフォールバック。searchAppは取得後にACLと原文を再検査する。
+- 新規test_worklog_catalog.mjsと既存インデックス試験で、空配列、日付移動、ログイン分離、25/81件、60分散ヒットを検証する。実GASのミリ秒測定ではない。

@@ -82,8 +82,14 @@ assert.equal(target.stats.allWide,1);
 target=new LinkSheet(1000);
 const many=context.projectAdvancedWorklogIds_(Array.from({length:25},(_,i)=>({id:'W-'+i})));
 assert.equal(many.length,25);
-assert.equal(target.stats.indexFinds,0,'larger views avoid excessively fragmented indexed reads');
-assert.equal(target.stats.allWide,1,'large visible sets use existing one-shot semantics');
+assert.equal(target.stats.indexFinds,1,'25 visible IDs must be indexed');
+assert.equal(target.stats.allWide,0,'do not fetch the entire link table at 25 IDs');
+assert.ok(target.stats.wideCells<=25*6,'only visible IDs read');
+target=new LinkSheet(1000);
+const huge=context.projectAdvancedWorklogIds_(Array.from({length:81},(_,i)=>({id:'W-'+i})));
+assert.equal(huge.length,81);
+assert.equal(target.stats.indexFinds,0,'81 IDs keep the cheaper one-shot path');
+assert.equal(target.stats.allWide,1);
 
 target=new LinkSheet(1000);
 target.rows[0][0]='不正な見出し';

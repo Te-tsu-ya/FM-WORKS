@@ -58,6 +58,7 @@ const server=vm.createContext({
  canViewScheduleRow_:(_,r)=>r[11]!=='管理者のみ',
  contiguousRowBlocks_:blockRows,readRowsByColumnValues_:()=>{throw Error('unexpected request lookup');}
 });
+vm.runInContext(fs.readFileSync('src/DataAccess.gs','utf8'),server);
 vm.runInContext(fs.readFileSync('src/Search.gs','utf8'),server);
 const query=q=>Array.from(server.searchApp('TOKEN',q),x=>({...x}));
 let rows=Array.from({length:1000},(_,i)=>row('S'+i,'other'));
@@ -84,7 +85,10 @@ for(let i=0;i<60;i++)rows[i*10]=row('S'+i*10,'needle '+i);
 current=new Sheet(rows);
 const abundant=query('needle');assert.equal(abundant.length,30);
 assert.equal(abundant[0].id,'S0');assert.equal(abundant[29].id,'S290');
-assert.equal(current.finder,1);assert.equal(current.full,1,'fragmented matches fallback to full read');
+assert.equal(current.finder,1);
+assert.equal(current.full,0,'fragmented matches must avoid full-table transfer');
+assert.ok(current.blocks<=8,'no more than eight body reads');
+assert.ok(current.wideCells<rows.length*18,'transfer fewer cells than the full table');
 
 rows=Array.from({length:1000},(_,i)=>row('S'+i,'ordinary'));
 rows[100]=row('S100','needle');

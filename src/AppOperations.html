@@ -349,6 +349,16 @@ let worklogActiveRequest=null;
 // Limit concurrency, but do not let an obsolete range block the currently selected range.
 const worklogWindowRequests=new Map();
 const WORKLOG_MAX_CONCURRENT_READS=2;
+// Empty project/task lists are valid results, not a signal to reload on every day.
+const WORKLOG_CATALOG_TTL=300000;
+let worklogCatalogState_={identity:'',at:0};
+function invalidateWorklogCatalog_(){worklogCatalogState_={identity:'',at:0};}
+function worklogCatalogFresh_(){
+ return worklogCatalogState_.identity===worklogWindowIdentity()&&
+   Date.now()-worklogCatalogState_.at<WORKLOG_CATALOG_TTL&&
+   Array.isArray(state.data&&state.data.projects)&&
+   Array.isArray(state.worklog&&state.worklog.taskOptions);
+}
 
 function worklogWindowIdentity(){
   const employeeId=state.data&&state.data.user&&state.data.user.employeeId||'';
@@ -372,13 +382,19 @@ function worklogCachedWindow(date){
   return winner;
 }
 
-function worklogStoreWindow(identity,range,data){
+function worklogStoreWindow(identity,range,data,includesCatalog=false){
   const entry={
     identity:identity,start:range.start,end:range.end,at:Date.now(),
     items:Array.isArray(data&&data.items)?data.items:[],
     taskOptions:Array.isArray(data&&data.taskOptions)?data.taskOptions:null,
     projects:Array.isArray(data&&data.projects)?data.projects:null
   };
+  if(includesCatalog&&Array.isArray(data&&data.projects)&&Array.isArray(data&&data.taskOptions)){
+    // Apply same-session master independently of the currently selected day.
+    state.data.projects=data.projects;
+    state.worklog.taskOptions=data.taskOptions;
+    worklogCatalogState_={identity:identity,at:Date.now()};
+  }
   const key=identity+'|'+range.start+'|'+range.end;
   worklogWindowCache.delete(key);
   worklogWindowCache.set(key,entry);
@@ -431,7 +447,7 @@ function loadWorklogs(options={}){
   }
   const range=worklogWindowRange(date);
   // Projects only need an initial load and explicit force refresh.
-  const includeProjects=!!options.force||!Array.isArray(state.data.projects)||!state.data.projects.length;
+  const includeProjects=!!options.force||!worklogCatalogFresh_();
   const generation=worklogWindowGeneration;
   const requestKey=identity+'|'+range.start+'|'+range.end;
   if(worklogWindowRequests.has(requestKey))return;
@@ -457,7 +473,7 @@ function loadWorklogs(options={}){
       if(state.page==='worklog')loadWorklogs({force:true});
       return;
     }
-    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null,taskOptions:null});
+    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null,taskOptions:null},includeProjects);
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM WORKS] worklog range '+(Date.now()-started)+'ms ('+range.start+' / '+range.end+')');
     const selected=state.worklog.date||state.data.today;
     const selectedCache=worklogCachedWindow(selected);
