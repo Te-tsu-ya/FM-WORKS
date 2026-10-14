@@ -106,7 +106,7 @@ function projectAdvancedTaskEffort_(projectId,tasks,checkedSheet,project,plan){
  if(!plan)plan=projectHubRows_('plan',projectHubStorage_().sheets.plan,projectId)[0]||{};
  const names=new Set([project.name,...projectHubAliases_(plan)].map(projectHubName_));
  const linked=new Map(refs.map(r=>[r[0],r[2]]));
- const rows=projectHubWorklogRows_(false);
+ const rows=projectHubWorklogRowsByIds_(Array.from(linked.keys()));
  const totals=new Map(tasks.map(t=>[t.id,0]));
  rows.forEach(r=>{
   const taskId=linked.get(r[0]);

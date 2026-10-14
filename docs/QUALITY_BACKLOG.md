@@ -301,3 +301,16 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - Blocked: GAS追加反映は作業環境クレジット不足の自動承認拒否。v0.25.8/公開版196の確認済み状態を維持。ブラウザー12項目・実GAS操作・P50/P95は未確認。
 
 - 実行証拠: GPT環境68 PASS / 0 FAIL / 12 SKIPPED。report SHA-256 `54c36b8c1af975909c3b530173f413949bbc1c8139bd19636f59059e18c50ad3`。`docs/releases/GITHUB_v02519_20261014_VERIFIED.md` とLOCAL_REPORT.jsonに対象/検証入力を記録。GASと画面の受入は未完了。
+
+## v0.25.20 経理再取得・保存・作業別工数
+
+- Accepted / High / 高信頼: 経理の追加表示で全3台帳を再取得。20秒の世代付きUTF-8分割snapshotを利用し、権限/ヘッダー/全件集計を維持。最新更新と保存後は必ずforceFresh。
+- Accepted / High / 高信頼: cache無効化漏れや旧RPCの再公開で保存後の状態が古くなるリスク。全書込経路を確認し、保存直後/監査前に世代変更とsnapshot削除。旧世代はwarm読取に使わない。
+- Accepted / Medium / 高信頼: 経理新規/一括保存で全送信キー列を読み込む。個別はverified finder、一括は最大20キーの一致本文を読み、変更内容と社員と監査を既存判定で確認。
+- Accepted / High / 高信頼: 作業別工数で全13列工数台帳を取得。紐づいたIDで限定し、別案件/削除/無効作業の集計防止は維持。6,000行中2IDは本文26セル、既存の1,501行試験でも26セル。
+- 残課題: 経理のcold全件集計/分析、総務ホームの全件集計と成長3台帳上限、初期HTML分割の適否、広いID集合の取得、実ブラウザー/GAS負荷実測。外部Sheets変更は明示更新が必要。
+- Blocked: GAS追加反映は作業環境クレジット不足による自動承認拒否。既存公開v0.25.8/196と業務データを維持し、迂回操作・Actions実行を行わない。
+
+- Accepted / High / 高信頼: 単一行finderの既定の大小文字無視とlive厳密一致が不整合。異なるケースの先行行で本来のキーを見落とすためmatchCase(true)に揃え、二重保存を防ぐ再送試験を追加。
+
+- v0.25.20実行証拠: GPT環境69 PASS / 0 FAIL / 12 SKIPPED。report SHA-256 `986b30b6982a5e63520bafaf190abcfa63e81a7cae65393b27875e88d20d9c3c`。チェック名/対象と要件別の受入を `docs/releases/GITHUB_v02520_20261014_VERIFIED.md` とLOCAL_REPORT.jsonへ記録。GAS/画面は未完了。

@@ -24,6 +24,7 @@ const ctx=vm.createContext({console,Date,JSON,Array,Set,Map,String,Number,Object
  safeSheetText_:v=>v,
  normalizeDate_:v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v))throw Error('日付が不正');return v;},
  withScriptLock_:fn=>fn(),
+ readRowsByColumnValues_:(sheet,col,width,ids,_ci,withRows)=>sheet.rows.flatMap((row,i)=>i>0&&ids.includes(String(row[col-1]))?[withRows?{rowNumber:i+1,values:row.slice(0,width)}:row.slice(0,width)]:[]),
  financeSheet_:()=>sheet,createId_:prefix=>prefix+'-'+(++ids),
  appendAudit_:()=>audit,
  auditJson_:v=>JSON.stringify(v),

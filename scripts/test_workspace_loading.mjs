@@ -9,10 +9,11 @@ const source=name=>baseline?execFileSync('git',['show','HEAD:src/'+name],{encodi
 class Sheet{
  constructor(rows){this.rows=rows;this.reads=[];}
  getLastRow(){return this.rows.length;}
- getRange(row,col,n=1,width=1){return {getDisplayValues:()=>{
+ getRange(row,col,n=1,width=1){return {createTextFinder:pattern=>({useRegularExpression(){return this;},matchEntireCell(){return this;},findAll:()=>this.rows.flatMap((r,i)=>i>=row-1&&i<row-1+n&&new RegExp(pattern,'i').test(String(r[col-1]||''))?[{getRow:()=>i+1}]:[])}),getDisplayValues:()=>{
   this.reads.push({row,col,n,width});
   return Array.from({length:n},(_,i)=>Array.from({length:width},(_,j)=>String(this.rows[row+i-1]?.[col+j-1]??'')));
  }};}
+ getRangeList(ranges){return {getRanges:()=>ranges.map(value=>{const m=value.match(/^A(\d+):M(\d+)$/);assert.ok(m);return this.getRange(Number(m[1]),1,Number(m[2])-Number(m[1])+1,13);})};}
 }
 const cache=new Map(),sheets={};let dbId='DB-A',generation=0;
 const cacheApi={get:k=>cache.get(k)||null,getAll:keys=>Object.fromEntries(keys.filter(k=>cache.has(k)).map(k=>[k,cache.get(k)])),
@@ -37,7 +38,8 @@ sheets['工数']=new Sheet([Array(15).fill('header'),...Array.from({length:1500}
  'W'+i,'2026-10-10','U','架空担当','案件一','設計','設計確認😀'.repeat(30),'09:00','09:30',30,'備考'.repeat(20),'2026-10-10','有効','','']),
  ['FOREIGN','2026-10-10','U','架空担当','案件二','設計','別の案件','09:00','10:00',999,'','','有効']]);
 const readCounts=()=>({headers:Object.values(sheets).flatMap(s=>s.reads).filter(r=>r.row===1).length,
- worklogFullReads:sheets['工数'].reads.filter(r=>r.row===2).length});
+ worklogBodyCells:sheets['工数'].reads.filter(r=>r.row>=2&&r.width===13).reduce((sum,r)=>sum+r.n*r.width,0),
+ worklogFullReads:sheets['工数'].reads.filter(r=>r.row===2&&r.width>1&&r.n>250).length});
 const resetReads=()=>Object.values(sheets).forEach(s=>s.reads=[]);
 ctx.getProjectHubWorkspace('A');resetReads();
 const advanced=ctx.getProjectAdvanced('A','P1'),counts=readCounts();
@@ -47,8 +49,9 @@ console.log(JSON.stringify({mode:baseline?'baseline':'fixed',advanced:counts,war
 if(baseline)process.exit(0);
 assert.equal(advanced.taskEffort[0].actualMinutes,30,'a cross-project worklog link cannot inflate task effort');
 assert.equal(counts.headers,10,'each project schema checked once within this request');
-assert.equal(counts.worklogFullReads,1,'personal task effort needs one detail snapshot beyond the compact portfolio');
-resetReads();ctx.getProjectAdvanced('A','P1');assert.equal(readCounts().worklogFullReads,0,'warm detail reuses its own snapshot');
+assert.equal(counts.worklogFullReads,0,'task effort reads matching IDs, not a full detail snapshot');
+assert.equal(counts.worklogBodyCells,26,'two linked IDs need exactly two body rows');
+resetReads();ctx.getProjectAdvanced('A','P1');assert.equal(readCounts().worklogFullReads,0,'repeated task effort never fetches the full worklog table');
 assert.equal(warm.worklogFullReads,0,'Japanese workload above 100 KB stays cached');
 assert.equal(bankHeaders,5,'each bank/year schema is checked once');
 assert.throws(()=>ctx.getProjectAdvanced('Z','P1'),/権限/,'cached worklogs never bypass live membership checks');

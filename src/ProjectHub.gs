@@ -271,6 +271,17 @@ function projectHubDetailWorklogRows_(force,projectId,projects,plans){
  // Candidate positions are only hints: recheck the current project names.
  return select(rows);
 }
+function projectHubWorklogRowsByIds_(ids){
+ const wanted=new Set((ids||[]).map(id=>String(id||'').trim()).filter(Boolean));
+ if(!wanted.size)return [];
+ const cached=cacheJsonGetLarge_('fm:projectHub:worklog:v2');
+ if(Array.isArray(cached))return cached.filter(row=>wanted.has(String(row[0])));
+ const sheet=getDb_().getSheetByName('工数');
+ if(!sheet)return [];
+ // The common reader batches ID hits and rechecks live IDs after hinted reads.
+ return readRowsByColumnValues_(sheet,1,13,Array.from(wanted))
+  .filter(row=>wanted.has(String(row[0])));
+}
 function projectHubInvalidateWorklogs_(){
  cacheRemove_('fm:projectHub:worklog:v2');
  cacheRemove_('fm:projectHub:worklog:summary:v3');

@@ -114,8 +114,11 @@ function findVerifiedSheetRow_(sheet,column,width,value,scope,display){
       }
     }catch(_){/* A moved or deleted row invalidates the hint. */}
   }
-  const found=sheet.getRange(2,column,lastRow-1,1)
-    .createTextFinder(key).matchEntireCell(true).findNext();
+  const finder=sheet.getRange(2,column,lastRow-1,1).createTextFinder(key).matchEntireCell(true);
+  // IDs and submission keys are exact values. The default case-insensitive
+  // finder could stop on a different key before the real matching row.
+  if(typeof finder.matchCase==='function')finder.matchCase(true);
+  const found=finder.findNext();
   if(!found)return null;
   const rowNumber=found.getRow();
   const row=readRow(rowNumber);

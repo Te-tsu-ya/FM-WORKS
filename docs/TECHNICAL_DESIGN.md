@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.19
+**文書版:** 0.25.20
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2695,3 +2695,23 @@ TextFinderは大文字小文字を区別しないリテラル検索とし、requ
 受入: R1選択案件のみ→6,000行中8行の取得セル数検査、R2旧名/同名/削除/空白→一覧と詳細の集計検証、R3即時再取得→旧要求と置換要求を任意順で完了、R4復旧→不正形式/別案件/失敗/ログアウト、R5内部情報削減→実API応答の検査。`test_project_detail_loading.mjs` と既存の案件/経理回帰を使用する。広く散在する場合の一括取得や高度管理の全件工数取得、経理の全件集計取得は残る。GASの実時間をセル数から推測しない。
 
 調査根拠: Google公式 https://developers.google.com/apps-script/guides/support/best-practices （通信削減・まとめ取得・キャッシュ）、https://developers.google.com/apps-script/reference/spreadsheet/text-finder （大小文字/正規表現/完全一致）。
+
+### v0.25.20 経理スナップショット世代と作業別工数ID（2026-10-14）
+
+経理の受入契約: A1 warm/追加表示では本文0回、A2権限・ヘッダーは毎回実判定、A3明示force/期限/欠損/DB切替は正本へ復旧、A4全書込経路は保存後無効化、A5旧読み取り/失敗監査でも保存世代を維持、A6全件総数と証憑照合を保持、A7工数ID取得は案件/作業/削除を再検証する。既存の新規登録/再送/承認/精算/API権限試験と新規 `test_finance_snapshot.mjs`、`test_project_detail_loading.mjs`、`test_workspace_loading.mjs` で検証する。
+
+`financeOverviewSnapshot_(force)` はexpenses/travels/receiptsの全件を既存のfinanceRows_で作成し、共通cacheJsonPutLarge_の20秒UTF-8分割キャッシュに保存する。取得前にgetFinanceOverviewのrequireFinanceOperator_とfinanceStorageStatus_を必ず実行する。自分の申請、承認/精算、重複チェックの正本はこの共有表示キャッシュを使わない。全データから件数/優先順/照合を計算し、指定された最大1,000件だけを画面へ送る。
+
+世代キーは `fm:finance:overview-generation:v1`、スナップショットは `fm:finance:overview:v1`。共通DataAccessがDB IDで分離する。世代はUUIDをCacheServiceに最大6時間保持し、未設定/欠損時は新しく作成する。読取結果に世代を付け、保存時は世代変更とスナップショット削除を行う。保存中に読取が終了しても、その旧世代を現在世代のキャッシュとして受け入れない。保存前後の非原子的なサービス境界は残るため、承認/精算/在庫等の最終判断をキャッシュへ移さない。CacheServiceの存在・期間・書込み成功は保証せず、完全な配列・世代一致がなければ正本を読む。
+
+新規financeWriteNew_、再申請resubmitFinanceRequest、financeReview_、settleFinanceRequest、一括saveFinanceReceiptsBulkの書込み直後、監査前にfinanceInvalidateOverview_を呼ぶ。経費/出張/経費記録の新規登録を含む全書込経路が対象。既存同内容の重複再送は正本を変更しないので無効化を増やさない。UIはoptions.forceをparams.forceFreshへ渡す。「さらに表示」はoptions.reuseSnapshot=trueでサーバーの20秒保持を使い、保存後・明示更新はforceFresh=trueとする。
+
+新規登録の送信識別子確認はfindVerifiedSheetRow_（表示値・live検査）に集約。一括入力は共通readRowsByColumnValues_に、検証済みの最大20キーとwithRowNumbers=trueを渡す。全キー列→個別本文の読み取りを減らし、一致本文から社員/送信内容を正本で検査する。入力キー重複を事前拒否するため、未保存の新規行を既存Mapへ仮登録する処理は不要となった。
+
+`projectHubWorklogRowsByIds_(ids)` はIDを重複除去し、有効な全件13列キャッシュがある場合はIDを選択する。なければ工数A列の共通IDインデックスから必要なA:Mだけを取得する。部分データを全件キャッシュへ入れず、既存2キーの無効化とDB分離を維持する。projectAdvancedTaskEffort_ではその後に作業リンク、案件名/旧名、削除、正の分数を再検証。一般社員/管理者の認可は先行するprojectAdvancedNeed_を維持する。小規模・長いキー集合・索引未対応等は共通readerの適応一括経路を使う。
+
+残る読込み: 冷えた経理の初回は正確な総数と照合のため全件を読み、分析/旧経費Excel集計は本変更対象外。大きな工数ID集合・散在は共通readerの一括フォールバックがある。短期間のキャッシュと読取セル数の削減をGAS実時間の測定済みと混同しない。
+
+公式仕様: https://developers.google.com/apps-script/guides/support/best-practices 、https://developers.google.com/apps-script/reference/cache/cache 。CacheServiceは早期破棄もあるため欠損試験を実施する。
+
+ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正本一致検査と検索条件を合わせる。大小文字だけ違う先行行で検索が止まり、既存の正しいキーを見落として二重保存する問題を回避する。検索表示用の部分一致・案件名正規化は変更しない。新規試験ではcase-keyとCASE-keyを別行に置き、正しいキーの再送がduplicateとなることを確認する。

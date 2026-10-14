@@ -25,6 +25,15 @@ records[100]=row('T100','old name');finderEnabled=false;reads.length=0;assert.eq
 cache.set('fm:projectHub:worklog:v2',records);reads.length=0;assert.equal(detail().length,8);assert.equal(reads.length,0,'reuse full snapshot without an extra Sheets read');detail(true);assert.ok(reads.length>0,'force never uses a warm snapshot');ctx.projectHubInvalidateWorklogs_();assert.equal(cache.size,0);
 reads.length=0;assert.equal(ctx.projectHubDetailWorklogRows_(true,'MISSING',projects,plans).length,0);assert.equal(reads.length,0);
 records=Array.from({length:6000},(_,i)=>row('B'+i,i%2?'Other':'name.[a]'));reads.length=0;found=detail(true);assert.equal(found.length,3000);assert.deepEqual(reads.map(r=>r.w),[13],'widely scattered hits prefer one full batch over many wide windows');
+// Use the production ID reader for advanced task effort, not a broad snapshot.
+ctx.PERFORMANCE_BUDGETS={indexedRead:800};ctx.logPerformance_=()=>{};
+ctx.regexEscape_=value=>String(value).replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
+sheet.getRangeList=values=>({getRanges:()=>values.map(text=>{const m=text.match(/^A(\d+):M(\d+)$/);assert.ok(m);return sheet.getRange(+m[1],1,+m[2]-m[1]+1,13);})});
+vm.runInContext(access.slice(access.indexOf('function readRowsByColumnValues_('),access.indexOf('function logPerformance_(')),ctx);
+reads.length=0;assert.equal(ctx.projectHubWorklogRowsByIds_(['B0','B5999']).length,2);assert.equal(reads.length,0,'ID scope reuses existing complete snapshot');
+ctx.projectHubInvalidateWorklogs_();reads.length=0;const byId=ctx.projectHubWorklogRowsByIds_(['B0','B5999','B0']);
+assert.deepEqual(Array.from(byId,r=>r[0]),['B0','B5999']);assert.equal(reads.reduce((sum,r)=>sum+r.n*r.w,0),26,'6000 rows are narrowed to two physical ID rows');
+reads.length=0;assert.equal(ctx.projectHubWorklogRowsByIds_([]).length,0);assert.equal(reads.length,0);
 // Ticket identity releases a new request immediately and prevents an old callback
 // from deleting the new request or overwriting a different selected project.
 const calls=[],runner=(meta={})=>new Proxy({}, {get(_o,key){if(key==='withSuccessHandler')return fn=>runner({...meta,success:fn});if(key==='withFailureHandler')return fn=>runner({...meta,failure:fn});return (...args)=>calls.push({method:String(key),args,...meta});}});

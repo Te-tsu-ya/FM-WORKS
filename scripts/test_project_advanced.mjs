@@ -50,6 +50,7 @@ const gctx=vm.createContext({
  projectHubRows_:kind=>kind==='plan'?plans:kind==='task'?tasks:kind==='update'?updates:[],
  projectHubCanManage_:(u,p)=>u.role==='ADMIN'||p.ownerId===u.employeeId,
  projectHubWorklogRows_:()=>db['工数'].rows.slice(1).map(r=>r.map(x=>String(x??''))),
+ projectHubWorklogRowsByIds_:ids=>db['工数'].rows.slice(1).filter(r=>ids.includes(r[0])).map(r=>r.map(x=>String(x??''))),
  projectHubName_:v=>String(v||'').trim().toLowerCase(),projectHubAliases_:p=>JSON.parse(p.aliases||'[]'),
  projectHubToday_:()=> '2026-10-10',safeSheetText_:(v,max)=>String(v??'').slice(0,max),
  toTimestamp_:()=> '2026-10-10 13:00:00',createId_:p=>p+'-'+(++seq),
