@@ -17,14 +17,11 @@ const AUTH = Object.freeze({
 });
 
 function getPublicAuthConfig() {
-  const config = getAuthConfig_();
-  return {
-    appName: APP.name,
-    needsSetup: isPrototypeMode_() ? false : !hasAnyPinConfigured_(),
-    pinLength: config.pinLength,
-    prototypeMode: isPrototypeMode_(),
-    support: getSupportConfig_()
-  };
+  const settings=getSettingsMap_(),config=getAuthConfig_(settings);
+  const prototype=prototypeModeEnabledForEnvironment_(settings.PROTOTYPE_MODE,getRuntimeEnvironment_());
+  return {appName:APP.name,appVersion:APP.version,
+    needsSetup:prototype?false:!hasAnyPinConfigured_(),pinLength:config.pinLength,
+    prototypeMode:prototype,support:getSupportConfig_(settings)};
 }
 
 function initializeFirstAdmin(employeeId, pin, clientInfo, support, rememberSession) {
@@ -713,8 +710,8 @@ function hasAnyPinConfigured_() {
   return sheet.getRange(2, 15, lastRow - 1, 1).getDisplayValues().some(r => !!r[0]);
 }
 
-function getAuthConfig_() {
-  const map = getSettingsMap_();
+function getAuthConfig_(settings) {
+  const map = settings || getSettingsMap_();
   return {
     sessionHours: Math.max(1, Number(map.SESSION_HOURS || AUTH.defaultSessionHours)),
     idleMinutes: Math.max(15, Number(map.SESSION_IDLE_MINUTES || AUTH.defaultIdleMinutes)),
@@ -726,8 +723,8 @@ function getAuthConfig_() {
   };
 }
 
-function getSupportConfig_() {
-  const map = getSettingsMap_();
+function getSupportConfig_(settings) {
+  const map = settings || getSettingsMap_();
   return {
     name: map.SUPPORT_CONTACT_NAME || 'FM WORKS管理者',
     email: map.SUPPORT_EMAIL || '',

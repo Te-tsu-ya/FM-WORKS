@@ -414,24 +414,45 @@ function performEmployeeSave(payload){
     handleApiError(err,'社員情報を保存できませんでした');
   }).saveEmployee(state.sessionToken,payload);
 }
-function refreshAppData(callback){
-  if(!state.sessionToken||!state.data)return;
-  const requestToken=state.sessionToken,previous=state.data;
+function refreshAppData(callback,options={}){
+  const done=()=>{if(typeof options.onDone==='function')options.onDone();};
+  if(!state.sessionToken||!state.data){done();return;}
+  if(typeof rememberWorklogQuickDraft==='function')rememberWorklogQuickDraft();
+  const requestToken=state.sessionToken,previous=state.data,previousToday=String(state.data.today||'');
+  const worklogDraft=typeof worklogQuickDrafts!=='undefined'&&typeof worklogDraftKey==='function'
+    ?worklogQuickDrafts.get(worklogDraftKey(previousToday)):null;
+  const keepWorklogDate=!!(worklogDraft&&String(worklogDraft.wlQuickProject||worklogDraft.wlQuickDescription||'').trim());
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(data){
-    if(requestToken!==state.sessionToken||previous!==state.data)return;
-    state.data={
-      ...data,
+    if(requestToken!==state.sessionToken||previous!==state.data){done();return;}
+    if(!data||!data.user||!/^\d{4}-\d{2}-\d{2}$/.test(data.today||'')||!data.attendance){
+      done();showToast('最新情報の形式を確認できませんでした。');return;
+    }
+    const rollover=data.today!==previousToday;
+    state.data={...data,
       projects:Array.isArray(data.projects)&&data.projects.length?data.projects:(previous.projects||[]),
-      monthlyReview:previous.monthlyReview||data.monthlyReview||null,
-      month:previous.month||data.month||null,
-      tasks:Array.isArray(previous.tasks)?previous.tasks:(data.tasks||null),
-      overviewReady:!!(previous.overviewReady||data.overviewReady)
-    };
+      monthlyReview:rollover?null:(previous.monthlyReview||data.monthlyReview||null),
+      month:rollover?null:(previous.month||data.month||null),
+      tasks:rollover?null:(Array.isArray(previous.tasks)?previous.tasks:(data.tasks||null)),
+      overviewReady:rollover?false:!!(previous.overviewReady||data.overviewReady)};
+    state.workLocation=data.attendance.workLocation||state.workLocation;
     state.schedule.employees=data.employees||state.schedule.employees||[];
+    if(rollover){
+      if(state.worklog.date===previousToday&&!keepWorklogDate)state.worklog.date=data.today;
+      if(state.schedule.date===previousToday&&!state.schedule.selectedEventId)state.schedule.date=data.today;
+      if(state.schedule.selectedDate===previousToday&&!state.schedule.selectedEventId)state.schedule.selectedDate=data.today;
+      if(state.monthly.yearMonth===previousToday.slice(0,7))state.monthly.yearMonth=data.today.slice(0,7);
+      if(String(state.company.year)===previousToday.slice(0,4))state.company.year=Number(data.today.slice(0,4));
+      invalidatePageCache('homeOverview','requests','monthly','worklog','schedule','company');
+      if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
+      state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''};
+    }
     setProfileUi();renderNav();renderPage();
-    loadHomeOverview({force:true,silent:true});
-    if(callback)callback();
-  }).withFailureHandler(function(err){if(requestToken===state.sessionToken&&previous===state.data)handleApiError(err,'最新情報を取得できませんでした');}).getInitialData(state.sessionToken);
+    if(options.resume||rollover)loadPageData_(state.page,{silent:true});
+    else loadHomeOverview({force:true,silent:true});
+    if(callback)callback();done();
+  }).withFailureHandler(function(err){
+    done();if(requestToken===state.sessionToken&&previous===state.data)handleApiError(err,'最新情報を取得できませんでした');
+  }).getInitialData(state.sessionToken);
 }
 
 // In-memory, session-scoped month result cache. Never put employee summaries in localStorage.

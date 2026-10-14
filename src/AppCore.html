@@ -419,6 +419,38 @@ function attendanceWorkspaceTabs(activeId){
 function scheduleWorkspaceTabs(activeId){
   return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
 }
+// One route-loading contract for login, navigation and resume.
+function loadPageData_(page,options={}){
+  if(!state.data||!state.sessionToken)return;
+  // Returning to cashflow must not download unrelated expense/travel ledgers.
+  if(page==='finance'&&typeof cashFlowUi!=='undefined'&&cashFlowUi.open){
+    if(typeof cashFlowLoad_==='function')cashFlowLoad_();
+    if(typeof cfbLoad_==='function'&&cfbUi.active!==false)cfbLoad_(false);
+    return;
+  }
+  if(page==='home')loadHomeOverview({silent:!!options.silent});
+  if(page==='schedule')loadSchedule({silent:true});
+  if(page==='companyCalendar')loadCompanyCalendar();
+  if(page==='worklog')loadWorklogs({silent:true});
+  if(page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
+  if(page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
+  if(page==='quotes'||page==='documentHistory')loadQuoteWorkspace({silent:true});
+  if(page==='finance')loadFinanceOverview();
+  if(page==='office'&&typeof somuLoad==='function')somuLoad(false);
+  if(page==='companyDocs')loadCompanyDocs();
+
+  if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
+  if(page==='monthly')loadMonthly();
+  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
+  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
+    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
+    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
+    if(state.adminTab==='operation')loadMaintenance();
+    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
+    if(state.adminTab==='requirements')loadSystemDocument('requirements');
+    if(state.adminTab==='technical')loadSystemDocument('technical');
+  }
+}
 function navigate(page){
   if(state.page==='finance'&&page!==state.page&&typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
   if(page!==state.page&&((typeof quoteUi!=='undefined'&&quoteUi.busy)||
@@ -443,28 +475,7 @@ function navigate(page){
   if(page!=='schedule')state.schedule.mobileDetailOpen=false;
   state.page=page;if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.route(page);history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
   const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
-  if(page==='home')loadHomeOverview({silent:true});
-  if(page==='schedule')loadSchedule({silent:true});
-  if(page==='companyCalendar')loadCompanyCalendar();
-  if(page==='worklog')loadWorklogs({silent:true});
-  if(page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
-  if(page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
-  if(page==='quotes'||page==='documentHistory')loadQuoteWorkspace({silent:true});
-  if(page==='finance')loadFinanceOverview();
-  if(page==='office'&&typeof somuLoad==='function')somuLoad(false);
-  if(page==='companyDocs')loadCompanyDocs();
-
-  if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
-  if(page==='monthly')loadMonthly();
-  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
-  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
-    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
-    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
-    if(state.adminTab==='operation')loadMaintenance();
-    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
-    if(state.adminTab==='requirements')loadSystemDocument('requirements');
-    if(state.adminTab==='technical')loadSystemDocument('technical');
-  }
+  loadPageData_(page,{silent:true});
 }
 function syncGlobalActionBanner(){
   const slot=document.getElementById('globalActionBannerSlot');

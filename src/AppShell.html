@@ -88,7 +88,9 @@ function renderLogin(message=''){
         <label class='login-field'><span>管理者電話番号（どちらか必須）</span><div class='login-input-wrap'><input id='setupSupportPhone' inputmode='tel' autocomplete='tel' placeholder='0254-xx-xxxx'></div></label>`:''}
         <label class='login-remember'><input id='rememberLogin' type='checkbox' checked><span>この端末でログイン状態を保持する（30日）</span></label>
         <small class='login-device-note'>共有PCではチェックを外してください。</small>
-        <button id='loginSubmit' class='login-submit' type='submit'>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
+        <button id='loginSubmit' class='login-submit' type='submit' ${state.publicConfigLoading||state.publicConfigError?'disabled':''}>${cfg.needsSetup?'初期設定を完了':'ログイン'}　→</button>
+        ${state.publicConfigError?`<button type='button' class='secondary-button' onclick='loadPublicLoginConfig()'>接続を再試行</button>`:''}
+        ${cfg.appVersion?`<small class='login-device-note' aria-label='アプリのバージョン'>v${escapeHtml(cfg.appVersion)}</small>`:''}
         <div class='login-help'>
           <button type='button' onclick='openPinHelpModal()'>PINを忘れた場合</button>
           <small>${escapeHtml(support.note||'社内のFM WORKS管理者へご連絡ください。')}</small>
@@ -116,6 +118,7 @@ function setLoginBusy(busy){
 
 function submitLogin(event){
   event.preventDefault();
+  if(state.publicConfigLoading||state.publicConfigError){showToast('接続情報を取得してからログインしてください。');return;}
   const id=document.getElementById('loginEmployeeId').value.trim().toUpperCase();
   const pin=document.getElementById('loginPin').value;
   const remember=document.getElementById('rememberLogin').checked;
@@ -188,28 +191,8 @@ function mountAuthenticatedApp(data,mustChangePin){
   renderPage();
   startLiveAttendanceTicker();
 
-  if(state.page==='home')loadHomeOverview();
-  if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
-  if(state.page==='schedule')loadSchedule({silent:true});
-  if(state.page==='companyCalendar')loadCompanyCalendar();
-  if(state.page==='worklog')loadWorklogs({silent:true});
-  if(state.page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
-  if(state.page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
-  if(state.page==='quotes'||state.page==='documentHistory')loadQuoteWorkspace({silent:true});
-  if(state.page==='finance')loadFinanceOverview();
-  if(state.page==='office'&&typeof somuLoad==='function')somuLoad(false);
-  if(state.page==='companyDocs')loadCompanyDocs();
-
-  if(state.page==='monthly')loadMonthly();
-  if(state.page==='people'&&data.permissions&&data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
-  if(state.page==='admin'&&data.permissions&&data.permissions.adminConsole){
-    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
-    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
-    if(state.adminTab==='operation')loadMaintenance();
-    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
-    if(state.adminTab==='requirements')loadSystemDocument('requirements');
-    if(state.adminTab==='technical')loadSystemDocument('technical');
-  }
+  appResumeContext_={token:state.sessionToken,at:Date.now(),loading:false};
+  loadPageData_(state.page);
 
   scheduleBackgroundTask(()=>loadNotifications(),2400);
   if(data.permissions&&data.permissions.adminConsole&&state.page==='admin'&&state.adminTab==='operation'){
@@ -498,13 +481,42 @@ function submitPinHelp(){
 }
 
 function loadPublicLoginConfig(message=''){
+  state.publicConfigLoading=true;state.publicConfigError=false;
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(config=>{
-    state.publicConfig=config;
+    if(state.sessionToken||state.data)return;
+    state.publicConfigLoading=false;state.publicConfigError=false;state.publicConfig=config;
     showLogin(message);
-  }).withFailureHandler(()=>showLogin(message||'FM WORKSの初期情報を読み込めませんでした。')).getPublicAuthConfig();
+  }).withFailureHandler(()=>{
+    if(state.sessionToken||state.data)return;
+    state.publicConfigLoading=false;state.publicConfigError=true;
+    showLogin(message||'FM WORKSの初期情報を読み込めませんでした。接続を再試行してください。');
+  }).getPublicAuthConfig();
+}
+
+// No polling or persistent business cache. A long-hidden tab gets one fresh
+// context read on return; short menu/tab changes keep existing snapshots.
+let appResumeBound_=false;
+let appResumeContext_={token:null,at:0,loading:false};
+function appTokyoDate_(){return new Date(Date.now()+9*3600000).toISOString().slice(0,10);}
+function refreshOnResume_(){
+  if(document.hidden||!state.sessionToken||!state.data)return;
+  const context=appResumeContext_;
+  if(context.loading||(typeof applicationWritePending_==='function'&&applicationWritePending_())||pendingLoads.size)return;
+  if(context.token===state.sessionToken&&Date.now()-context.at<300000&&state.data.today===appTokyoDate_())return;
+  context.token=state.sessionToken;context.loading=true;
+  refreshAppData(null,{resume:true,onDone:()=>{
+    if(context!==appResumeContext_)return;
+    context.loading=false;context.at=Date.now();
+  }});
+}
+function initAppResumeRefresh_(){
+  if(appResumeBound_)return;appResumeBound_=true;
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshOnResume_();});
+  if(window.addEventListener)window.addEventListener('online',refreshOnResume_);
 }
 
 function bootstrap(){
+  initAppResumeRefresh_();
   initTheme();
   const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
   state.sessionToken=getStoredSessionToken();

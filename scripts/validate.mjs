@@ -413,9 +413,9 @@ if (!maintenanceCodeText.includes('DBスキーマ不整合') || !app.includes('f
 for (const marker of ['function readRowsByDateRange_(','function dateRangeRegex_(','function logPerformance_(','PERFORMANCE_BUDGETS']) {
   if (!dataAccessCodeText.includes(marker)) { console.error('Data access marker missing: '+marker); failed=true; }
 }
-if (!serverCode.includes('readRowsByDateRange_(sheet,4,12,startDate,endDate)') ||
+if (!serverCode.includes('readRowsByDateRange_(sheet,4,12,startDate,endDate,2,[employeeId])') ||
     !serverCode.includes('readRowsByDateRange_(sheet,1,10,start,end)') ||
-    !monthlySnapshotMainCode.includes('readRowsByDateRange_(worklogSheet,2,15,start,end)')) {
+    !monthlySnapshotMainCode.includes('readRowsByDateRange_(worklogSheet,2,15,start,end,3,[targetId])')) {
   console.error('Date-scoped reads are not wired into high-volume flows.');
   failed=true;
 }
@@ -548,7 +548,7 @@ if (!worklogPerfText.includes('projects:includeProjects?getProjectsInternal_(fal
   failed = true;
 }
 for (const marker of [
-  'readRowsByDateRange_(sheet,1,16,start,end)',
+  'readRowsByDateRange_(sheet,1,16,start,end,2,[employeeId])',
   'readRowsByColumnValues_(sheet,3,19,[employeeId])'
 ]) {
   if (!monthlyPerfText.includes(marker)) {

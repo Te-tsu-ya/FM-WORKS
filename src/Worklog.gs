@@ -12,7 +12,7 @@ function getWorklogs(sessionToken, params) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return { items: [], totalMinutes: 0, projects:includeProjects?getProjectsInternal_(false):[],taskOptions:includeProjects&&typeof projectAdvancedTaskOptions_==='function'?projectAdvancedTaskOptions_(session.employee):[] };
 
-  const items = (typeof projectAdvancedWorklogIds_==='function'?projectAdvancedWorklogIds_:items=>items)(readRowsByDateRange_(sheet,2,15,start,end)
+  const items = (typeof projectAdvancedWorklogIds_==='function'?projectAdvancedWorklogIds_:items=>items)(readRowsByDateRange_(sheet,2,15,start,end,employeeId==='ALL'?undefined:3,[employeeId])
     .filter(r => r[0] && r[12] !== '削除' && r[1] >= start && r[1] <= end && (employeeId === 'ALL' || r[2] === employeeId))
     .map(r => ({
       id: r[0], date: r[1], employeeId: r[2], name: r[3], project: r[4],
@@ -175,7 +175,7 @@ function assertNoWorklogOverlap_(sheet, employeeId, date, start, end, excludeId)
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
   // Use the already-tested date index, instead of downloading all months of worklogs.
-  const rows = readRowsByDateRange_(sheet,2,15,date,date);
+  const rows = readRowsByDateRange_(sheet,2,15,date,date,3,[employeeId]);
   const startMin = timeToMinutes_(start);
   const endMin = timeToMinutes_(end);
 

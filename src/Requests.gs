@@ -465,7 +465,7 @@ function hasAppliedPunchCorrection_(requestRow) {
   const marker='申請承認による修正 '+requestRow[0];
   const punchSheet=getDb_().getSheetByName(DB.sheets.punches);
   if(punchSheet.getLastRow()>1){
-    return readRowsByDateRange_(punchSheet,4,12,requestRow[5],requestRow[5])
+    return readRowsByDateRange_(punchSheet,4,12,requestRow[5],requestRow[5],2,[requestRow[2]])
       .some(r=>String(r[1])===String(requestRow[2])&&r[7]==='CORRECTION'&&String(r[10]||'')===marker);
   }
   return false;

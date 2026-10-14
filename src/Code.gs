@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.6',
+  version: '0.25.7',
   locale: 'ja-JP'
 });
 
@@ -158,7 +158,7 @@ function getHomeMonthStats_(employee,today) {
 
   const worklogSheet=getDb_().getSheetByName('工数');
   const worklogRows=worklogSheet&&worklogSheet.getLastRow()>=2
-    ? readRowsByDateRange_(worklogSheet,2,15,start,end).filter(r=>r[2]===targetId&&r[12]!=='削除')
+    ? readRowsByDateRange_(worklogSheet,2,15,start,end,3,[targetId]).filter(r=>r[2]===targetId&&r[12]!=='削除')
     : [];
   const worklogMinutes=worklogRows.reduce((sum,r)=>sum+Number(r[9]||0),0);
 
@@ -399,7 +399,7 @@ function getActivePunchRows_(employeeId, startDate, endDate) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   const source=startDate&&endDate
-    ? readRowsByDateRange_(sheet,4,12,startDate,endDate)
+    ? readRowsByDateRange_(sheet,4,12,startDate,endDate,2,[employeeId])
     // History needs all dates for correct superseded-punch handling, but not
     // other employees' 12-column rows. Keep cheap one-shot reads on small sheets.
     : lastRow>250&&String(employeeId||'').trim()
