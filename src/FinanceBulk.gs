@@ -48,17 +48,17 @@ function saveFinanceReceiptsBulk(sessionToken,payload) {
     const last=sheet.getLastRow(),keyCol=model.keys.indexOf('requestKey')+1;
     const existing=new Map();
     if(last>=2){
-      const keys=sheet.getRange(2,keyCol,last-1,1).getDisplayValues();
-      keys.forEach((row,index)=>{
-        const key=String(row[0]||'');
-        if(key&&!existing.has(key))existing.set(key,index+2);
+      const matches=readRowsByColumnValues_(sheet,keyCol,model.keys.length,rows.map(row=>row.requestKey),false,true);
+      matches.forEach(match=>{
+        const key=String(match.values[keyCol-1]||'');
+        if(key&&!existing.has(key))existing.set(key,match);
       });
     }
     const now=financeNow_(),pending=[],results=[];
     for(const submittedRow of rows){
       const row=Object.assign({},submittedRow),previous=existing.get(row.requestKey);
       if(previous){
-        const old=financeObject_('receipt',sheet.getRange(previous,1,1,model.keys.length).getDisplayValues()[0]);
+        const old=financeObject_('receipt',previous.values);
         if(String(old.creatorId)!==String(employee.employeeId)||
            !financeSameSubmittedRecord_('receipt',old,row))
           throw new Error('以前の登録内容と異なる行があります。重複登録を防ぐため、履歴を確認してください。');
@@ -68,7 +68,6 @@ function saveFinanceReceiptsBulk(sessionToken,payload) {
         row.createdAt=now;row.updatedAt=now;
         row.creatorId=employee.employeeId;row.creatorName=employee.name;
         pending.push(row);
-        existing.set(row.requestKey,last+pending.length);
         results.push({id:String(row.id),duplicate:false,auditRecorded:false});
       }
     }
@@ -77,6 +76,7 @@ function saveFinanceReceiptsBulk(sessionToken,payload) {
     if(pending.length){
       sheet.getRange(last+1,1,pending.length,model.keys.length)
         .setValues(pending.map(row=>financeArray_('receipt',row)));
+      financeInvalidateOverview_();
     }
     let newIndex=0;
     for(let i=0;i<rows.length;i++){

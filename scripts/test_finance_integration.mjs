@@ -27,6 +27,8 @@ const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx),models=vm.runInContext('FINAN
 const rowHints=new Map();
 ctx.CacheService={getScriptCache:()=>({
   get:key=>rowHints.get(key)||null,
+  getAll:keys=>Object.fromEntries(keys.filter(key=>rowHints.has(key)).map(key=>[key,rowHints.get(key)])),
+  putAll:values=>{for(const [key,value] of Object.entries(values))rowHints.set(key,String(value));},
   put:(key,value)=>rowHints.set(key,String(value)),
   remove:key=>rowHints.delete(key)
 })};
@@ -321,7 +323,7 @@ sheets['経費記録'].rows.push(addRecord('receipt',{
 for(const sheet of Object.values(sheets)){
   sheet.stats.displayCalls=0;sheet.stats.displayCells=0;sheet.stats.headerReads=0;
 }
-const large=api.getFinanceOverview('ADMIN',{limit:160});
+const large=api.getFinanceOverview('ADMIN',{limit:160,forceFresh:true});
 ok('overview reports processing duration separately from network latency',
  Number.isFinite(large.performance&&large.performance.serverMs)&&large.performance.serverMs>=0);
 ok('large overview bounds transferred receipt matches to visible expense IDs',

@@ -91,3 +91,7 @@ assert.equal(calls.length,bulkCount,'old bulk success cannot start a write of th
 assert.equal(js('financeBulkUi.index'),0);assert.equal(js('financeBulkUi.busy'),false);
 assert.equal(js('financeBulkUi.rows[0].item'),'新しい未保存入力');
 console.log('PASS finance/quote refresh: same-session reset, obsolete success/failure, warm reuse, queued force, malformed/network responses, year isolation and document revision');
+
+client.resetFinanceUi();client.loadFinanceOverview();assert.equal(calls.at(-1).args[1].forceFresh,false);calls.at(-1).success(finance);
+client.financeShowMore();assert.equal(calls.at(-1).args[1].limit,320);assert.equal(calls.at(-1).args[1].forceFresh,false,'more rows bypass local TTL but reuse short server snapshot');calls.at(-1).success(finance);
+client.loadFinanceOverview({force:true});assert.equal(calls.at(-1).args[1].forceFresh,true,'explicit update bypasses server snapshot');calls.at(-1).success(finance);

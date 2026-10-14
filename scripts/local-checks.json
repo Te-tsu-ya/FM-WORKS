@@ -16,6 +16,7 @@
     "node scripts/test_global_search.mjs",
     "node scripts/test_search_schedule_index.mjs",
     "node scripts/test_finance_integration.mjs",
+    "node scripts/test_finance_snapshot.mjs",
     "node scripts/test_cashflow.mjs",
     "node scripts/test_cashflow_client.mjs",
     "node scripts/test_cashflow_grid.mjs",

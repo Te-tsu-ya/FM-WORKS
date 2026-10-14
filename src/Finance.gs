@@ -193,10 +193,9 @@ function financeWriteNew_(kind,record,employee){
     const keyIndex=model.keys.indexOf('requestKey');
     const last=sheet.getLastRow();
     if(last>=2){
-      const keys=sheet.getRange(2,keyIndex+1,last-1,1).getDisplayValues();
-      const match=keys.findIndex(x=>x[0]===key);
-      if(match!==-1){
-        const existing=financeObject_(kind,sheet.getRange(match+2,1,1,model.keys.length).getDisplayValues()[0]);
+      const match=findVerifiedSheetRow_(sheet,keyIndex+1,model.keys.length,key,'finance-'+kind+'-request',true);
+      if(match){
+        const existing=financeObject_(kind,match.row);
         if(String(existing.employeeId||existing.creatorId)!==String(employee.employeeId))throw new Error('送信識別子が重複しています。');
         if(!financeSameSubmittedRecord_(kind,existing,record))
           throw new Error('前回と異なる内容で再送されています。登録履歴を確認してから新しい申請を作成してください。');
@@ -212,6 +211,7 @@ function financeWriteNew_(kind,record,employee){
     if(kind==='receipt'){record.creatorId=employee.employeeId;record.creatorName=employee.name;}
     else {record.employeeId=employee.employeeId;record.employeeName=employee.name;record.status='承認待ち';}
     sheet.appendRow(financeArray_(kind,record));
+    financeInvalidateOverview_();
     const auditRecorded=appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,operation:'経理新規登録',target:kind,
       targetId:record.id,before:'',after:auditJson_({kind:kind,id:record.id}),source:'WEB',result:'SUCCESS',note:financeAuditRequestNote_(key)});
     return {ok:true,id:record.id,duplicate:false,record:financeConfirmedRecord_(record),auditRecorded:auditRecorded===true};
@@ -351,14 +351,44 @@ function financeOutstandingFirst_(rows,max){
   });
   return ordered.slice(0,max);
 }
+const FINANCE_OVERVIEW_CACHE_KEY='fm:finance:overview:v1';
+const FINANCE_OVERVIEW_GENERATION_KEY='fm:finance:overview-generation:v1';
+function financeOverviewGeneration_(){
+  if(typeof cacheJsonGet_!=='function'||typeof cacheJsonPut_!=='function')return '';
+  const current=cacheJsonGet_(FINANCE_OVERVIEW_GENERATION_KEY);
+  if(typeof current==='string'&&current)return current;
+  const generation='finance-'+Utilities.getUuid();
+  cacheJsonPut_(FINANCE_OVERVIEW_GENERATION_KEY,generation,21600);
+  return generation;
+}
+function financeInvalidateOverview_(){
+  if(typeof cacheJsonPut_==='function'){
+    const stored=cacheJsonPut_(FINANCE_OVERVIEW_GENERATION_KEY,'finance-'+Utilities.getUuid(),21600);
+    if(stored===false&&typeof cacheRemove_==='function')cacheRemove_(FINANCE_OVERVIEW_GENERATION_KEY);
+  }
+  if(typeof cacheRemove_==='function')cacheRemove_(FINANCE_OVERVIEW_CACHE_KEY);
+}
+function financeOverviewSnapshot_(force){
+  const generation=financeOverviewGeneration_();
+  const cached=!force&&generation&&typeof cacheJsonGetLarge_==='function'
+    ?cacheJsonGetLarge_(FINANCE_OVERVIEW_CACHE_KEY):null;
+  if(cached&&cached.generation===generation&&
+    ['expenses','travels','receipts'].every(key=>Array.isArray(cached[key])))return cached;
+  const snapshot={generation:generation,expenses:financeRows_('expense','',0,true),
+    travels:financeRows_('travel','',0,true),receipts:financeRows_('receipt','',0,true)};
+  // A request started before a save must not republish its old snapshot.
+  if(generation&&typeof cacheJsonPutLarge_==='function'&&
+    cacheJsonGet_(FINANCE_OVERVIEW_GENERATION_KEY)===generation)
+    cacheJsonPutLarge_(FINANCE_OVERVIEW_CACHE_KEY,snapshot,20);
+  return snapshot;
+}
 function getFinanceOverview(sessionToken,params){
   const startedAt=Date.now();
   requireFinanceOperator_(sessionToken);
   const status=financeStorageStatus_();
   if(!status.ready)return {setupRequired:true,expenses:[],travels:[],receipts:[],message:'DB初期設定が必要です。管理者はバックアップ後にDB更新を実施してください。'};
-  const allExpenses=financeRows_('expense','',0,true);
-  const allTravels=financeRows_('travel','',0,true);
-  const allReceipts=financeRows_('receipt','',0,true);
+  const snapshot=financeOverviewSnapshot_(!!(params&&params.forceFresh));
+  const allExpenses=snapshot.expenses,allTravels=snapshot.travels,allReceipts=snapshot.receipts;
   const max=Math.max(1,Math.min(1000,Number(params&&params.limit)||160));
   const expenses=financeOutstandingFirst_(allExpenses,max);
   const travels=financeOutstandingFirst_(allTravels,max);
@@ -403,6 +433,7 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
     });
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length)
       .setValues([financeArray_(kind,updated)]);
+    financeInvalidateOverview_();
     const auditRecorded=appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
       operation:'経理再申請',target:kind,targetId:item.id,
       before:auditJson_({status:item.status,amount:item.amount||item.spentAmount,returnReason:item.returnReason}),
@@ -425,6 +456,7 @@ function financeReview_(sessionToken,kind,id,decision,reason){
       decidedBy:reviewer.employeeId,decidedAt:now,returnReason:comment,updatedAt:now
     });
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length).setValues([financeArray_(kind,next)]);
+    financeInvalidateOverview_();
     const auditRecorded=appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:decision==='APPROVE'?'経理承認':'経理差戻し',
       target:kind,targetId:item.id,before:auditJson_({status:item.status}),after:auditJson_({status:next.status,reason:comment}),
       source:'WEB',result:'SUCCESS',note:''});
@@ -446,6 +478,7 @@ function settleFinanceRequest(sessionToken,kind,id,paidOn,receivedOn){
     if(String(item.employeeId)===String(reviewer.employeeId))throw new Error('自分自身の申請の精算確定はできません。');
     const now=financeNow_(),next=Object.assign({},item,{status:'精算済',paidAt:paid,receivedAt:received,updatedAt:now});
     target.sheet.getRange(target.rowNumber,1,1,model.keys.length).setValues([financeArray_(kind,next)]);
+    financeInvalidateOverview_();
     const auditRecorded=appendAudit_({employeeId:reviewer.employeeId,employeeName:reviewer.name,operation:'経理精算確認',
       target:kind,targetId:item.id,before:auditJson_({status:item.status}),after:auditJson_({status:next.status,paidAt:paid}),
       source:'WEB',result:'SUCCESS',note:''});
