@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.7
+**文書版:** 0.25.8
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.7`
+`APP.version = 0.25.8`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2554,3 +2554,15 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - `refreshOnResume_` はvisibilitychange／onlineのみで発火。ログイン・5分TTL・JST日付・保存状態・進行中の取得を確認し、1回のgetInitialDataへまとめる。無限ポーリングなし。`refreshAppData` の日付更新は入力中の工数と明示的な過去日選択を保持する。
 - `getPublicAuthConfig` は1回の設定マップをgetAuthConfig_／getSupportConfig_へ渡す。PRODUCTIONの試作PIN禁止・PIN設定済み判定は維持。初期接続失敗の再試行とappVersionを公開ログイン画面へ表示。
 - 個人データ・認証結果の長期サーバーキャッシュは追加しない。Google起動／ネットワークの遅延は残り、実測速度は認証付き確認の別証拠とする。
+
+
+## 2026-10-14 v0.25.8 適応的な本文取得と分析ライフサイクル
+
+- readRowsByColumnValues_／readRowsByDateRange_は少量台帳（本文250行かつ10,000セル以内）を単一取得し、同じ条件でフィルタする。大規模側は既存TextFinderの索引を維持。
+- indexedRowWindows_は一致行を連続区間へ整理し、8区間を超えた場合は最大7個の行間だけを残して区間をまとめる。同じ最大8読取の条件で追加取得セル数を最小化する。窓内に含まれる非対象行を返却直前に除外し、物理行番号は窓の開始位置を使う。索引不可・長期の安全なfallbackは維持。
+- cfaLoad_の通常重複ではforceAfterを立てない。workspaceAt／monthAt／projectionAtによる5分TTL。cfaInvalidateReads_が世代番号と読取状態を無効化し、入力下書きは保持する。cfaReadError_は保存・出力フラグを解除しない。
+- 初回失敗時のcfaPage_はエラーと接続再試行を描画し、描画によるRPCループを止める。取得済み分析のエラーにも再試行を表示する。
+- cfbLoadActiveSection_をキャッシュhitと銀行取得成功の双方で実行。銀行集計と分析／台帳のTTLを独立に扱う。銀行書込後と手動更新で分析の旧応答を遮断。
+- 注釈／分類／シナリオ保存後の子取得をworkspace成功後へ一本化。金融台帳保存は銀行集計更新後の子取得へ一本化。cashFlowClose_で経理ローダーを呼び、未期限切れなら通信しない。
+- 共通未保存・処理中ガードに分析・条件・口座・予定を含める。年度切替／終了／銀行更新／セクション切替で分析の保存・出力中を検査する。
+- Google公式のサービス呼び出し削減・一括読取方針を適用する。合成のサービス回数を受入指標とし、実GASのP50/P95は別測定。公式根拠: https://developers.google.com/apps-script/guides/support/best-practices 。

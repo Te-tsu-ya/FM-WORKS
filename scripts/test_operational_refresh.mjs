@@ -71,6 +71,7 @@ const specs=JSON.parse(JSON.stringify(vm.runInContext('DB_SCHEMA_SPECS',server))
 for(const [name,header] of Object.entries(specs))db[name]=new Sheet([header]);delete db['見積ヘッダー'];
 const employee=(id,manager,status='在籍')=>{const r=Array(26).fill('');r[0]=id;r[1]='架空社員';r[6]=status;r[23]=manager;return r;};
 db['社員マスタ'].rows.push(employee('FM0002','fm0001'),employee('FM0003','FM0004'),employee('FM0099','FM0001','退職'));
+for(let i=0;i<300;i++)db['社員マスタ'].rows.push(employee('FM'+String(1000+i),'FM9000'));
 db['プロジェクト計画'].rows.push(['P1',480,'FM0001']);
 db['プロジェクト作業'].rows.push(['T1','P1','設計','FM0002','','2026-10-13',480,10,'進行中']);
 db['工数']=new Sheet([Array(15).fill('header'),['W1','2026-10-11','FM0002','架空社員','架空案件一','設計','作業', '09:00','10:00',60,'','','有効']]);

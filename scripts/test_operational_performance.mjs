@@ -60,4 +60,10 @@ c.loadPublicLoginConfig();calls.at(-1).success({appVersion:'0.25.7',needsSetup:f
 let settingReads=0,pinChecks=0;const auth=vm.createContext({APP:{name:'FM WORKS',version:'0.25.7'}});vm.runInContext(fs.readFileSync('src/Auth.gs','utf8'),auth);auth.getSettingsMap_=()=>{settingReads++;return {PROTOTYPE_MODE:'TRUE',PIN_LENGTH:'6',SUPPORT_CONTACT_NAME:'管理者'};};auth.getRuntimeEnvironment_=()=> 'STAGING';auth.normalizeRuntimeEnvironment_=v=>v;auth.hasAnyPinConfigured_=()=>{pinChecks++;return true;};
 assert.equal(auth.getPublicAuthConfig().prototypeMode,true);assert.equal(settingReads,1);assert.equal(pinChecks,0);
 auth.getRuntimeEnvironment_=()=> 'PRODUCTION';assert.equal(auth.getPublicAuthConfig().prototypeMode,false);assert.equal(pinChecks,1);assert.ok(!JSON.stringify(auth.getPublicAuthConfig()).includes('000000'));
+// Cashflow sub-editors participate in the shared draft/save guard.
+js("state.sessionToken='C';state.data={today:appTokyoDate_(),user:{employeeId:'C'}};let cfaUi={busy:true,exporting:false,editor:null,ruleDraft:null,scenarioDraft:null};");
+assert.equal(c.applicationWritePending_(),true,'cashflow analysis writes block logout');
+js('cfaUi.busy=false;cfaUi.scenarioDraft={name:"入力途中"};cfbUi.planForm={title:"未保存予定"}');
+assert.ok(c.applicationUnsavedItems_().includes('資金繰りの分類・シミュレーション'));
+assert.ok(c.applicationUnsavedItems_().includes('金融機関・入出金予定'));
 console.log('PASS operational performance: versioned shell / UTF-8 chunks / partial cache / outage / indexed physical rows / no unrelated bodies / session races / project selection / contact / unsaved and busy guards');

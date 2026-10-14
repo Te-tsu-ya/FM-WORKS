@@ -58,7 +58,7 @@ function cflSave_(){
  const fail=err=>{if(ui!==cflUi||identity!==financeIdentity())return;ui.busy=false;cfbUi.busy=false;ui.uncertain=true;ui.error=cleanApiErrorMessage(err,'保存結果が未確認です。同じ内容で再試行してください。');renderPageIfActive('finance');};
  const next=()=>{
   if(ui!==cflUi||identity!==financeIdentity())return;
-  if(index>=snapshot.length){ui.busy=false;ui.uncertain=false;cfbUi.busy=false;ui.rows=[];ui.cache.clear();cflLoad_(true);cfbLoadAfterWrite_();showToast('台帳を保存し、年間集計を更新しました。');return;}
+  if(index>=snapshot.length){ui.busy=false;ui.uncertain=false;cfbUi.busy=false;ui.rows=[];ui.cache.clear();cfbLoadAfterWrite_();showToast('台帳を保存し、年間集計を更新しました。');return;}
   const chunk=snapshot.slice(index,index+20).map(r=>({...r,incoming:cfbBankGridMoney_(r.incoming,'入金',false,false),outgoing:cfbBankGridMoney_(r.outgoing,'出金',false,false),balance:cfbBankGridMoney_(r.balance,'残高',true,true)}));
   cfbRpc_('saveCashFlowLedgerRows',{accountId,rows:chunk},result=>{
    if(ui!==cflUi||identity!==financeIdentity())return;

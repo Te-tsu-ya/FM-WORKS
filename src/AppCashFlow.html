@@ -3,12 +3,25 @@
 let cashFlowUi={open:false,year:0,seq:0,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:'',uncertain:false};
 function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:'',uncertain:false};}
 function cashFlowAllowed_(){return !!(state.sessionToken&&state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace&&state.data.permissions.adminConsole);}
+function cashFlowAnalysisBusy_(){return typeof cfaUi!=='undefined'&&!!(cfaUi.busy||cfaUi.exporting);}
+function cashFlowAuxDraft_(){return !!(
+ (typeof cfaUi!=='undefined'&&(cfaUi.editor||cfaUi.ruleDraft||cfaUi.scenarioDraft))||
+ (typeof cfbUi!=='undefined'&&(cfbUi.accountForm||cfbUi.planForm)));}
+function cashFlowAuxDiscard_(next){
+ if(!cashFlowAuxDraft_()){next();return;}
+ openConfirmDialog('未保存の資金繰り入力','分類・条件・金融機関・入出金予定に保存前の入力があります。破棄して移動しますか？','入力を破棄して移動',()=>{
+  if(typeof cfaUi!=='undefined'){cfaUi.editor=null;cfaUi.ruleDraft=null;cfaUi.scenarioDraft=null;}
+  if(typeof cfbUi!=='undefined'){cfbUi.accountForm=null;cfbUi.planForm=null;}
+  next();
+ });
+}
 function cashFlowThisYear_(){
  const s=String(state.data&&state.data.today||new Date().toISOString().slice(0,10)),m=/^(\d{4})-(\d{2})/.exec(s);
  return m?Number(m[1])+(Number(m[2])===12?1:0):new Date().getFullYear();
 }
 function cashFlowDiscard_(next){
  if(typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
+ if(cashFlowAuxDraft_()){cashFlowAuxDiscard_(()=>cashFlowDiscard_(next));return;}
  if(typeof cflDirty_==='function'&&cflDirty_()){openConfirmDialog('台帳の未保存入力','保存していない台帳の入力を破棄して移動しますか？','入力を破棄して移動',()=>{cflUi.rows=[];cflUi.serial++;cflUi.data=null;cashFlowDiscard_(next);});return;}
  if(!cashFlowUi.dirty){next();return;}
  openConfirmDialog('未保存の変更',cashFlowUi.uncertain?'保存結果が未確認です。先に同じ内容と送信キーで再試行し、登録内容を照合してください。破棄すると再送の手掛かりがなくなります。破棄しますか？':'保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
@@ -28,7 +41,7 @@ function cashFlowClose_(){
    '保存せず閉じる',()=>{cfbUi.preview=null;cfbUi.bankGridEdited=false;cashFlowClose_();});return;
  }
 
- if(cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込みが終わるまでお待ちください。');return;}
+ if(cashFlowAnalysisBusy_()||cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込みが終わるまでお待ちください。');return;}
  cashFlowDiscard_(()=>{
   const bank=typeof cfbUi!=='undefined'?cfbUi:null,demo=!!(bank&&bank.demo);
   if(typeof cfbReset_==='function'){
@@ -39,12 +52,13 @@ function cashFlowClose_(){
   cashFlowUi.open=false;cashFlowUi.loading=false;cashFlowUi.refreshNeeded=false;cashFlowUi.draft=record?{openingBalance:record.openingBalance,revision:record.revision,months:record.months.map(x=>({...x}))}:null;
   cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.seq++;
   renderPageIfActive('finance');
+  if(typeof loadFinanceOverview==='function')loadFinanceOverview({silent:true});
  });
 }
 function cashFlowChangeYear_(value){
  if(typeof cfbUi!=='undefined'&&cfbUi.importPending){showToast('銀行明細の取込を再開・完了してから年度を切り替えてください。');return;}
 
- if(cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込み中は年度を切替できません。');return;}
+ if(cashFlowAnalysisBusy_()||cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込み中は年度を切替できません。');return;}
  const y=Number(value),input=document.getElementById('cfYear');
  if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
  if(y===cashFlowUi.year)return;
