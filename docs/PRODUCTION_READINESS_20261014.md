@@ -79,7 +79,7 @@
 
 ## 統合前の品質ゲート
 
-- [ ] `node scripts/run_local_checks.mjs --functional` による **全53件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
+- [ ] `node scripts/run_local_checks.mjs --functional` による **全59件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
 - [ ] Node側の追加試験: `scripts/test_worklog_catalog.mjs`、`scripts/test_worklog_link_index.mjs`、`scripts/test_search_schedule_index.mjs`、`scripts/test_global_search.mjs`、`scripts/test_work1_large_cache.mjs`、`scripts/test_work1_rpc_admin.mjs`。
 - [ ] 実行環境がある場合はブラウザー12件と、データ漏えいのないモバイル/PC目視を確認する。
 - [ ] `src/Code.gs` APP.version、要件・技術文書、`src/GeneratedDocs.gs` の完全一致。
@@ -92,7 +92,7 @@
 
 ### PERF-06 認証の繰り返し設定取得
 - 修正: AUTH.sessionTouchMinutesの範囲内ではセッション延長設定を再取得しない。最小5分の延長判定で必要時のみ設定を読み、毎回のセッション行・社員行の再照合は省略しない。
-- Work1実測: \`getInitialData\` / \`getWorklogs\` / \`getHomeOverview\` などで、設定キャッシュ参照回数が減ったことを測る。役割変更・期限切れが従来通り即時拒否されるか確認。
+- Work1実測: `getInitialData` / `getWorklogs` / `getHomeOverview` などで、設定キャッシュ参照回数が減ったことを測る。役割変更・期限切れが従来通り即時拒否されるか確認。
 
 ### v0.25.10 更新（2026-10-14）
 - HTML静的CacheServiceが版番号を6時間保持する。旧版のままソースを更新すると変更前HTMLを配信しうるため、APP.versionを0.25.10に更新。
@@ -104,3 +104,9 @@
 
 ### PERF-07 初回HTML転送・描画
 - 初回Indexテンプレートは44 HTML/CSS/JS部品・約1.3MBの元ソースを一括同梱（ネットワーク転送量ではない）。1600KiBのソースサイズ予算・CacheService分割上限の回帰試験を追加。今後DOM初期化やJavaScriptパースが遅い場合は、未使用部品と動的モジュール分割を実ブラウザーで試験してから判断する。
+
+## v0.25.10 最終GitHub実装監査（2026-10-14）
+- GitHub専用featureブランチで修正: ①起動版番号の更新で6時間HTMLキャッシュを分離、②本人/担当者のホーム申請集計を規模に応じた最小列取得へ、③認証済社員の年休照合再利用（実付与後は再検証）、④工数案件マスタの古い通信の上書き防止、⑤正常空マスタの再取得防止、⑥総務大容量分割キャッシュと権限、⑦予定検索窓の縮約、⑧申請と経費履歴RPCの優先順位付け、⑨読取45秒無応答の明示的回復と後着成功無効化（書込には適用禁止）、⑩社員マスタの非管理者への個人情報最小化、⑪起動段階の計測、⑫HTML元サイズ予算。
+- 限定検証: 変更した10個のGASファイル・5個のJavaScript HTMLの構文解析 PASS。架空データのV8局所検証ではホーム小/大規模申請、本人/管理者権限、工数旧応答の不採用、タイムアウトからの回復、社員一覧非公開項目、ナビゲーション起動メトリクスをPASS。これは全機能回帰合格ではない。
+- 未実行: 当該HEADで `node scripts/run_local_checks.mjs --functional` 全59テスト、ブラウザー12項目、認証後の本物のGASによる実保存・リロードと冷間/暖機P50/P95。この3項目が未実施の間は「本番READY」を宣言せず、mainへの統合は安全なゲート後に行う。
+- Work1担当: PR #139 のHEADと最新mainの差分を確認→所有者PC/WorkのNode実行環境で59件回帰とUI確認→mainへmerge→既存GASへ反映（Actions不使用）→管理者の通信速度でRPC/HTML受信/初期化/描画を区別し、データ量と社員ロールを変えて受入記録。
