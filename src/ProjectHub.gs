@@ -36,7 +36,7 @@ function projectHubRead_(force,detail){
   else{const sh=storage.sheets.resource,n=sh.getLastRow()-1;if(n>0){const ids=sh.getRange(2,1,n,2).getDisplayValues(),status=sh.getRange(2,7,n,1).getDisplayValues();result.resources=ids.map((r,i)=>({id:r[0],projectId:r[1],status:status[i][0]})).filter(r=>r.id&&r.status!=='非表示');}}
  }
  if(detail){
-  const rows=projectHubWorklogRows_(force,false).map(r=>r.slice(1,13));
+  const rows=projectHubDetailWorklogRows_(force,detail,result.projects,result.plans).map(r=>r.slice(1,13));
   result.worklogs=rows.filter(r=>r[11]!=='削除'&&Number.isFinite(Number(r[8]))&&Number(r[8])>0);
  }else{
   // The cockpit only needs project name, minutes, and status. Do not read
@@ -133,7 +133,7 @@ function getProjectHubWorkspace(sessionToken,force){
 function getProjectHubDetail(sessionToken,projectId,force){
  const u=requireSession_(sessionToken).employee,r=projectHubRead_(!!force,String(projectId)),p=r.projects.find(x=>x.projectId===String(projectId));
  if(!p)throw new Error('指定したプロジェクトが見つかりません。');
- const rawPlan=r.plans.find(x=>x.projectId===p.projectId)||{},plan={...rawPlan};delete plan._row;
+ const rawPlan=r.plans.find(x=>x.projectId===p.projectId)||{},plan=projectHubPublic_(rawPlan);
  const canManage=projectHubCanManage_(u,plan),quotes=projectHubQuoteOptions_(u),quote=quotes.find(x=>x.id===plan.quoteId)||null;
  const canSeeOrderValue=u.role==='ADMIN'||!!quote;
  if(!canSeeOrderValue)delete plan.orderValue;
@@ -141,18 +141,19 @@ function getProjectHubDetail(sessionToken,projectId,force){
  const logs=r.worklogs.filter(w=>{const owners=names.get(projectHubName_(w[3]));return !!owners&&owners.size===1&&owners.has(p.projectId);});
  const managedIds=u.role==='MANAGER'?getManagedEmployeeIds_(u):new Set();
  const canViewPerson=id=>u.employeeId===id||u.role==='ADMIN'||managedIds.has(id);
- const tasks=r.tasks.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.ownerId===u.employeeId}));
- const resources=r.resources.filter(x=>x.projectId===p.projectId).map(x=>({...x,canEdit:canManage||x.createdBy===u.employeeId}));
+ const tasks=r.tasks.filter(x=>x.projectId===p.projectId).map(x=>({...projectHubPublic_(x),canEdit:canManage||x.ownerId===u.employeeId}));
+ const resources=r.resources.filter(x=>x.projectId===p.projectId).map(x=>({...projectHubPublic_(x),canEdit:canManage||x.createdBy===u.employeeId}));
  const detailLogs=logs.filter(w=>canViewPerson(w[1])).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
  const byCategory=Object.create(null),byPerson=Object.create(null),byMonth=Object.create(null);
  logs.forEach(w=>{const cat=w[4]||'未分類',month=String(w[0]).slice(0,7);byCategory[cat]=(byCategory[cat]||0)+Number(w[8]);byMonth[month]=(byMonth[month]||0)+Number(w[8]);if(canViewPerson(w[1])){const key=w[1];if(!byPerson[key])byPerson[key]={employeeId:key,name:w[2],minutes:0};byPerson[key].minutes+=Number(w[8]);}});
  return {project:p,plan,quote,canSeeOrderValue,canManage,setupRequired:!r.storage.ready,missing:r.storage.missing,
   metrics:projectHubMetrics_(p,plan,tasks,logs,projectHubToday_()),tasks,resources,
-  updates:r.updates.filter(x=>x.projectId===p.projectId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,60),
+  updates:r.updates.filter(x=>x.projectId===p.projectId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,60).map(projectHubPublic_),
   worklogs:detailLogs.slice(0,100).map(w=>({date:w[0],name:w[2],category:w[4],description:w[5],minutes:Number(w[8])})),
   worklogDetailCount:detailLogs.length,byCategory,byPerson:Object.values(byPerson),byMonth,
   worklogScope:u.role==='ADMIN'?'全社員':u.role==='MANAGER'?'本人・直属メンバー':'本人のみ',today:projectHubToday_()};
 }
+function projectHubPublic_(record){const copy={...record};delete copy.requestKey;delete copy._row;return copy;}
 function projectHubText_(v,label,max,required){const s=String(v==null?'':v).trim();if(s.length>max)throw new Error(label+'は'+max+'文字以内で入力してください。');if(required&&!s)throw new Error(label+'を入力してください。');return safeSheetText_(s,max);}
 function projectHubMinutes_(v,required){if(!required&&(v===''||v==null))return '';const hours=Number(v);if(!Number.isFinite(hours)||hours<=0||hours>100000||!Number.isInteger(hours*60))throw new Error('予定工数は0より大きい時間で、分単位まで入力してください。');return Math.round(hours*60);}
 function projectHubDate_(v){return v?normalizeDate_(v):'';}
@@ -234,6 +235,41 @@ function projectHubWorklogRows_(force,summaryOnly){
  // Both paths use a single contiguous Sheets read and independent 20s caches.
  const rows=last>1?sh.getRange(2,compact?5:1,last-1,compact?9:13).getDisplayValues():[];
  cacheJsonPutLarge_(key,rows,20);return rows;
+}
+function projectHubDetailWorklogRows_(force,projectId,projects,plans){
+ const owners=projectHubWorklogOwners_(projects,new Map(plans.map(p=>[p.projectId,p])));
+ const names=Array.from(owners.keys()).filter(name=>owners.get(name).size===1&&owners.get(name).has(String(projectId)));
+ if(!names.length)return [];
+ const wanted=new Set(names),select=rows=>rows.filter(row=>wanted.has(projectHubName_(row[4])));
+ // Reuse a live full snapshot when advanced task effort already loaded it.
+ const cached=force?null:cacheJsonGetLarge_('fm:projectHub:worklog:v2');
+ if(Array.isArray(cached))return select(cached);
+ const sheet=getDb_().getSheetByName('工数'),last=sheet?sheet.getLastRow():0;
+ if(last<2)return [];
+ if(last-1<=250)return select(projectHubWorklogRows_(force,false));
+ const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ // Use the same Unicode whitespace accepted by JavaScript trim, including
+ // Japanese full-width spaces, regardless of the finder regex engine's \s.
+ const padding='[\\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*';
+ const pattern='^'+padding+'(?:'+names.map(escape).join('|')+')'+padding+'$';
+ let positions;
+ try{
+  if(pattern.length>5000||names.length>80)throw new Error('Use narrow metadata scan');
+  positions=sheet.getRange(2,5,last-1,1).createTextFinder(pattern).useRegularExpression(true)
+   .matchCase(false).matchEntireCell(true).findAll().map(cell=>cell.getRow());
+ }catch(_){
+  // Older adapters without TextFinder still read only the project column first.
+  positions=sheet.getRange(2,5,last-1,1).getDisplayValues()
+   .flatMap((row,i)=>wanted.has(projectHubName_(row[0]))?[i+2]:[]);
+ }
+ if(!positions.length)return [];
+ const blocks=indexedRowWindows_(positions);
+ // Broadly distributed hits can cost more round trips than a single batch.
+ if(blocks.reduce((sum,b)=>sum+b.end-b.start+1,0)>(last-1)*.7)
+  return select(projectHubWorklogRows_(force,false));
+ const rows=blocks.flatMap(block=>sheet.getRange(block.start,1,block.end-block.start+1,13).getDisplayValues());
+ // Candidate positions are only hints: recheck the current project names.
+ return select(rows);
 }
 function projectHubInvalidateWorklogs_(){
  cacheRemove_('fm:projectHub:worklog:v2');

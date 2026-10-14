@@ -37,6 +37,7 @@
     "node scripts/test_somu_client.mjs",
     "node scripts/test_somu_pagination.mjs",
     "node scripts/test_project_hub.mjs",
+    "node scripts/test_project_detail_loading.mjs",
     "node scripts/test_schema_migration.mjs",
     "node scripts/test_project_advanced.mjs",
     "node scripts/test_business_workflows.mjs",

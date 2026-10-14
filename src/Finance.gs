@@ -95,6 +95,7 @@ function financeNormalizeDateText_(value){
 }
 function financeTransportRow_(kind,row){
   const data=financeObject_(kind,row);
+  delete data.requestKey; // Read responses never expose write idempotency keys.
   ['usedOn','startsOn','endsOn','paidAt','receivedAt'].forEach(field=>{
     if(Object.prototype.hasOwnProperty.call(data,field))data[field]=financeNormalizeDateText_(data[field]);
   });
