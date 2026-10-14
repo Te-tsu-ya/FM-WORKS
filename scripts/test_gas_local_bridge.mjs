@@ -70,7 +70,9 @@ console.log('PASS local GAS bridge core: target pinning, immutable deployment ve
 const self=path.dirname(fileURLToPath(import.meta.url));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-bridge-test-'));
 function cmd(bin,args,cwd,env={}) {
- const r=spawnSync(bin,args,{cwd,env:{...process.env,...env},encoding:'utf8',maxBuffer:3*1024*1024,timeout:60000});
+ const {FM_FAKE_INPUT, ...actualEnv}=env;
+ const r=spawnSync(bin,args,{cwd,env:{...process.env,...actualEnv},input:FM_FAKE_INPUT,
+   encoding:'utf8',maxBuffer:3*1024*1024,timeout:60000});
  return {code:r.status,stdout:r.stdout||'',stderr:r.stderr||'',error:r.error};
 }
 function ok(bin,args,cwd,env={}) {
@@ -80,7 +82,7 @@ function ok(bin,args,cwd,env={}) {
 }
 try {
  const origin=path.join(tmp,'remote with spaces.git'),work=path.join(tmp,'work with spaces'),fake=path.join(tmp,'fake bin'),server=path.join(tmp,'fake gas');
- fs.mkdirSync(fake);fs.mkdirSync(server);fs.mkdirSync(path.join(server,'source'));
+ fs.mkdirSync(fake);fs.mkdirSync(server);fs.mkdirSync(path.join(server,'source'));fs.mkdirSync(path.join(server,'immutable'));
  ok('git',['init','--bare','--initial-branch=main',origin],tmp);
  fs.mkdirSync(work);ok('git',['init','--initial-branch=main'],work);
  ok('git',['config','user.email','local@example.invalid'],work);
@@ -98,6 +100,8 @@ try {
  for(const file of fs.readdirSync(path.join(work,'src')))
   fs.copyFileSync(path.join(work,'src',file),path.join(server,'source',file));
  fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.4'};\n");
+ for(const name of fs.readdirSync(path.join(server,'source')))
+  fs.copyFileSync(path.join(server,'source',name),path.join(server,'immutable',name));
  fs.writeFileSync(path.join(server,'version'),'192');
  const fakeCli=`import fs from 'node:fs';
 import path from 'node:path';
@@ -106,7 +110,10 @@ const dir=path.join(server,'source');
 if(args[0]==='list-deployments'){
  console.log('- '+dep+' @'+fs.readFileSync(path.join(server,'version'),'utf8').trim()+' Web app');
 }else if(args[0]==='pull'){
- for(const name of fs.readdirSync(dir))fs.copyFileSync(path.join(dir,name),path.join(process.cwd(),name));
+ const isVersioned=args[1]==='--versionNumber';
+ if(isVersioned && Number(args[2])!==Number(fs.readFileSync(path.join(server,'version'),'utf8')))process.exit(8);
+ const remote=isVersioned?path.join(server,'immutable'):dir;
+ for(const name of fs.readdirSync(remote))fs.copyFileSync(path.join(remote,name),path.join(process.cwd(),name));
 }else if(args[0]==='push'){
  const source=path.join(process.cwd(),'src');
  if(!fs.existsSync(source))process.exit(7);
@@ -114,6 +121,9 @@ if(args[0]==='list-deployments'){
  for(const name of fs.readdirSync(source))if(/\.(?:gs|html|json)$/.test(name))fs.copyFileSync(path.join(source,name),path.join(dir,name));
 }else if(args[0]==='create-deployment'){
  if(args[1]!=='--deploymentId'||args[2]!==dep)process.exit(4);
+ const immutable=path.join(server,'immutable');
+ fs.rmSync(immutable,{recursive:true,force:true});fs.mkdirSync(immutable,{recursive:true});
+ for(const name of fs.readdirSync(dir))fs.copyFileSync(path.join(dir,name),path.join(immutable,name));
  const n=Number(fs.readFileSync(path.join(server,'version'),'utf8'))+1;
  fs.writeFileSync(path.join(server,'version'),String(n));console.log('Deployed '+dep+' @'+n);
 }else process.exit(7);
@@ -169,5 +179,48 @@ if(args[0]==='list-deployments'){
  assert.notEqual(r.code,0,'unexpected external GAS edit must fail');
  assert.match(r.stderr,/outside approved publisher/);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','drift does not deploy');
+
+ // Manual Windows batch: use main even when the approval pointer is stale.
+ fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.5'};\n");
+ fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.7'};\n");
+ ok('git',['add','src/Code.gs'],work);ok('git',['commit','-m','[skip ci] manual main release'],work);
+ ok('git',['push','origin','main'],work);
+ const manualSha=ok('git',['rev-parse','main'],work).trim();
+ const correctEnv={...env,FM_WORKS_MANUAL_EXPECTED_SHA:manualSha};
+ const wrongEnv={...env,FM_WORKS_MANUAL_EXPECTED_SHA:'f'.repeat(40)};
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight-main'],work,correctEnv);
+ assert.equal(r.code,0,'manual main preflight: '+r.stderr);
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','manual preflight read only');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--deploy-main'],work,wrongEnv);
+ assert.notEqual(r.code,0,'unconfirmed main SHA blocked');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--deploy-main'],work,correctEnv);
+ assert.equal(r.code,0,'manual main publish: '+r.stderr);
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'194');
+ const manualReceipt=ok('git',['ls-remote','origin','refs/heads/deploy/gas-published'],work).split('\t')[0];
+ assert.equal(manualReceipt,manualSha,'manual release records exact published SHA');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--deploy-main'],work,correctEnv);
+ assert.equal(r.code,0,'same main commit idempotent');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'194');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
+ assert.notEqual(r.code,0,'stale approval pointer must not be deployed');
+ const statusFile=path.join(work,'artifacts/gas-local-bridge/state.json');
+ fs.rmSync(statusFile);
+ fs.writeFileSync(path.join(server,'source/Code.gs'),'function unknownEditorChange(){}\n');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--adopt-baseline-prompt'],work,
+   {...env,FM_FAKE_INPUT:manualSha+'\n'});
+ assert.notEqual(r.code,0,'bootstrap refuses unpublished GAS HEAD edits');
+ assert.equal(fs.existsSync(statusFile),false);
+ fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.7'};\n");
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--adopt-baseline-prompt'],work,
+   {...env,FM_FAKE_INPUT:manualSha+'\n'});
+ assert.equal(r.code,0,'read-only immutable GAS bootstrap: '+r.stderr);
+ const adopted=JSON.parse(fs.readFileSync(statusFile,'utf8'));
+ assert.equal(adopted.commit,manualSha);
+ assert.equal(adopted.version,194);
+ assert.match(adopted.status,/ADOPTED_EXISTING_DEPLOYMENT/);
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'194');
+ console.log('PASS manual GAS main release: pinned SHA, adopted baseline, remote drift refusal, same URL, idempotent');
+
  console.log('PASS local GAS bridge fake end-to-end: preflight read-only, one controlled deploy, idempotency, remote drift stops publication (portable Node/clasp fake)');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
