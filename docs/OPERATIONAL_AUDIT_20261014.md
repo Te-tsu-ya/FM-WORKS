@@ -61,3 +61,7 @@ GPT環境で `node scripts/run_local_checks.mjs --functional`: **49 PASS / 0 FAI
 - CTO説明用の架空JSONとGAS既存Sheetsは別構成。共有DBの本導入方針、同時運用、ファイル保管・監査・運用責任者を確定する。
 
 コード修正・GitHub統合・GAS公開・DB移行・実操作は別々の証拠として扱う。未確認の条件を「実運用完成」「瞬時表示」と報告しない。
+
+## v0.25.7 公開結果
+
+2026-10-14 09:23 JST、GitHub PR #136の統合コードを既存GASの公開版195へ更新。変更10件を保存後全文照合し、公開URLのv0.25.7表示と共通ローダー／復帰処理の読込みを確認。詳細と未確認範囲は `docs/releases/GAS_v0257_20261014_PUBLISHED.md`。49 PASS / 0 FAIL / browser12 SKIP。認証後の実操作・P50/P95は引き続き未確認。
