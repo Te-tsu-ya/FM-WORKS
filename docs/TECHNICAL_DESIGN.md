@@ -2613,3 +2613,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - AppRotaryIntegration.htmlはget/list/search/findと、特定の冪等なresumeSession/previewRequest/healthCheckだけを45秒で時間切れにする。failure handlerは1回だけ実行、sharedReadsと表示を清掃、遅延した元のRPC成功・失敗はendedフラグで無視する。P95集計には失敗通信として1回記録する。
 - save/submit/approve/delete等の状態変更RPCはタイマーを使わず、二重書込みを防ぐ。ログアウト時は既存rpcCallbackGenerationによる旧応答破棄を維持する。
 - StylesRotaryLoader.htmlは失敗状態だけ閉じる操作を復活。表示と実際の読込み時間は別々に計測し、45秒を超える正常読取がないかGAS公開後に確認する。
+
+### v0.25.10 社員ディレクトリの送信範囲（2026-10-14）
+- Code.gs employeeDirectoryForViewer_(employees,viewer): ADMINは社内管理に必要な完全なgetEmployees_結果を返す。MANAGER/USER等は表示用社員ID、名前、部署、役職、roleを返す。管理者以外のhireDate、leaveBasisDate、payrollIncludedは送信禁止。MANAGERのmanagerIdはviewer自身への直属関係のみ、それ以外は空文字。
+- buildInitialDataForEmployee_とgetScheduleBundleForViewer_の両方に同一のサニタイザーを使用。getEmployees_のサーバー内キャッシュやcanManageEmployeeRecord_のライブ権限判定は変更しない。

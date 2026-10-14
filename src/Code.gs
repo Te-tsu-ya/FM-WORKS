@@ -102,7 +102,7 @@ function buildInitialDataForEmployee_(employee) {
   const perfStarted=Date.now();
   const today = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd');
   const attendance = getAttendanceState_(employee.employeeId);
-  const employees = getEmployees_();
+  const employees = employeeDirectoryForViewer_(getEmployees_(),employee);
   const scheduleBundle = getScheduleBundleForViewer_(employee, {
     start: today,
     end: today,
@@ -137,6 +137,26 @@ function buildInitialDataForEmployee_(employee) {
   logPerformance_('getInitialData',perfStarted,PERFORMANCE_BUDGETS.initialData,{employees:employees.length,todayEvents:scheduleBundle.events.length});
   return data;
 }
+
+// Limit employee-directory fields crossing the GAS HTML-service boundary.
+// The full source directory is retained on the server for permission checks.
+// Managers need a managerId only for their own direct-report monthly selector.
+function employeeDirectoryForViewer_(employees,viewer) {
+  if(String(viewer&&viewer.role||'').toUpperCase()==='ADMIN')return employees;
+  const managerId=String(viewer&&viewer.role||'').toUpperCase()==='MANAGER'
+    ?String(viewer.employeeId||''):'';
+  return (employees||[]).map(person=>({
+    employeeId:person.employeeId,
+    name:person.name,
+    displayName:person.displayName,
+    shortName:person.shortName,
+    department:person.department,
+    title:person.title,
+    role:person.role,
+    managerId:managerId&&String(person.managerId||'')===managerId?managerId:''
+  }));
+}
+
 function getHomeMonthStats_(employee,today,approvedRequests) {
   const ym=today.slice(0,7),start=ym+'-01',end=today,targetId=employee.employeeId;
   const punches=getActivePunchRows_(targetId,start,end),byDate={};
@@ -837,7 +857,7 @@ function getScheduleBundleForViewer_(viewer, params) {
   const result={
     start, end, events,
     companyDays: getCompanyCalendarRange_(start, end),
-    employees: params.includeEmployees === false ? [] : getEmployees_()
+    employees: params.includeEmployees === false ? [] : employeeDirectoryForViewer_(getEmployees_(),viewer)
   };
   logPerformance_('getScheduleBundle',perfStarted,PERFORMANCE_BUDGETS.scheduleBundle,{events:events.length,start:start,end:end});
   return result;
