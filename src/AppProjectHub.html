@@ -1,6 +1,6 @@
 <script>
 /* Project workspace uses session-local snapshots and drafts, never persistent business storage. */
-let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};
+let projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Map(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};
 const PROJECT_HUB_TABS=[['overview','概要'],['tasks','計画・進捗'],['effort','工数'],['resources','資料'],['updates','共有メモ'],['advanced','詳細管理']];
 
 /* Session-only, privacy-preserving client RPC timing; counts browser/network/server round trips. */
@@ -23,14 +23,14 @@ function projectHubTimingPanel_(){
  return `<details class="ph-panel ph-timing-panel"><summary>プロジェクトの通信速度を確認する</summary><p class="ph-help">このブラウザーの現在のログイン中に実際に発生した通信の往復時間です（ネットワーク・GAS起動・サーバー処理を含む）。キャッシュ表示や初回アプリ起動時間は含みません。20回以上の測定でP95を表示します。測定操作は追加の通信を発生させません。</p><div class="ph-table-wrap"><table class="ph-manager-table"><thead><tr><th>操作</th><th>件数</th><th>P50</th><th>P95</th><th>最長</th><th>失敗</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
-function resetProjectHubUi(){projectHubTimingSamples.length=0;if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Set(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
+function resetProjectHubUi(){projectHubTimingSamples.length=0;if(typeof resetProjectAdvancedUi_==='function')resetProjectAdvancedUi_();projectHubUi={data:null,at:0,loading:false,refreshNeeded:false,serial:0,error:'',selected:'',tab:'overview',query:'',filter:'all',pickerOpen:false,details:new Map(),pending:new Map(),editor:null,busy:false,view:'list',sort:'updated',limit:20,resourceFilter:'all',resourceQuery:'',updateFilter:'all',updateQuery:'',taskView:'board'};}
 function projectHubIdentity_(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
-function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();if(typeof projectAdvancedInvalidate_==='function')projectAdvancedInvalidate_();}
+function projectHubInvalidate_(){projectHubUi.at=0;projectHubUi.serial++;if(projectHubUi.loading)projectHubUi.refreshNeeded=true;projectHubUi.details.clear();projectHubUi.pending.clear();if(typeof projectAdvancedInvalidate_==='function')projectAdvancedInvalidate_();}
 function loadProjectHub(options={}){
  if(!state.sessionToken||!state.data)return;
  if(projectHubUi.loading){if(options.force)projectHubUi.refreshNeeded=true;return;}
  if(!options.force&&projectHubUi.data&&Date.now()-projectHubUi.at<300000){if(projectHubUi.selected&&(projectHubUi.view==='detail'||projectHubUi.editor))projectHubLoadDetail_(projectHubUi.selected);return;}
- if(options.force){projectHubUi.serial++;projectHubUi.details.clear();}
+ if(options.force){projectHubUi.serial++;projectHubUi.details.clear();projectHubUi.pending.clear();}
  const ui=projectHubUi,identity=projectHubIdentity_(),serial=ui.serial,started=Date.now();ui.loading=true;ui.error='';
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.loading=false;
@@ -51,19 +51,23 @@ function loadProjectHub(options={}){
 }
 function projectHubLoadDetail_(id,force=false){
  const ui=projectHubUi,cached=ui.details.get(id);if(!force&&cached&&Date.now()-cached.at<300000)return;
- if(ui.pending.has(id))return;ui.pending.add(id);const identity=projectHubIdentity_(),serial=ui.serial,started=Date.now();
+ const pending=ui.pending.get(id);if(pending&&(!force||pending.force))return;
+ const ticket={serial:ui.serial,force:!!force},identity=projectHubIdentity_(),started=Date.now();ui.pending.set(id,ticket);
+ if(ui.selected===id)ui.error='';
+ const active=()=>ui===projectHubUi&&identity===projectHubIdentity_()&&ticket.serial===ui.serial&&ui.pending.get(id)===ticket;
+ const fail=error=>{
+  if(!active())return;ui.pending.delete(id);projectHubTimingRecord_('案件詳細',started,false);
+  if(ui.selected===id){ui.error=cleanApiErrorMessage(error,'案件の詳細を読み込めませんでした。');renderPageIfActive('projects');}
+ };
  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
-  if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.pending.delete(id);
-  if(serial!==ui.serial){if(ui.selected===id)projectHubLoadDetail_(id,true);return;}
-  projectHubTimingRecord_('案件詳細',started,!!data);
-  ui.details.set(id,{data,at:Date.now()});if(ui.selected===id)renderPageIfActive('projects');
- }).withFailureHandler(error=>{
-  if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.pending.delete(id);
-  if(serial!==ui.serial){if(ui.selected===id)projectHubLoadDetail_(id,true);return;}
-  projectHubTimingRecord_('案件詳細',started,false);
-  ui.error=cleanApiErrorMessage(error,'案件の詳細を読み込めませんでした。');renderPageIfActive('projects');
- }).getProjectHubDetail(state.sessionToken,id,force);
+  if(!active())return;
+  if(!data||!data.project||data.project.projectId!==String(id)||!data.metrics||
+    !['tasks','resources','updates','worklogs'].every(key=>Array.isArray(data[key])))return fail(new Error('案件の詳細の形式を確認できませんでした。再試行してください。'));
+  ui.pending.delete(id);projectHubTimingRecord_('案件詳細',started,true);
+  ui.details.set(id,{data,at:Date.now()});if(ui.selected===id){ui.error='';renderPageIfActive('projects');}
+ }).withFailureHandler(fail).getProjectHubDetail(state.sessionToken,id,force);
 }
+function projectHubRetryDetail_(){if(projectHubUi.busy||!projectHubUi.selected)return;projectHubLoadDetail_(projectHubUi.selected,true);renderPageIfActive('projects');}
 function projectHubSelect_(id){
  if(projectHubUi.busy||typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)return;
  if(projectHubUi.editor&&projectHubUi.editor.changed){showToast('入力途中の内容を保存するか、取消してください。');return;}
@@ -326,7 +330,7 @@ function projectHubPage(){
  if(data&&data.setupRequired)intro+=`<aside class="ph-setup"><strong>案件データの保存先を準備してください</strong><p>管理者が「管理・設定 → 運用・労務 → DBスキーマ更新」でバックアップと更新を行います。</p><small>${escapeHtml((data.missing||[]).join('、'))}</small></aside>`;
  if(data&&data.unlinkedWorklogCount)intro+=`<details class="ph-link-warning"><summary>案件とのひも付けを確認する工数：${data.unlinkedWorklogCount}件</summary><p>現在の案件名・旧案件名に一致しない工数記録です。案件集計には含まれません。</p></details>`;
  if(data&&data.ambiguousWorklogCount)intro+=`<details class="ph-link-warning"><summary>同名案件で集計を保留した工数：${Number(data.ambiguousWorklogCount)}件</summary><p>現在の案件名・過去の案件名が複数案件に一致しています。二重計上を防ぐため集計から除外しました。管理者が案件名を確認してください。</p></details>`;
- const error=ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}</p>`:'';
+ const error=ui.error?`<p class="ph-error" role="alert">${escapeHtml(ui.error)}${view==='detail'?'<button type="button" class="secondary-button" onclick="projectHubRetryDetail_()">詳細を再試行</button>':''}</p>`:'';
  if(view!=='detail'||!p){
   const allowed=view==='dashboard'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole;
   return `<div class="ph-workspace ph-experience"><header class="ph-heading"><div><span class="eyebrow">PROJECTS</span><h1>プロジェクト</h1><p>案件を探す・計画を進める・工数や資料を共有する</p></div><div class="button-row"><button type="button" class="secondary-button" onclick="loadProjectHub({force:true})" ${ui.busy?'disabled':''}>更新</button></div></header><nav class="ph-view-switch" aria-label="プロジェクト画面"><button type="button" class="${allowed?'':'is-active'}" onclick="projectHubOpenList_()">案件一覧</button>${state.data&&state.data.permissions&&state.data.permissions.adminConsole?`<button type="button" class="${allowed?'is-active':''}" onclick="projectHubOpenManagement_()">管理者ダッシュボード</button>`:''}</nav>${error}${intro}${allowed?projectHubDashboard_():projectHubPortfolio_()}</div>`;

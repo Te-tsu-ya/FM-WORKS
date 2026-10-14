@@ -19,7 +19,7 @@ const sheet={getLastRow:()=>rows.length+1,getRange:(r,c,h,w)=>({
 })};
 const c=vm.createContext({Map,Array,Object,String,Number,Date,Math,Set,console,
  projectHubStorage_:()=>({ready:true,missing:[],sheets:{resource:{getLastRow:()=>1}}}),
- getProjectsInternal_:()=>[],
+ getProjectsInternal_:()=>[{projectId:'P-A',name:'架空案件A'},{projectId:'P-B',name:'架空案件B'}],
  projectHubRows_:()=>[],
  getDb_:()=>({getSheetByName:()=>sheet}),
  cacheJsonGetLarge_:key=>cache.get(key),
@@ -27,6 +27,7 @@ const c=vm.createContext({Map,Array,Object,String,Number,Date,Math,Set,console,
  cacheRemove_:key=>cache.delete(key)
 });
 vm.runInContext(part('projectHubRead_','projectHubName_')+
+ part('projectHubName_','projectHubQuoteOptions_')+
  part('projectHubWorklogRows_','projectHubRememberRename_'),c);
 const summary=c.projectHubRead_(false);
 assert.equal(summary.worklogs.length,2);

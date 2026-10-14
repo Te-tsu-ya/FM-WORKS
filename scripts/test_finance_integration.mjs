@@ -170,6 +170,7 @@ ok('invalid overlength input never writes a row',
  sheets['経費精算申請'].rows.length===sizeBefore);
 denied('another user cannot reuse a submission key',()=>api.submitFinanceExpense('ACCOUNTING',expense),/重複/);
 const mine=api.getMyFinanceItems('STAFF'),notMine=api.getMyFinanceItems('ACCOUNTING');
+ok('personal finance read omits internal submission keys',mine.expenses.every(x=>!Object.hasOwn(x,'requestKey'))&&mine.travels.every(x=>!Object.hasOwn(x,'requestKey')));
 ok('users can only see own finance submissions',mine.expenses.length===1&&notMine.expenses.length===0);
 denied('expense cannot settle before approval',()=>api.settleFinanceRequest('ACCOUNTING','expense',saved.id,'2026-10-09'),/承認済/);
 const approval=api.reviewFinanceRequest('ACCOUNTING','expense',saved.id,'APPROVE','');
@@ -279,6 +280,7 @@ ok('GA can register business receipt',rec.ok&&sheets['経費記録'].rows[1][11]
 ok('receipts provide server-acknowledged record, not an unconfirmed local draft',
   rec.record&&rec.record.id===rec.id&&rec.record.amount===1000&&rec.record.paid==='済');
 const summary=api.getFinanceOverview('ADMIN');
+ok('overview omits keys from receipts, expenses and travel', [...summary.expenses,...summary.travels,...summary.receipts].every(x=>!Object.hasOwn(x,'requestKey')));
 ok('authorized user sees all 3 record families',summary.expenses.length===2&&
  summary.travels.length===1&&summary.receipts.length===1);
 ok('Sheet record display uses serializable primitive values',summary.expenses.every(x=>

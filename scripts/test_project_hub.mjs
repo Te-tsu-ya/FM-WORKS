@@ -85,6 +85,7 @@ assert.deepEqual(workspace.quoteOptions.map(q=>q.id),['Q1']);
 assert.equal(workspace.projects[0].resourceCount,1);
 sheets['プロジェクト資料'].reads=[];const detail=plain(ctx.getProjectHubDetail('E','PRJ-001'));
 assert.ok(sheets['プロジェクト資料'].reads.filter(r=>r.row>=2&&r.col===1&&r.width>6).every(r=>r.row===2&&r.n===1),'detail fetches only selected project document bodies');
+for(const record of [detail.plan,...detail.tasks,...detail.resources,...detail.updates]){assert.equal(record.requestKey,undefined,'read APIs omit internal send keys');assert.equal(record._row,undefined,'physical editing rows stay server-side');}
 assert.equal(detail.worklogs.length,1);assert.equal(detail.byPerson.length,1);assert.equal(detail.metrics.actualMinutes,180);
 assert.equal(detail.canSeeOrderValue,true);assert.equal(detail.resources[0].body,"'=secret");
 assert.equal(ctx.getProjectHubDetail('M','PRJ-001').worklogs.length,1);
