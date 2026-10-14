@@ -219,3 +219,8 @@ Fusion Mind社内向けの統合ワークポータルです。
 
 ### ロータリーエンジン型ローダー
 ユーザー提供のProduction ZIPと同じ正面ハウジング・偏心ローター／軸の3:1運動を使用し、全画面起動と各GASデータ取得・保存に共通表示します。新規画面のGAS通信は FMRotaryRPC() 経由で開始・成功・失敗に対応できます。Google Apps Scriptは個々の通信進捗率を報告しないため、推定％は表示しません。
+
+
+## WindowsのバッチでGAS公開（GitHub Actionsの実行クレジット不要）
+
+[初回設定と通常公開の手順](docs/GAS_MANUAL_WINDOWS_BATCH.md)。リポジトリ直下の `FM-WORKS-GAS-SETUP.bat` を初回だけ実行し、以降は `FM-WORKS-GAS-PUBLISH.bat` をダブルクリックして最新mainを既存GASのURLへ更新できます。未確認の公開先・GAS上の手動変更・未検証の変更は停止し、事前照合とローカル機能テストを省略しません。GAS公開と実ブラウザー操作の合格は別工程です。

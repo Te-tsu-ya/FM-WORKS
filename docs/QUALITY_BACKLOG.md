@@ -314,3 +314,9 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - Accepted / High / 高信頼: 単一行finderの既定の大小文字無視とlive厳密一致が不整合。異なるケースの先行行で本来のキーを見落とすためmatchCase(true)に揃え、二重保存を防ぐ再送試験を追加。
 
 - v0.25.20実行証拠: GPT環境69 PASS / 0 FAIL / 12 SKIPPED。report SHA-256 `986b30b6982a5e63520bafaf190abcfa63e81a7cae65393b27875e88d20d9c3c`。チェック名/対象と要件別の受入を `docs/releases/GITHUB_v02520_20261014_VERIFIED.md` とLOCAL_REPORT.jsonへ記録。GAS/画面は未完了。
+
+
+## 2026-10-14 Windowsバッチ手動公開
+- GitHubコード実装済み: `FM-WORKS-GAS-SETUP.bat`と`FM-WORKS-GAS-PUBLISH.bat`。最新mainを検証済みGAS既存Deployment IDへクレジット不要で手動更新する仕組み。手動公開はdeploy/gas-production更新不要、対象SHAを確認してから実行。
+- 重要な安全策: 不変GAS公開版+編集ソース+GitHub原本の照合、リモートドリフト拒否、部分公開時pending保持、GitHub Actions禁止、Google認証情報のローカル保存。シナリオ試験を追加。
+- 未受入: DellでのインストールとGoogle本人認証、Work1の最後に公開したGASのGitHub SHAと版の照合、実GASへの公開・公開後画面操作。実運用公開済みと主張しない。

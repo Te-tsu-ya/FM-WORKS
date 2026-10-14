@@ -49,3 +49,10 @@
 `node scripts/test_gas_local_bridge.mjs` はGoogle/GitHubへの通信なしで、模擬リポジトリと模擬claspを使い、事前照合・既存デプロイへの1回限りの公開・再実行の重複防止・GAS手動変更検出・文書のみ更新時の公開スキップをテストする。`scripts/local-checks.json` のGPTローカル機能検証にも登録する。
 
 参考：[Google公式clasp](https://github.com/google/clasp)／[Apps Script Projects API](https://developers.google.com/apps-script/api/how-tos/manage-projects)／[GitHub Actions課金](https://docs.github.com/en/billing/concepts/product-billing/github-actions)。
+
+
+## 2026-10-14 追加：Windowsの手動GAS公開バッチ
+
+最新mainをローカルのWindowsから手動で既存GASへ反映したい場合は、リポジトリ直下の `FM-WORKS-GAS-SETUP.bat`（初回のみ）と `FM-WORKS-GAS-PUBLISH.bat`（毎回同じファイル）を利用します。最新mainの確認 → 同一コミットSHAの確認 → 既存GASのread-only照合 → ローカル機能テスト → 既存Deployment IDへの更新です。
+
+旧タスクスケジューラ式の `deploy/gas-production` 公開依頼を更新しなくても、**所有者がBATで明示的にYを選んだ場合だけ最新mainを公開**できます。セットアップ時は実公開済みのGitHub SHAと既存GAS公開不変版・現在の編集ソースの一致を必ず確認し、旧基準の192版を無条件に採用しません。GitHub Actionsを使わない条件と既存URL維持は同じです。詳しくは [GAS_MANUAL_WINDOWS_BATCH.md](GAS_MANUAL_WINDOWS_BATCH.md)。

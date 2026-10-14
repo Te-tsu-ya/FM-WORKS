@@ -38,3 +38,9 @@ CTOへの説明は `demo/data/financial.json` の架空データと `node script
 - ユーザー指定PCは **Windows Dellノート（第11世代Core i7）**。`docs/GAS_WINDOWS_DELL_SETUP.md` に、初回Google認証・既存Script ID接続・公開前の読み取り照合・Windowsタスクスケジューラへの安全な5分間隔登録を記載する。
 - WindowsのNode.jsからnpm `clasp.cmd` を起動する修正と、PowerShell ScheduledTasksでの `--install-windows` / `--status-windows` / `--remove-windows` を用いる。Mac専用の `--install-macos` をWindowsで案内しない。
 - 所有者Dellの初回接続・タスク登録・実GAS公開・認証付き操作は未実施。実際に完了するまで「自動公開が動作中」と扱わない。
+
+
+## 2026-10-14 手動バッチによるGitHub Actions枠ゼロ公開
+- Windows所有者が `FM-WORKS-GAS-PUBLISH.bat` で明示的にYを選んだときは、`deploy/gas-production` を別途進めず、**最新mainのピン留めしたSHA**を公開対象にできる。既存の自動ブリッジの承認用branch運用とは別モードであり、明示的なユーザー承認・ローカルテスト・公開前のGAS差分照合は省略しない。
+- 初回設定は `FM-WORKS-GAS-SETUP.bat` から、Work1が実公開したGitHub SHAと現行GASの**不変公開版**・編集ソース双方の照合後だけローカル状態を採用。既存GAS URLを変更せず、DB・権限・GitHub Actionsには触れない。
+- 手動公開の状態は `artifacts/gas-local-bridge` と `deploy/gas-published` の配信受領SHAへ記録する。配信成功はログイン後業務の受入成功と区別する。
