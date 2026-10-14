@@ -2603,3 +2603,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - Code.gs getHomeMonthStats_: 第3引数が配列なら既読の休暇行を利用し、それ以外は既存の月次申請取得を維持。getHomeOverviewは重複した申請シート検索を行わない。
 - AnnualLeaveAutomation.gs maybeReconcileLeave_: requireSession_が検証した同一社員レコードを第3引数で任意に受け、異なる社員のレコードは再取得する。年休付与・台帳修復が起きたら呼出側は再読取。
 - getApplicationShell_は版番号付き静的HTMLを21600秒保持する。アプリ更新時に版を変えないと古いHTMLが続くおそれがあるためv0.25.10に改版。
+
+### v0.25.10 工数マスタの非同期世代制御（2026-10-14）
+- AppOperations.html の worklogCatalogEpoch_ を保存・ログインで加算、全期間キャッシュに同梱されたマスタ配列を無効化。API発行時の epoch と ticket を取得し、最新世代かつ最新順序の応答だけを worklogCatalogState_ と state.data.projects に反映する。
+- worklogShowCachedDay は日付行のみ適用し、過去の範囲からグローバルな案件・作業選択肢をコピーしない。既存の空案件取得済み判断と1～2並列範囲、社員単位のID照合は維持する。
+- 工数変更後の画面再表示では、範囲キャッシュが新しくても案件マスタが失効していれば強制更新不要の通常取得でマスタを取り直す。旧通信で個人情報が別セッションに渡らないよう、identity/epochで防止する。

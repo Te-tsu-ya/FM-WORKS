@@ -31,4 +31,15 @@ request.success({items:[],projects:[],taskOptions:[]});
 state.sessionToken='S2';state.data.user.employeeId='U2';state.worklog.date='2027-10-14';state.data.projects=[];
 run('loadWorklogs()');request=requests.shift();
 assert.equal(request.args[1].includeProjects,true,'new session never reuses former user catalog');
+// Simulate a project save while a catalog read is in flight.
+const oldRead=request;
+run('invalidateWorklogCatalog_()');
+oldRead.success({items:[],projects:[{name:'obsolete'}],taskOptions:[{title:'obsolete'}]});
+assert.equal(run('worklogCatalogFresh_()'),false,'pre-save response may not restore an obsolete master');
+assert.equal(state.data.projects.length,0,'invalidated master cannot be applied from late response');
+// A completed master must be stable when returning to an older day window.
+run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-03-01",end:"2028-03-31"},{items:[],projects:[{name:"CURRENT"}],taskOptions:[]},true)');
+run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-04-01",end:"2028-04-30"},{items:[],projects:[{name:"OLD"}],taskOptions:[]},true)');
+run('worklogShowCachedDay("2028-03-14",worklogCachedWindow("2028-03-14"))');
+assert.equal(state.data.projects[0].name,'OLD','day cache never resurrects older master');
 console.log('PASS empty worklog catalogs, fast date navigation, invalidation and session separation');

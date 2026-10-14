@@ -352,7 +352,13 @@ const WORKLOG_MAX_CONCURRENT_READS=2;
 // Empty project/task lists are valid results, not a signal to reload on every day.
 const WORKLOG_CATALOG_TTL=300000;
 let worklogCatalogState_={identity:'',at:0};
-function invalidateWorklogCatalog_(){worklogCatalogState_={identity:'',at:0};}
+let worklogCatalogEpoch_=0,worklogCatalogIssued_=0,worklogCatalogApplied_=0;
+function invalidateWorklogCatalog_(){
+  worklogCatalogEpoch_++;
+  worklogCatalogState_={identity:'',at:0};
+  // Only invalidate master lists, not independent daily worklog records.
+  worklogWindowCache.forEach(entry=>{entry.projects=null;entry.taskOptions=null;});
+}
 function worklogCatalogFresh_(){
  return worklogCatalogState_.identity===worklogWindowIdentity()&&
    Date.now()-worklogCatalogState_.at<WORKLOG_CATALOG_TTL&&
@@ -382,17 +388,23 @@ function worklogCachedWindow(date){
   return winner;
 }
 
-function worklogStoreWindow(identity,range,data,includesCatalog=false){
+function worklogStoreWindow(identity,range,data,includesCatalog=false,catalogEpoch=worklogCatalogEpoch_,catalogTicket=0){
+  const acceptsCatalog=includesCatalog&&catalogEpoch===worklogCatalogEpoch_&&
+    identity===worklogWindowIdentity()&&
+    catalogTicket>=worklogCatalogApplied_&&
+    Array.isArray(data&&data.projects)&&Array.isArray(data&&data.taskOptions);
   const entry={
     identity:identity,start:range.start,end:range.end,at:Date.now(),
     items:Array.isArray(data&&data.items)?data.items:[],
-    taskOptions:Array.isArray(data&&data.taskOptions)?data.taskOptions:null,
-    projects:Array.isArray(data&&data.projects)?data.projects:null
+    taskOptions:acceptsCatalog?data.taskOptions:null,
+    projects:acceptsCatalog?data.projects:null
   };
-  if(includesCatalog&&Array.isArray(data&&data.projects)&&Array.isArray(data&&data.taskOptions)){
-    // Apply same-session master independently of the currently selected day.
+  if(acceptsCatalog){
+    // A late response must never replace a newer catalog or resurrect a
+    // catalog invalidated by a project write or by a new user.
     state.data.projects=data.projects;
     state.worklog.taskOptions=data.taskOptions;
+    worklogCatalogApplied_=catalogTicket;
     worklogCatalogState_={identity:identity,at:Date.now()};
   }
   const key=identity+'|'+range.start+'|'+range.end;
@@ -412,8 +424,8 @@ function worklogShowCachedDay(date,entry){
   state.worklog.loadedDate=date;
   state.worklog.loading=false;
   state.worklog.error='';
-  if(Array.isArray(entry.projects))state.data.projects=entry.projects;
-  if(Array.isArray(entry.taskOptions))state.worklog.taskOptions=entry.taskOptions;
+  // A cached date is independent from the globally freshest project catalog.
+  // Never restore an older project's options just because its day was visited.
   markPageCache('worklog',date);
 }
 
@@ -436,7 +448,7 @@ function loadWorklogs(options={}){
     const switchedDay=state.worklog.loadedDate!==date;
     worklogShowCachedDay(date,cached);
     if(switchedDay||!options.silent)renderPageIfActive('worklog');
-    if(fresh&&!options.force)return;
+    if(fresh&&!options.force&&worklogCatalogFresh_())return;
   }else{
     state.worklog.loadedDate=null;
     state.worklog.items=[];
@@ -448,6 +460,8 @@ function loadWorklogs(options={}){
   const range=worklogWindowRange(date);
   // Projects only need an initial load and explicit force refresh.
   const includeProjects=!!options.force||!worklogCatalogFresh_();
+  const catalogEpoch=worklogCatalogEpoch_;
+  const catalogTicket=includeProjects?++worklogCatalogIssued_:0;
   const generation=worklogWindowGeneration;
   const requestKey=identity+'|'+range.start+'|'+range.end;
   if(worklogWindowRequests.has(requestKey))return;
@@ -473,7 +487,7 @@ function loadWorklogs(options={}){
       if(state.page==='worklog')loadWorklogs({force:true});
       return;
     }
-    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null,taskOptions:null},includeProjects);
+    worklogStoreWindow(identity,range,includeProjects?(data||{}):{...(data||{}),projects:null,taskOptions:null},includeProjects,catalogEpoch,catalogTicket);
     if(typeof console!=='undefined'&&console.debug)console.debug('[FM WORKS] worklog range '+(Date.now()-started)+'ms ('+range.start+' / '+range.end+')');
     const selected=state.worklog.date||state.data.today;
     const selectedCache=worklogCachedWindow(selected);
