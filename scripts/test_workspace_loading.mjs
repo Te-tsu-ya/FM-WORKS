@@ -47,7 +47,8 @@ console.log(JSON.stringify({mode:baseline?'baseline':'fixed',advanced:counts,war
 if(baseline)process.exit(0);
 assert.equal(advanced.taskEffort[0].actualMinutes,30,'a cross-project worklog link cannot inflate task effort');
 assert.equal(counts.headers,10,'each project schema checked once within this request');
-assert.equal(counts.worklogFullReads,0,'advanced detail shares the portfolio worklog snapshot');
+assert.equal(counts.worklogFullReads,1,'personal task effort needs one detail snapshot beyond the compact portfolio');
+resetReads();ctx.getProjectAdvanced('A','P1');assert.equal(readCounts().worklogFullReads,0,'warm detail reuses its own snapshot');
 assert.equal(warm.worklogFullReads,0,'Japanese workload above 100 KB stays cached');
 assert.equal(bankHeaders,5,'each bank/year schema is checked once');
 assert.throws(()=>ctx.getProjectAdvanced('Z','P1'),/権限/,'cached worklogs never bypass live membership checks');

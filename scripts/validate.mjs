@@ -543,7 +543,7 @@ for (const marker of [
     failed = true;
   }
 }
-if (!worklogPerfText.includes('projects:includeProjects?getProjectsInternal_(false):[]')) {
+if (!(worklogPerfText.includes('const projects=includeProjects?getProjectsInternal_(false):[]')&&worklogPerfText.includes('projectAdvancedTaskOptions_(session.employee,projects)'))) {
   console.error('Worklog must lazy-load projects with its own page bundle.');
   failed = true;
 }
@@ -564,7 +564,7 @@ if (!app.includes('includeEmployees:false') || !app.includes('const includeProje
 for (const performanceServerMarker of [
   'function getHomeOverview(sessionToken)',
   'getPendingRequestCount_(employee)',
-  "params.includeEmployees === false ? [] : getEmployees_()"
+  "params.includeEmployees === false ? [] : employeeDirectoryForViewer_(getEmployees_(),viewer)"
 ]) {
   if (!(serverCode + fs.readFileSync(path.join(root,'src/Requests.gs'),'utf8')).includes(performanceServerMarker)) {
     console.error('v0.8.2 performance server marker missing: ' + performanceServerMarker);
@@ -1007,7 +1007,7 @@ for(const marker of [
   'function leaveEntitlement_(hire,asOf)',
   'function leaveAttendanceEvidence_(employee,part)',
   'function reconcileLeaveUnlocked_(employee,today)',
-  'function maybeReconcileLeave_(employeeId,asOf)',
+  'function maybeReconcileLeave_(employeeId,asOf,verifiedEmployee)',
   'function annualLeaveDailyJob_()',
   'function installAnnualLeaveDailyJob(sessionToken)',
   "operation:'法定年休自動付与'"
@@ -1261,7 +1261,7 @@ for (const [label, source, requiredMarkers] of [
   ['request integrity', requestCode, ['assertNoLeaveConflict_', 'preparePunchCorrection_', 'validatePunchSequence_', 'assertMonthRangeOpen_']],
   ['worklog overlap protection', worklogCode, ['assertNoWorklogOverlap_', 'assertMonthOpenForDate_']],
   ['punch correction resolution', serverCode, ['getActivePunchRows_', 'superseded.has', 'validatePunchSequence_']],
-  ['schedule permissions', serverCode, ['canEditLegacyOwn', 'canEdit: viewer.role', 'withScriptLock_', 'const oldSource = old[16]']]
+  ['schedule permissions', serverCode, ['function canEditScheduleRow_(', 'canEdit: canEditScheduleRow_(viewer,r)', 'withScriptLock_', '!canEditScheduleRow_(employee,old)', '!canEditScheduleRow_(employee,values)']]
 ]) {
   for (const item of requiredMarkers) {
     if (!source.includes(item)) {

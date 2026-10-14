@@ -758,7 +758,7 @@ const result=vm.runInContext(`
       {id:'W-7',date:'2026-10-07',project:'テスト案件A',category:'設計',description:'画面設計',start:'09:00',end:'10:00',minutes:60},
       {id:'W-8',date:'2026-10-08',project:'テスト案件A',category:'開発',description:'テスト',start:'10:00',end:'12:00',minutes:120}
     ],
-    projects:[{name:'テスト案件A',status:'進行中'}]
+    projects:[{name:'テスト案件A',status:'進行中'}],taskOptions:[]
   });
   expect('worklog window presents the requested day',state.worklog.loadedDate==='2026-10-08'&&state.worklog.totalMinutes===120);
   resetCalls();
@@ -1118,10 +1118,10 @@ const result=vm.runInContext(`
   state.sessionToken='SESSION_TOKEN';
   resetCalls();
   const initialHub=peoplePage();
-  expect('management opens integrated employee hub with seven sections including quote settings',
+  expect('management opens integrated employee hub with eight sections including speed diagnostics',
     initialHub.includes('admin-workspace-body')&&initialHub.includes('admin-overview-card')&&
     initialHub.includes('admin-people-split')&&initialHub.includes('admin-side-nav')&&
-    ADMIN_CATEGORIES.length===7&&settingsTabs('people').split('data-admin-tab=').length===8);
+    ADMIN_CATEGORIES.length===8&&settingsTabs('people').split('data-admin-tab=').length===9);
   expect('management KPI counts only real active employees, leave and PIN statuses',
     adminRecords.filter(x=>x.active!==false).length===3&&
     adminOverviewStats().includes('年休未設定')&&

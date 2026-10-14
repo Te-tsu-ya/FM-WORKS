@@ -221,9 +221,7 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
   if(lastRow-1<=250&&(lastRow-1)*width<=10000)return fallback('SMALL_BATCH');
   const regex=dateRangeRegex_(start,end,370);
   if(!regex)return fallback('LONG_RANGE_FALLBACK');
-  const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')
-}
-;
+  const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
   let cells,preselectedBlocks=null,source=scoped?'DATE_OWNER_INDEX':'DATE_INDEX';
   try{
     cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();

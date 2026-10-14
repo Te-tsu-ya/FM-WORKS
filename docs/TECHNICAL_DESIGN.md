@@ -2662,3 +2662,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 
 ### v0.25.17 hover RPCの負荷制限（2026-10-14）
 - AppCore.html prefetchRouteOnIntent/queueRoutePrefetch: requests/officeを先読み対象から外し、schedule/worklogだけ450msの滞在後に実行する。画面を実際に開くloadPageData_の経路は変更しない。クリック時の主RPCと申請・総務の大きなRPCが競合するのを防ぐ。
+
+### Work1統合時の修復（v0.25.16）
+- readRowsByDateRange_のownerRegexの文字列終端と完全一致アンカーを復旧。元PRの45blob一致確認後に構文不正を再現し、統合前に修正する。
+- validateの契約は案件マスタ1回・employeeDirectoryForViewer_・verifiedEmployee引数・画面と保存／削除の共通canEditScheduleRow_を検査。元のACLと個人情報最小化の条件を緩めない。
+- 一覧E:Mと詳細A:Mは独立20秒cache。総務の小規模fixtureと大規模実装試験を区別し、通常日付移動でマスタを再取得しないAPI応答形をクライアント契約で検証する。

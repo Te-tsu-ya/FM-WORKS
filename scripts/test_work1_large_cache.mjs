@@ -5,7 +5,7 @@ const entries=new Map();let puts=0,seq=0;
 const cache={get:k=>entries.get(k)||null,getAll:ks=>Object.fromEntries(ks.filter(k=>entries.has(k)).map(k=>[k,entries.get(k)])),
  put:(k,v)=>entries.set(k,v),putAll:data=>{puts++;for(const [k,v] of Object.entries(data))entries.set(k,v);},
  remove:k=>entries.delete(k)};
-const c=vm.createContext({console,CacheService:{getScriptCache:()=>cache},getDatabaseSpreadsheetId_:()=> 'TEST_DB',
+const c=vm.createContext({console,DB:{timeZone:'Asia/Tokyo'},CacheService:{getScriptCache:()=>cache},getDatabaseSpreadsheetId_:()=> 'TEST_DB',
  Utilities:{getUuid:()=>String(++seq),formatDate:()=> '2026-10-14'},
  requireSession_:token=>({employee:{role:token==='ADMIN'?'ADMIN':token==='STAFF'?'USER':'DENIED'}}),
  assertPermission_:(x,p)=>{if(p!=='officeWorkspace'||x.role==='DENIED')throw Error('access denied');},
