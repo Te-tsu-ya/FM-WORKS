@@ -79,7 +79,7 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const punchSheet=db.getSheetByName(DB.sheets.punches);
   if(punchSheet&&punchSheet.getLastRow()>=2){
-    readRowsByDateRange_(punchSheet,4,12,rangeStart,rangeEnd).forEach(r=>{
+    readRowsByDateRange_(punchSheet,4,12,rangeStart,rangeEnd,2,[employeeId]).forEach(r=>{
       if(r[1]!==employeeId||r[3]<rangeStart||r[3]>rangeEnd)return;
       consider(String(r[3]).slice(0,7),r[11]||r[5]);
     });
@@ -87,7 +87,7 @@ function getLatestMonthlyDataUpdateMap_(employeeId, startMonth, endMonth) {
 
   const worklogSheet=db.getSheetByName('工数');
   if(worklogSheet&&worklogSheet.getLastRow()>=2){
-    readRowsByDateRange_(worklogSheet,2,15,rangeStart,rangeEnd).forEach(r=>{
+    readRowsByDateRange_(worklogSheet,2,15,rangeStart,rangeEnd,3,[employeeId]).forEach(r=>{
       if(r[2]!==employeeId||r[1]<rangeStart||r[1]>rangeEnd)return;
       consider(String(r[1]).slice(0,7),r[14]||r[11]);
     });
@@ -386,7 +386,7 @@ function getLegacyDailySnapshots_(employeeId, start, end) {
   const map = {};
   if (lastRow < 2) return map;
 
-  readRowsByDateRange_(sheet,1,16,start,end).forEach(r=>{
+  readRowsByDateRange_(sheet,1,16,start,end,2,[employeeId]).forEach(r=>{
     if (!r[0] || r[1] !== employeeId || r[0] < start || r[0] > end || !['移行済','確定'].includes(r[14])) return;
     map[r[0]] = {
       date:r[0],
@@ -437,7 +437,7 @@ function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const requests = getApprovedRequestsForMonth_(targetId,start,end);
 
   const worklogSheet=getDb_().getSheetByName('工数');
-  const worklogRows=worklogSheet.getLastRow()<2?[]:readRowsByDateRange_(worklogSheet,2,15,start,end)
+  const worklogRows=worklogSheet.getLastRow()<2?[]:readRowsByDateRange_(worklogSheet,2,15,start,end,3,[targetId])
     .filter(r=>r[2]===targetId&&r[1]>=start&&r[1]<=end&&r[12]!=='削除');
   const worklogByDate={};
   worklogRows.forEach(r=>{ worklogByDate[r[1]]=(worklogByDate[r[1]]||0)+Number(r[9]||0); });

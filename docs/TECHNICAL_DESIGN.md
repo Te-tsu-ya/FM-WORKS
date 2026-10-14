@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.6
+**文書版:** 0.25.7
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,9 +67,9 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.23.8`
+`APP.version = 0.25.7`
 
-DBスキーマ: 18。  
+DBスキーマ: 20。  
 認証スキーマ: 3。  
 タイムゾーン: `Asia/Tokyo`。
 
@@ -2544,3 +2544,13 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - 金融台帳はキーが同じ時だけ前のデータを保持して更新し、別口座・年度・ページの旧データを表示しない。ページキャッシュ40件上限。
 
 根拠: https://developers.google.com/apps-script/guides/support/best-practices 、https://developers.google.com/apps-script/guides/html/communication 、https://developers.google.com/apps-script/reference/cache/cache 。初回のGAS起動・Google通信・認証Sheets読取は残り、常に瞬時という保証はしない。機構上の削減件数と実環境のP50/P95を別に記録する。
+
+
+## 2026-10-14 v0.25.7 対象行取得・共通ローダー
+
+- `readRowsByDateRange_` の任意6・7引数は社員列と社員ID集合。日付列と社員列のTextFinder行位置を交差し、RangeListで連続ブロックだけ読む。返却直前にも日付・社員IDを再確認する。索引が使えない／長期間／多数分断なら、両条件付きで安全な読取へ戻す。既存の共有予定・会社カレンダーの非限定取得契約は維持。
+- Codeの本日／月集計、Worklogの取得／重複時刻検証、Monthlyの改訂確認／移行勤怠／工数、Requestsの勤怠修正確認へ適用。
+- `loadPageData_` がmountAuthenticatedAppとnavigateの重複処理を共通化。復帰時も同じ入口を使う。資金繰りが開いていれば年次・銀行APIだけで更新し、経費一覧は呼ばない。
+- `refreshOnResume_` はvisibilitychange／onlineのみで発火。ログイン・5分TTL・JST日付・保存状態・進行中の取得を確認し、1回のgetInitialDataへまとめる。無限ポーリングなし。`refreshAppData` の日付更新は入力中の工数と明示的な過去日選択を保持する。
+- `getPublicAuthConfig` は1回の設定マップをgetAuthConfig_／getSupportConfig_へ渡す。PRODUCTIONの試作PIN禁止・PIN設定済み判定は維持。初期接続失敗の再試行とappVersionを公開ログイン画面へ表示。
+- 個人データ・認証結果の長期サーバーキャッシュは追加しない。Google起動／ネットワークの遅延は残り、実測速度は認証付き確認の別証拠とする。

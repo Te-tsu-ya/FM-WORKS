@@ -187,28 +187,37 @@ function logPerformance_(label,startedAt,budgetMs,meta){
   return payload;
 }
 
-function readRowsByDateRange_(sheet,dateColumn,width,start,end){
-  const lastRow=sheet.getLastRow();
-  if(lastRow<2)return [];
+// Optional owner index intersects with the date index before any wide-row read.
+// Every result is rechecked against live values; indexes never grant access.
+function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scopeValues){
+  const lastRow=sheet.getLastRow();if(lastRow<2||String(start)>String(end))return [];
+  const scoped=Number.isInteger(scopeColumn)&&scopeColumn>=1&&scopeColumn<=width;
+  const wanted=scoped?[...new Set((scopeValues||[]).map(v=>String(v||'')).filter(Boolean))]:[];
+  if(scoped&&!wanted.length)return [];
+  const owners=new Set(wanted),started=Date.now();
+  const select=rows=>rows.filter(r=>String(r[dateColumn-1]||'')>=String(start)&&
+    String(r[dateColumn-1]||'')<=String(end)&&(!scoped||owners.has(String(r[scopeColumn-1]||''))));
+  const fallback=source=>{
+    const rows=select(sheet.getRange(2,1,lastRow-1,width).getDisplayValues());
+    logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source,scoped});return rows;
+  };
   const regex=dateRangeRegex_(start,end,370);
-  // Long date spans exceed the indexed regex cap. Never expose out-of-range rows.
-  if(!regex){
-    if(String(start)>String(end))return [];
-    return sheet.getRange(2,1,lastRow-1,width).getDisplayValues()
-      .filter(r=>String(r[dateColumn-1]||'')>=String(start)&&String(r[dateColumn-1]||'')<=String(end));
-  }
-  const started=Date.now();
-  const cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();
-  if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER'});return [];}
+  if(!regex)return fallback('LONG_RANGE_FALLBACK');
+  const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
+  if(scoped&&(wanted.length>80||ownerRegex.length>5000))return fallback('SCOPE_LIMIT_FALLBACK');
+  let cells;
+  try{
+    cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();
+    if(scoped&&cells.length){
+      const matches=sheet.getRange(2,scopeColumn,lastRow-1,1).createTextFinder(ownerRegex).useRegularExpression(true).matchEntireCell(true).findAll();
+      const positions=new Set(matches.map(c=>c.getRow()));cells=cells.filter(c=>positions.has(c.getRow()));
+    }
+  }catch(_){return fallback('INDEX_UNAVAILABLE');}
+  if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER',scoped});return [];}
   const blocks=contiguousRowBlocks_(cells.map(c=>c.getRow()));
-  if(blocks.length>48){
-    const rows=sheet.getRange(2,1,lastRow-1,width).getDisplayValues().filter(r=>r[dateColumn-1]>=start&&r[dateColumn-1]<=end);
-    logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source:'FULL_FALLBACK',blocks:blocks.length});
-    return rows;
-  }
+  if(blocks.length>48)return fallback('FRAGMENTED_FALLBACK');
   const endCol=columnLetter_(width);
   const ranges=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges();
-  const rows=ranges.flatMap(range=>range.getDisplayValues());
-  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source:'DATE_INDEX',blocks:blocks.length});
-  return rows;
+  const rows=select(ranges.flatMap(range=>range.getDisplayValues()));
+  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source:scoped?'DATE_OWNER_INDEX':'DATE_INDEX',blocks:blocks.length});return rows;
 }
