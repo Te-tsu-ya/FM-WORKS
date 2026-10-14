@@ -26,6 +26,6 @@ assert.deepEqual(Array.from(managed,x=>x.id),['T1','T2']);assert.equal(reads,0);
 const admin=c.projectAdvancedTaskOptions_({employeeId:'A',role:'ADMIN'});
 assert.deepEqual(Array.from(admin,x=>x.id),['T1','T2']);assert.equal(reads,1,'older caller without catalog still works');
 const worklog=fs.readFileSync('src/Worklog.gs','utf8');
-assert.match(worklog,/const projects=includeProjects\\?getProjectsInternal_\\(false\\):\\[\\]/);
-assert.match(worklog,/projectAdvancedTaskOptions_\\(session.employee,projects\\)/);
+assert.ok(worklog.includes('const projects=includeProjects?getProjectsInternal_(false):[]'));
+assert.ok(worklog.includes('projectAdvancedTaskOptions_(session.employee,projects)'));
 console.log('PASS worklog catalog reused, empty fallback supported, original ACL filters kept');
