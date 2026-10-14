@@ -316,12 +316,13 @@ function projectAdvancedWorklogIds_(items){
  return scoped.map(item=>({...item,taskId:map.get(item.id)||''}));
 }
 
-function projectAdvancedTaskOptions_(user){
+function projectAdvancedTaskOptions_(user,knownProjects){
  if(!projectAdvancedSheet_('プロジェクト工数対応',true))return [];
  const status=projectHubStorage_();if(!status.ready)return [];
  const plans=projectHubRows_('plan',status.sheets.plan),tasks=projectHubRows_('task',status.sheets.task);
  const managers=new Set(plans.filter(p=>p.ownerId===user.employeeId).map(p=>p.projectId));
- const projects=new Map(getProjectsInternal_(false).filter(p=>p.status==='進行中').map(p=>[p.projectId,p]));
+ const source=Array.isArray(knownProjects)?knownProjects:getProjectsInternal_(false);
+ const projects=new Map(source.filter(p=>p.status==='進行中').map(p=>[p.projectId,p]));
  return tasks.filter(t=>t.status!=='非表示'&&projects.has(t.projectId)&&(user.role==='ADMIN'||managers.has(t.projectId)||t.ownerId===user.employeeId))
   .map(t=>({id:t.id,projectId:t.projectId,project:projects.get(t.projectId).name,title:t.title,status:t.status}));
 }

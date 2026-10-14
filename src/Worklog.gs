@@ -10,7 +10,12 @@ function getWorklogs(sessionToken, params) {
   const includeProjects=params.includeProjects!==false;
   const sheet = getDb_().getSheetByName('工数');
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { items: [], totalMinutes: 0, projects:includeProjects?getProjectsInternal_(false):[],taskOptions:includeProjects&&typeof projectAdvancedTaskOptions_==='function'?projectAdvancedTaskOptions_(session.employee):[] };
+  // The task-option builder used to re-read the same project catalog
+  // immediately after getProjectsInternal_ in every included response.
+  const projects=includeProjects?getProjectsInternal_(false):[];
+  const taskOptions=includeProjects&&typeof projectAdvancedTaskOptions_==='function'
+    ?projectAdvancedTaskOptions_(session.employee,projects):[];
+  if (lastRow < 2) return { items: [], totalMinutes: 0, projects,taskOptions };
 
   const items = (typeof projectAdvancedWorklogIds_==='function'?projectAdvancedWorklogIds_:items=>items)(readRowsByDateRange_(sheet,2,15,start,end,employeeId==='ALL'?undefined:3,[employeeId])
     .filter(r => r[0] && r[12] !== '削除' && r[1] >= start && r[1] <= end && (employeeId === 'ALL' || r[2] === employeeId))
@@ -23,7 +28,7 @@ function getWorklogs(sessionToken, params) {
     .sort((a,b) => b.date.localeCompare(a.date) || (b.start||'').localeCompare(a.start||'')));
 
   logPerformance_('getWorklogs',perfStarted,PERFORMANCE_BUDGETS.worklogs,{items:items.length});
-  return { items: items, totalMinutes: items.reduce((sum,x)=>sum+x.minutes,0), projects:includeProjects?getProjectsInternal_(false):[],taskOptions:includeProjects&&typeof projectAdvancedTaskOptions_==='function'?projectAdvancedTaskOptions_(session.employee):[] };
+  return { items: items, totalMinutes: items.reduce((sum,x)=>sum+x.minutes,0), projects,taskOptions };
 }
 
 function saveWorklog(sessionToken, payload) {

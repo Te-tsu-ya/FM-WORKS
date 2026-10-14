@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.12
+**文書版:** 0.25.13
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.12`
+`APP.version = 0.25.13`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2642,3 +2642,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.12 予定表クライアント通信のcleanup（2026-10-14）
 - AppOperations.html loadSchedule: scheduleWindowRequestsの管理情報にticketを保存。invalidateScheduleWindowCacheでgeneration更新後、全pending requestにendPageLoad(ticket)を実行してからmap.clear。古いcallbackはgeneration条件で結果破棄、後着finalizeの二度目endPageLoadはSet.deleteの冪等性で安全。
 - 予定表キャッシュ・イベント再利用と認証/社員IDの確認は維持。リクエストをクライアント側で解除してもGASのサーバー処理が中断されたとは見なさない。
+
+### v0.25.13 工数案件マスタの同一RPC内再利用（2026-10-14）
+- Worklog.gs getWorklogs はincludeProjects=trueのときだけgetProjectsInternal_(false)を1回取得し、projectAdvancedTaskOptions_(employee,projects)に渡す。データ行0件/通常時の両方で同じ配列を返す。includeProjects=falseはどちらも空配列。
+- ProjectAdvanced.gs projectAdvancedTaskOptions_(user,knownProjects)は配列を受け取るとその最新取得済み内容を再利用し、引数なしの従来呼出元はgetProjectsInternal_(false)を引き続き実行。権限・ステータス判定と業務DB読み取りの仕様は変更しない。
