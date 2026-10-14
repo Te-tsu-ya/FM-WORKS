@@ -543,9 +543,11 @@ function requireSession_(sessionToken) {
     throw new Error('AUTH_REQUIRED');
   }
 
-  const config = getAuthConfig_();
   const lastUsed = parseTimestamp_(row[6]);
   if (!lastUsed || (now.getTime() - lastUsed.getTime()) >= AUTH.sessionTouchMinutes * 60000) {
+    // Keep live session and employee verification on every request. The settings
+    // map is needed only for a session idle-expiry touch, not every RPC.
+    const config = getAuthConfig_();
     const nowText = toTimestamp_(now);
     const remembered = String(row[10] || '').toUpperCase() === 'TRUE' || row[10] === true;
     const idleMinutes = remembered ? config.rememberIdleMinutes : config.idleMinutes;

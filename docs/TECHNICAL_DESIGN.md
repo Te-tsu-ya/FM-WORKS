@@ -2592,3 +2592,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.9 検索のサービス呼出しコスト（2026-10-14）
 - indexedRowWindows_(rows, minGapRows=0)に任意の最小分離行数を追加。既存呼出しは0で従来の8窓・最小セル数を維持。Search.gsは24行以上の大きなギャップのみ切り、24行未満はまとめて読む。窓内の無関係な行はsearchAppが全文・閲覧権限で除外する。
 - 合成1000行の予定60ヒット（10行おき）は1窓591行で10,638セルを読取（元の全件18,000セル、以前の8窓9,504セル）。遠い8ヒットは8窓・144セル。Google Sheets往復の実時間は未計測。
+
+
+### v0.25.9 認証ホットパスの設定取得省略（2026-10-14）
+- Auth.gs \`requireSession_\`: hashToken_、findVerifiedSheetRow_(session)、実社員行検証、絶対/無操作期限・ログイン状態は毎回実行。\`getAuthConfig_\`のみ\`sessionTouchMinutes\`経過後の延長処理ブロック内へ移動。設定値変更の適用タイミングと認証拒否の契約は不変。CacheServiceの余計なgetを毎RPCで発生させない。
+- scripts/test_data_access_performance.mjs に通常認証で設定参照を省く回帰試験を追加。実GASのセッション失効・役割変更・延長の実操作はWork1側の受入に残す。
