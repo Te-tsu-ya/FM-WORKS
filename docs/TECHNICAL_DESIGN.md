@@ -2581,3 +2581,9 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - ProjectAdvanced.gsは1～80件の工数対応IDをreadRowsByColumnValues_によるライブ行照合付き索引で取得。81件以上または250行以下は一括読取。
 - Search.gsはindexedRowWindows_で最大8窓、取得予定の全行に対する比率が75%超なら全件取得。TextFinder障害やスペース入り複合検索時は安全なフォールバック。searchAppは取得後にACLと原文を再検査する。
 - 新規test_worklog_catalog.mjsと既存インデックス試験で、空配列、日付移動、ログイン分離、25/81件、60分散ヒットを検証する。実GASのミリ秒測定ではない。
+
+
+### v0.25.9 検索結果の安全な移動（2026-10-14）
+- Search.gsは検索した社員のemployeeIdを返し、ADMINならpeople、他ロールならscheduleをルートにする。管理情報は管理者画面でしか提供しない。
+- AppShell.htmlのopenSearchResultは管理者向け選択対象を設定する前に過去の社員検索/ロール/状態フィルターを解除。非管理者向け予定表では対象社員で絞る。予定そのものを開く際は旧社員/カテゴリ絞込をALLに戻し、日付・予定IDとモバイル詳細状態を引き継ぐ。
+- test_global_search.mjsはサーバー側ルート分離とクライアント側3遷移を合成回帰対象に追加。新規API/RPCやSheets書き込みなし。

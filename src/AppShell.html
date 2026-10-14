@@ -345,8 +345,23 @@ function openSearchResult(index){
   if(!item)return;
   hideSearchResults();
   const input=document.getElementById('globalSearchInput');if(input)input.value='';
+  if(item.type==='社員'&&item.employeeId){
+    if(item.route==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
+      // Clear old filters so the searched employee is visible on first render.
+      state.adminUi.search='';state.adminUi.role='ALL';state.adminUi.status='ALL';
+      state.adminUi.selectedEmployeeId=item.employeeId;
+    }else if(item.route==='schedule'&&state.schedule){
+      state.schedule.employeeId=item.employeeId;
+      state.schedule.category='ALL';
+      state.schedule.highlightEmployeeId='ALL';
+      state.schedule.selectedEventId=null;
+    }
+  }
   if(item.route==='schedule'&&item.date){
-    state.schedule.date=item.date;state.schedule.selectedDate=item.date;state.schedule.selectedEventId=null;state.schedule.view='day';
+    state.schedule.date=item.date;state.schedule.selectedDate=item.date;
+    // Preserve the target event and reset stale filters from another search.
+    state.schedule.employeeId='ALL';state.schedule.category='ALL';
+    state.schedule.selectedEventId=item.id||null;state.schedule.mobileDetailOpen=!!item.id;state.schedule.view='day';
   }
   navigate(item.route||'home');
 }

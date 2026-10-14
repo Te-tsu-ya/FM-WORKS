@@ -13,7 +13,9 @@ function searchApp(sessionToken, query) {
     if (hay.includes(q)) add({
       type:'社員',title:employee.name,
       sub:[employee.employeeId,employee.department,employee.title].filter(Boolean).join(' / '),
-      route:'people'
+      employeeId:employee.employeeId,
+      // Personal details are admin-only; other roles open shared schedules.
+      route:session.employee.role==='ADMIN'?'people':'schedule'
     });
     if (results.length >= 30) return results;
   }
