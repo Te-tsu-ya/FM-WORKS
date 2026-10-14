@@ -79,7 +79,7 @@
 
 ## 統合前の品質ゲート
 
-- [ ] `node scripts/run_local_checks.mjs --functional` による **全64件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
+- [ ] `node scripts/run_local_checks.mjs --functional` による **全65件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
 - [ ] Node側の追加試験: `scripts/test_worklog_catalog.mjs`、`scripts/test_worklog_link_index.mjs`、`scripts/test_search_schedule_index.mjs`、`scripts/test_global_search.mjs`、`scripts/test_work1_large_cache.mjs`、`scripts/test_work1_rpc_admin.mjs`。
 - [ ] 実行環境がある場合はブラウザー12件と、データ漏えいのないモバイル/PC目視を確認する。
 - [ ] `src/Code.gs` APP.version、要件・技術文書、`src/GeneratedDocs.gs` の完全一致。
@@ -125,3 +125,6 @@
 
 ### PERF-11 プロジェクト一覧の過去工数読取削減
 - 既存の案件一覧は毎回すべての工数についてA:M（13列）を読んでいた。v0.25.15で一覧はE:M（9列）、案件詳細は従来13列を維持し、独立した20秒キャッシュを使う。全行対象は引き続き残るため、実データ量によっては将来DB設計見直しも必要。GAS公開後P50/P95を実測する。
+
+### PERF-12 初回ログインの社員認証列読取
+- v0.25.16: PIN設定有無だけをSheets側TextFinderで調べ、ログイン画面初期化で全社員PINハッシュ列を転送しない。空列/設定済み/旧APIフォールバックをNodeテストへ追加。Work1の実GASで初回管理者設定と2回目の設定拒否も実操作確認する。

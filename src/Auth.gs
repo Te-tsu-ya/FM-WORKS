@@ -709,7 +709,18 @@ function hasAnyPinConfigured_() {
   const sheet = getDb_().getSheetByName(DB.sheets.employees);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return false;
-  return sheet.getRange(2, 15, lastRow - 1, 1).getDisplayValues().some(r => !!r[0]);
+  const hashes = sheet.getRange(2, 15, lastRow - 1, 1);
+  // The public login page needs only a yes/no, never PIN hashes. Search
+  // in Sheets instead of transferring the entire credential-hash column.
+  // This result is deliberately uncached: first-admin creation must recheck
+  // the live row inside the existing ScriptLock.
+  try {
+    return !!hashes.createTextFinder('.+').useRegularExpression(true)
+      .matchEntireCell(true).findNext();
+  } catch (_) {
+    // Older or mocked Sheets APIs can still read the original column.
+    return hashes.getDisplayValues().some(r => !!r[0]);
+  }
 }
 
 function getAuthConfig_(settings) {

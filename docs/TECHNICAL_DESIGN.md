@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.15
+**文書版:** 0.25.16
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.15`
+`APP.version = 0.25.16`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2655,3 +2655,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - ProjectHub.gs `projectHubRead_(force,detail)` で一覧用と詳細用を区別。詳細では従来のA:M (13列)、一覧ではE:M (9列)だけを1回getDisplayValuesで取得。E=案件、J=分数、M=削除状態を元の配列位置w[3]/w[8]/w[11]へ詰め直し、projectHubMetrics_/aliases/未紐付け判定の互換性を維持。
 - `projectHubWorklogRows_(force,summaryOnly)` は `fm:projectHub:worklog:summary:v3` と従来 `fm:projectHub:worklog:v2` を別20秒CacheServiceへ保持。`projectHubInvalidateWorklogs_` は両キーを無効化。CacheServiceは不確実なためmiss時は正本再読込。
 - 単体回帰は架空の削除済み/ゼロ工数/重複プロジェクト/一覧・詳細で読取列数と数値が一致することを検証。実GASの秒数はWork1公開後にP50/P95で測る。
+
+### v0.25.16 初回PIN有無のSheets側検出（2026-10-14）
+- Auth.gs hasAnyPinConfigured_: 社員マスタ15列の `Range.createTextFinder('.+').useRegularExpression(true).matchEntireCell(true).findNext()` でPINハッシュの存在のみ検査。代替として旧 `getDisplayValues().some` をtry/catchに保持。未設定の空列はfalse。
+- 結果はあえてCacheService等へ保存しない（ログイン時に初期設定の正確な有無が必要）。initializeFirstAdminはScriptLock取得後に同じライブチェックを実行し、既存の検査条件/監査を変更しない。
