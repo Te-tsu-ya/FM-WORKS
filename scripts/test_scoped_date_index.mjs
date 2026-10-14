@@ -33,7 +33,7 @@ const make=(data,width=15)=>{
  });
  return {stats,getLastRow:()=>data.length+1,getRange:range,
   getRangeList:specs=>({getRanges:()=>specs.map(s=>{
-   const m=/^A(\\d+):[A-Z]+(\\d+)$/.exec(s);
+   const m=/^A(\d+):[A-Z]+(\d+)$/.exec(s);
    assert.ok(m,s);return range(Number(m[1]),1,Number(m[2])-Number(m[1])+1,width);
   })})};
 };
