@@ -144,6 +144,7 @@ function acceptLogin(result){
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
+  const mountStarted=typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
   Object.keys(pageCache).forEach(key=>delete pageCache[key]);pendingLoads.clear();
   resetFinanceUi();
   if(typeof somuReset==='function')somuReset();
@@ -190,6 +191,10 @@ function mountAuthenticatedApp(data,mustChangePin){
   const themeButton=document.getElementById('themeToggleButton');if(themeButton)themeButton.onclick=toggleTheme;
   renderNav();
   renderPage();
+  if(typeof FMWorksPerformance!=='undefined'&&FMWorksPerformance&&typeof FMWorksPerformance.recordAuthenticatedMountMs==='function'){
+    const mountEnd=typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
+    FMWorksPerformance.recordAuthenticatedMountMs(Math.max(0,mountEnd-mountStarted));
+  }
   startLiveAttendanceTicker();
 
   appResumeContext_={token:state.sessionToken,at:Date.now(),loading:false};

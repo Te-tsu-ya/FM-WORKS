@@ -252,6 +252,7 @@ function adminPerformanceSection_(){
   const list=p&&Array.isArray(p.methods)?p.methods:[];
   const ms=v=>Number.isFinite(v)?Math.round(v).toLocaleString('ja-JP')+' ms':'—';
   const count=list.reduce((n,x)=>n+Number(x.calls||0),0);
+  const startup=p&&p.startup||{};
   const table=list.length?
     "<div class='table-wrap'><table class='auth-table'><thead><tr><th>処理名</th><th>回数</th><th>失敗</th><th>P50</th><th>P95</th><th>直近</th></tr></thead><tbody>"+
     list.map(x=>'<tr><td><code>'+escapeHtml(x.method)+'</code></td><td>'+Number(x.calls||0).toLocaleString('ja-JP')+
@@ -262,6 +263,10 @@ function adminPerformanceSection_(){
     "<p class='muted'>現在のブラウザータブで発生したGAS通信の往復時間です。回線・サーバー起動も含みます。</p>"+
     "<div class='maintenance-detail'><div><span>計測した通信</span><strong>"+count.toLocaleString('ja-JP')+
     "回</strong></div><div><span>重複通信を省略</span><strong>"+Number(p&&p.coalescedReads||0).toLocaleString('ja-JP')+"回</strong></div></div>"+
+    "<div class='maintenance-detail'><div><span>HTML受信まで</span><strong>"+ms(startup.htmlResponseMs)+
+    "</strong></div><div><span>初期画面準備まで</span><strong>"+ms(startup.domContentLoadedMs)+
+    "</strong></div><div><span>ログイン後の画面描画</span><strong>"+ms(startup.authenticatedMountMs)+"</strong></div></div>"+
+    "<p class='muted'>HTML受信・画面準備はページを開いてからの累積時間です。ログイン後の描画はデータを受け取ってからのブラウザー処理時間で、GASサーバーの実行時間とは別です。計測できない環境は「—」と表示します。</p>"+
     "<p class='muted'>P50は半分の通信がおさまる時間、P95は95％がおさまる時間です。各処理の直近80回まで、20回未満のP95は参考値です。リロード・ログアウトで消えます。</p>"+
     table+"<div class='button-row section-gap'>"+
     "<button class='secondary-button' type='button' onclick=\"renderPageIfActive('admin')\">数値を更新</button>"+

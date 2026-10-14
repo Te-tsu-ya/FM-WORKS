@@ -15,6 +15,20 @@ let rpcPerfGeneration=0;
 let rpcCallbackGeneration=0,readGeneration=0;
 const sharedReads=new Map();
 let coalescedReads=0;
+let authenticatedMountMs=null;
+function recordAuthenticatedMountMs(ms){
+ const v=Number(ms);
+ if(Number.isFinite(v)&&v>=0&&v<120000)authenticatedMountMs=Math.round(v);
+}
+function navigationTimings_(){
+ try{
+  const perf=global.performance,entry=perf&&typeof perf.getEntriesByType==='function'?
+    (perf.getEntriesByType('navigation')||[])[0]:null;
+  const value=v=>Number.isFinite(v)&&v>=0?Math.round(v):null;
+  return {htmlResponseMs:entry?value(entry.responseEnd):null,
+    domContentLoadedMs:entry?value(entry.domContentLoadedEventEnd):null};
+ }catch(_){return {htmlResponseMs:null,domContentLoadedMs:null}}
+}
 function rpcPerfReset(){rpcPerfGeneration++;rpcPerfSamples.clear();coalescedReads=0;}
 function rpcPerfNow(){
  const perf=global.performance;
@@ -37,9 +51,9 @@ function rpcPerfReport(){
   const value=p=>samples.length?samples[Math.max(0,Math.ceil(samples.length*p)-1)]:null;
   return {method,calls:row.calls,failures:row.failures,p50Ms:value(0.5),p95Ms:value(0.95),lastMs:row.lastMs};
  }).sort((a,b)=>(b.p95Ms||0)-(a.p95Ms||0)||a.method.localeCompare(b.method));
- return {scope:'current-browser-tab',sampleWindow:80,coalescedReads,methods};
+ return {scope:'current-browser-tab',sampleWindow:80,coalescedReads,methods,startup:{...navigationTimings_(),authenticatedMountMs}};
 }
-global.FMWorksPerformance=Object.freeze({report:rpcPerfReport,clear:rpcPerfReset});
+global.FMWorksPerformance=Object.freeze({report:rpcPerfReport,clear:rpcPerfReset,recordAuthenticatedMountMs});
 const authMethods=new Set(['getPublicAuthConfig','resumeSession','getInitialData','login','initializeFirstAdmin']);
 const quietMethods=new Set(['getNotifications','ensureDailyBackup']);
 const labels={

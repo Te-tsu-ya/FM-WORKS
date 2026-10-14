@@ -57,7 +57,8 @@
     "node scripts/test_home_request_snapshot.mjs",
     "node scripts/test_rpc_read_timeout.mjs",
     "node scripts/test_employee_directory_privacy.mjs",
-    "node scripts/test_request_secondary_loading.mjs"
+    "node scripts/test_request_secondary_loading.mjs",
+    "node scripts/test_startup_metrics.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

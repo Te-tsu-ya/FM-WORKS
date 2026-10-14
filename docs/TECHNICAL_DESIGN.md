@@ -2625,3 +2625,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.10 申請メニューの優先度制御（2026-10-14）
 - AppCore.html loadPageData_: requests初回はloadRequestsのみ。既存のrequestsキャッシュが有効な場合に限りqueueRequestFinanceHistory_を予約する。AppOperations.html loadRequests の成功/失敗後にqueueRequestFinanceHistory_を呼び、scheduleIdleTask(450ms)後に社員ID/セッション/表示ページを再照合してからloadMyFinanceItems({silent:true})を実行する。
 - 従来の同時2 GAS取得を、画面上部の申請処理→画面下部の経費履歴の順序へ変更し、Google script.runの同時通信枠競合を減らす。キャッシュとfinanceUi.ownLoadingの既存ガードは維持する。
+
+### v0.25.10 最初の表示とGAS往復の測定区別（2026-10-14）
+- AppRotaryIntegration.html: PerformanceNavigationTiming.responseEndとdomContentLoadedEventEndのナビゲーション開始からの経過時間を返し、AppShell.mountAuthenticatedAppではrenderNav/renderPageまでのブラウザー同期処理時間を記録。外部に送信しない。Google iframe/API非対応はnull。
+- AppAdmin.html: これら3指標を通信速度タブに表示し、別の意味の累積時刻と描画時間を混同しない。コピー可能なJSONは処理名と時間のみ。
