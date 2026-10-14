@@ -79,7 +79,7 @@
 
 ## 統合前の品質ゲート
 
-- [ ] `node scripts/run_local_checks.mjs --functional` による **全59件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
+- [ ] `node scripts/run_local_checks.mjs --functional` による **全63件**の機能チェックが当該commitで成功。結果と対象commit SHAをPRに保存（Actionsを使わない）。
 - [ ] Node側の追加試験: `scripts/test_worklog_catalog.mjs`、`scripts/test_worklog_link_index.mjs`、`scripts/test_search_schedule_index.mjs`、`scripts/test_global_search.mjs`、`scripts/test_work1_large_cache.mjs`、`scripts/test_work1_rpc_admin.mjs`。
 - [ ] 実行環境がある場合はブラウザー12件と、データ漏えいのないモバイル/PC目視を確認する。
 - [ ] `src/Code.gs` APP.version、要件・技術文書、`src/GeneratedDocs.gs` の完全一致。
@@ -108,8 +108,8 @@
 ## v0.25.10 最終GitHub実装監査（2026-10-14）
 - GitHub専用featureブランチで修正: ①起動版番号の更新で6時間HTMLキャッシュを分離、②本人/担当者のホーム申請集計を規模に応じた最小列取得へ、③認証済社員の年休照合再利用（実付与後は再検証）、④工数案件マスタの古い通信の上書き防止、⑤正常空マスタの再取得防止、⑥総務大容量分割キャッシュと権限、⑦予定検索窓の縮約、⑧申請と経費履歴RPCの優先順位付け、⑨読取45秒無応答の明示的回復と後着成功無効化（書込には適用禁止）、⑩社員マスタの非管理者への個人情報最小化、⑪起動段階の計測、⑫HTML元サイズ予算。
 - 限定検証: 変更した10個のGASファイル・5個のJavaScript HTMLの構文解析 PASS。架空データのV8局所検証ではホーム小/大規模申請、本人/管理者権限、工数旧応答の不採用、タイムアウトからの回復、社員一覧非公開項目、ナビゲーション起動メトリクスをPASS。これは全機能回帰合格ではない。
-- 未実行: 当該HEADで `node scripts/run_local_checks.mjs --functional` 全59テスト、ブラウザー12項目、認証後の本物のGASによる実保存・リロードと冷間/暖機P50/P95。この3項目が未実施の間は「本番READY」を宣言せず、mainへの統合は安全なゲート後に行う。
-- Work1担当: PR #139 のHEADと最新mainの差分を確認→所有者PC/WorkのNode実行環境で59件回帰とUI確認→mainへmerge→既存GASへ反映（Actions不使用）→管理者の通信速度でRPC/HTML受信/初期化/描画を区別し、データ量と社員ロールを変えて受入記録。
+- 未実行: 当該HEADで `node scripts/run_local_checks.mjs --functional` 全63テスト、ブラウザー12項目、認証後の本物のGASによる実保存・リロードと冷間/暖機P50/P95。この3項目が未実施の間は「本番READY」を宣言せず、mainへの統合は安全なゲート後に行う。
+- Work1担当: PR #139 のHEADと最新mainの差分を確認→所有者PC/WorkのNode実行環境で63件回帰とUI確認→mainへmerge→既存GASへ反映（Actions不使用）→管理者の通信速度でRPC/HTML受信/初期化/描画を区別し、データ量と社員ロールを変えて受入記録。
 
 ### PERF-08 月次・工数の二重全列TextFinder
 - v0.25.11: 多量の過去記録でも日付ヒットが180行以内かつ推定転送3600セル以下の場合は社員列TextFinderを省略、読み込んだ正本行で必ず所属社員を再照合。合成1,200行で少数ヒット時のFinder2→1、大規模日付では2段階維持。GAS時間の受入測定は未実施。
