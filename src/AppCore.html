@@ -75,15 +75,16 @@ function scheduleBackgroundTask(fn,delay,attempt=0){
 }
 function prefetchRouteOnIntent(page){
   if(!state.data||!state.sessionToken||state.busy||pendingLoads.size>0)return;
+  // A hover must not preempt the active route with a costly multi-ledger RPC.
+  // Only small, bounded calendar/worklog windows are eligible for prefetch.
   if(page==='schedule')loadSchedule({silent:true});
   else if(page==='worklog')loadWorklogs({silent:true});
-  else if(page==='requests')loadRequests({silent:true});
-  else if(page==='office'&&typeof somuLoad==='function')somuLoad(false);
 }
 function queueRoutePrefetch(page){
   clearTimeout(routePrefetchTimer);
-  if(!['schedule','worklog','requests','office'].includes(page))return;
-  routePrefetchTimer=setTimeout(()=>prefetchRouteOnIntent(page),220);
+  if(!['schedule','worklog'].includes(page))return;
+  // Long dwell avoids a GAS launch during a quick menu pointer crossing.
+  routePrefetchTimer=setTimeout(()=>prefetchRouteOnIntent(page),450);
 }
 function startMenuPrefetch(){
   // Eager multi-page prefetch is intentionally disabled. User intent gets priority over background GAS calls.

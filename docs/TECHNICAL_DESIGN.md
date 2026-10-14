@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.16
+**文書版:** 0.25.17
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.16`
+`APP.version = 0.25.17`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2659,3 +2659,6 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.16 初回PIN有無のSheets側検出（2026-10-14）
 - Auth.gs hasAnyPinConfigured_: 社員マスタ15列の `Range.createTextFinder('.+').useRegularExpression(true).matchEntireCell(true).findNext()` でPINハッシュの存在のみ検査。代替として旧 `getDisplayValues().some` をtry/catchに保持。未設定の空列はfalse。
 - 結果はあえてCacheService等へ保存しない（ログイン時に初期設定の正確な有無が必要）。initializeFirstAdminはScriptLock取得後に同じライブチェックを実行し、既存の検査条件/監査を変更しない。
+
+### v0.25.17 hover RPCの負荷制限（2026-10-14）
+- AppCore.html prefetchRouteOnIntent/queueRoutePrefetch: requests/officeを先読み対象から外し、schedule/worklogだけ450msの滞在後に実行する。画面を実際に開くloadPageData_の経路は変更しない。クリック時の主RPCと申請・総務の大きなRPCが競合するのを防ぐ。

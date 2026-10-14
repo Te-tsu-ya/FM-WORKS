@@ -65,7 +65,8 @@
     "node scripts/test_worklog_catalog_reuse.mjs",
     "node scripts/test_schedule_acl.mjs",
     "node scripts/test_project_cockpit_effort_width.mjs",
-    "node scripts/test_pin_presence_search.mjs"
+    "node scripts/test_pin_presence_search.mjs",
+    "node scripts/test_prefetch_priority.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",
