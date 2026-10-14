@@ -100,6 +100,14 @@ assert.equal(current.blocks,8,'large gaps keep isolated low-cell reads');
 assert.equal(current.full,0);
 assert.equal(current.wideCells,8*18);
 rows=Array.from({length:1000},(_,i)=>row('S'+i,'ordinary'));
+for(let i=0;i<100;i++)rows[i*10]=row('S'+i*10,'needle '+i);
+current=new Sheet(rows);
+const nearlyFull=query('needle');
+assert.equal(nearlyFull.length,30,'dense search cap is unchanged');
+assert.equal(current.full,1,'when matched windows span over 75% of the table, one full read wins');
+assert.equal(current.blocks,0,'dense fallback avoids multiple getDisplayValues calls');
+
+rows=Array.from({length:1000},(_,i)=>row('S'+i,'ordinary'));
 rows[100]=row('S100','needle');
 current=new Sheet(rows);current.fail=true;
 assert.deepEqual(query('needle').map(x=>x.id),['S100']);
