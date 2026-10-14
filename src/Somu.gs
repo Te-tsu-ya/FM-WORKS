@@ -50,7 +50,7 @@ function somuModel_(kind){
  // Stock, approval and return mutations always read Sheets under ScriptLock.
 const SOMU_VIEW_CACHE_TTL_SECONDS=20;
 function somuSnapshotCacheKey_(){
-  return 'fm:somu:workspace:v5:'+getDatabaseSpreadsheetId_();
+  return 'fm:somu:workspace:v6:'+getDatabaseSpreadsheetId_();
 }
 function somuInvalidateSnapshot_(){
   if(typeof cacheRemove_==='function')cacheRemove_(somuSnapshotCacheKey_());
@@ -113,7 +113,10 @@ function somuRows_(kind,limit,preverifiedSheet){
   if(last<2)return {items:[],total:0,truncated:false};
   const count=Math.max(0,last-1),max=Math.max(1,Math.min(2500,Number(limit)||1500));
   // Keep the newest entries, but do not quietly represent a partial result as complete.
-  const start=Math.max(2,last-max+1);
+  // Large base ledgers use full-ledger paging: only a small home preview is
+  // needed here. Do not send thousands of duplicate records before page one.
+  const preview=count>max&&['asset','loan','purchase','document'].includes(kind)?60:max;
+  const start=Math.max(2,last-preview+1);
   const items=sheet.getRange(start,1,last-start+1,m.keys.length).getDisplayValues()
     .map(row=>somuPublic_(kind,somuRecord_(kind,row))).filter(r=>r.id);
   return {items:items,total:count,truncated:count>max};
@@ -125,6 +128,69 @@ function somuFind_(kind,id){
   const match=findVerifiedSheetRow_(sheet,1,m.keys.length,key,'somu:'+kind+':id',true);
   if(!match)throw new Error('対象の記録が見つかりません。再読込してください。');
   return {sheet:sheet,rowNumber:match.rowNumber,item:somuRecord_(kind,match.row)};
+}
+
+// Full-ledger search without transferring the complete ledger to the browser.
+// Cursors use registration rows: appending new records cannot shift older pages.
+function getSomuRecordsPage(token,params){
+  somuOperator_(token); // Never reuse a permission decision from the workspace cache.
+  const p=params||{},kind={assets:'asset',loans:'loan',purchases:'purchase',documents:'document'}[p.kind];
+  if(!kind)throw new Error('対象の総務台帳を確認してください。');
+  const query=String(p.query||'').trim().toLocaleLowerCase('ja-JP'),filter=String(p.filter||'all');
+  if(query.length>120||!['all','open','closed','overdue'].includes(filter)||
+    (filter==='overdue'&&kind!=='loan'))throw new Error('検索条件を確認してください。');
+  const before=Number(p.before||0);
+  if(!Number.isSafeInteger(before)||before<0)throw new Error('ページ位置を確認してください。');
+  const model=somuModel_(kind),sheet=somuSheet_(kind),last=sheet.getLastRow();
+  const end=Math.min(last,before?before-1:last),today=somuToday_();
+  if(end<2)return {ok:true,kind:p.kind,items:[],hasMore:false,nextBefore:0,today:today};
+  const closed=['返却済','入荷済','保管終了','廃止'];
+  const find=(start,width,text,regex,entire)=>sheet.getRange(2,start,end-1,width)
+    .createTextFinder(text).matchCase(false).matchEntireCell(!!entire)
+    .useRegularExpression(!!regex).findAll().map(cell=>cell.getRow());
+  let candidates=null;
+  if(query){
+    // A request key is not public data, including when it is a middle column.
+    const hidden=model.keys.indexOf('requestKey'),parts=hidden<0?[[1,model.keys.length]]:
+      [[1,hidden],[hidden+2,model.keys.length-hidden-1]].filter(part=>part[1]>0);
+    const terms=[query];
+    if(/^\d{4}-\d{2}-\d{2}$/.test(query))terms.push(query.replace(/-/g,'/'),query.replace(/-0?/g,'/'));
+    candidates=new Set([].concat(...parts.map(part=>[].concat(...terms.map(term=>find(part[0],part[1],term,false,false))))));
+  }
+  if(filter!=='all'){
+    const statusColumn=model.keys.indexOf('status')+1;
+    const statusRows=new Set(find(statusColumn,1,filter==='overdue'?'貸出中':closed.join('|'),true,true));
+    if(candidates)candidates=new Set(Array.from(candidates).filter(row=>filter==='open'?!statusRows.has(row):statusRows.has(row)));
+    else candidates=filter==='open'?new Set(Array.from({length:end-1},(_,i)=>i+2).filter(row=>!statusRows.has(row))):statusRows;
+  }
+  const positions=candidates?Array.from(candidates).filter(row=>row>=2&&row<=end).sort((a,b)=>b-a):null;
+  const items=[],rowNumbers=[];let offset=0,scanEnd=end,scannedBefore=end+1,reads=0;
+  // At most eight body reads, each at most 120 rows. Sparse hits do not cause
+  // a giant merged range, and an unfinished scan exposes a continuation cursor.
+  while(reads<8&&items.length<61&&(positions?offset<positions.length:scanEnd>=2)){
+    const top=positions?positions[offset]:scanEnd,bottom=Math.max(2,top-119);
+    const wanted=positions?new Set():null;
+    if(positions)while(offset<positions.length&&positions[offset]>=bottom)wanted.add(positions[offset++]);
+    const values=sheet.getRange(bottom,1,top-bottom+1,model.keys.length).getDisplayValues();reads++;
+    for(let row=top;row>=bottom;row--){
+      if(wanted&&!wanted.has(row))continue;
+      scannedBefore=row;
+      const item=somuPublic_(kind,somuRecord_(kind,values[row-bottom]));
+      if(!item.id)continue;
+      const status=String(item.status||'');
+      if(filter==='closed'&&!closed.includes(status)||filter==='open'&&closed.includes(status)||
+        filter==='overdue'&&!(status==='貸出中'&&item.dueDate&&item.dueDate<today))continue;
+      // Recheck live public values; TextFinder hits may have changed meanwhile.
+      if(query&&!Object.keys(item).some(key=>String(item[key]??'').toLocaleLowerCase('ja-JP').includes(query)))continue;
+      items.push(item);rowNumbers.push(row);
+      if(items.length===61)break;
+    }
+    scanEnd=bottom-1;
+  }
+  const lookahead=items.length>60;
+  const hasMore=lookahead||(positions?offset<positions.length:scanEnd>=2);
+  const nextBefore=hasMore?(lookahead?rowNumbers[59]:scannedBefore):0;
+  return {ok:true,kind:p.kind,items:items.slice(0,60),hasMore:hasMore,nextBefore:nextBefore,today:today};
 }
 
 function somuWrite_(kind,target,item){

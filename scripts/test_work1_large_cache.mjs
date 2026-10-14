@@ -20,7 +20,7 @@ assert.ok(puts>0);assert.equal(run('somuGetCachedSnapshot_()').assets.length,850
 assert.equal(run('getSomuWorkspace("ADMIN").canApprove'),true);
 assert.equal(run('getSomuWorkspace("STAFF").canApprove'),false);
 assert.throws(()=>run('getSomuWorkspace("DENIED")'),/access denied/);
-const key='fm:db:TEST_DB:fm:somu:workspace:v5:TEST_DB',manifest=JSON.parse(entries.get(key));
+const key='fm:db:TEST_DB:fm:somu:workspace:v6:TEST_DB',manifest=JSON.parse(entries.get(key));
 assert.ok(manifest.count>1);
 const part=key+':'+manifest.generation+':0',saved=entries.get(part);
 entries.delete(part);assert.equal(run('somuGetCachedSnapshot_()'),null);
