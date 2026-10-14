@@ -18,7 +18,7 @@ const sheet={getLastRow:()=>rows.length+1,getRange:(r,c,h,w)=>({
  getDisplayValues:()=>{reads.push({column:c,width:w,cells:h*w});return rows.slice(r-2,r-2+h).map(item=>item.slice(c-1,c-1+w));}
 })};
 const c=vm.createContext({Map,Array,Object,String,Number,Date,Math,Set,console,
- projectHubStorage_:()=>({ready:true,missing:[],sheets:{}}),
+ projectHubStorage_:()=>({ready:true,missing:[],sheets:{resource:{getLastRow:()=>1}}}),
  getProjectsInternal_:()=>[],
  projectHubRows_:()=>[],
  getDb_:()=>({getSheetByName:()=>sheet}),
