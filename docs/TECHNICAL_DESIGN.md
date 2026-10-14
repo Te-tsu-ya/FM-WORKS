@@ -2629,3 +2629,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.10 最初の表示とGAS往復の測定区別（2026-10-14）
 - AppRotaryIntegration.html: PerformanceNavigationTiming.responseEndとdomContentLoadedEventEndのナビゲーション開始からの経過時間を返し、AppShell.mountAuthenticatedAppではrenderNav/renderPageまでのブラウザー同期処理時間を記録。外部に送信しない。Google iframe/API非対応はnull。
 - AppAdmin.html: これら3指標を通信速度タブに表示し、別の意味の累積時刻と描画時間を混同しない。コピー可能なJSONは処理名と時間のみ。
+
+### v0.25.10 HTML元データ量の回帰テスト（2026-10-14）
+- scripts/test_shell_payload_budget.mjs はIndex.htmlからinclude_を抽出し、必須ファイル存在・重複なし、Buffer.byteLengthに基づく総ソースサイズ1,638,400bytes（1600KiB）以下、生成文書は埋め込まない契約、静的CacheService最大40分割/60000bytesキー制限を確認。
+- 2026-10-14監査時のmainは44部品・およそ1.33MBのUTF-8ソース（合成見積）。通信時のgzip転送サイズ、サーバー温/冷起動、HTMLのスクリプト実行時間はこの単体チェックでは保証しない。Work1公開後、ブラウザーNavigation TimingとRPC P50/P95で切り分ける。
