@@ -860,6 +860,9 @@ function saveScheduleWindow(identity,range,data){
 function invalidateScheduleWindowCache(){
   scheduleWindowGeneration++;
   scheduleWindowCache.clear();
+  // Old in-flight requests cannot update the new generation. Release their
+  // page-loading reservations now; stale callbacks remain harmless.
+  scheduleWindowRequests.forEach(request=>endPageLoad(request.ticket));
   scheduleWindowRequests.clear();
   scheduleDateIndexSource=null;
   scheduleDateIndex=null;
@@ -914,7 +917,7 @@ function loadSchedule(options={}){
   const ticket=beginPageLoad('scheduleWindow',activeKey);
   if(!ticket)return;
   const session=state.sessionToken;
-  scheduleWindowRequests.set(activeKey,{generation,identity,session,displayKey});
+  scheduleWindowRequests.set(activeKey,{generation,identity,session,displayKey,ticket});
   const finalize=()=>{
     endPageLoad(ticket);
     scheduleWindowRequests.delete(activeKey);
