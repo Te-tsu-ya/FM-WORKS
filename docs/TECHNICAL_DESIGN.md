@@ -2608,3 +2608,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - AppOperations.html の worklogCatalogEpoch_ を保存・ログインで加算、全期間キャッシュに同梱されたマスタ配列を無効化。API発行時の epoch と ticket を取得し、最新世代かつ最新順序の応答だけを worklogCatalogState_ と state.data.projects に反映する。
 - worklogShowCachedDay は日付行のみ適用し、過去の範囲からグローバルな案件・作業選択肢をコピーしない。既存の空案件取得済み判断と1～2並列範囲、社員単位のID照合は維持する。
 - 工数変更後の画面再表示では、範囲キャッシュが新しくても案件マスタが失効していれば強制更新不要の通常取得でマスタを取り直す。旧通信で個人情報が別セッションに渡らないよう、identity/epochで防止する。
+
+### v0.25.10 読取RPCのウォッチドッグ（2026-10-14）
+- AppRotaryIntegration.htmlはget/list/search/findと、特定の冪等なresumeSession/previewRequest/healthCheckだけを45秒で時間切れにする。failure handlerは1回だけ実行、sharedReadsと表示を清掃、遅延した元のRPC成功・失敗はendedフラグで無視する。P95集計には失敗通信として1回記録する。
+- save/submit/approve/delete等の状態変更RPCはタイマーを使わず、二重書込みを防ぐ。ログアウト時は既存rpcCallbackGenerationによる旧応答破棄を維持する。
+- StylesRotaryLoader.htmlは失敗状態だけ閉じる操作を復活。表示と実際の読込み時間は別々に計測し、45秒を超える正常読取がないかGAS公開後に確認する。

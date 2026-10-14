@@ -187,7 +187,7 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
  return (...args)=>{
    const callbackGeneration=rpcCallbackGeneration;
    const listener={success,failure,userObject,hasUserObject};
-   const read=/^(get|list|search|find)/.test(prop);
+   const read=/^(get|list|search|find)/.test(prop)||/^(resumeSession|previewRequest|healthCheck)$/.test(prop);
    let key='';
    if(read){
      try{key=callbackGeneration+'|'+readGeneration+'|'+prop+'|'+JSON.stringify(args);}catch(_){}
@@ -202,13 +202,20 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
    const tracking=ensureActivity();
    const task=tracking&&tracking.begin(prop);
    const perfStarted=rpcPerfNow(),perfGeneration=rpcPerfGeneration;
-   let ended=false,recorded=false;
+   let ended=false,recorded=false,timeoutId=null;
+   const READ_TIMEOUT_MS=45000;
    const record=error=>{
      if(recorded)return;recorded=true;
      if(perfGeneration===rpcPerfGeneration)rpcPerfRecord(prop,perfStarted,!!error);
    };
-   const finish=error=>{if(ended)return;ended=true;record(error);if(tracking)tracking.settle(task,error)};
+   const finish=error=>{
+     if(ended)return;ended=true;
+     if(timeoutId!==null&&typeof global.clearTimeout==='function')global.clearTimeout(timeoutId);
+     record(error);
+     if(tracking)tracking.settle(task,error);
+   };
    const deliver=(failed,values)=>{
+     if(ended)return; // Never apply responses arriving after the timeout.
      if(key&&sharedReads.get(key)===entry)sharedReads.delete(key);
      if(callbackGeneration!==rpcCallbackGeneration){finish(null);return;}
      record(failed?values[0]||new Error('GAS request failed'):null);
@@ -233,6 +240,15 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
      const runner=raw.withSuccessHandler((...values)=>deliver(false,values))
        .withFailureHandler((...values)=>deliver(true,values));
      if(typeof runner[prop]!=='function')throw Error('Unknown GAS method: '+prop);
+     // Do not add a client timeout to financial/attendance writes:
+     // the server may commit even when its response is lost.
+     if(read&&typeof global.setTimeout==='function'){
+       timeoutId=global.setTimeout(()=>{
+         const error=new Error('NETWORK_TIMEOUT: 読み込みの応答がありません。再読込してください。');
+         error.name='TimeoutError';
+         deliver(true,[error]);
+       },READ_TIMEOUT_MS);
+     }
      return runner[prop](...args);
    }catch(error){if(key&&sharedReads.get(key)===entry)sharedReads.delete(key);finish(error);throw error}
  };

@@ -54,7 +54,8 @@
     "node scripts/test_work1_large_cache.mjs",
     "node scripts/test_work1_rpc_admin.mjs",
     "node scripts/test_worklog_catalog.mjs",
-    "node scripts/test_home_request_snapshot.mjs"
+    "node scripts/test_home_request_snapshot.mjs",
+    "node scripts/test_rpc_read_timeout.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",
