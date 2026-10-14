@@ -1,7 +1,7 @@
 <script>
 /* Dedicated General Affairs UI: never persist business data in the browser. */
 let somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',loadedAt:0,listLimit:60};
-function somuReset(){somuTabState_.clear();window.somuActiveForm=null;somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
+function somuReset(){somuPageInvalidate_();somuTabState_.clear();window.somuActiveForm=null;somuUi={loaded:false,loading:false,busy:false,error:'',data:null,tab:'home',query:'',filter:'all',selected:'',loadedAt:0,listLimit:60};if(typeof somuGrowthReset_==='function')somuGrowthReset_();}
 function somuSessionIdentity(){return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');}
 function somuCanUse(){return !!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace&&state.sessionToken);}
 function somuData(){return (somuUi.data||{assets:[],loans:[],purchases:[],documents:[]});}
@@ -30,6 +30,7 @@ function somuScheduleGrowth_(force){
 }
 function somuLoad(force){
  if(!somuCanUse())return;
+ if(force)somuPageInvalidate_();
  if(somuUi.loading){if(force)somuUi.refreshNeeded=true;return;}
  // Local in-memory snapshot makes return navigation instantaneous.
  if(somuUi.loaded&&!force&&Date.now()-somuUi.loadedAt<SOMU_CLIENT_FRESH_MS){
@@ -76,12 +77,53 @@ function somuLoad(force){
 }
 function somuReload(){somuLoad(true);}
 const somuTabState_=new Map();
-function somuTab(tab){if(!['home','assets','loans','purchases','documents','contracts','facilities','tickets'].includes(tab))return;somuTabState_.set(somuUi.tab,{filter:somuUi.filter,query:somuUi.query,selected:somuUi.selected,listLimit:somuUi.listLimit});somuUi.tab=tab;Object.assign(somuUi,somuTabState_.get(tab)||{filter:'all',query:'',selected:'',listLimit:60});if(typeof somuGrowthTab_==='function'&&somuGrowthTab_(tab))somuGrowthLoad(false);renderPageIfActive('office');}
-function somuSearch(value){somuUi.query=String(value||'').slice(0,120);somuUi.listLimit=60;somuRefreshLists();}
-function somuFilter(value){somuUi.filter=String(value||'all');somuUi.listLimit=60;somuRefreshLists();}
-function somuPick(id){somuUi.selected=String(id);somuRefreshLists();}
-function somuMore(){somuUi.listLimit=Math.min(2500,(somuUi.listLimit||60)+60);somuRefreshLists();}
+function somuTab(tab){if(!['home','assets','loans','purchases','documents','contracts','facilities','tickets'].includes(tab))return;somuTabState_.set(somuUi.tab,{filter:somuUi.filter,query:somuUi.query,selected:somuUi.selected,listLimit:somuUi.listLimit,pageBefore:somuUi.pageBefore||0,pageBack:(somuUi.pageBack||[]).slice()});somuUi.tab=tab;Object.assign(somuUi,somuTabState_.get(tab)||{filter:'all',query:'',selected:'',listLimit:60,pageBefore:0,pageBack:[]});if(typeof somuGrowthTab_==='function'&&somuGrowthTab_(tab))somuGrowthLoad(false);renderPageIfActive('office');somuPageEnsure_(0);}
+function somuSearch(value){somuUi.query=String(value||'').slice(0,120);somuUi.listLimit=60;somuUi.pageBefore=0;somuUi.pageBack=[];somuPageEnsure_(450);somuRefreshLists();}
+function somuFilter(value){somuUi.filter=String(value||'all');somuUi.listLimit=60;somuUi.pageBefore=0;somuUi.pageBack=[];somuPageEnsure_(0);somuRefreshLists();}
+function somuPick(id){somuUi.selected=String(id);if(somuPaged_()&&!(somuPageCurrent_()&&somuPageCurrent_().items.some(x=>String(x.id)===String(id)))){somuUi.query=String(id);somuUi.filter='all';somuUi.pageBefore=0;somuUi.pageBack=[];const input=document.getElementById('somuQuery');if(input)input.value=somuUi.query;somuPageEnsure_(0);}somuRefreshLists();}
+function somuMore(){if(somuPaged_()){const view=somuPageCurrent_();if(!view||view.loading||!view.hasMore)return;somuUi.pageBack=(somuUi.pageBack||[]).concat(somuUi.pageBefore||0);somuUi.pageBefore=view.nextBefore;somuUi.selected='';somuPageEnsure_(0);}else somuUi.listLimit=Math.min(2500,(somuUi.listLimit||60)+60);somuRefreshLists();}
+function somuPrevious_(){if(!somuUi.pageBack||!somuUi.pageBack.length)return;somuUi.pageBefore=somuUi.pageBack.pop();somuUi.selected='';somuPageEnsure_(0);somuRefreshLists();}
+const somuPageCache_=new Map();let somuPageView_=null,somuPageEpoch_=0,somuPageTimer_=null;
+function somuPageInvalidate_(){somuPageEpoch_++;somuPageCache_.clear();somuPageView_=null;if(somuPageTimer_!==null)clearTimeout(somuPageTimer_);somuPageTimer_=null;}
+function somuPaged_(){return ['assets','loans','purchases','documents'].includes(somuUi.tab)&&somuTruncated_(somuUi.tab);}
+function somuPageKey_(){return JSON.stringify([somuSessionIdentity(),somuUi.tab,somuUi.query.trim(),somuUi.filter,somuUi.pageBefore||0]);}
+function somuPageCurrent_(){return somuPageView_&&somuPageView_.key===somuPageKey_()?somuPageView_:null;}
+function somuPageEnsure_(delay,retry){
+ if(!somuCanUse()||state.page!=='office'||!somuPaged_()||somuUi.loading)return;
+ const key=somuPageKey_(),existing=somuPageCurrent_();
+ if(!retry&&existing&&(existing.loading||existing.error||Date.now()-existing.stamp<SOMU_CLIENT_FRESH_MS))return;
+ const cached=somuPageCache_.get(key);
+ if(!retry&&cached&&Date.now()-cached.stamp<SOMU_CLIENT_FRESH_MS){somuPageView_=cached;return;}
+ if(somuPageTimer_!==null)clearTimeout(somuPageTimer_);
+ const ui=somuUi,identity=somuSessionIdentity(),epoch=somuPageEpoch_,params={kind:ui.tab,query:ui.query.trim(),filter:ui.filter,before:ui.pageBefore||0};
+ somuPageView_={key:key,items:existing&&existing.items||[],loading:true,error:'',stamp:0};
+ somuPageTimer_=setTimeout(()=>{
+  somuPageTimer_=null;
+  if(ui!==somuUi||identity!==somuSessionIdentity()||epoch!==somuPageEpoch_||key!==somuPageKey_()||state.page!=='office'){if(somuPageView_&&somuPageView_.key===key)somuPageView_=null;return;}
+  const valid=()=>ui===somuUi&&identity===somuSessionIdentity()&&epoch===somuPageEpoch_;
+  const fail=err=>{if(!valid()||key!==somuPageKey_())return;somuPageView_={key:key,items:[],loading:false,error:cleanApiErrorMessage(err,'台帳の検索に失敗しました。再試行してください。'),stamp:0};somuRefreshLists();};
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+   if(!valid())return;
+   if(!result||result.ok!==true||result.kind!==params.kind||!Array.isArray(result.items)||result.items.length>60||result.items.some(item=>!item||typeof item!=='object'||!item.id)||typeof result.hasMore!=='boolean'||
+     result.hasMore&&(!Number.isSafeInteger(result.nextBefore)||result.nextBefore<2||params.before&&result.nextBefore>=params.before))return fail(new Error('ページ結果を確認できません。'));
+   const view=Object.assign({},result,{key:key,loading:false,error:'',stamp:Date.now()});
+   somuPageCache_.delete(key);somuPageCache_.set(key,view);while(somuPageCache_.size>20)somuPageCache_.delete(somuPageCache_.keys().next().value);
+   if(key!==somuPageKey_())return;
+   somuPageView_=view;if(state.page==='office')somuRefreshLists();
+  }).withFailureHandler(fail).getSomuRecordsPage(state.sessionToken,params);
+ },delay||0);
+}
+function somuPageRetry_(){somuPageEnsure_(0,true);somuRefreshLists();}
+function somuFindRecord_(kind,id){const view=somuPageCurrent_();return (view&&kind===somuUi.tab?view.items:[]).concat(somuData()[kind]||[]).find(x=>String(x.id)===String(id));}
+function somuPagerMarkup_(){
+ if(!somuPaged_())return '';
+ const view=somuPageCurrent_();
+ return '<div class="somu-notice" role="status">全台帳を検索・登録順（新しい順）で最大60件ずつ表示'+(view&&view.loading?' · 読み込み中…':'')+'</div>'+
+  (view&&view.error?'<div class="somu-warning" role="alert">'+escapeHtml(view.error)+' <button type="button" class="secondary-button" onclick="somuPageRetry_()">再試行</button></div>':'')+
+  '<div class="somu-detail-actions"><button type="button" class="secondary-button" onclick="somuPrevious_()" '+(!(somuUi.pageBack||[]).length||view&&view.loading?'disabled':'')+'>前のページ</button><button type="button" class="secondary-button" onclick="somuMore()" '+(!view||view.loading||view.error||!view.hasMore?'disabled':'')+'>次のページ</button></div>';
+}
 function somuRows(kind){
+ if(kind===somuUi.tab&&somuPaged_()){const view=somuPageCurrent_();return view?view.items:[];}
  const q=somuUi.query.toLocaleLowerCase('ja-JP'),filter=somuUi.filter,d=somuData();
  return (d[kind]||[]).filter(x=>{
   const today=d.today||state.data&&state.data.today||'2026-10-10';
@@ -101,7 +143,8 @@ function somuRefreshLists(){
  const kind=somuUi.tab==='assets'?'assets':somuUi.tab==='loans'?'loans':somuUi.tab==='purchases'?'purchases':'documents',rows=somuRows(kind);
  if(!rows.some(x=>String(x.id)===somuUi.selected))somuUi.selected=rows.length?String(rows[0].id):'';
  list.innerHTML=somuListMarkup_(kind,rows);if(detail)detail.innerHTML=somuDetailMarkup_(kind,rows.find(x=>String(x.id)===somuUi.selected));
- if(count)count.textContent=somuCountText_(kind,rows.length); 
+ if(count)count.textContent=somuPaged_()?'このページ '+rows.length+'件':somuCountText_(kind,rows.length);
+ const pager=document.getElementById('somuPager');if(pager)pager.innerHTML=somuPagerMarkup_();
 }
 function somuStatus_(s,warning){return '<span class="somu-pill '+(warning?'danger':['申請中','貸出中'].includes(s)?'warn':['入荷済','返却済','有効'].includes(s)?'good':'')+'">'+escapeHtml(s||'未設定')+'</span>';}
 function somuCard_(label,value,tone,tab,filter){return '<button type="button" class="somu-kpi '+tone+'" onclick="somuTab(\''+tab+'\');somuFilter(\''+(filter||'all')+'\')"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong><small>詳細を見る ›</small></button>';}
@@ -139,7 +182,7 @@ function somuAvailable_(asset){
 function somuSummary_(kind,x){if(kind==='assets'){const available=somuAvailable_(x);
  return [x.code,x.location||'保管先なし',x.quantity+'点（'+(available===null?'貸出可能数は未確定':'貸出可能 '+available+'点')+'）'];}if(kind==='loans')return [x.assetCode,x.borrower,'期限 '+x.dueDate];if(kind==='purchases')return [x.name,x.requesterName||'',x.quantity+'点・'+Number(x.estimatedPrice||0).toLocaleString('ja-JP')+'円/点'];return [x.name,x.category||'',x.location||'保管場所未登録'];}
 function somuListMarkup_(kind,rows){
- if(!rows.length)return '<div class="somu-empty">条件に一致するデータはありません。検索条件を変更してください。</div>';
+ if(!rows.length)return '<div class="somu-empty">'+(somuPaged_()&&(!somuPageCurrent_()||somuPageCurrent_().loading)?'台帳を検索しています…':somuPaged_()&&somuPageCurrent_().hasMore?'この範囲に一致する記録はありません。次のページへ進めます。':'条件に一致するデータはありません。検索条件を変更してください。')+'</div>';
  const today=somuData().today||state.data&&state.data.today||'2026-10-10';
  const displayed=rows.slice(0,somuUi.listLimit||60);
  return displayed.map(x=>{const [name,sub,info]=somuSummary_(kind,x),chosen=String(x.id)===somuUi.selected;
@@ -167,14 +210,15 @@ function somuDetailMarkup_(kind,x){
  return '<div class="somu-detail-head"><h2>'+escapeHtml(somuSummary_(kind,x)[0])+'</h2>'+somuStatus_(x.status)+'</div><dl class="somu-detail-fields">'+fields+'</dl><div class="somu-detail-actions">'+actions+'</div>';
 }
 function somuRecords_(kind){
+ somuPageEnsure_(0);
  const rows=somuRows(kind);
  const filterOptions=[['all','すべて'],['open','進行中'],['closed','完了・終了']];if(kind==='loans')filterOptions.splice(1,0,['overdue','期限超過']);
  if(!somuUi.selected&&rows.length)somuUi.selected=String(rows[0].id);
  const selected=rows.find(x=>String(x.id)===somuUi.selected)||rows[0];
- return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+somuCountText_(kind,rows.length)+'</p></div>'+
+ return '<div class="somu-records"><section class="card somu-record-list"><div class="somu-panel-head"><div><h2>'+({assets:'備品台帳',loans:'貸出・返却',purchases:'購買管理',documents:'書類台帳'})[kind]+'</h2><p id="somuCount">'+(somuPaged_()?'このページ '+rows.length+'件':somuCountText_(kind,rows.length))+'</p></div>'+
  ('<button class="primary-button" onclick="somuOpenForm(\''+({assets:'asset',loans:'loan',purchases:'purchase',documents:'document'})[kind]+'\')">＋ 新規登録</button>')+'</div>'+
  '<div class="somu-filters"><label><span class="visually-hidden">総務記録を検索</span><input aria-label="総務記録を検索" id="somuQuery" placeholder="番号・品名・担当者で検索" value="'+escapeHtml(somuUi.query)+'" oninput="somuSearch(this.value)"></label><label><span class="visually-hidden">状態を絞り込む</span><select aria-label="状態を絞り込む" onchange="somuFilter(this.value)">'+filterOptions.map(([value,label])=>'<option value="'+value+'" '+(somuUi.filter===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label></div>'+
- '<div id="somuList" class="somu-items">'+somuListMarkup_(kind,rows)+'</div></section><section class="card somu-record-detail" aria-label="選択した記録の詳細"><div id="somuDetail">'+somuDetailMarkup_(kind,selected)+'</div></section></div>';
+ '<div id="somuList" class="somu-items">'+somuListMarkup_(kind,rows)+'</div><div id="somuPager">'+somuPagerMarkup_()+'</div></section><section class="card somu-record-detail" aria-label="選択した記録の詳細"><div id="somuDetail">'+somuDetailMarkup_(kind,selected)+'</div></section></div>';
 }
 function somuPage(){
  if(!somuCanUse())return pageHead('総務','この画面を表示する権限がありません。');
@@ -184,7 +228,7 @@ function somuPage(){
  if(d.setupRequired)return '<div class="v15-workspace v15-general-affairs"><header class="v15-page-hero"><div><h1>総務</h1><p>備品・購買・貸出・書類の管理</p></div></header><div class="card somu-empty"><strong>総務DBの初期設定が必要です</strong><p>管理者が「管理・設定 → 運用・労務」からバックアップ付きDB更新を実行してください。</p><p>未作成：'+escapeHtml((d.missing||[]).join('、'))+'</p><button type="button" class="secondary-button" onclick="somuReload()">DBの状態を再確認</button>' + (state.data&&state.data.permissions&&state.data.permissions.adminConsole?'<button type="button" class="primary-button" onclick="setAdminTab(\'operation\')">管理画面でDBを更新</button>':'') + '</div></div>';
  const active=somuUi.tab;
  return '<div class="v15-workspace v15-general-affairs somu-workspace"><header class="somu-heading"><div><div class="v15-kicker">FM WORKS / 管理業務</div><h1>総務</h1><p>会社の資産・契約・設備・社内手続きを、一つの場所で管理</p></div><div class="somu-top-actions"><button class="secondary-button" onclick="somuReload()">更新</button></div></header>'+
- (d.truncated?'<div class="somu-warning" role="status">台帳の表示上限に達しました。全件表示ではありません。管理者にご確認ください。</div>':'')+
+ (d.truncated?'<div class="somu-notice" role="status">ホームの件数は一部の記録から集計しています。備品・貸出・購買・書類の各台帳では、過去の記録も検索してページを切り替えられます。</div>':'')+
  (typeof somuGrowthNavigation_==='function'?somuGrowthNavigation_():'<nav class="somu-tabs" aria-label="総務機能"><button type="button" onclick="somuTab(\'home\')">総務ホーム</button></nav>')+
  (active==='home'&&typeof somuGrowthHome_==='function'?somuGrowthHome_():
   typeof somuGrowthTab_==='function'&&somuGrowthTab_(active)?somuGrowthRecords_(active):
@@ -195,7 +239,8 @@ function somuOpenForm(kind,id,selectedAssetId){
  if(somuUi.busy)return;
  const plural={asset:'assets',loan:'loans',purchase:'purchases',document:'documents'}[kind];
  if(!plural)return;
- const old=(somuData()[plural]||[]).find(x=>String(x.id)===String(id))||{};
+ const old=somuFindRecord_(plural,id)||{};
+ if(id&&!old.id){showToast('対象の記録を選び直してください。');return;}
  const fields={
  asset:[['code','管理番号','text',true],['name','品名','text',true],['category','分類','text'],['maker','メーカー','text'],['model','型番','text'],['location','保管場所','text'],['quantity','保有数','number',true],['minimum','在庫下限','number',true],['status','状態','select',false,['利用中','保管中','廃止']],['note','備考','textarea']],
  loan:[['assetId','備品を選択','asset',true],['borrower','貸出先','text',true],['quantity','貸出数','number',true],['loanDate','貸出日','date',true],['dueDate','返却予定日','date',true],['purpose','使用目的','textarea']],
@@ -206,7 +251,8 @@ function somuOpenForm(kind,id,selectedAssetId){
   label+=required?' <em class="v15-required">必須</em>':'';
   let value=old[key]??({quantity:1,minimum:0,estimatedPrice:0,loanDate:state.data.today,dueDate:state.data.today,status:'利用中'}[key]??'');
   if(type==='asset'){
-   const assets=(somuData().assets||[]).filter(a=>a.status!=='廃止');
+   const chosen=somuFindRecord_('assets',selectedAssetId),assets=(somuData().assets||[]).filter(a=>a.status!=='廃止');
+   if(chosen&&chosen.status!=='廃止'&&!assets.some(a=>a.id===chosen.id))assets.unshift(chosen);
    return '<label class="field"><span>'+label+'</span><select id="somu-'+key+'" required>'+assets.map(a=>'<option value="'+escapeHtml(a.id)+'" '+(a.id===selectedAssetId?'selected':'')+'>'+escapeHtml(a.code+' · '+a.name)+'</option>').join('')+'</select></label>';
   }
   if(type==='select')return '<label class="field"><span>'+label+'</span><select id="somu-'+key+'">'+choices.map(o=>'<option '+(o===value?'selected':'')+'>'+o+'</option>').join('')+'</select></label>';
@@ -221,8 +267,8 @@ function somuOpenForm(kind,id,selectedAssetId){
 }
 function somuRegisterReceivedPurchase_(id){
  if(somuUi.busy)return;
- const purchase=(somuData().purchases||[]).find(x=>String(x.id)===String(id)&&x.status==='入荷済');
- if(!purchase)return;
+ const purchase=somuFindRecord_('purchases',id);
+ if(!purchase||purchase.status!=='入荷済')return;
  const linked=(somuData().assets||[]).find(x=>String(x.note||'').includes('[購買:'+purchase.id+']'));
  if(linked){somuTab('assets');somuPick(linked.id);showToast('この購買に対応する備品は登録済みです');return;}
  somuOpenForm('asset');
