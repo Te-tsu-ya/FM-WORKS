@@ -50,7 +50,9 @@
     "node scripts/test_repository_demo.mjs",
     "node scripts/test_cashflow_ledger_client.mjs",
     "node scripts/test_operational_performance.mjs",
-    "node scripts/test_adaptive_loading.mjs"
+    "node scripts/test_adaptive_loading.mjs",
+    "node scripts/test_work1_large_cache.mjs",
+    "node scripts/test_work1_rpc_admin.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

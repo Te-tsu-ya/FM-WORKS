@@ -13,6 +13,7 @@ const ADMIN_CATEGORIES=[
   {id:'projects',label:'プロジェクト',short:'案件',icon:'案',help:'工数で利用する案件マスタ'},
   {id:'quotes',label:'見積・取引先',short:'取引先',icon:'見',help:'取引先マスタと正式見積番号を管理'},
   {id:'operation',label:'運用・労務',short:'運用',icon:'運',help:'労務ルールと運用状態'},
+  {id:'performance',label:'通信速度',short:'速度',icon:'速',help:'このタブの通信待ち時間を確認'},
   {id:'requirements',label:'要件定義書',short:'要件',icon:'文',help:'アプリの要件と業務ルール'},
   {id:'technical',label:'技術設計書',short:'設計',icon:'技',help:'実装・データ設計'}
 ];
@@ -237,11 +238,50 @@ function adminPage(){
   if(state.adminTab==='auth')content=authSettingsSection();
   else if(state.adminTab==='projects')content=projectAdminSection();
   else if(state.adminTab==='operation')content=maintenanceSection();
+  else if(state.adminTab==='performance')content=adminPerformanceSection_();
   else if(state.adminTab==='quotes')content=quoteAdministrationSection_();
   else if(state.adminTab==='requirements')content=documentPane('requirements');
   else if(state.adminTab==='technical')content=documentPane('technical');
   else content=authSettingsSection();
   return adminWorkspaceShell(state.adminTab,content);
+}
+
+
+function adminPerformanceSection_(){
+  const p=typeof FMWorksPerformance!=='undefined'&&FMWorksPerformance&&typeof FMWorksPerformance.report==='function'?FMWorksPerformance.report():null;
+  const list=p&&Array.isArray(p.methods)?p.methods:[];
+  const ms=v=>Number.isFinite(v)?Math.round(v).toLocaleString('ja-JP')+' ms':'—';
+  const count=list.reduce((n,x)=>n+Number(x.calls||0),0);
+  const table=list.length?
+    "<div class='table-wrap'><table class='auth-table'><thead><tr><th>処理名</th><th>回数</th><th>失敗</th><th>P50</th><th>P95</th><th>直近</th></tr></thead><tbody>"+
+    list.map(x=>'<tr><td><code>'+escapeHtml(x.method)+'</code></td><td>'+Number(x.calls||0).toLocaleString('ja-JP')+
+      '</td><td>'+Number(x.failures||0).toLocaleString('ja-JP')+'</td><td>'+ms(x.p50Ms)+'</td><td>'+
+      ms(x.p95Ms)+'</td><td>'+ms(x.lastMs)+'</td></tr>').join('')+'</tbody></table></div>':
+    "<p class='muted'>まだ通信の計測がありません。勤怠や工数を操作してから戻ってください。</p>";
+  return "<div class='section-gap'>"+card('通信の待ち時間（実測）',
+    "<p class='muted'>現在のブラウザータブで発生したGAS通信の往復時間です。回線・サーバー起動も含みます。</p>"+
+    "<div class='maintenance-detail'><div><span>計測した通信</span><strong>"+count.toLocaleString('ja-JP')+
+    "回</strong></div><div><span>重複通信を省略</span><strong>"+Number(p&&p.coalescedReads||0).toLocaleString('ja-JP')+"回</strong></div></div>"+
+    "<p class='muted'>P50は半分の通信がおさまる時間、P95は95％がおさまる時間です。各処理の直近80回まで、20回未満のP95は参考値です。リロード・ログアウトで消えます。</p>"+
+    table+"<div class='button-row section-gap'>"+
+    "<button class='secondary-button' type='button' onclick=\"renderPageIfActive('admin')\">数値を更新</button>"+
+    "<button class='secondary-button' type='button' onclick='adminCopyRpcPerformance_()'>結果をコピー</button>"+
+    "<button class='secondary-button' type='button' onclick='adminClearRpcPerformance_()'>計測を消去</button>"+
+    "</div><p class='muted'>測定内容は処理名・回数・待ち時間だけです。セッショントークン、PIN、社員情報、引数や返却データは含めません。</p>"
+  )+"</div>";
+}
+function adminCopyRpcPerformance_(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return;
+  if(typeof FMWorksPerformance==='undefined'||!FMWorksPerformance||typeof navigator==='undefined'||!navigator.clipboard||!navigator.clipboard.writeText){
+    showToast('コピー機能が利用できません');return;
+  }
+  navigator.clipboard.writeText(JSON.stringify(FMWorksPerformance.report(),null,2))
+    .then(()=>showToast('通信速度をコピーしました'),()=>showToast('コピーに失敗しました'));
+}
+function adminClearRpcPerformance_(){
+  if(!(state.data&&state.data.permissions&&state.data.permissions.adminConsole))return;
+  if(typeof FMWorksPerformance!=='undefined'&&FMWorksPerformance&&typeof FMWorksPerformance.clear==='function')FMWorksPerformance.clear();
+  renderPageIfActive('admin');
 }
 
 function saveLaborRulesFromAdmin(){

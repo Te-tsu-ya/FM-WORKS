@@ -34,8 +34,8 @@ const ctx=vm.createContext({
  Utilities:{formatDate:(d,tz,fmt)=>fmt==='yyyy-MM-dd'?'2026-10-10':'2026-10-10 10:00:00',
   newBlob:raw=>({getBytes:()=>new Uint8Array(Buffer.byteLength(raw,'utf8'))})},
  getDatabaseSpreadsheetId_:()=> 'SYNTHETIC_DB',
- cacheJsonGet_:key=>snapshotCache.get(key)||null,
- cacheJsonPut_:(key,value)=>{snapshotCache.set(key,JSON.parse(JSON.stringify(value)));return true;},
+ cacheJsonGetLarge_:key=>snapshotCache.get(key)||null,
+ cacheJsonPutLarge_:(key,value)=>{snapshotCache.set(key,JSON.parse(JSON.stringify(value)));return true;},
  cacheRemove_:key=>{snapshotCache.delete(key);},
  logPerformance_:()=>{},
 
@@ -184,6 +184,9 @@ const partial=call('getSomuWorkspace','token',true);
 assert.equal(partial.truncatedKinds.assets,true,'asset list has incomplete page flag');
 assert.equal(partial.truncatedKinds.loans,true,'loan list has incomplete page flag');
 assert.equal(partial.truncated,true);
+const largeReadCount=rangeReads;
+assert.equal(call('getSomuWorkspace','token').rowCount,partial.rowCount);
+assert.equal(rangeReads,largeReadCount,'large warm cache avoids all Sheet reads');
 employee={role:'USER',employeeId:'FM0099',name:'架空一般社員',department:'開発'};
 assert.throws(()=>call('getSomuWorkspace','token'),/権限なし/);
 assert.throws(()=>call('saveSomuAsset','token',{code:'AS-002',name:'不正保存',quantity:1,minimum:0}),/権限なし/);

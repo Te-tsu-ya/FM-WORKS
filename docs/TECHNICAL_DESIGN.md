@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.8
+**文書版:** 0.25.9
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.8`
+`APP.version = 0.25.9`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2566,3 +2566,11 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 - 注釈／分類／シナリオ保存後の子取得をworkspace成功後へ一本化。金融台帳保存は銀行集計更新後の子取得へ一本化。cashFlowClose_で経理ローダーを呼び、未期限切れなら通信しない。
 - 共通未保存・処理中ガードに分析・条件・口座・予定を含める。年度切替／終了／銀行更新／セクション切替で分析の保存・出力中を検査する。
 - Google公式のサービス呼び出し削減・一括読取方針を適用する。合成のサービス回数を受入指標とし、実GASのP50/P95は別測定。公式根拠: https://developers.google.com/apps-script/guides/support/best-practices 。
+
+
+## v0.25.9 総務キャッシュ・通信速度の診断（2026-10-14）
+
+- Somu.gs: 共有キャッシュキーをv5にし、cacheJsonGetLarge_/cacheJsonPutLarge_を使用。既存のUTF-8 60KB分割・不変世代・最後にmanifest公開という実装を利用する。20秒TTL、最大4.8MB、断片欠損またはCacheService異常時はcache missとして正本へ戻る。更新後のmanifest削除を維持する。
+- getSomuWorkspaceは共有結果を読む前にsomuOperator_で社員セッションとofficeWorkspace権限を再確認。canApproveとtodayは利用者ごとに計算して付加する。個別の閲覧権限を共有しない。
+- AppAdmin.html: performanceセクションで既存FMWorksPerformance.report()のブラウザー往復P50/P95を表示。FMRotaryRPCからの計測値のみを使い、GASの通信を追加しない。clipboardには引数/結果のない統計JSONだけを渡す。ADMIN権限なしでは表示・コピー・消去を拒否する。
+- テスト: 大容量の分割整合性、断片紛失、更新時の無効化、社員別承認、管理者の統計表示とHTML無害化を追加。GASの公開と実機計測はこのGitHubコミットの対象外。
