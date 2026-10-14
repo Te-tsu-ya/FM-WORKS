@@ -5,6 +5,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
+import {createInterface} from 'node:readline/promises';
 import {
   RELEASE_BRANCH, KNOWN_DEPLOYMENT_ID, INITIAL_EXPECTED_VERSION, INITIAL_BASELINE_COMMIT, ACCEPTED_SOURCE,
   checkClaspProject, claspInvocation, extractDeployment, verifyDeployResult, validateRequestedCommit,
@@ -15,10 +16,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/gas-local-bridge');
 const statePath = path.join(output, 'state.json');
 const pendingPath = path.join(output, 'pending.json');
-const modes = new Set(['--once', '--watch', '--preflight']);
+const modes = new Set(['--once', '--watch', '--preflight', '--preflight-main', '--deploy-main', '--adopt-baseline-prompt']);
 const args = process.argv.slice(2);
 if (args.length !== 1 || !modes.has(args[0])) {
-  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--once|--watch');
+  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--once|--watch|--preflight-main|--deploy-main|--adopt-baseline-prompt');
   process.exit(2);
 }
 const mode = args[0];
@@ -68,23 +69,69 @@ function requireDeployment(worktree) {
   const listed=run('clasp',['list-deployments'],worktree);
   return extractDeployment(listed);
 }
-function pullSnapshot(baseDir, scriptId) {
+function pullSnapshot(baseDir, scriptId, versionNumber=null) {
   fs.mkdirSync(baseDir,{recursive:true});
   fs.writeFileSync(path.join(baseDir,'.clasp.json'),JSON.stringify({scriptId,rootDir:'.'})+'\n',{mode:0o600});
-  run('clasp',['pull'],baseDir,180000);
+  const command=['pull'];
+  if(versionNumber!==null){
+    if(!Number.isSafeInteger(versionNumber)||versionNumber<1)throw Error('Invalid immutable GAS version.');
+    command.push('--versionNumber',String(versionNumber));
+  }
+  run('clasp',command,baseDir,180000);
   return contentHashes(localFiles(baseDir));
 }
-function cycle({preflight=false}={}) {
+
+function adoptExistingDeployment(sha) {
+  if(!/^[a-f0-9]{40}$/i.test(sha))throw Error('Baseline must be the verified 40-character GitHub commit SHA.');
+  const cfg=currentConfig();
+  if(readState()||fs.existsSync(pendingPath))
+    throw Error('The publisher already has state or a pending release; refusing to replace it.');
+  // Only the owner can explicitly select a prior approved GitHub commit.
+  // This operation does not push sources, create versions or modify the GAS deployment.
+  run('git',['fetch','--no-tags','origin','+refs/heads/main:refs/remotes/origin/main'],root,180000);
+  const main=run('git',['rev-parse','refs/remotes/origin/main'],root).trim();
+  run('git',['merge-base','--is-ancestor',sha,main],root);
+  const expected=gitSourceHashes(sha);
+  const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-gas-adopt-'));
+  try{
+    const version=requireDeployment(root);
+    const deployed=pullSnapshot(path.join(sandbox,'immutable'),cfg.scriptId,version);
+    const current=pullSnapshot(path.join(sandbox,'editor-head'),cfg.scriptId);
+    // The immutable /exec version must match both the selected Git commit
+    // and the current editable GAS HEAD. Never adopt hidden unpublished edits.
+    assertPublishedSnapshot(expected,deployed);
+    assertPublishedSnapshot(deployed,current);
+    persist(statePath,{commit:sha,version,remoteHashes:current,updatedAt:stamp(),
+      status:'ADOPTED_EXISTING_DEPLOYMENT_SOURCE_VERIFIED_BROWSER_PENDING'});
+    log('Adopted existing GAS @'+version+' from verified commit '+sha.slice(0,12)+'. No GAS changes made.');
+  } finally {
+    fs.rmSync(sandbox,{recursive:true,force:true});
+  }
+}
+async function promptBaseline() {
+  const rl=createInterface({input:process.stdin,output:process.stdout});
+  try {return (await rl.question('Previously published GitHub commit SHA (40 hex chars): ')).trim();}
+  finally {rl.close();}
+}
+
+function cycle({preflight=false, useMain=false}={}) {
   const cfg=currentConfig();
   const oldState=readState();
   if (fs.existsSync(pendingPath))
     throw Error('A previous release may have been interrupted. Inspect pending.json and GAS before clearing it.');
   // This is NOT GitHub Actions; git fetch uses local Git authentication.
-  run('git',['fetch','--no-tags','origin',
-    '+refs/heads/main:refs/remotes/origin/main',
-    '+refs/heads/'+RELEASE_BRANCH+':refs/remotes/origin/'+RELEASE_BRANCH],root,180000);
+  const fetchRefs=['+refs/heads/main:refs/remotes/origin/main'];
+  if(!useMain)fetchRefs.push('+refs/heads/'+RELEASE_BRANCH+':refs/remotes/origin/'+RELEASE_BRANCH);
+  run('git',['fetch','--no-tags','origin',...fetchRefs],root,180000);
   const main=run('git',['rev-parse','refs/remotes/origin/main'],root).trim();
-  const requested=run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  const requested=useMain?main:run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  if(useMain){
+    // The Windows operator confirmed one exact SHA after the read-only check.
+    // A merge during confirmation must not silently deploy a different commit.
+    const pinned=String(process.env.FM_WORKS_MANUAL_EXPECTED_SHA||'');
+    if(!/^[a-f0-9]{40}$/i.test(pinned)||pinned!==requested)
+      throw Error('GitHub main changed since manual preflight (or SHA was not pinned). Restart the batch.');
+  }
   const necessary=validateRequestedCommit({mainSha:main,requestedSha:requested,previouslyPublishedSha:oldState?.commit});
   if (!necessary && !preflight) {log('No new approved GAS release request.');return;}
   const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-gas-release-'));
@@ -161,12 +208,20 @@ function cycle({preflight=false}={}) {
 let lockFd;
 try {lockFd=fs.openSync(lockPath,'wx',0o600);}catch(e){throw Error('Bridge is already running. Remove stale lock only after checking the process.');}
 process.on('exit',()=>{try{fs.closeSync(lockFd);fs.unlinkSync(lockPath);}catch{}});
-if (mode==='--watch') {
+if (mode==='--adopt-baseline-prompt') {
+  try{adoptExistingDeployment(await promptBaseline());}
+  catch(e){errorLog(String(e.message||e));process.exitCode=1;}
+} else if (mode==='--watch') {
   log('Watching approved release pointer every 5 minutes; PC must stay awake.');
   for (;;) {
     try{cycle();}catch(e){errorLog(String(e.message||e));}
     await sleep(5*60*1000);
   }
 } else {
-  try{cycle({preflight:mode==='--preflight'});}catch(e){errorLog(String(e.message||e));process.exitCode=1;}
+  try{
+    cycle({
+      preflight:mode==='--preflight'||mode==='--preflight-main',
+      useMain:mode==='--preflight-main'||mode==='--deploy-main'
+    });
+  }catch(e){errorLog(String(e.message||e));process.exitCode=1;}
 }
