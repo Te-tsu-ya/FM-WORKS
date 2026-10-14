@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.10
+**文書版:** 0.25.11
 **更新日:** 2026-10-14
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -67,7 +67,7 @@ Google Sheets: FM WORKS DB
 
 ## 3. バージョン
 
-`APP.version = 0.25.10`
+`APP.version = 0.25.11`
 
 DBスキーマ: 20。  
 認証スキーマ: 3。  
@@ -2633,3 +2633,8 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.10 HTML元データ量の回帰テスト（2026-10-14）
 - scripts/test_shell_payload_budget.mjs はIndex.htmlからinclude_を抽出し、必須ファイル存在・重複なし、Buffer.byteLengthに基づく総ソースサイズ1,638,400bytes（1600KiB）以下、生成文書は埋め込まない契約、静的CacheService最大40分割/60000bytesキー制限を確認。
 - 2026-10-14監査時のmainは44部品・およそ1.33MBのUTF-8ソース（合成見積）。通信時のgzip転送サイズ、サーバー温/冷起動、HTMLのスクリプト実行時間はこの単体チェックでは保証しない。Work1公開後、ブラウザーNavigation TimingとRPC P50/P95で切り分ける。
+
+### v0.25.11 日付＋社員の二重TextFinderを適応化（2026-10-14）
+- DataAccess.gs readRowsByDateRange_: まず既存のdateColumn TextFinderで実候補を見つける。その行をindexedRowWindows_（最大8窓）にまとめ、件数<=180かつ `窓内行数 × 取得列数 <= 3600` の場合は2回目の社員TextFinderを使わず候補だけを読み込み、select()で社員IDと期間を確実に再検証する。
+- それ以外の大きな検索では以前のowner列TextFinderで共通部分に限定して読む。owner条件が80以上または正規表現5000文字超でフォールバックする判断は大規模経路だけに適用。ゼロ件・TextFinder失敗・スモールバッチを維持する。
+- 具体例（架空の1000行以上のデータ）: 当月42ヒット/対象21件で日付・社員列Finderは2回→1回、630セル読取。大量マッチはFinder2回に留める。実GASの時間短縮率はWork1公開後のP50/P95測定で判断する。

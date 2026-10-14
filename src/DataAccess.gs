@@ -221,20 +221,33 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
   if(lastRow-1<=250&&(lastRow-1)*width<=10000)return fallback('SMALL_BATCH');
   const regex=dateRangeRegex_(start,end,370);
   if(!regex)return fallback('LONG_RANGE_FALLBACK');
-  const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
-  if(scoped&&(wanted.length>80||ownerRegex.length>5000))return fallback('SCOPE_LIMIT_FALLBACK');
-  let cells;
+  const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')
+}
+;
+  let cells,preselectedBlocks=null,source=scoped?'DATE_OWNER_INDEX':'DATE_INDEX';
   try{
     cells=sheet.getRange(2,dateColumn,lastRow-1,1).createTextFinder(regex).useRegularExpression(true).matchEntireCell(true).findAll();
     if(scoped&&cells.length){
-      const matches=sheet.getRange(2,scopeColumn,lastRow-1,1).createTextFinder(ownerRegex).useRegularExpression(true).matchEntireCell(true).findAll();
-      const positions=new Set(matches.map(c=>c.getRow()));cells=cells.filter(c=>positions.has(c.getRow()));
+      // A second TextFinder scans the entire employee column. For a compact
+      // date result it is cheaper to read those few rows and check the owner
+      // in JavaScript. Index hints must never determine authorization.
+      const dateBlocks=indexedRowWindows_(cells.map(c=>c.getRow()));
+      const candidateRows=dateBlocks.reduce((total,b)=>total+b.end-b.start+1,0);
+      const compact=cells.length<=180&&candidateRows*width<=3600;
+      if(compact){
+        preselectedBlocks=dateBlocks;
+        source='DATE_INDEX_IN_MEMORY_SCOPE';
+      }else{
+        if(wanted.length>80||ownerRegex.length>5000)return fallback('SCOPE_LIMIT_FALLBACK');
+        const matches=sheet.getRange(2,scopeColumn,lastRow-1,1).createTextFinder(ownerRegex).useRegularExpression(true).matchEntireCell(true).findAll();
+        const positions=new Set(matches.map(c=>c.getRow()));cells=cells.filter(c=>positions.has(c.getRow()));
+      }
     }
   }catch(_){return fallback('INDEX_UNAVAILABLE');}
   if(!cells.length){logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:0,source:'TEXT_FINDER',scoped});return [];}
-  const blocks=indexedRowWindows_(cells.map(c=>c.getRow()));
+  const blocks=preselectedBlocks||indexedRowWindows_(cells.map(c=>c.getRow()));
   const endCol=columnLetter_(width);
   const ranges=sheet.getRangeList(blocks.map(b=>'A'+b.start+':'+endCol+b.end)).getRanges();
   const rows=select(ranges.flatMap(range=>range.getDisplayValues()));
-  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source:scoped?'DATE_OWNER_INDEX':'DATE_INDEX',blocks:blocks.length});return rows;
+  logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source,blocks:blocks.length});return rows;
 }
