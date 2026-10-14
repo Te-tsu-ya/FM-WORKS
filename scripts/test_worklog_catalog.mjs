@@ -38,8 +38,12 @@ oldRead.success({items:[],projects:[{name:'obsolete'}],taskOptions:[{title:'obso
 assert.equal(run('worklogCatalogFresh_()'),false,'pre-save response may not restore an obsolete master');
 assert.equal(state.data.projects.length,0,'invalidated master cannot be applied from late response');
 // A completed master must be stable when returning to an older day window.
-run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-03-01",end:"2028-03-31"},{items:[],projects:[{name:"CURRENT"}],taskOptions:[]},true)');
-run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-04-01",end:"2028-04-30"},{items:[],projects:[{name:"OLD"}],taskOptions:[]},true)');
+run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-03-01",end:"2028-03-31"},{items:[],projects:[{name:"EARLIER"}],taskOptions:[]},true,worklogCatalogEpoch_,++worklogCatalogIssued_)');
+const olderTicket=run('++worklogCatalogIssued_');
+const newerTicket=run('++worklogCatalogIssued_');
+run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-04-01",end:"2028-04-30"},{items:[],projects:[{name:"NEWER"}],taskOptions:[]},true,worklogCatalogEpoch_,'+newerTicket+')');
+run('worklogStoreWindow(worklogWindowIdentity(),{start:"2028-05-01",end:"2028-05-31"},{items:[],projects:[{name:"LATE_OLD"}],taskOptions:[]},true,worklogCatalogEpoch_,'+olderTicket+')');
+assert.equal(state.data.projects[0].name,'NEWER','older request ticket may not overwrite a newer master');
 run('worklogShowCachedDay("2028-03-14",worklogCachedWindow("2028-03-14"))');
-assert.equal(state.data.projects[0].name,'OLD','day cache never resurrects older master');
+assert.equal(state.data.projects[0].name,'NEWER','day cache never resurrects an earlier master');
 console.log('PASS empty worklog catalogs, fast date navigation, invalidation and session separation');
