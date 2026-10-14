@@ -438,7 +438,13 @@ function loadPageData_(page,options={}){
   if(page==='companyCalendar')loadCompanyCalendar();
   if(page==='worklog')loadWorklogs({silent:true});
   if(page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
-  if(page==='requests'){loadRequests();loadMyFinanceItems({silent:true});}
+  if(page==='requests'){
+    const warm=typeof requestsDataReady==='function'&&requestsDataReady()&&
+      cacheFresh('requests',requestsIdentity());
+    loadRequests();
+    // Never compete with the primary leave/approval RPC on a cold route.
+    if(warm&&typeof queueRequestFinanceHistory_==='function')queueRequestFinanceHistory_();
+  }
   if(page==='quotes'||page==='documentHistory')loadQuoteWorkspace({silent:true});
   if(page==='finance')loadFinanceOverview();
   if(page==='office'&&typeof somuLoad==='function')somuLoad(false);

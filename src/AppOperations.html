@@ -1530,6 +1530,17 @@ function requestsIdentity(){
   return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
 }
 function requestsDataReady(){return !!(state.requests.loadedKey&&state.requests.loadedKey===requestsIdentity());}
+function queueRequestFinanceHistory_(){
+  const identity=requestsIdentity();
+  // This section is below the main request dashboard; defer secondary
+  // expense/travel ledgers until the main result has rendered.
+  scheduleIdleTask(()=>{
+    if(state.page==='requests'&&state.sessionToken&&state.data&&
+       identity===requestsIdentity()&&typeof loadMyFinanceItems==='function'){
+      loadMyFinanceItems({silent:true});
+    }
+  },450);
+}
 function loadRequests(options={}){
   if(!state.sessionToken||!state.data)return;
   const key=requestsIdentity(),r=state.requests,ready=requestsDataReady();
@@ -1548,6 +1559,7 @@ function loadRequests(options={}){
     r.loadedKey=key;r.loading=false;r.refreshing=false;r.error='';
     markPageCache('requests',key);
     renderPageIfActive('requests');
+    if(state.page==='requests')queueRequestFinanceHistory_();
   }).withFailureHandler(err=>{
     endPageLoad(ticket);
     if(token!==state.sessionToken||key!==requestsIdentity())return;
@@ -1555,6 +1567,7 @@ function loadRequests(options={}){
     r.error='申請情報を読み込めませんでした。再読込してください。';
     if(!options.silent)handleApiError(err,'申請を読み込めませんでした');
     renderPageIfActive('requests');
+    if(state.page==='requests')queueRequestFinanceHistory_();
   }).getRequestsBundle(state.sessionToken);
 }
 const REQUEST_UI={

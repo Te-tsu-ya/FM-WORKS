@@ -2621,3 +2621,7 @@ Google公式のサービス呼び出し削減・キャッシュ利用・非同�
 ### v0.25.10 ホーム申請のデータ規模適応（2026-10-14）
 - Requests.gs `getHomeRequestSnapshot_` は managed.size>80 かつ sheet.getLastRow()>250 で2パス分離。自身の19列を1社員ID索引で取得し承認済休暇を算出。対象部署の10列を別途取得し承認待ち件数を算出。小規模では両方を1度の19列取得。どちらでも管理対象IDと本人IDの再判定を通す。
 - 既存readRowsByColumnValues_の80 ID上限超過時は大きなテーブルを全列読むため、承認人数が増えた場合に自動で幅10へ抑制。性能を推測で秒数化せず、GAS P50/P95で測定する。
+
+### v0.25.10 申請メニューの優先度制御（2026-10-14）
+- AppCore.html loadPageData_: requests初回はloadRequestsのみ。既存のrequestsキャッシュが有効な場合に限りqueueRequestFinanceHistory_を予約する。AppOperations.html loadRequests の成功/失敗後にqueueRequestFinanceHistory_を呼び、scheduleIdleTask(450ms)後に社員ID/セッション/表示ページを再照合してからloadMyFinanceItems({silent:true})を実行する。
+- 従来の同時2 GAS取得を、画面上部の申請処理→画面下部の経費履歴の順序へ変更し、Google script.runの同時通信枠競合を減らす。キャッシュとfinanceUi.ownLoadingの既存ガードは維持する。
