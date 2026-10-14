@@ -176,9 +176,15 @@ function contiguousRowBlocks_(rowNumbers){
 // At most eight Sheet value reads. Keep the seven largest gaps unread: among
 // ordered row windows this minimizes extra cells for this service-call budget.
 // Callers must filter live row values again because a window may include gaps.
-function indexedRowWindows_(rowNumbers){
-  const blocks=contiguousRowBlocks_(rowNumbers);if(blocks.length<=8)return blocks;
-  const gaps=blocks.slice(1).map((b,i)=>({after:i,size:b.start-blocks[i].end-1}));
+function indexedRowWindows_(rowNumbers,minGapRows){
+  const blocks=contiguousRowBlocks_(rowNumbers);
+  if(blocks.length<=1)return blocks;
+  // Default path preserves the existing smallest-cell, at-most-eight-window behavior.
+  // Optional minimum gap avoids paying extra Sheets round trips for tiny holes.
+  const minGap=Math.max(0,Math.floor(Number(minGapRows)||0));
+  if(blocks.length<=8&&!minGap)return blocks;
+  const gaps=blocks.slice(1).map((b,i)=>({after:i,size:b.start-blocks[i].end-1}))
+    .filter(g=>g.size>=minGap);
   const cuts=new Set(gaps.sort((a,b)=>b.size-a.size||a.after-b.after).slice(0,7).map(g=>g.after));
   const windows=[];let start=blocks[0].start;
   blocks.forEach((b,i)=>{if(cuts.has(i)||i===blocks.length-1){windows.push({start,end:b.end});start=blocks[i+1]?.start;}});

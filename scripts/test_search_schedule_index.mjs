@@ -88,8 +88,17 @@ assert.equal(abundant[0].id,'S0');assert.equal(abundant[29].id,'S290');
 assert.equal(current.finder,1);
 assert.equal(current.full,0,'fragmented matches must avoid full-table transfer');
 assert.ok(current.blocks<=8,'no more than eight body reads');
+assert.equal(current.blocks,1,'small gaps collapse into a single remote read');
 assert.ok(current.wideCells<rows.length*18,'transfer fewer cells than the full table');
 
+rows=Array.from({length:1000},(_,i)=>row('S'+i,'ordinary'));
+for(let i=0;i<8;i++)rows[i*100]=row('S'+i*100,'needle distant');
+current=new Sheet(rows);
+const separated=query('needle');
+assert.equal(separated.length,8,'distant hits remain visible');
+assert.equal(current.blocks,8,'large gaps keep isolated low-cell reads');
+assert.equal(current.full,0);
+assert.equal(current.wideCells,8*18);
 rows=Array.from({length:1000},(_,i)=>row('S'+i,'ordinary'));
 rows[100]=row('S100','needle');
 current=new Sheet(rows);current.fail=true;
