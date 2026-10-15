@@ -34,7 +34,10 @@
 - 旧 `gas_local_bridge.mjs` はテストの標準出力とエラーを捨て、一時Git worktreeを終了時に削除していたため、テスト失敗の原因が追えなかった。
 - 新版は失敗テスト名とチェック件数を表示し、専用Windowsフォルダー `artifacts/gas-local-bridge/last-functional-report.json` と `last-functional-suite.log` に実行結果を残す。これらは `.gitignore` によりGitHubに送られない。
 - 本番データは操作しない。いずれかのチェックが失敗した場合は `clasp push`・デプロイ更新に進まず停止する。詳細を確認せずにテストを飛ばすことは禁止。
-- 診断専用バッチは `node scripts/run_local_checks.mjs --functional` だけを実行し、GitHubブランチ・GAS・Sheets・認証情報へアクセスしない。既存の手動公開バッチとは別に使用する。
+- 診断専用バッチは `node scripts/gas_local_bridge.mjs --diagnose` を実行し、GASのソースを読取専用で照合してからテストする。GitHubの公開依頼ブランチ、GASのソースやデプロイ、Sheetsのデータは変更しない。既存の手動公開バッチとは別に使用する。
+- `node scripts/gas_local_bridge.mjs --diagnose` はGitHubの最新 `main` と実GASの内容を**読み取り専用**で照合し、最新コードの機能テストを一時worktreeで実行する。公開依頼ブランチを移動せず、`clasp push`や新しいGASデプロイも行わない。失敗レポートを `artifacts/gas-local-bridge/` に残す。
+- 個別の失敗を確認する際は、手動公開バッチではなく診断専用BATを一度実行する。診断で赤いFAILが出た段階ではGAS公開を再試行せず、失敗したテストの内容を修正してから公開する。
+
 
 ## 初回設定（Dellで一度だけ）
 
