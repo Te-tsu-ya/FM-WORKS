@@ -240,17 +240,23 @@ function mountAuthenticatedApp(data,mustChangePin){
 }
 
 function loadAuthenticatedApp(mustChangePin,initialData){
+  // GAS RPCs are asynchronous. After logout or a second login, an older
+  // response must never remount a previous employee's private workspace.
+  const requestToken=state.sessionToken;
+  if(!requestToken)return;
   if(initialData){
-    mountAuthenticatedApp(initialData,mustChangePin);
+    if(state.sessionToken===requestToken)mountAuthenticatedApp(initialData,mustChangePin);
     return;
   }
   setLoading();
   (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+    if(state.sessionToken!==requestToken)return;
     mountAuthenticatedApp(data,mustChangePin);
   }).withFailureHandler(err=>{
+    if(state.sessionToken!==requestToken)return;
     clearLocalSession();
     loadPublicLoginConfig(sessionErrorMessage(err).includes('SESSION')?'セッションの有効期限が切れました。':'ログイン状態を確認できませんでした。');
-  }).getInitialData(state.sessionToken);
+  }).getInitialData(requestToken);
 }
 
 function setProfileUi(){
@@ -296,6 +302,7 @@ function initGlobalKeyboardShortcuts(){
       const modal=document.getElementById('modalRoot');
       if(modal&&modal.innerHTML.trim()){
         e.preventDefault();
+        if(typeof modal.querySelector==='function'&&modal.querySelector("[data-pin-change-required='true']"))return;
         if(typeof financeModalBusy_==='function'&&financeModalBusy_(modal)){
           showToast('経理処理中のため、結果が確定するまで閉じられません。');return;
         }
@@ -488,7 +495,7 @@ function openChangePinModal(force=false){
   const pinLength=Math.max(4,Number(state.publicConfig&&state.publicConfig.pinLength)||6);
   closeProfileMenu();
   const r=ensureModal();
-  r.innerHTML=`<div class='modal-backdrop' ${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true'>
+  r.innerHTML=`<div class='modal-backdrop' ${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true' ${force?"data-pin-change-required='true'":''}>
     <div class='modal-head'><div><small>${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>${force?'':"<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button>"}</div>
     ${force?"<div class='setup-note'>安全のため、管理者が発行した仮PINから新しいPINへ変更してください。</div>":''}
     <div class='form-grid'>
@@ -587,14 +594,19 @@ function bootstrap(){
   });
 
   if(state.sessionToken){
+    // Capture the restored session before issuing RPC. An old response must
+    // not overwrite another user's session or reopen the logged-out app.
+    const resumeToken=state.sessionToken;
     setLoading();
     (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+      if(state.sessionToken!==resumeToken)return;
       if(result.mustChangePin){showRequiredPinChange_();return;}
       loadAuthenticatedApp(false,result&&result.initialData||null);
     }).withFailureHandler(()=>{
+      if(state.sessionToken!==resumeToken)return;
       clearLocalSession();
       loadPublicLoginConfig('セッションの有効期限が切れました。');
-    }).resumeSession(state.sessionToken);
+    }).resumeSession(resumeToken);
     return;
   }
   loadPublicLoginConfig();

@@ -131,6 +131,19 @@ function companyDocsForm_(payload){
     effectiveOn:date?normalizeDate_(date):'',status,folderId,tags:companyDocsTags_(p.tags)
   };
 }
+function companyDocsMatchesPayload_(row,form){
+  // Request keys are idempotent only when the actor and every persisted field
+  // agree. A changed draft with a reused key is a conflict, not a success.
+  return String(row[1]||'')===form.title &&
+    String(row[2]||'')===form.category &&
+    String(row[3]||'')===form.summary &&
+    String(row[4]||'')===form.effectiveOn &&
+    String(row[5]||'')===form.status &&
+    String(row[9]||'')===form.url &&
+    String(row[15]||'')===form.body &&
+    String(row[16]||'')===form.folderId &&
+    String(row[17]||'')===form.tags.join(',');
+}
 function companyDocsKey_(value){
   const key=String(value||'').trim();
   if(!/^[A-Za-z0-9_-]{12,100}$/.test(key))throw new Error('送信識別子が不正です。画面を開き直してください。');
@@ -241,7 +254,11 @@ function saveCompanyDocument(sessionToken,payload){
       throw new Error('社内文書の分類列が未準備です。管理者はDB更新を行ってください。');
     if(id){
       const found=companyDocsFind_(sheet,id),row=found.row;
-      if(String(row[14]||'')===key)return {ok:true,duplicate:true,document:companyDocsRow_(row,true)};
+      if(String(row[14]||'')===key){
+        if(String(row[8]||'')!==String(employee.employeeId)||!companyDocsMatchesPayload_(row,form))
+          throw new Error('送信識別子の内容が一致しません。再読み込みしてください。');
+        return {ok:true,duplicate:true,document:companyDocsRow_(row,true)};
+      }
       if(!Number.isInteger(revision)||revision<1||Number(row[6])!==revision)
         throw new Error('別の担当者が文書を更新しました。再読み込みして内容を確認してください。');
       const before={revision:Number(row[6]),status:String(row[5]),folderId:String(row[16])};
@@ -262,6 +279,9 @@ function saveCompanyDocument(sessionToken,payload){
       if(i>=0){
         const row=sheet.getRange(i+2,1,1,COMPANY_DOC_HEADERS.length).getDisplayValues()[0];
         if(row[12])throw new Error('同じ送信の文書はすでに削除されています。');
+        if(Number(row[6])!==1||String(row[11]||'')!==String(employee.employeeId)||
+           !companyDocsMatchesPayload_(row,form))
+          throw new Error('送信識別子の内容が一致しません。再読み込みしてください。');
         return {ok:true,duplicate:true,document:companyDocsRow_(row,true)};
       }
     }
