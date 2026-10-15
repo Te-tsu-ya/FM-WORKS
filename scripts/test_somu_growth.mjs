@@ -87,6 +87,7 @@ const c=call('saveSomuGrowthRecord','auth','contract',contract);
 assert.equal(c.ok,true);assert.equal(c.record.revision,1);
 assert.equal(cache.size,0,'write removes shared snapshot cache');
 assert.equal(call('saveSomuGrowthRecord','auth','contract',contract).duplicate,true);
+assert.throws(()=>call('saveSomuGrowthRecord','auth','contract',{...contract,annualYen:150001}),/送信識別子の内容が一致/);
 assert.equal(call('getSomuGrowthData','auth').contracts.length,1);
 assert.throws(()=>call('saveSomuGrowthRecord','auth','contract',{
  ...contract,id:c.record.id,revision:0,name:'古い情報'}),/更新/);
@@ -98,6 +99,8 @@ const facility={code:'FM-CAR-1',name:'架空の社用車',type:'車両',location
  lastCheckedOn:'2026-01-01',nextCheckOn:'2026-11-01',status:'稼働中',requestKey:'key-long-00004'};
 const car=call('saveSomuGrowthRecord','auth','facility',facility);
 assert.equal(car.record.type,'車両');
+assert.equal(call('saveSomuGrowthRecord','auth','facility',facility).duplicate,true);
+assert.throws(()=>call('saveSomuGrowthRecord','auth','facility',{...facility,location:'別の保管場所'}),/送信識別子の内容が一致/);
 assert.throws(()=>call('saveSomuGrowthRecord','auth','facility',{
  ...facility,requestKey:'key-long-00005'}),/同じ管理番号/);
 assert.throws(()=>call('saveSomuGrowthRecord','auth','facility',{
@@ -106,6 +109,8 @@ const ticket={subject:'架空備品の修理',category:'設備・修理',priorit
  dueOn:'2026-10-20',description:'修理依頼',status:'未着手',requestKey:'key-long-00007'};
 const t=call('saveSomuGrowthRecord','auth','ticket',ticket);
 assert.equal(t.record.requesterName,'架空総務担当');
+assert.equal(call('saveSomuGrowthRecord','auth','ticket',ticket).duplicate,true);
+assert.throws(()=>call('saveSomuGrowthRecord','auth','ticket',{...ticket,priority:'緊急'}),/送信識別子の内容が一致/);
 employee={employeeId:'F002',name:'別の架空総務担当',role:'ADMIN',department:'総務'};
 assert.throws(()=>call('saveSomuGrowthRecord','auth','ticket',ticket),/送信識別子/);
 const done=call('saveSomuGrowthRecord','auth','ticket',{...ticket,id:t.record.id,revision:1,status:'完了'});
