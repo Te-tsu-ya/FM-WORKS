@@ -30,7 +30,8 @@ const errorLog = message => console.error('[' + stamp() + '] ' + message);
 function run(command, argv, cwd, timeout=120000) {
   const resolved=command==='clasp' ? claspInvocation(argv) : {command,args:argv};
   const result = spawnSync(resolved.command, resolved.args, {cwd, encoding:'utf8', timeout, maxBuffer:8*1024*1024,
-    windowsHide:true, env:{...process.env, GIT_TERMINAL_PROMPT:'0'}});
+    windowsHide:true, windowsVerbatimArguments:resolved.windowsVerbatimArguments === true,
+    env:{...process.env, GIT_TERMINAL_PROMPT:'0'}});
   if (result.error || result.status !== 0) {
     // Do not echo full stdout/stderr: OAuth/token-bearing external messages may occur.
     throw Error(command + ' command failed (' + (result.error?.code || result.status) + '). Check credentials and local logs.');

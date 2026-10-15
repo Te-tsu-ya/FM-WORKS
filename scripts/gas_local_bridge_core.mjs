@@ -17,7 +17,9 @@ export function claspInvocation(argv, platform = process.platform, env = process
     return arg.includes(' ') ? '"' + arg + '"' : arg;
   };
   const line = 'clasp.cmd ' + args.map(quote).join(' ');
-  return {command:env.ComSpec || 'cmd.exe',args:['/d','/s','/c','"' + line + '"']};
+  // cmd.exe /S /C strips the outer quote pair. Node must pass it verbatim
+  // rather than escaping quotes and turning the line into one command name.
+  return {command:env.ComSpec || 'cmd.exe',args:['/d','/s','/c','"' + line + '"'],windowsVerbatimArguments:true};
 }
 
 export function checkClaspProject(config) {

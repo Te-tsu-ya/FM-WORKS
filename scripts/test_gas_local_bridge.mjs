@@ -20,7 +20,42 @@ assert.equal(windowsInvocation.args[0],'/d');
 assert.equal(windowsInvocation.args[2],'/c');
 assert.match(windowsInvocation.args[3],/clasp\.cmd create-deployment/);
 assert.match(windowsInvocation.args[3],/"FM WORKS abcd"/);
+assert.equal(windowsInvocation.windowsVerbatimArguments,true,
+  'Windows cmd.exe must receive command arguments without Node re-quoting');
+const windowsList=claspInvocation(['list-deployments'],'win32',{ComSpec:'C:\\Windows\\System32\\cmd.exe'});
+assert.deepEqual(windowsList.args,['/d','/s','/c','"clasp.cmd list-deployments"']);
+assert.equal(windowsList.windowsVerbatimArguments,true);
+const bridgeProgram=fs.readFileSync(new URL('./gas_local_bridge.mjs',import.meta.url),'utf8');
+assert.match(bridgeProgram,/windowsVerbatimArguments:resolved\.windowsVerbatimArguments === true/,
+  'spawnSync must enable Windows verbatim mode for clasp');
 assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
+
+
+// Windows-only smoke test: invoke a FAKE clasp.cmd through the real cmd.exe.
+// Never connects to Google or GitHub. Regression for the Windows exit-code-1 bug.
+if (process.platform === 'win32') {
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-win-clasp-launch-'));
+  try {
+    fs.writeFileSync(path.join(folder,'clasp.cmd'),'@echo off\r\nnode "%~dp0echo-args.cjs" %*\r\n');
+    fs.writeFileSync(path.join(folder,'echo-args.cjs'),'console.log(JSON.stringify(process.argv.slice(2)));\n');
+    const env={...process.env,PATH:folder+path.delimiter+(process.env.PATH||'')};
+    const cases=[
+      ['list-deployments'],
+      ['create-deployment','--deploymentId',KNOWN_DEPLOYMENT_ID,'--description','FM WORKS windows-probe']
+    ];
+    for (const argv of cases) {
+      const invocation=claspInvocation(argv,'win32',env);
+      const result=spawnSync(invocation.command,invocation.args,{
+        cwd:folder,env,encoding:'utf8',windowsHide:true,
+        windowsVerbatimArguments:invocation.windowsVerbatimArguments,timeout:15000
+      });
+      assert.equal(result.status,0,'Windows clasp.cmd command failed: '+String(result.stderr||result.error?.message||''));
+      assert.deepEqual(JSON.parse(String(result.stdout||'').trim()),argv,
+        'cmd.exe must preserve clasp argument boundaries and spaced descriptions');
+    }
+    console.log('PASS Windows cmd.exe /S /C + clasp.cmd: dummy list and spaced deployment arguments');
+  } finally {fs.rmSync(folder,{recursive:true,force:true});}
+}
 
 // Windows registration is intentionally opt-in and runs a read-only preflight first.
 const winInstall=fs.readFileSync(new URL('./Install-GasLocalBridgeWindows.ps1',import.meta.url),'utf8');
