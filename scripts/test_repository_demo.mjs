@@ -35,7 +35,12 @@ const partial={...row,requestKey:'LEDGER-PARTIAL-KEY-1',incoming:444};
 assert.throws(()=>call('saveCashFlowLedgerRows',{accountId,rows:[partial]}),/interruption/);
 call('saveCashFlowLedgerRows',{accountId,rows:[partial]});
 assert.equal(runtime.sheets.get('資金取引').rows.filter(r=>r[7]==='LEDGER-'+partial.requestKey).length,1);
-assert.equal(JSON.stringify(seed),before,'source JSON remains unchanged');assert.equal(fs.readFileSync('demo/data/financial.json','utf8').trim(),JSON.stringify(seed,null,2));
+assert.equal(JSON.stringify(seed),before,'source JSON remains unchanged');
+// Compare the canonical JSON bytes without treating Windows CRLF as a content edit.
+// Avoid dumping the entire synthetic dataset into diagnostic logs on mismatch.
+const sourceText=fs.readFileSync('demo/data/financial.json','utf8').replace(/\r\n?/g,'\n').trim();
+const expectedText=JSON.stringify(seed,null,2);
+assert.ok(sourceText===expectedText,'synthetic JSON source formatting/content changed');
 const independent=createDemoRuntime(seed);assert.equal(independent.call('getFinanceOverview',['REPO-DEMO',{}]).totals.receipt,300);
 assert.equal(independent.call('reviewFinanceRequest',['REPO-DEMO','expense','DEMO-EXPENSE-1-0','APPROVE','']).status,'承認済');
 assert.equal(independent.call('settleFinanceRequest',['REPO-DEMO','expense','DEMO-EXPENSE-1-0','2026-10-13','2026-10-13']).status,'精算済');

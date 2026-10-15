@@ -39,6 +39,14 @@
 - 個別の失敗を確認する際は、手動公開バッチではなく診断専用BATを一度実行する。診断で赤いFAILが出た段階ではGAS公開を再試行せず、失敗したテストの内容を修正してから公開する。
 
 
+## 2026-10-15：Windows公開診断で検出した3つの機能テスト誤判定
+
+- 2026-10-15のDell診断では **66 PASS / 3 FAIL / 12ブラウザ検査SKIP**。GAS既存公開版 `@196` の読み取り照合はPASS。GAS公開は未実施。
+- `test_initial_payload.mjs`: WindowsチェックアウトのCRLFが初期HTML全体のファイルサイズを **16,403バイト**増やし、見かけ上 `1,367,267 > 1,360,000`。GitHub正本のUTF-8 LFバイト数は **1,350,864**で、元の上限内。サイズ上限は変更せず、改行をLF正規化して判定する。CSS **400,021 / 420,000**、JS **940,849 / 950,000**も正本では上限内。
+- `test_cashflow_report_session.mjs`: 実際の `cfaDownloadReport_` は存在するが、次の関数との間に1つ空行があるとテストの抽出正規表現が失敗する。LF/CRLF・空行を許容し、既存のセッション・年度・シナリオ変更防止ロジックの実行テストは継続。
+- `test_repository_demo.mjs`: `demo/data/financial.json` はGitHub原本では `JSON.stringify(seed,null,2)` と完全一致。Windowsの改行変換で誤判定していたため、改行だけLF正規化した上でデータの全文一致を確認する。失敗時に約64万文字のJSONを標準エラーへ展開しない。
+- **業務 `src/`・実DB・本番GASの内容は今回変更しない**。GAS公開を行う前に、Windowsの `node scripts/gas_local_bridge.mjs --diagnose` の最新結果が `0 FAIL` になることを確認する。GitHub Actionsは使わない。
+
 ## 初回設定（Dellで一度だけ）
 
 WindowsのPowerShellを通常ユーザーとして開きます。

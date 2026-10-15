@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync('src/AppCashFlowAnalysis.html','utf8');
-const match=source.match(/function cfaDownloadReport_\(format\)\{[\s\S]*?\n\}\n(?=function )/);
+const match=source.match(/function cfaDownloadReport_\(format\)\{[\s\S]*?\r?\n\}[ \t]*\r?\n(?:[ \t]*\r?\n)*(?=function )/);
 assert.ok(match,'report handler exists');
-const scenarioMatch=source.match(/function cfaScenarioSelect_\(id\)\{[\s\S]*?\n\}\nfunction cfaScenarioNew_/);
+const scenarioMatch=source.match(/function cfaScenarioSelect_\(id\)\{[\s\S]*?\r?\n\}[ \t]*\r?\n(?:[ \t]*\r?\n)*(?=function cfaScenarioNew_)/);
 assert.ok(scenarioMatch,'scenario selection handler exists');
 const callbacks=[];
 let downloads=0,render=0,failClick=false,revoked=0;
@@ -18,7 +18,7 @@ const ctx=vm.createContext({state,cashFlowUi,cfaUi,cfbUi:{demo:false},cashFlowAl
  document:{body:{appendChild:()=>{}},createElement:()=>({click(){if(failClick)throw Error('blocked');downloads++},remove(){}})},
  setTimeout:()=>0,cfaLoadProjection_:()=>{},cfaShowError_:(err)=>{cfaUi.error=err.message;cfaUi.exporting=false;}});
 vm.runInContext(match[0].trim(),ctx);
-vm.runInContext(scenarioMatch[0].replace(/\nfunction cfaScenarioNew_$/,''),ctx);
+vm.runInContext(scenarioMatch[0].trim(),ctx);
 const result={ok:true,base64:Buffer.from('test').toString('base64'),filename:'report.pdf',mimeType:'application/pdf'};
 ctx.cfaDownloadReport_('PDF');
 assert.equal(callbacks.length,1);
