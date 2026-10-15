@@ -201,6 +201,24 @@ function somuNew_(kind,item){
   somuSheet_(kind).appendRow(somuArray_(kind,item));
   somuInvalidateSnapshot_();
 }
+// An idempotency key represents one submitted form, not permission to silently
+// acknowledge a different form. Normalize values from formatted Sheets cells.
+function somuMatchesSubmittedFields_(stored,fields){
+  if(!stored||!fields)return false;
+  return Object.keys(fields).every(function(key){
+    const actual=stored[key],expected=fields[key];
+    if(typeof expected==='number'){
+      const formatted=String(actual==null?'':actual).replace(/[,，\s]/g,'');
+      return /^\d+$/.test(formatted)&&Number(formatted)===expected;
+    }
+    return String(actual==null?'':actual)===String(expected==null?'':expected);
+  });
+}
+function somuAssertSameRequest_(stored,fields){
+  if(!somuMatchesSubmittedFields_(stored,fields))
+    throw new Error('送信識別子の内容が一致しません。再読み込みして入力内容を確認してください。');
+}
+
 function somuByRequestKey_(kind,key){
   const m=somuModel_(kind),idx=m.keys.indexOf('requestKey');
   if(idx<0||!String(key||''))return null;
@@ -311,6 +329,7 @@ function createSomuLoan(token,payload){
     if(duplicate){
       if(String(duplicate.creatorId)!==String(actor.employeeId))
         throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+      somuAssertSameRequest_(duplicate,{assetId,borrower,quantity:count,loanDate,dueDate,purpose});
       return {ok:true,duplicate:true,record:somuPublic_('loan',duplicate)};
     }
     const asset=somuFind_('asset',assetId).item;
@@ -357,6 +376,7 @@ function createSomuPurchase(token,payload){
     if(duplicate){
       if(String(duplicate.requesterId)!==String(actor.employeeId))
         throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+      somuAssertSameRequest_(duplicate,fields);
       return {ok:true,duplicate:true,record:somuPublic_('purchase',duplicate)};
     }
     if(fields.assetId)somuFind_('asset',fields.assetId);
@@ -379,8 +399,14 @@ function resubmitSomuPurchase(token,id,payload){
     const target=somuFind_('purchase',id),old=target.item;
     if(String(old.requesterId)!==String(actor.employeeId))
       throw new Error('他の社員の購買申請は再申請できません。');
-    if(old.status==='申請中'&&String(old.requestKey)===key)
+    if(old.status==='申請中'&&String(old.requestKey)===key){
+      // Return reasons are retained in the note after a resubmission; compare
+      // the stable submitted fields without confusing that audit note with input.
+      const stableFields=Object.assign({},fields);
+      delete stableFields.note;
+      somuAssertSameRequest_(old,stableFields);
       return {ok:true,duplicate:true,record:somuPublic_('purchase',old)};
+    }
     if(old.status!=='差戻し')throw new Error('差戻された購買申請だけを再申請できます。');
     if(String(old.requestKey)===key)
       throw new Error('再申請には新しい送信識別子が必要です。');
@@ -443,6 +469,7 @@ function saveSomuDocument(token,payload){
       if(duplicate){
         if(String(duplicate.creatorId)!==String(actor.employeeId))
           throw new Error('送信識別子の重複が発生しました。再読み込みしてください。');
+        somuAssertSameRequest_(duplicate,fields);
         return {ok:true,duplicate:true,record:somuPublic_('document',duplicate)};
       }
     }

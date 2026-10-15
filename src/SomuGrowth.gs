@@ -130,16 +130,15 @@ function saveSomuGrowthRecord(token,kind,payload){
     const target=id?somuFind_(kind,id):null,old=target&&target.item;
     if(old&&Number(old.revision)!==Number(p.revision))
       throw new Error('別の担当者が更新しました。再読み込みしてください。');
-    if(!old){
-      const duplicate=somuByRequestKey_(kind,key);
-      if(duplicate){
-        if(String(duplicate.createdBy)!==String(actor.employeeId))
-          throw new Error('送信識別子が重複しています。再読み込みしてください。');
-        return {ok:true,duplicate:true,record:somuPublic_(kind,duplicate)};
-      }
-    }
+    const duplicate=!old?somuByRequestKey_(kind,key):null;
+    if(duplicate&&String(duplicate.createdBy)!==String(actor.employeeId))
+      throw new Error('送信識別子が重複しています。再読み込みしてください。');
     const fields=kind==='contract'?somuGrowthContractFields_(p):
-      kind==='facility'?somuGrowthFacilityFields_(p):somuGrowthTicketFields_(p,actor,old);
+      kind==='facility'?somuGrowthFacilityFields_(p):somuGrowthTicketFields_(p,actor,old||duplicate);
+    if(duplicate){
+      somuAssertSameRequest_(duplicate,fields);
+      return {ok:true,duplicate:true,record:somuPublic_(kind,duplicate)};
+    }
     if(kind==='facility'){
       const duplicate=readRowsByColumnValues_(status.sheets.facility,2,SOMU_MODELS.facility.keys.length,[fields.code])
         .some(row=>String(row[0]||'')&&String(row[0])!==id&&

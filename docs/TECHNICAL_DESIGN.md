@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.25
+**文書版:** 0.25.26
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2756,3 +2756,12 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - GAS `CacheService` の1項目サイズはバイト単位のため、共有 `DataAccess.gs/utf8Bytes_` でシリアライズ後のUTF-8サイズを計測し、90,000バイト以下のみキャッシュする。保存に失敗しても業務レポートは返す。
 - `scripts/test_finance_integration.mjs` に、不正なキャッシュ内容・年度不一致・容量超過の日本語集計・正常なキャッシュ保存・キャッシュ障害時のフォールバックを追加。実データへの変更は行わない。
 - 最新の原本とGitHub Actions禁止運用を維持。アプリの全機能72件とブラウザー12件の受入は公開前後に別途確認する。
+
+## v0.25.26｜総務の送信識別子（idempotency key）整合性（2026-10-16）
+
+- `Somu.gs/somuMatchesSubmittedFields_` は、シートから読み出した保存済レコードと正規化済みフォームの全主要フィールドを照合する。整数の表示値は桁区切りカンマを除去して数値一致を判定し、文字列・日付・URL・状態は厳密一致とする。
+- `createSomuLoan`、`createSomuPurchase`、`saveSomuDocument` は、ロック内でキー検索→登録者検証→フォーム一致検証→同一再送の返却の順で処理する。
+- `saveSomuGrowthRecord` の新規登録では、契約・設備・依頼フォームを正規化した後にキー衝突先の保存内容と比較する。依頼の自動計算項目（完了日・依頼者）は保存済レコードを基準に再構成し、日付変更時の誤判定を避ける。
+- `resubmitSomuPurchase` は差戻し理由を保持する備考以外のフォーム項目を検証してから再送成功を返す。送信識別子はレスポンスへ公開しない。データ原本やDB列を変更せず、`test_somu_integration.mjs` と `test_somu_growth.mjs` で回帰する。
+- 既存の `FM-WORKS_GAS_Update_SAFE_v3.bat` で全機能テストと配信照合が成功するまではGAS公開しない。GitHub Actionsは使わない。
+- 数値項目の比較では、整形後の文字列を `/^\d+$/` で検証し、`Number(...)` の指数表現・不正文字吸収を許さない。
