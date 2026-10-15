@@ -2743,3 +2743,9 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `dateRangeRegex_` で生成した最後の日付が要求終了日と一致しない場合、途中で切れたregexを返さず空文字を返す。これにより `LONG_RANGE_FALLBACK` で実Sheetの全行を読み、指定期間・社員IDの両方で絞る。
 - `test_scoped_date_index.mjs` に架空1200行での400日完走、最終月と別社員の境界、401日での完全フォールバックを追加。インデックス経路の利用回数も検査。
 - 実データ・GAS公開の検証、P50/P95実測、ブラウザーテストは別ゲート。
+
+### v0.25.24補足｜FinanceAdvisorの任意キャッシュをfail-openにする
+
+- `getFinanceSpendingInsights`は `CacheService.getScriptCache()` / `get` のエラーを非致命的として記録し、従来のSpreadsheetApp読み取りへ続行する。キャッシュ`put`の例外は取得済みの有効なreportを破棄させない。
+- 失敗時の `ok:false` レスポンスは実際の元台帳読み取り・列検証の失敗時のみに返す。正しいキャッシュヒットと閲覧権限の判定は従来どおり。
+- `test_finance_integration.mjs`で、キャッシュ接続失敗・get失敗・put失敗・キャッシュヒットの4つをNode VMの架空台帳で確認。

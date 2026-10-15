@@ -69,9 +69,18 @@ function getFinanceSpendingInsights(sessionToken,params){
     throw new Error('表示する年を確認してください。');
   const props=PropertiesService.getScriptProperties();
   const spreadsheetId=String(props.getProperty('FM_LEGACY_EXPENSE_SPREADSHEET_ID')||FINANCE_LEGACY_SPEND_ID).trim();
-  const cache=CacheService.getScriptCache(),key='finspend:v1:'+year+':'+spreadsheetId.slice(-12);
-  const hit=cache.get(key);
-  if(hit){try{return JSON.parse(hit);}catch(_e){}}
+  const key='finspend:v1:'+year+':'+spreadsheetId.slice(-12);
+  let cache=null;
+  // The cache is optional. A quota/service failure must never hide a valid
+  // read-only legacy spending report from an authorized finance operator.
+  try{
+    cache=CacheService.getScriptCache();
+    const hit=cache.get(key);
+    if(hit){try{return JSON.parse(hit);}catch(_e){}}
+  }catch(cacheError){
+    console.warn('legacy expense cache unavailable; reading source directly',cacheError);
+    cache=null;
+  }
   try{
     const ss=SpreadsheetApp.openById(spreadsheetId),sheet=ss.getSheetByName('経費');
     if(!sheet)throw new Error('SOURCE_SHEET_MISSING');
@@ -82,7 +91,10 @@ function getFinanceSpendingInsights(sessionToken,params){
     const rows=last<2?[]:sheet.getRange(2,1,last-1,10).getDisplayValues();
     const report=Object.assign({ok:true},financeSpendingDigest_(rows,year));
     const json=JSON.stringify(report);
-    if(json.length<90000)cache.put(key,json,120);
+    if(json.length<90000&&cache){
+      try{cache.put(key,json,120);}
+      catch(cacheError){console.warn('legacy expense cache write skipped',cacheError);}
+    }
     return report;
   }catch(e){
     console.error('legacy expense report unavailable',e);
