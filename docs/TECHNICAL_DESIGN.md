@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.21
+**文書版:** 0.25.22
 **更新日:** 2026-10-15
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2722,3 +2722,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `AppShell.html`の`openChangePinModal`および`AppAdmin.html`の`openTempPinModal`は、公開ログイン設定`state.publicConfig.pinLength`から`maxlength`と表示文言を組み立てる。検証側では桁数8および既定6でUIを実行確認する。
 - `FinanceAdvisor.gs`の`financeSpendingDigest_`は取得年と月・日から`Date.UTC(year,month,0)`で実在する月末日を求め、不存在日を破棄する。変更するのは旧台帳の読取専用集計だけで、原本シート・金額・取引データを更新しない。
 - 回帰検証：`scripts/test_punch_history_index.mjs`、`scripts/test_pin_presence_search.mjs`、`scripts/test_finance_integration.mjs`。69件の機能試験と12件の未実施ブラウザー試験の区別は継続。GitHub Actionsを使わず、既存v3手動公開バッチを継続使用する。
+
+## v0.25.22｜第2次監査：認証・期間制限の設計（2026-10-15）
+
+- `Auth.gs` の `requireSession_(token, allowTemporaryPinChange)` は、セッショントークン・期限・社員の有効状態を検証した後、`employee.mustChangePin` かつ本番モードの場合、既定で `PIN_CHANGE_REQUIRED` を返す。これにより全従来 `requireSession_` 通常RPCを改修不要で保護。特例引数は `resumeSession` と `changeOwnPin` のみ。公開APIの `requireAdminSession_` 経由でもバイパスさせない。
+- 仮PINでの `login` ・ `resumeSession` レスポンスに `initialData` を含めない。フロントの `acceptLogin` / 起動時セッション復帰は `showRequiredPinChange_` を経由してログイン画面上の必須PIN変更モーダルを表示する。復帰時は `getPublicAuthConfig()` からPIN桁数を取得する。PIN変更成功後、`getInitialData` から通常の画面を構築。
+- `Code.gs` の `assertReadWindow_(start,end,400)` は日付正規化後のUTC日数差で最大400暦日を判定。`getScheduleBundleForViewer_` と `Worklog.gs/getWorklogs` の冒頭でDBアクセス前に呼ぶ。巨大範囲によるGAS実行時間超過やSheets全件走査を避ける。
+- 新しい回帰テストはNode VM/架空の社員・Sheetで実行し、本番DB、Google API、Actionsを操作しない。仮PINの通常RPC拒否・PIN変更許可・復帰・初期情報非送出と、400日境界・閏年・過大範囲のDB未アクセスを検証する。GAS実機のブラウザー・運用データ受入は別工程。

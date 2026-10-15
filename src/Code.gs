@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.21',
+  version: '0.25.22',
   locale: 'ja-JP'
 });
 
@@ -844,6 +844,7 @@ function getScheduleBundleForViewer_(viewer, params) {
   const start = normalizeDate_(params.start || today);
   const end = normalizeDate_(params.end || start);
   if (start > end) throw new Error('期間指定が不正です。');
+  assertReadWindow_(start,end,400);
   const employeeId = String(params.employeeId || 'ALL');
   const category = String(params.category || 'ALL');
   const sheet = getDb_().getSheetByName(DB.sheets.schedule);
@@ -1206,6 +1207,16 @@ function normalizeDate_(value) {
     throw new Error('存在しない日付です。');
   }
   return s;
+}
+
+// Guard expensive range-based RPCs before reading the workbook/calendar.
+// 400 dates permit full-year views without allowing multi-year accidental scans.
+function assertReadWindow_(start,end,maxDays){
+  const limit=Number(maxDays)||400;
+  const span=Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z');
+  if(!Number.isFinite(span)||span<0||span>(limit-1)*86400000){
+    throw new Error('表示期間は最大'+limit+'日以内にしてください。');
+  }
 }
 
 function normalizeTime_(value) {

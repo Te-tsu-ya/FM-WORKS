@@ -160,10 +160,14 @@ function login(employeeId, pin, clientInfo, rememberSession) {
     lock.releaseLock();
   }
 
-  try {
-    result.initialData = buildInitialDataForEmployee_(record);
-  } catch (e) {
-    console.warn('login bootstrap preload failed', e);
+  // A temporary PIN may create a session for PIN replacement, but must not
+  // deliver authenticated business data before the mandatory change.
+  if(!result.mustChangePin){
+    try {
+      result.initialData = buildInitialDataForEmployee_(record);
+    } catch (e) {
+      console.warn('login bootstrap preload failed', e);
+    }
   }
   return result;
 }
@@ -198,16 +202,20 @@ function isPrototypeLogin_(record, pin) {
 }
 
 function resumeSession(sessionToken) {
-  const session = requireSession_(sessionToken);
+  // Resume is allowed only to recover the mandatory PIN-change screen.
+  const session = requireSession_(sessionToken,true);
+  const needsPinChange=!!(session.employee.mustChangePin&&!isPrototypeMode_());
   const result = {
     ok: true,
-    mustChangePin: session.employee.mustChangePin,
+    mustChangePin: needsPinChange,
     user: publicEmployee_(session.employee)
   };
-  try {
-    result.initialData = buildInitialDataForEmployee_(session.employee);
-  } catch (e) {
-    console.warn('resume bootstrap preload failed', e);
+  if(!needsPinChange){
+    try {
+      result.initialData = buildInitialDataForEmployee_(session.employee);
+    } catch (e) {
+      console.warn('resume bootstrap preload failed', e);
+    }
   }
   return result;
 }
@@ -245,7 +253,7 @@ function logout(sessionToken) {
 }
 
 function changeOwnPin(sessionToken, currentPin, newPin) {
-  const session = requireSession_(sessionToken);
+  const session = requireSession_(sessionToken,true);
   const employee = session.employee;
   return withScriptLock_(function() {
     const fresh = getEmployeeAuthRecord_(employee.employeeId);
@@ -521,7 +529,7 @@ function saveAuthSupportSettings(sessionToken, payload) {
     return getSupportConfig_();
   });
 }
-function requireSession_(sessionToken) {
+function requireSession_(sessionToken, allowTemporaryPinChange) {
   const raw = String(sessionToken || '');
   if (raw.length < 40) throw new Error('AUTH_REQUIRED');
   const hash = hashToken_(raw);
@@ -541,6 +549,12 @@ function requireSession_(sessionToken) {
   if (!employee || !employee.active || employee.authState === 'DISABLED') {
     sheet.getRange(rowNumber, 8).setValue('REVOKED');
     throw new Error('AUTH_REQUIRED');
+  }
+  // A client-side forced dialog is not an authorization boundary. Only
+  // resumeSession and changeOwnPin may use a temporary-PIN session.
+  // Prototype-only sign-in remains governed by the existing non-production gate.
+  if(employee.mustChangePin && allowTemporaryPinChange!==true && !isPrototypeMode_()){
+    throw new Error('PIN_CHANGE_REQUIRED');
   }
 
   const lastUsed = parseTimestamp_(row[6]);

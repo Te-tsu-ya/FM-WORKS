@@ -5,6 +5,7 @@ function getWorklogs(sessionToken, params) {
   const start = normalizeDate_(params.start || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd'));
   const end = normalizeDate_(params.end || start);
   if (start > end) throw new Error('期間指定を確認してください。');
+  assertReadWindow_(start,end,400);
   const requestedEmployeeId = String(params.employeeId || session.employee.employeeId);
   const employeeId = session.employee.role === 'ADMIN' ? requestedEmployeeId : session.employee.employeeId;
   const includeProjects=params.includeProjects!==false;
