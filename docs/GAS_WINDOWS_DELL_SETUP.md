@@ -4,6 +4,14 @@
 
 目的：通常チャットから「GitHubとGASへ公開」を指示し、Windowsの専用タスクが5分おきに公開依頼を確認、ローカルテスト後に**既存GASデプロイ**を更新する。GitHub Actionsは使用しません。Windows 10/11で実行する構成です。
 
+## 2026-10-15：手動更新バッチのWindows起動修正
+
+- Dellから `clasp.cmd list-deployments` で既存公開版 `@196` を取得済み。Google認証・スクリプトID接続は成功しているが、GitHub最新コードのGAS公開完了は未確認。
+- 手動バッチのNode.js → `cmd.exe /S /C` → `clasp.cmd` 呼び出しで、Nodeが外側の引用符を二重エスケープし終了コード1になる。`windowsVerbatimArguments: true` を適用し、安全な引数の許可文字チェックは継続。
+- Windowsの回帰確認は `node scripts/test_gas_local_bridge.mjs` で、**偽のローカル clasp.cmd** を `cmd.exe` から起動する。GoogleやGitHubの内容は変更しない。更新バッチは公開依頼ブランチ更新前にこの自己診断を実行する。
+- `.clasp.json` が存在するなら、通常のバッチでは再ログイン・スクリプトID入力を省略する。認証の期限切れ等が起きたときだけ再ログインする。
+- 手動バッチは既存GAS `@196` と公開時点の正本 `600b99213a3de50234f09de673337d8a7cfe86ea` を照合し、読取専用 `--preflight` を通過して初めて `--once` で既存デプロイを更新する。新規URL発行、DB初期化、認証後画面検証は行わない。
+
 ## 初回設定（Dellで一度だけ）
 
 WindowsのPowerShellを通常ユーザーとして開きます。
