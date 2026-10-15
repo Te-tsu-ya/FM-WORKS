@@ -23,14 +23,16 @@
 
 **公開を担当するPCはWindowsのDellノート（第11世代Core i7）に確定。** Windows専用の初回設定・5分間隔タスク登録・状態確認・停止方法は [`GAS_WINDOWS_DELL_SETUP.md`](GAS_WINDOWS_DELL_SETUP.md) を参照。`clasp.cmd` のWindows起動を実装し、`node scripts/setup_gas_local_bridge.mjs --install-windows` でタスクスケジューラへ登録可能。最初のGoogle認証と `--preflight` が必要で、PC未設定の状態ではGAS公開済みと報告しない。
 
-**初回公開版について:** 記録上はGAS@192（v0.25.4）。現在のGASが他チャットですでに更新されていたら、初回検査は停止する。最新の実公開版を調べ、納得した場合に限りローカル環境変数 `FM_WORKS_INITIAL_GAS_VERSION` に確認した数値を指定する。値を推測して設定しない。
+**初回照合基準について:** 2026-10-14の[正式公開記録](releases/GAS_v0258_20261014_PUBLISHED.md)でGAS@196（v0.25.8）・統合main `600b99213a3de50234f09de673337d8a7cfe86ea` を確認済み。手動・他チャットからそれ以降に更新されている場合は初回照合を停止する。確認できない公開版に合わせて基準値を推測変更せず、GASの全ファイル・Script ID・Deployment IDを照合してから安全に引き継ぐ。
+
+**Windowsでの手動公開：** リポジトリ直下の `FM-WORKS_GAS_Update.bat` を一度保存して使用する。毎回GitHubからmainを取得し、`--preflight-main` で実GASの安全確認を先に行い、担当者の確認を得てから公開依頼ポインターを進め、`clasp update-deployment` で既存URLへ公開する。スケジュール登録は不要。GASの公開成功とブラウザーでの業務動作確認は区別する。
 
 ## 普段のチャットから公開する仕組み
 
 1. ChatGPTがGitHubでコード修正・ローカル検証・PR統合を行う。公開の指示または承認があったときだけ次へ進む。
 2. GitHubの `deploy/gas-production` ブランチを**最新mainと同じコミットSHA**へfast-forward更新する（並行更新確認とexpected SHA保護）。これがクレジット消費なしの「公開依頼」。
 3. Mac側が公開依頼を受信し、所有者のGit・Google認証で対象SHA、GAS既存Deployment ID、GAS側ファイル一覧、前回のリモート内容を照合し、`node scripts/run_local_checks.mjs --functional` をローカル実行する。
-4. 問題なければ `clasp push --force` 後、**必ず既存のDeployment IDを指定**して `clasp create-deployment --deploymentId <既存ID>` を実行。新しいWebアプリURLは作らない。公開版番号とGASコード内容の一致を再取得して検証する。
+4. 問題なければ `clasp push --force` 後、**必ず既存のDeployment IDを指定**して `clasp update-deployment <既存ID> --description FM_WORKS_<SHA>` を実行。新しいWebアプリURLは作らない。公開版番号とGASコード内容の一致を再取得して検証する。
 5. 成功したときにのみ `deploy/gas-published` ブランチを同じ対象SHAに更新する。ChatGPTはGitHubの「公開依頼SHA」と「反映済みSHA」を比較して公開進捗を判定できる。
 6. **重要：受領ブランチの一致はソース配信確認であり、ブラウザー実画面・全機能・権限の実操作成功とは別。** GASの公開URLを実際に開き、ユーザー操作を確認するまではUI検証完了と報告しない。
 
