@@ -20,6 +20,14 @@
 - 初回公開の実GAS比較は従来通り `@196` と正本コミット `600b99213a3de50234f09de673337d8a7cfe86ea` を使用し、ソース比較・手動改変検出・公開対象IDの照合を省略しない。**今回の修正はGASの更新やバックアップ操作を行わない。**
 - エラー発生時点では模擬テスト終了前のため、その回の公開依頼ポインターは更新されず、GAS公開も実施していない。以降の `--preflight` と `--once` は本物のGoogle環境での安全確認が必要。
 
+## 2026-10-15：clasp pullの拡張子変換による公開前停止
+
+- Windowsで自己テスト3件（Windows `clasp.cmd`、ブリッジコア、模擬E2E）はPASS。実GASの`--preflight`では `Required Apps Script sources are absent from release.` と表示され、`clasp push` の前に停止。
+- GitHubの `src/`には`Code.gs`、`Styles.html`、`appsscript.json`など83ファイルが存在する。現行 `clasp` は Scriptファイルを取得するとき、既定の拡張子順 `['.js','.gs']` の先頭を使うため、`Code.gs` が `Code.js` として保存され得る。
+- リモートの読取専用一時ディレクトリで使用する `.clasp.json` に `scriptExtensions:['.gs','.js']` を明示し、`htmlExtensions:['.html']` を固定した。ソースを自動削除したり、拡張子を一方的に書き換えてGASへ押し付けたりしない。
+- 模擬 `clasp pull` でも既定なら `.js` を生成する挙動を再現し、明示設定が必要な回帰テストに変更した。必須ファイルが欠けた場合は、欠落ファイルと取得したファイル名のサンプルを表示し、**GASへ書き込まず停止**する。
+- この修正はスクリプト・試験・運用文書だけ。公開リクエスト用ブランチは既に`main`と一致するが、**実GAS公開版は最後の確認で @196**。実Google環境の再実行・認証画面・業務DBについて成功確認をしていない。
+
 ## 初回設定（Dellで一度だけ）
 
 WindowsのPowerShellを通常ユーザーとして開きます。

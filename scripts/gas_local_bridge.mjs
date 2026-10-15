@@ -50,8 +50,15 @@ function localFiles(directory) {
     if (!entry.isFile() || !ACCEPTED_SOURCE.test(entry.name)) continue;
     files[entry.name]=fs.readFileSync(path.join(directory,entry.name),'utf8');
   }
-  if (!('appsscript.json' in files) || !('Code.gs' in files) || !('Styles.html' in files))
-    throw Error('Required Apps Script sources are absent from release.');
+  const missing=['appsscript.json','Code.gs','Styles.html'].filter(name=>!(name in files));
+  if (missing.length) {
+    const visible=fs.readdirSync(directory,{withFileTypes:true}).filter(x=>x.isFile()&&!x.name.startsWith('.')).map(x=>x.name).sort();
+    const renamed=missing.filter(x=>x.endsWith('.gs')&&visible.includes(x.replace(/\.gs$/,'.js')));
+    const hint=renamed.length ? ' clasp returned .js in place of .gs: '+renamed.map(x=>x.replace(/\.gs$/,'.js')).join(', ')+'.' : '';
+    throw Error('Required Apps Script sources missing: '+missing.join(', ')+
+      '. Found '+visible.length+' file(s); sample: '+visible.slice(0,12).join(', ')+'.'+hint+
+      ' Refusing to overwrite GAS.');
+  }
   return files;
 }
 function gitSourceHashes(commitSha) {
@@ -71,7 +78,11 @@ function requireDeployment(worktree) {
 }
 function pullSnapshot(baseDir, scriptId) {
   fs.mkdirSync(baseDir,{recursive:true});
-  fs.writeFileSync(path.join(baseDir,'.clasp.json'),JSON.stringify({scriptId,rootDir:'.'})+'\n',{mode:0o600});
+  // clasp defaults to writing Script files with .js extension when pulling.
+  // Our GitHub source inventory uses .gs; pin the preferred extension so
+  // read-only remote snapshots compare against the same filenames.
+  const pullConfig={scriptId,rootDir:'.',scriptExtensions:['.gs','.js'],htmlExtensions:['.html']};
+  fs.writeFileSync(path.join(baseDir,'.clasp.json'),JSON.stringify(pullConfig)+'\n',{mode:0o600});
   run('clasp',['pull'],baseDir,180000);
   return contentHashes(localFiles(baseDir));
 }
