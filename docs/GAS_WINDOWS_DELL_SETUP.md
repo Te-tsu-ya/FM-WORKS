@@ -28,6 +28,14 @@
 - 模擬 `clasp pull` でも既定なら `.js` を生成する挙動を再現し、明示設定が必要な回帰テストに変更した。必須ファイルが欠けた場合は、欠落ファイルと取得したファイル名のサンプルを表示し、**GASへ書き込まず停止**する。
 - この修正はスクリプト・試験・運用文書だけ。公開リクエスト用ブランチは既に`main`と一致するが、**実GAS公開版は最後の確認で @196**。実Google環境の再実行・認証画面・業務DBについて成功確認をしていない。
 
+## 2026-10-15：機能テスト失敗時の診断改善
+
+- GAS `@196` の公開先ID、ファイル一覧・既存ソース照合、`--preflight` は実機で成功した。次の `node scripts/run_local_checks.mjs --functional` が Windows 上で exit 1 となり、公開は未実行。**原因の個別テストは現時点で未特定。**
+- 旧 `gas_local_bridge.mjs` はテストの標準出力とエラーを捨て、一時Git worktreeを終了時に削除していたため、テスト失敗の原因が追えなかった。
+- 新版は失敗テスト名とチェック件数を表示し、専用Windowsフォルダー `artifacts/gas-local-bridge/last-functional-report.json` と `last-functional-suite.log` に実行結果を残す。これらは `.gitignore` によりGitHubに送られない。
+- 本番データは操作しない。いずれかのチェックが失敗した場合は `clasp push`・デプロイ更新に進まず停止する。詳細を確認せずにテストを飛ばすことは禁止。
+- 診断専用バッチは `node scripts/run_local_checks.mjs --functional` だけを実行し、GitHubブランチ・GAS・Sheets・認証情報へアクセスしない。既存の手動公開バッチとは別に使用する。
+
 ## 初回設定（Dellで一度だけ）
 
 WindowsのPowerShellを通常ユーザーとして開きます。
