@@ -30,6 +30,8 @@ assert.match(bridgeProgram,/last-functional-report\.json/,
   'functional check report must survive temporary worktree removal');
 assert.match(bridgeProgram,/Functional suite failed/,
   'failed checks must identify the blocked publication in the terminal');
+assert.match(bridgeProgram,/--diagnose/,
+  'read-only diagnosis must be invocable without a release-pointer update');
 assert.match(bridgeProgram,/runFunctionalSuite\(tree,requested\)/,
   'publisher must persist functional test results');
 assert.match(bridgeProgram,/windowsVerbatimArguments:resolved\.windowsVerbatimArguments === true/,
@@ -190,8 +192,12 @@ if(args[0]==='list-deployments'){
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
+ let diagnosed=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--diagnose'],work,env);
+ assert.equal(diagnosed.code,0,'diagnose: '+diagnosed.stderr);
+ assert.match(diagnosed.stdout,/no GAS push or deployment was performed/);
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','diagnostics never deploy');
  // A failing local suite must report its precise test, preserve evidence and never push GAS.
- const broken=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,{...env,FM_SIMULATE_FUNCTIONAL_FAILURE:'1'});
+ const broken=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--diagnose'],work,{...env,FM_SIMULATE_FUNCTIONAL_FAILURE:'1'});
  assert.notEqual(broken.code,0,'synthetic local test failure blocks release');
  assert.match(broken.stderr,/Functional suite failed: scripts\/simulated\.mjs/);
  const savedReport=path.join(work,'artifacts/gas-local-bridge/last-functional-report.json');
