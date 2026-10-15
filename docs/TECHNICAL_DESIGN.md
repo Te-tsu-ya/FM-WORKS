@@ -2,8 +2,8 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.20
-**更新日:** 2026-10-14
+**文書版:** 0.25.21
+**更新日:** 2026-10-15
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -2715,3 +2715,10 @@ TextFinderは大文字小文字を区別しないリテラル検索とし、requ
 公式仕様: https://developers.google.com/apps-script/guides/support/best-practices 、https://developers.google.com/apps-script/reference/cache/cache 。CacheServiceは早期破棄もあるため欠損試験を実施する。
 
 ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正本一致検査と検索条件を合わせる。大小文字だけ違う先行行で検索が止まり、既存の正しいキーを見落として二重保存する問題を回避する。検索表示用の部分一致・案件名正規化は変更しない。新規試験ではcase-keyとCASE-keyを別行に置き、正しいキーの再送がduplicateとなることを確認する。
+
+## v0.25.21｜監査と回帰：API限界値・PIN UI同期・架空日付テスト（2026-10-15）
+
+- `Code.gs`の`getPunchHistory(sessionToken,limit)`は`Number.isFinite`、`Math.floor`、`Math.max(1)`、`Math.min(100)`を通して最大100件に抑える。タイムスタンプ降順・本人認証・削除／修正の既存判定は変更しない。
+- `AppShell.html`の`openChangePinModal`および`AppAdmin.html`の`openTempPinModal`は、公開ログイン設定`state.publicConfig.pinLength`から`maxlength`と表示文言を組み立てる。検証側では桁数8および既定6でUIを実行確認する。
+- `FinanceAdvisor.gs`の`financeSpendingDigest_`は取得年と月・日から`Date.UTC(year,month,0)`で実在する月末日を求め、不存在日を破棄する。変更するのは旧台帳の読取専用集計だけで、原本シート・金額・取引データを更新しない。
+- 回帰検証：`scripts/test_punch_history_index.mjs`、`scripts/test_pin_presence_search.mjs`、`scripts/test_finance_integration.mjs`。69件の機能試験と12件の未実施ブラウザー試験の区別は継続。GitHub Actionsを使わず、既存v3手動公開バッチを継続使用する。

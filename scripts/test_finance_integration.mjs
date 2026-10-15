@@ -23,6 +23,19 @@ const ctx=vm.createContext({
 for(const file of ['src/Code.gs','src/Schema.gs','src/DataAccess.gs','src/Finance.gs','src/FinanceAdvisor.gs']){
   vm.runInContext(fs.readFileSync(file,'utf8'),ctx,{filename:file});
 }
+// Legacy finance insights must not total impossible calendar dates.
+const spend=(date,amount)=>[date,'','架空取引先','','事務用品',String(amount),'','架空社員','',''];
+const plainYear=ctx.financeSpendingDigest_([
+  spend('2026-02-28',100),spend('2026-02-29',700),
+  spend('2026-02-30',900),spend('2026-04-30',200),spend('2026-04-31',800)
+],2026);
+ok('nonexistent expense dates are excluded from legacy annual totals',
+  plainYear.count===2&&plainYear.total===300);
+const leapYear=ctx.financeSpendingDigest_([
+  spend('2028-02-29',300),spend('2028-02-30',999),spend('2028-03-31',400)
+],2028);
+ok('leap day and valid month-end expenses remain countable',
+  leapYear.count===2&&leapYear.total===700);
 const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx),models=vm.runInContext('FINANCE_MODELS',ctx);
 const rowHints=new Map();
 ctx.CacheService={getScriptCache:()=>({

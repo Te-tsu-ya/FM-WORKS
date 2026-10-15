@@ -37,4 +37,26 @@ failFinder=true;
 selectedHashes=['','PINHASH'];
 assert.equal(ctx.hasAnyPinConfigured_(),true);
 assert.equal(displayReads,1,'fallback remains available');
-console.log('PASS no PIN, configured PIN, no full hash download, fallback');
+// Both PIN-setting surfaces must honor the server's configured length.
+const shellSource=fs.readFileSync('src/AppShell.html','utf8');
+const adminSource=fs.readFileSync('src/AppAdmin.html','utf8');
+const ownModal=shellSource.match(/function openChangePinModal\(force=false\)\{[\s\S]*?\r?\n\}/);
+const adminModal=adminSource.match(/function openTempPinModal\(employeeId\)\{[\s\S]*?\r?\n\}/);
+assert.ok(ownModal&&adminModal,'both PIN modal implementations must exist');
+const modal={innerHTML:''};
+const uiState={publicConfig:{pinLength:8},authAdmin:{employees:[{employeeId:'FM9001',name:'架空管理者'}]}};
+const ui=vm.createContext({state:uiState,closeProfileMenu(){},ensureModal:()=>modal,
+  escapeHtml:value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))});
+vm.runInContext(ownModal[0]+'\n'+adminModal[0],ui);
+ui.openChangePinModal(false);
+assert.equal([...modal.innerHTML.matchAll(/maxlength='8'/g)].length,3,
+  'change-own-PIN form must accept an eight-digit configured PIN');
+ui.openTempPinModal('FM9001');
+assert.equal([...modal.innerHTML.matchAll(/maxlength='8'/g)].length,2);
+assert.match(modal.innerHTML,/8桁の仮PIN/,'operator-facing PIN length must agree with setting');
+uiState.publicConfig.pinLength=6;
+ui.openTempPinModal('FM9001');
+assert.equal([...modal.innerHTML.matchAll(/maxlength='6'/g)].length,2,
+  'six-digit default remains supported');
+
+console.log('PASS no PIN, configured PIN, indexed hash lookup, configurable operator PIN dialogs');
