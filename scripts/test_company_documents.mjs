@@ -110,6 +110,8 @@ assert.equal(created.document.folderId,'general/equipment');
 assert.equal(created.document.tags.join(','),'備品,貸出');
 assert.equal(created.document.revision,1);
 assert.equal(call('saveCompanyDocument','SESSION',payload).duplicate,true);
+assert.throws(()=>call('saveCompanyDocument','SESSION',{...payload,summary:'同じキーで変更した説明'}),/送信識別子の内容/,
+  'same creation request key cannot silently accept changed content');
 assert.equal(db.sheet.rows.length,2,'idempotency must not add duplicate rows');
 db.sheet.reads=[];
 const adminList=call('getCompanyDocuments','SESSION');
@@ -128,6 +130,8 @@ assert.equal(call('searchCompanyDocumentBodies','SESSION','備品 テスト本�
 assert.throws(()=>call('saveCompanyDocument','SESSION',payload),/権限/);
 employee=somu;
 assert.equal(call('getCompanyDocuments','SESSION').items.length,1,'sōmu may view drafts');
+assert.throws(()=>call('saveCompanyDocument','SESSION',payload),/送信識別子の内容/,
+  'different editor may not claim another author\'s create request key');
 assert.throws(()=>call('saveCompanyDocument','SESSION',{...payload,id:created.document.id,revision:1,url:'javascript:alert(1)',
   requestKey:'badurl20261010'}),/HTTPS/);
 const updated=call('saveCompanyDocument','SESSION',{...payload,id:created.document.id,revision:1,status:'公開',
@@ -135,6 +139,13 @@ const updated=call('saveCompanyDocument','SESSION',{...payload,id:created.docume
 assert.equal(updated.document.revision,2);
 assert.equal(updated.document.folderId,'hr/work');
 assert.equal(updated.document.tags.join(','),'勤務,在宅');
+const replayEdit={...payload,id:created.document.id,revision:1,status:'公開',
+  folderId:'hr/work',tags:'勤務、在宅',requestKey:'edit20261010ok'};
+assert.equal(call('saveCompanyDocument','SESSION',replayEdit).duplicate,true,
+  'exact edit retry must stay idempotent');
+assert.throws(()=>call('saveCompanyDocument','SESSION',{...replayEdit,summary:'再送時に異なる概要'}),/送信識別子の内容/,
+  'same edit request key with changed contents must be rejected');
+assert.equal(db.sheet.rows[1][3],payload.summary,'idempotency conflict must not overwrite document');
 assert.throws(()=>call('saveCompanyDocument','SESSION',{...payload,id:created.document.id,
   revision:1,requestKey:'conflict20261010'}),/別の担当者/);
 employee=staff;

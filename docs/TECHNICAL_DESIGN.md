@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.22
+**文書版:** 0.25.23
 **更新日:** 2026-10-15
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2729,3 +2729,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - 仮PINでの `login` ・ `resumeSession` レスポンスに `initialData` を含めない。フロントの `acceptLogin` / 起動時セッション復帰は `showRequiredPinChange_` を経由してログイン画面上の必須PIN変更モーダルを表示する。復帰時は `getPublicAuthConfig()` からPIN桁数を取得する。PIN変更成功後、`getInitialData` から通常の画面を構築。
 - `Code.gs` の `assertReadWindow_(start,end,400)` は日付正規化後のUTC日数差で最大400暦日を判定。`getScheduleBundleForViewer_` と `Worklog.gs/getWorklogs` の冒頭でDBアクセス前に呼ぶ。巨大範囲によるGAS実行時間超過やSheets全件走査を避ける。
 - 新しい回帰テストはNode VM/架空の社員・Sheetで実行し、本番DB、Google API、Actionsを操作しない。仮PINの通常RPC拒否・PIN変更許可・復帰・初期情報非送出と、400日境界・閏年・過大範囲のDB未アクセスを検証する。GAS実機のブラウザー・運用データ受入は別工程。
+
+## v0.25.23｜第3次監査：通信世代と文書再送キー整合性（2026-10-15）
+
+- `AppShell.html` / `loadAuthenticatedApp` はリクエスト開始時の `state.sessionToken` をキャプチャし、RPC成功/失敗ハンドラで現在トークンと一致する場合のみ画面をマウントまたはセッションを消去する。起動時 `bootstrap` / `resumeSession` にも独立した `resumeToken` ガードを適用し、旧RPCがログアウト後や別ログイン後のUIを上書きしない。
+- `AppShell.html` / `openChangePinModal(true)` は必須PINダイアログに `data-pin-change-required` を付与し、`initGlobalKeyboardShortcuts` のEsc分岐で閉じる操作のみを阻止する。通常ダイアログと従来の経理保存中Escブロックを維持する。
+- `CompanyDocs.gs` / `companyDocsMatchesPayload_` は保存済みのタイトル、分類、概要、施行日、公開状態、URL、本文、フォルダー、タグを正規化済みフォームと照合。更新同一キーは最終編集者も、作成同一キーは作成者と初版revision=1も検証する。差異があれば例外で終了しDBへの書き込みを行わない。
+- `scripts/test_auth_session_callback_guard.mjs` に古い成功/失敗応答の破棄、正常復帰、PIN変更Esc制限を登録し、既存 `scripts/test_company_documents.mjs` に作成/改訂時の同一・異内容・別担当者の再送ケースを追加。`scripts/local-checks.json` に新規テストを加え、GitHub Actionsは有効にしない。
