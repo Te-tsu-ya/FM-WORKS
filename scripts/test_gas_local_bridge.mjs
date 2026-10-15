@@ -19,7 +19,7 @@ assert.deepEqual(claspInvocation(['list-deployments'], 'linux'), {command:'clasp
 const windowsInvocation=claspInvocation(['update-deployment',KNOWN_DEPLOYMENT_ID,'--description','FM_WORKS_abcd'], 'win32', {ComSpec:'C:\\Windows\\System32\\cmd.exe'});
 assert.equal(windowsInvocation.args[0],'/d');
 assert.equal(windowsInvocation.args[2],'/c');
-assert.match(windowsInvocation.args[3],/clasp\\.cmd update-deployment/);
+assert.ok(windowsInvocation.args[3].includes('clasp.cmd update-deployment'));
 assert.match(windowsInvocation.args[3],/FM_WORKS_abcd/);
 assert.ok(!windowsInvocation.args[3].includes('create-deployment'));
 assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
@@ -127,10 +127,20 @@ if(args[0]==='list-deployments'){
  const initialBaseline=ok('git',['rev-parse','HEAD'],work).trim();
  fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.5'};\n");
  ok('git',['add','src/Code.gs'],work);ok('git',['commit','-m','[skip ci] approved update'],work);
- ok('git',['branch','deploy/gas-production'],work);
+ ok('git',['branch','deploy/gas-production',initialBaseline],work);
  ok('git',['push','-u','origin','main','deploy/gas-production'],work);
  const env={PATH:fake+path.delimiter+process.env.PATH,FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
+ // The public request pointer intentionally lags behind main. Read-only
+ // candidate preflight MUST work without advancing the approval pointer.
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
+ assert.notEqual(r.code,0,'old pointer should not pass normal preflight');
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight-main'],work,env);
+ assert.equal(r.code,0,'read-only preflight-main: '+r.stderr);
+ assert.equal(ok('git',['ls-remote','origin','refs/heads/deploy/gas-production'],work).split('\\t')[0],initialBaseline,
+   'read-only preflight must not advance the release pointer');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'196','candidate preflight never deploys');
+ ok('git',['push','origin','main:refs/heads/deploy/gas-production'],work);
+ r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'196','preflight never deploys');
  // The first-ever release also refuses unpublished manual changes to GAS HEAD.
@@ -143,7 +153,7 @@ if(args[0]==='list-deployments'){
  assert.equal(r.code,0,'first publish: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'197','existing deployment updated once');
  const st=JSON.parse(fs.readFileSync(path.join(work,'artifacts/gas-local-bridge/state.json'),'utf8'));
- assert.equal(st.version,193);
+ assert.equal(st.version,197);
  assert.equal(st.status,'DEPLOYED_SOURCE_VERIFIED_BROWSER_PENDING');
  assert.equal(ok('git',['rev-parse','refs/remotes/origin/main'],work).trim().length,40);
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
