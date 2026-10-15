@@ -54,7 +54,7 @@ node scripts/setup_gas_local_bridge.mjs --connect
 node scripts/gas_local_bridge.mjs --preflight
 ```
 
-GitHub最新版の公開依頼、既存GASデプロイ、最後に記録された公開版（初期値@192）、元のGASソース内容を**読み取り専用**で照合します。別の作業で公開版・ファイルが変更されていたら停止します。値を推測して強制上書きしないでください。
+GitHub最新版の公開依頼、既存GASデプロイ、最後に記録された公開版（初期値@196）、元のGASソース内容を**読み取り専用**で照合します。別の作業で公開版・ファイルが変更されていたら停止します。値を推測して強制上書きしないでください。
 
 ### 5. 初回の公開を手動で確認
 
@@ -82,6 +82,27 @@ node scripts/setup_gas_local_bridge.mjs --remove-windows
 ```
 
 ローカルの実行ログ・公開済みコミット・エラーは `artifacts/gas-local-bridge/` に記録します。途中失敗時の `pending.json` は、GASの状態を確認するまで削除しないでください。
+
+## 固定のWindows更新バッチ（手動、GitHub Actionsなし）
+
+1. 一度だけGitHubの `FM-WORKS_GAS_Update.bat` をWindows PCに保存する。
+2. 初回はGit、Node.js 20以上、`@google/clasp` 3.4.1を用意する。バッチは既存の `%USERPROFILE%\\FM-WORKS-PUBLISHER` を利用し、なければ初回のみGitHubをcloneする。
+3. `clasp login` および既存GAS **Script ID** の接続は初回のみ必要。公開URL内のデプロイIDとは異なる。認証情報はGitHubやチャットへ出さない。
+4. GitHubの `main` 更新後、同じバッチをダブルクリックする。**最新版取得 → 公開依頼を動かさない `--preflight-main` → 本人の `YES` → `deploy/gas-production` 更新 → `--once` → 既存GAS公開版検証** の順に処理する。
+5. GitHub Actionsや新しいGAS URLは使わない。バッチ自体は毎回ダウンロードし直さない。GitHub本体やbridgeの修正は次回起動時に自動取得する。
+6. タスクスケジューラの「FM WORKS - GAS Publisher」が登録されているだけでは停止しない。同時実行はbridgeの排他ロックで停止し、既存設定を勝手に削除しない。
+
+**初回の出所照合はGAS @196／GitHub `600b99213a3de50234f09de673337d8a7cfe86ea`（[正式公開記録](releases/GAS_v0258_20261014_PUBLISHED.md)）が基準。** GASが別経路ですでに更新されていた場合は、古い基準を使って上書きせず停止する。人が最新の版とGASコードの全ファイルを照合したうえで公開用stateを安全に引き継ぐ必要がある。数値を推測して環境変数を上書きしてはならない。
+
+**STOPPEDの理由別対応：**
+- `clasp` が見つからない／古い → 一度だけ `npm install -g @google/clasp@3.4.1`。
+- `Initial GAS version mismatch` → GAS管理画面の既存デプロイ版と正式公開記録を照合。自動的にバージョン番号を変更しない。
+- `Remote Apps Script contains files absent in GitHub` → GAS側にGitHub未管理ファイルがある。削除事故防止のため停止。削除せず、FM WORKS開発チャットで差分確認する。
+- `pending.json` → 前回のpush／deployが中断された可能性がある。GASのソース・バージョンを照合するまで削除しない。
+- `Bridge is already running` → 同時実行中。完了を待ち、古いロックを無条件で消さない。
+- `deploy/gas-published` が更新されない → GAS反映に成功しても受領記録の作成に失敗した可能性がある。GAS実版を確認し、無条件で再公開しない。
+
+既存GASのソース配信・公開番号の検証と、社員PINログイン後の実操作・スプレッドシート連携の受入確認は別工程。
 
 ## 普段の使い方
 
