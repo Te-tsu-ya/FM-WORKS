@@ -15,10 +15,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/gas-local-bridge');
 const statePath = path.join(output, 'state.json');
 const pendingPath = path.join(output, 'pending.json');
-const modes = new Set(['--once', '--watch', '--preflight']);
+const modes = new Set(['--once', '--watch', '--preflight', '--diagnose']);
 const args = process.argv.slice(2);
 if (args.length !== 1 || !modes.has(args[0])) {
-  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--once|--watch');
+  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--diagnose|--once|--watch');
   process.exit(2);
 }
 const mode = args[0];
@@ -131,9 +131,10 @@ function cycle({preflight=false}={}) {
     '+refs/heads/main:refs/remotes/origin/main',
     '+refs/heads/'+RELEASE_BRANCH+':refs/remotes/origin/'+RELEASE_BRANCH],root,180000);
   const main=run('git',['rev-parse','refs/remotes/origin/main'],root).trim();
-  const requested=run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  // Diagnostics inspect current main without advancing any remote release pointer.
+  const requested=mode==='--diagnose'?main:run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
   const necessary=validateRequestedCommit({mainSha:main,requestedSha:requested,previouslyPublishedSha:oldState?.commit});
-  if (!necessary && !preflight) {log('No new approved GAS release request.');return;}
+  if (!necessary && !preflight && mode!=='--diagnose') {log('No new approved GAS release request.');return;}
   const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-gas-release-'));
   const tree=path.join(sandbox,'source');
   let worktreeAdded=false, pushStarted=false;
@@ -160,6 +161,12 @@ function cycle({preflight=false}={}) {
     assertNoRemoteDrift(oldState?.remoteHashes,remoteBefore);
     log('Verified release ref, existing GAS target @'+currentVersion+' and remote file inventory.');
     if (preflight) {log('Preflight only: no source push or deployment.');return;}
+    if(mode==='--diagnose'){
+      log('Diagnostics: current GitHub main; running functional suite without GAS writes.');
+      runFunctionalSuite(tree,requested);
+      log('Diagnostics completed: no GAS push or deployment was performed.');
+      return;
+    }
     if (oldState && sameSourceSnapshot(candidate,oldState.remoteHashes)) {
       persist(statePath,{...oldState,commit:requested,updatedAt:stamp(),status:'NO_SOURCE_CHANGE_PREVIOUS_DEPLOYMENT_RETAINED'});
       try {run('git',['push','origin',requested+':refs/heads/deploy/gas-published'],root,180000);}
