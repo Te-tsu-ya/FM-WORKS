@@ -54,4 +54,28 @@ assert.equal(bigger.stats.finders,2,'large dates keep two intersecting indexes')
 assert.equal(found.length,300);assert.ok(found.every(r=>r[2]==='STAFF'));
 const empty=make(data);
 assert.equal(ctx.readRowsByDateRange_(empty,2,15,'2026-07-01','2026-07-10',3,['STAFF']).length,0);
-console.log('PASS adaptive date indexes: 1 finder for sparse scoped date, 2 for dense, owner ACL, no-hit');
+
+// Regression: 400-day UI windows must return the complete last 30 days, even
+// with >250 rows where the optimized index, not a small-sheet scan, is used.
+const base='2026-01-01',day395=parseDay(base,395),day399=parseDay(base,399),day400=parseDay(base,400);
+const periodRows=Array.from({length:1200},()=>row('2025-01-01','OTHER'));
+periodRows[100]=row(base,'STAFF');
+periodRows[700]=row(day395,'STAFF');
+periodRows[701]=row(day399,'OTHER');
+periodRows[800]=row(day399,'STAFF');
+const fourHundred=make(periodRows);
+const indexed=ctx.readRowsByDateRange_(fourHundred,2,15,base,day399,3,['STAFF']);
+assert.deepEqual(indexed.map(r=>r[1]).sort(),[base,day395,day399].sort(),
+  '400-day index must include the final month and never expose other employees');
+assert.equal(fourHundred.stats.finders,1,'valid 400-day request must stay indexed');
+assert.ok(new RegExp(ctx.dateRangeRegex_(base,day399,400)).test(day399),
+  'indexed regex must include the requested final day');
+// For internal >400-day ranges, completeness takes precedence over indexing.
+assert.equal(ctx.dateRangeRegex_(base,day400,400),'',
+  'incomplete date index must not be returned to a caller');
+const fourHundredOne=make(periodRows);
+const fallback=ctx.readRowsByDateRange_(fourHundredOne,2,15,base,day400,3,['STAFF']);
+assert.deepEqual(fallback.map(r=>r[1]).sort(),[base,day395,day399].sort(),
+  'long-range fallback must still include every authorized row');
+assert.equal(fourHundredOne.stats.finders,0,'overlong requests must not run truncated indexed search');
+console.log('PASS adaptive date indexes: sparse, dense, complete 400-day range, long-range fallback, owner ACL');

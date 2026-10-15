@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.23
+**文書版:** 0.25.24
 **更新日:** 2026-10-15
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2736,3 +2736,16 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `AppShell.html` / `openChangePinModal(true)` は必須PINダイアログに `data-pin-change-required` を付与し、`initGlobalKeyboardShortcuts` のEsc分岐で閉じる操作のみを阻止する。通常ダイアログと従来の経理保存中Escブロックを維持する。
 - `CompanyDocs.gs` / `companyDocsMatchesPayload_` は保存済みのタイトル、分類、概要、施行日、公開状態、URL、本文、フォルダー、タグを正規化済みフォームと照合。更新同一キーは最終編集者も、作成同一キーは作成者と初版revision=1も検証する。差異があれば例外で終了しDBへの書き込みを行わない。
 - `scripts/test_auth_session_callback_guard.mjs` に古い成功/失敗応答の破棄、正常復帰、PIN変更Esc制限を登録し、既存 `scripts/test_company_documents.mjs` に作成/改訂時の同一・異内容・別担当者の再送ケースを追加。`scripts/local-checks.json` に新規テストを加え、GitHub Actionsは有効にしない。
+
+## v0.25.24｜日付インデックスの400日境界とフォールバック（2026-10-15）
+
+- `DataAccess.gs/readRowsByDateRange_` のインデックス探索範囲を370から400暦日に変更し、`Code.gs` の予定と `Worklog.gs` の工数の最大表示期間と一致させる。
+- `dateRangeRegex_` で生成した最後の日付が要求終了日と一致しない場合、途中で切れたregexを返さず空文字を返す。これにより `LONG_RANGE_FALLBACK` で実Sheetの全行を読み、指定期間・社員IDの両方で絞る。
+- `test_scoped_date_index.mjs` に架空1200行での400日完走、最終月と別社員の境界、401日での完全フォールバックを追加。インデックス経路の利用回数も検査。
+- 実データ・GAS公開の検証、P50/P95実測、ブラウザーテストは別ゲート。
+
+### v0.25.24補足｜FinanceAdvisorの任意キャッシュをfail-openにする
+
+- `getFinanceSpendingInsights`は `CacheService.getScriptCache()` / `get` のエラーを非致命的として記録し、従来のSpreadsheetApp読み取りへ続行する。キャッシュ`put`の例外は取得済みの有効なreportを破棄させない。
+- 失敗時の `ok:false` レスポンスは実際の元台帳読み取り・列検証の失敗時のみに返す。正しいキャッシュヒットと閲覧権限の判定は従来どおり。
+- `test_finance_integration.mjs`で、キャッシュ接続失敗・get失敗・put失敗・キャッシュヒットの4つをNode VMの架空台帳で確認。

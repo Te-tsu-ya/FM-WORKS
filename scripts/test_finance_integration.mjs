@@ -126,6 +126,34 @@ vm.runInContext(`getDb_=()=>mockDb;getDatabaseSpreadsheetId_=()=>"FAKE-FINANCE-D
       item.result||'',item.note||'']);return true;};`,ctx);
 const api=vm.runInContext('({financeOperatorAllowed_,financeStorageStatus_,submitFinanceExpense,submitFinanceTravel,saveFinanceReceipt,getMyFinanceItems,getFinanceOverview,reviewFinanceRequest,settleFinanceRequest,resubmitFinanceRequest,financeReceiptCrossCheck_,financeNormalizeDateText_,financeOutstandingFirst_,financeMyActionFirst_,financeAmountDisplay_,assertDatabaseMigrationSafe_})',ctx);
 const advisor=vm.runInContext('({financeSpendingDigest_,financeTravelExplanation_,getFinanceTravelExplanation,financeInvoiceNumber_,lookupFinanceInvoiceIssuer,getFinanceSpendingInsights})',ctx);
+
+// CacheService failures are not source data failures; report and spreadsheet
+// remain read-only and usable under cache quota/availability errors.
+const savedLegacyCache=ctx.CacheService;
+const cachedReport=(service)=>{
+  ctx.CacheService=service;
+  return advisor.getFinanceSpendingInsights('ACCOUNTING',{year:2026});
+};
+const noCache=cachedReport({getScriptCache(){throw Error('Synthetic cache outage')}});
+ok('legacy expense report works when CacheService cannot be opened',
+  noCache.ok===true&&noCache.total===4200);
+const readFailure=cachedReport({getScriptCache:()=>({
+  get(){throw Error('Synthetic cache read failure')},put(){throw Error('Do not write')}
+})});
+ok('legacy expense report works after a cache read failure',
+  readFailure.ok===true&&readFailure.total===4200);
+const writeFailure=cachedReport({getScriptCache:()=>({
+  get(){return null},put(){throw Error('Synthetic cache write quota exceeded')}
+})});
+ok('legacy expense report still succeeds when cache.put throws',
+  writeFailure.ok===true&&writeFailure.total===4200);
+const cacheHit=cachedReport({getScriptCache:()=>({
+  get(){return JSON.stringify({ok:true,year:2026,total:12345,source:'LEGACY_ONLY'})}
+})});
+ok('valid existing legacy expense cache hit remains effective',
+  cacheHit.ok===true&&cacheHit.total===12345);
+ctx.CacheService=savedLegacyCache;
+
 const expense={
  usedOn:'2026-10-08',vendor:'架空の販売店',item:'事務用品',category:'消耗品費',
  amount:'2500',purpose:'架空業務用品の購入',paymentMethod:'立替',
