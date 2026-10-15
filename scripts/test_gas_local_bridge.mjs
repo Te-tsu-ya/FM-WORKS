@@ -26,6 +26,14 @@ const windowsList=claspInvocation(['list-deployments'],'win32',{ComSpec:'C:\\Win
 assert.deepEqual(windowsList.args,['/d','/s','/c','"clasp.cmd list-deployments"']);
 assert.equal(windowsList.windowsVerbatimArguments,true);
 const bridgeProgram=fs.readFileSync(new URL('./gas_local_bridge.mjs',import.meta.url),'utf8');
+assert.match(bridgeProgram,/last-functional-report\.json/,
+  'functional check report must survive temporary worktree removal');
+assert.match(bridgeProgram,/Functional suite failed/,
+  'failed checks must identify the blocked publication in the terminal');
+assert.match(bridgeProgram,/--diagnose/,
+  'read-only diagnosis must be invocable without a release-pointer update');
+assert.match(bridgeProgram,/runFunctionalSuite\(tree,requested\)/,
+  'publisher must persist functional test results');
 assert.match(bridgeProgram,/windowsVerbatimArguments:resolved\.windowsVerbatimArguments === true/,
   'spawnSync must enable Windows verbatim mode for clasp');
 assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
@@ -124,7 +132,13 @@ try {
  fs.mkdirSync(path.join(work,'scripts'));fs.mkdirSync(path.join(work,'src'));
  for(const name of ['gas_local_bridge_core.mjs','gas_local_bridge.mjs'])
   fs.copyFileSync(path.join(self,name),path.join(work,'scripts',name));
- fs.writeFileSync(path.join(work,'scripts/run_local_checks.mjs'),"console.log('PASS simulated checks');\n");
+ fs.writeFileSync(path.join(work,'scripts/run_local_checks.mjs'),
+  "import fs from 'node:fs';\n"+
+  "fs.mkdirSync('artifacts/local-verification',{recursive:true});\n"+
+  "const fail=process.env.FM_SIMULATE_FUNCTIONAL_FAILURE==='1';\n"+
+  "fs.writeFileSync('artifacts/local-verification/report.json',JSON.stringify({mode:'functional',passed:fail?0:1,failed:fail?1:0,skipped:0,checks:[{file:'scripts/simulated.mjs',status:fail?'FAIL':'PASS',details:fail?'Intentional local fixture error':''}]}));\n"+
+  "if(fail){console.error('FAIL scripts/simulated.mjs');process.exit(1);}\n"+
+  "console.log('PASS simulated checks');\n");
  fs.writeFileSync(path.join(work,'.gitignore'),'.clasp.json\nartifacts/\n');
  fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.4'};\n");
  fs.writeFileSync(path.join(work,'src/Styles.html'),'<style>.sidebar{background:white}</style>\n');
@@ -178,6 +192,19 @@ if(args[0]==='list-deployments'){
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
+ let diagnosed=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--diagnose'],work,env);
+ assert.equal(diagnosed.code,0,'diagnose: '+diagnosed.stderr);
+ assert.match(diagnosed.stdout,/no GAS push or deployment was performed/);
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','diagnostics never deploy');
+ // A failing local suite must report its precise test, preserve evidence and never push GAS.
+ const broken=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--diagnose'],work,{...env,FM_SIMULATE_FUNCTIONAL_FAILURE:'1'});
+ assert.notEqual(broken.code,0,'synthetic local test failure blocks release');
+ assert.match(broken.stderr,/Functional suite failed: scripts\/simulated\.mjs/);
+ const savedReport=path.join(work,'artifacts/gas-local-bridge/last-functional-report.json');
+ assert.equal(JSON.parse(fs.readFileSync(savedReport,'utf8')).failed,1,'failure evidence survives worktree cleanup');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','failed checks may not deploy GAS');
+ assert.equal(fs.existsSync(path.join(work,'artifacts/gas-local-bridge/pending.json')),false,
+   'functional suite failure does not begin a source push');
  // The first-ever release also refuses unpublished manual changes to GAS HEAD.
  fs.writeFileSync(path.join(server,'source/Code.gs'),'function unexpectedManualEdit(){}\n');
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);

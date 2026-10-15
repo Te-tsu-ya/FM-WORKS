@@ -15,10 +15,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/gas-local-bridge');
 const statePath = path.join(output, 'state.json');
 const pendingPath = path.join(output, 'pending.json');
-const modes = new Set(['--once', '--watch', '--preflight']);
+const modes = new Set(['--once', '--watch', '--preflight', '--diagnose']);
 const args = process.argv.slice(2);
 if (args.length !== 1 || !modes.has(args[0])) {
-  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--once|--watch');
+  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--diagnose|--once|--watch');
   process.exit(2);
 }
 const mode = args[0];
@@ -38,6 +38,51 @@ function run(command, argv, cwd, timeout=120000) {
   }
   return String(result.stdout || '');
 }
+
+function runFunctionalSuite(worktree, requestedSha) {
+  // Keep local-only diagnostics before the temporary release worktree is deleted.
+  const result=spawnSync(process.execPath,['scripts/run_local_checks.mjs','--functional'],{
+    cwd:worktree,encoding:'utf8',timeout:1800000,maxBuffer:12*1024*1024,
+    windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}
+  });
+  const reportSrc=path.join(worktree,'artifacts/local-verification/report.json');
+  const reportDst=path.join(output,'last-functional-report.json');
+  const logDst=path.join(output,'last-functional-suite.log');
+  // Never confuse an old report with the current failed attempt.
+  fs.rmSync(reportDst,{force:true});
+  fs.writeFileSync(logDst,
+    'GitHub commit: '+requestedSha+'\nExit: '+String(result.status)+'\n'+
+    'STDOUT\n'+String(result.stdout||'')+'\nSTDERR\n'+String(result.stderr||result.error?.message||'')+'\n',
+    {mode:0o600});
+  let report=null;
+  if(fs.existsSync(reportSrc)){
+    fs.copyFileSync(reportSrc,reportDst);
+    try{report=JSON.parse(fs.readFileSync(reportDst,'utf8'));}
+    catch(e){errorLog('Local functional report cannot be parsed.');}
+  }
+  const failed=Array.isArray(report?.checks)?report.checks.filter(x=>x.status==='FAIL'):[];
+  const validReport=report?.mode==='functional' && Array.isArray(report?.checks) &&
+    Number.isInteger(report?.failed) && Number.isInteger(report?.passed);
+  if(result.error || result.status!==0 || !validReport || report.failed!==0){
+    const names=failed.map(x=>String(x.file||'')).filter(x=>/^scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x));
+    const fallback=String(result.stdout||'').split(/\r?\n/).filter(x=>/^FAIL scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x)).map(x=>x.slice(5));
+    const failedNames=(names.length?names:fallback);
+    errorLog('Functional suite failed: '+(failedNames.length?failedNames.join(', '):'unknown test'));
+    for(const item of failed.slice(0,4)){
+      const lines=String(item.details||'').split(/\r?\n/)
+        .map(x=>x.trim()).filter(x=>/^(?:AssertionError|Error|TypeError|ReferenceError|SyntaxError|Expected|Actual|ERR_)/.test(x))
+        .slice(0,2);
+      const note=lines.join(' | ').replace(/https?:\/\/[^\s]+/g,'[URL]')
+        .replace(/(?:ghp_|github_pat_|ya29\.)[^\s]+/gi,'[REDACTED]');
+      if(note)errorLog('Reason for '+String(item.file||'unknown')+': '+note.slice(0,400));
+    }
+    errorLog('Saved local diagnostic output: '+logDst);
+    if(fs.existsSync(reportDst))errorLog('Saved test report: '+reportDst);
+    throw Error('Local functional tests failed before GAS push. Inspect the saved report; do not retry blindly.');
+  }
+  log('Local functional suite passed: '+report.passed+' PASS, '+report.skipped+' browser SKIPPED.');
+}
+
 function readState() {return fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath,'utf8')) : null;}
 function persist(file, value) {
   const tmp = file + '.tmp';
@@ -96,9 +141,10 @@ function cycle({preflight=false}={}) {
     '+refs/heads/main:refs/remotes/origin/main',
     '+refs/heads/'+RELEASE_BRANCH+':refs/remotes/origin/'+RELEASE_BRANCH],root,180000);
   const main=run('git',['rev-parse','refs/remotes/origin/main'],root).trim();
-  const requested=run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  // Diagnostics inspect current main without advancing any remote release pointer.
+  const requested=mode==='--diagnose'?main:run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
   const necessary=validateRequestedCommit({mainSha:main,requestedSha:requested,previouslyPublishedSha:oldState?.commit});
-  if (!necessary && !preflight) {log('No new approved GAS release request.');return;}
+  if (!necessary && !preflight && mode!=='--diagnose') {log('No new approved GAS release request.');return;}
   const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-gas-release-'));
   const tree=path.join(sandbox,'source');
   let worktreeAdded=false, pushStarted=false;
@@ -125,6 +171,12 @@ function cycle({preflight=false}={}) {
     assertNoRemoteDrift(oldState?.remoteHashes,remoteBefore);
     log('Verified release ref, existing GAS target @'+currentVersion+' and remote file inventory.');
     if (preflight) {log('Preflight only: no source push or deployment.');return;}
+    if(mode==='--diagnose'){
+      log('Diagnostics: current GitHub main; running functional suite without GAS writes.');
+      runFunctionalSuite(tree,requested);
+      log('Diagnostics completed: no GAS push or deployment was performed.');
+      return;
+    }
     if (oldState && sameSourceSnapshot(candidate,oldState.remoteHashes)) {
       persist(statePath,{...oldState,commit:requested,updatedAt:stamp(),status:'NO_SOURCE_CHANGE_PREVIOUS_DEPLOYMENT_RETAINED'});
       try {run('git',['push','origin',requested+':refs/heads/deploy/gas-published'],root,180000);}
@@ -133,7 +185,7 @@ function cycle({preflight=false}={}) {
       return;
     }
     log('Running local functional suite (no GitHub Actions).');
-    run(process.execPath,['scripts/run_local_checks.mjs','--functional'],tree,1800000);
+    runFunctionalSuite(tree,requested);
     // Tests may run for minutes. Abort if anyone changed remote code during verification.
     const justBeforePush=pullSnapshot(path.join(sandbox,'remote-just-before-push'),cfg.scriptId);
     assertNoRemoteDrift(remoteBefore,justBeforePush);
