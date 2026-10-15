@@ -22,7 +22,9 @@ function dateRangeStrings_(start,end,maxDays){
 
 function dateRangeRegex_(start,end,maxDays){
   const days=dateRangeStrings_(start,end,maxDays);
-  if(!days.length)return '';
+  // A partial range index silently drops later records. If the requested
+  // end day was not reached, let readRowsByDateRange_ use its full fallback.
+  if(!days.length||days[days.length-1]!==String(end||start))return '';
   return '^(?:'+days.join('|')+')$';
 }
 
@@ -222,7 +224,8 @@ function readRowsByDateRange_(sheet,dateColumn,width,start,end,scopeColumn,scope
     logPerformance_('dateRangeRead',started,PERFORMANCE_BUDGETS.dateRangeRead,{rows:rows.length,source,scoped});return rows;
   };
   if(lastRow-1<=250&&(lastRow-1)*width<=10000)return fallback('SMALL_BATCH');
-  const regex=dateRangeRegex_(start,end,370);
+  // Match the 400-day maximum of schedule/worklog APIs without truncation.
+  const regex=dateRangeRegex_(start,end,400);
   if(!regex)return fallback('LONG_RANGE_FALLBACK');
   const ownerRegex='^(?:'+wanted.map(regexEscape_).join('|')+')$';
   let cells,preselectedBlocks=null,source=scoped?'DATE_OWNER_INDEX':'DATE_INDEX';
