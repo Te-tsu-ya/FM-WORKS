@@ -97,4 +97,16 @@ assert.ok(active.calls.wideCells<600*12,'window gaps stay unread');
 active=sheet([]);
 assert.deepEqual(Array.from(c.getActivePunchRows_('E-01')),[],'empty sheets return without scanning');
 
+// A caller-provided Infinity/huge limit must not create an unbounded GAS RPC.
+active=sheet(Array.from({length:240},(_,i)=>make('BOUND-'+i,'E-01',
+  '2026-10-12','2026-10-12 09:00:00')));
+assert.equal(c.getPunchHistory('AUTHENTICATED-TEST',500000).length,100,
+  'excessive history requests must be capped to 100 entries');
+assert.equal(c.getPunchHistory('AUTHENTICATED-TEST',Infinity).length,20,
+  'nonfinite limit must fall back to normal 20-entry response');
+assert.equal(c.getPunchHistory('AUTHENTICATED-TEST',-200).length,1,
+  'negative limit must not request an invalid array range');
+assert.equal(c.getPunchHistory('AUTHENTICATED-TEST').length,20,
+  'default history limit must remain 20');
+
 console.log('PASS: indexed employee punch history, corrected/cancelled records, auth scope, limit/order, escaped IDs and small/fragmented fallback');
