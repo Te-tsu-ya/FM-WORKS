@@ -64,7 +64,8 @@ function runFunctionalSuite(worktree, requestedSha) {
   if(result.error || result.status!==0 || !validReport || report.failed!==0){
     const names=failed.map(x=>String(x.file||'')).filter(x=>/^scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x));
     const fallback=String(result.stdout||'').split(/\r?\n/).filter(x=>/^FAIL scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x)).map(x=>x.slice(5));
-    errorLog('Functional suite failed: '+(names.length?names:fallback).join(', ') || 'unknown test');
+    const failedNames=(names.length?names:fallback);
+    errorLog('Functional suite failed: '+(failedNames.length?failedNames.join(', '):'unknown test'));
     errorLog('Saved local diagnostic output: '+logDst);
     if(fs.existsSync(reportDst))errorLog('Saved test report: '+reportDst);
     throw Error('Local functional tests failed before GAS push. Inspect the saved report; do not retry blindly.');
