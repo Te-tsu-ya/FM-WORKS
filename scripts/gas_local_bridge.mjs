@@ -48,6 +48,8 @@ function runFunctionalSuite(worktree, requestedSha) {
   const reportSrc=path.join(worktree,'artifacts/local-verification/report.json');
   const reportDst=path.join(output,'last-functional-report.json');
   const logDst=path.join(output,'last-functional-suite.log');
+  // Never confuse an old report with the current failed attempt.
+  fs.rmSync(reportDst,{force:true});
   fs.writeFileSync(logDst,
     'GitHub commit: '+requestedSha+'\nExit: '+String(result.status)+'\n'+
     'STDOUT\n'+String(result.stdout||'')+'\nSTDERR\n'+String(result.stderr||result.error?.message||'')+'\n',
@@ -66,6 +68,14 @@ function runFunctionalSuite(worktree, requestedSha) {
     const fallback=String(result.stdout||'').split(/\r?\n/).filter(x=>/^FAIL scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x)).map(x=>x.slice(5));
     const failedNames=(names.length?names:fallback);
     errorLog('Functional suite failed: '+(failedNames.length?failedNames.join(', '):'unknown test'));
+    for(const item of failed.slice(0,4)){
+      const lines=String(item.details||'').split(/\r?\n/)
+        .map(x=>x.trim()).filter(x=>/^(?:AssertionError|Error|TypeError|ReferenceError|SyntaxError|Expected|Actual|ERR_)/.test(x))
+        .slice(0,2);
+      const note=lines.join(' | ').replace(/https?:\/\/[^\s]+/g,'[URL]')
+        .replace(/(?:ghp_|github_pat_|ya29\.)[^\s]+/gi,'[REDACTED]');
+      if(note)errorLog('Reason for '+String(item.file||'unknown')+': '+note.slice(0,400));
+    }
     errorLog('Saved local diagnostic output: '+logDst);
     if(fs.existsSync(reportDst))errorLog('Saved test report: '+reportDst);
     throw Error('Local functional tests failed before GAS push. Inspect the saved report; do not retry blindly.');
