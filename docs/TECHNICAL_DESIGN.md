@@ -2,8 +2,8 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.24
-**更新日:** 2026-10-15
+**文書版:** 0.25.25
+**更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
 ## 1. アーキテクチャ
@@ -2749,3 +2749,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `getFinanceSpendingInsights`は `CacheService.getScriptCache()` / `get` のエラーを非致命的として記録し、従来のSpreadsheetApp読み取りへ続行する。キャッシュ`put`の例外は取得済みの有効なreportを破棄させない。
 - 失敗時の `ok:false` レスポンスは実際の元台帳読み取り・列検証の失敗時のみに返す。正しいキャッシュヒットと閲覧権限の判定は従来どおり。
 - `test_finance_integration.mjs`で、キャッシュ接続失敗・get失敗・put失敗・キャッシュヒットの4つをNode VMの架空台帳で確認。
+
+## v0.25.25｜任意キャッシュの耐障害性（2026-10-16）
+
+- `FinanceAdvisor.gs/getFinanceSpendingInsights` のキャッシュ戻り値を `ok===true`、`source==='LEGACY_ONLY'`、要求年との一致、有限な数値 `total` で検証し、合致しない場合は原本から再集計する。`JSON.parse('null')` が成功してしまうケースも無効値として扱う。
+- GAS `CacheService` の1項目サイズはバイト単位のため、共有 `DataAccess.gs/utf8Bytes_` でシリアライズ後のUTF-8サイズを計測し、90,000バイト以下のみキャッシュする。保存に失敗しても業務レポートは返す。
+- `scripts/test_finance_integration.mjs` に、不正なキャッシュ内容・年度不一致・容量超過の日本語集計・正常なキャッシュ保存・キャッシュ障害時のフォールバックを追加。実データへの変更は行わない。
+- 最新の原本とGitHub Actions禁止運用を維持。アプリの全機能72件とブラウザー12件の受入は公開前後に別途確認する。

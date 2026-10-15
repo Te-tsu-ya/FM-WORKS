@@ -152,6 +152,43 @@ const cacheHit=cachedReport({getScriptCache:()=>({
 })});
 ok('valid existing legacy expense cache hit remains effective',
   cacheHit.ok===true&&cacheHit.total===12345);
+let invalidCacheWrites=0;
+const nullCache=cachedReport({getScriptCache:()=>({
+  get(){return 'null';},put(){invalidCacheWrites++;}
+})});
+ok('JSON null cache never masquerades as a valid financial report',
+  nullCache.ok===true&&nullCache.total===4200);
+const mismatchedYear=cachedReport({getScriptCache:()=>({
+  get(){return JSON.stringify({ok:true,year:2025,total:98765,source:'LEGACY_ONLY'});},
+  put(){}
+})});
+ok('wrong cached financial year is ignored even with a matching cache key',
+  mismatchedYear.ok===true&&mismatchedYear.total===4200);
+const cachedFailure=cachedReport({getScriptCache:()=>({
+  get(){return JSON.stringify({ok:false,year:2026,total:0,source:'LEGACY_ONLY'});},
+  put(){}
+})});
+ok('failure-shaped cache payload cannot replace the live report',
+  cachedFailure.ok===true&&cachedFailure.total===4200);
+const originalSpendingDigest=ctx.financeSpendingDigest_;
+ctx.financeSpendingDigest_=()=>({
+  year:2026,count:1,total:4200,source:'LEGACY_ONLY',
+  records:[{note:'日本語'.repeat(20000)}]
+});
+let overLimitCacheWrites=0;
+const japaneseReport=cachedReport({getScriptCache:()=>({
+  get(){return null;},put(){overLimitCacheWrites++;}
+})});
+ctx.financeSpendingDigest_=originalSpendingDigest;
+ok('UTF-8 oversized Japanese finance report returns intact without cache put',
+  japaneseReport.ok===true&&japaneseReport.total===4200&&
+  japaneseReport.records[0].note.length===60000&&overLimitCacheWrites===0);
+let smallReportCacheWrites=0;
+const regularReport=cachedReport({getScriptCache:()=>({
+  get(){return null;},put(){smallReportCacheWrites++;}
+})});
+ok('ordinary financial reports still benefit from short cache TTL',
+  regularReport.ok===true&&regularReport.total===4200&&smallReportCacheWrites===1);
 ctx.CacheService=savedLegacyCache;
 
 const expense={

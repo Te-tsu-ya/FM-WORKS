@@ -76,7 +76,16 @@ function getFinanceSpendingInsights(sessionToken,params){
   try{
     cache=CacheService.getScriptCache();
     const hit=cache.get(key);
-    if(hit){try{return JSON.parse(hit);}catch(_e){}}
+    if(hit){
+      try{
+        const parsed=JSON.parse(hit);
+        // Cache data is advisory. A stale/malformed value must not look like
+        // a successful financial report (JSON "null" is valid but not a report).
+        if(parsed&&parsed.ok===true&&parsed.source==='LEGACY_ONLY'&&
+           parsed.year===year&&typeof parsed.total==='number'&&Number.isFinite(parsed.total))
+          return parsed;
+      }catch(_e){/* Corrupt cache entry: read the authoritative sheet. */}
+    }
   }catch(cacheError){
     console.warn('legacy expense cache unavailable; reading source directly',cacheError);
     cache=null;
@@ -91,7 +100,9 @@ function getFinanceSpendingInsights(sessionToken,params){
     const rows=last<2?[]:sheet.getRange(2,1,last-1,10).getDisplayValues();
     const report=Object.assign({ok:true},financeSpendingDigest_(rows,year));
     const json=JSON.stringify(report);
-    if(json.length<90000&&cache){
+    // CacheService limits are UTF-8 bytes, not JS character counts. A long
+    // Japanese report can be <90k characters but exceed the byte quota.
+    if(cache&&utf8Bytes_(json)<=90000){
       try{cache.put(key,json,120);}
       catch(cacheError){console.warn('legacy expense cache write skipped',cacheError);}
     }
