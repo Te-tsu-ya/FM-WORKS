@@ -141,7 +141,12 @@ const dir=path.join(server,'source');
 if(args[0]==='list-deployments'){
  console.log('- '+dep+' @'+fs.readFileSync(path.join(server,'version'),'utf8').trim()+' Web app');
 }else if(args[0]==='pull'){
- for(const name of fs.readdirSync(dir))fs.copyFileSync(path.join(dir,name),path.join(process.cwd(),name));
+ const config=JSON.parse(fs.readFileSync(path.join(process.cwd(),'.clasp.json'),'utf8'));
+ const extension=config.scriptExtensions?.[0]||'.js';
+ for(const name of fs.readdirSync(dir)) {
+  const target=name.endsWith('.gs')?name.slice(0,-3)+extension:name;
+  fs.copyFileSync(path.join(dir,name),path.join(process.cwd(),target));
+ }
 }else if(args[0]==='push'){
  const source=path.join(process.cwd(),'src');
  if(!fs.existsSync(source))process.exit(7);
