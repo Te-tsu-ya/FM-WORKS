@@ -69,7 +69,9 @@
     "node scripts/test_schedule_acl.mjs",
     "node scripts/test_project_cockpit_effort_width.mjs",
     "node scripts/test_pin_presence_search.mjs",
-    "node scripts/test_prefetch_priority.mjs"
+    "node scripts/test_prefetch_priority.mjs",
+    "node scripts/test_temporary_pin_gate.mjs",
+    "node scripts/test_read_window_contract.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

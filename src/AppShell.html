@@ -140,7 +140,35 @@ function submitLogin(event){
 
 function acceptLogin(result){
   setSessionToken(result.sessionToken,!!result.remembered);
-  loadAuthenticatedApp(!!result.mustChangePin,result&&result.initialData||null);
+  if(result.mustChangePin){showRequiredPinChange_();return;}
+  loadAuthenticatedApp(false,result&&result.initialData||null);
+}
+
+// Do not mount the business UI or fetch getInitialData until a temporary
+// PIN has been changed. This screen needs only the public PIN-length config.
+function showRequiredPinChange_(){
+  const token=state.sessionToken;
+  if(!token)return;
+  const display=()=>{
+    if(state.sessionToken!==token||state.data)return;
+    showLogin('仮PINでログインしました。安全のため新しいPINへ変更してください。');
+    openChangePinModal(true);
+  };
+  if(state.publicConfig&&Number.isFinite(Number(state.publicConfig.pinLength))){
+    display();
+    return;
+  }
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+    .withSuccessHandler(config=>{
+      if(state.sessionToken!==token||state.data)return;
+      state.publicConfig=config;
+      display();
+    })
+    .withFailureHandler(()=>{
+      if(state.sessionToken!==token||state.data)return;
+      state.publicConfigError=true;
+      showLogin('PIN変更の設定を取得できませんでした。ページを再読み込みしてください。');
+    }).getPublicAuthConfig();
 }
 
 function mountAuthenticatedApp(data,mustChangePin){
@@ -475,7 +503,15 @@ function openChangePinModal(force=false){
 function submitOwnPinChange(force){
   const current=document.getElementById('currentPin').value,newPin=document.getElementById('newPin').value,confirmPin=document.getElementById('newPinConfirm').value;
   if(newPin!==confirmPin){showToast('確認用PINが一致しません');return}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{closeModal();showToast('PINを変更しました')}).withFailureHandler(err=>{if(!handleApiError(err,'PINを変更できませんでした')&&force){} }).changeOwnPin(state.sessionToken,current,newPin);
+  const token=state.sessionToken;
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+    if(token!==state.sessionToken)return;
+    closeModal();
+    showToast('PINを変更しました');
+    if(force)loadAuthenticatedApp(false,null);
+  }).withFailureHandler(err=>{
+    if(token===state.sessionToken)handleApiError(err,'PINを変更できませんでした');
+  }).changeOwnPin(token,current,newPin);
 }
 
 function openPinHelpModal(){
@@ -553,7 +589,8 @@ function bootstrap(){
   if(state.sessionToken){
     setLoading();
     (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-      loadAuthenticatedApp(!!result.mustChangePin,result&&result.initialData||null);
+      if(result.mustChangePin){showRequiredPinChange_();return;}
+      loadAuthenticatedApp(false,result&&result.initialData||null);
     }).withFailureHandler(()=>{
       clearLocalSession();
       loadPublicLoginConfig('セッションの有効期限が切れました。');
