@@ -162,7 +162,14 @@ if(args[0]==='list-deployments'){
  ok('git',['add','src/Code.gs'],work);ok('git',['commit','-m','[skip ci] approved update'],work);
  ok('git',['branch','deploy/gas-production'],work);
  ok('git',['push','-u','origin','main','deploy/gas-production'],work);
- const env={PATH:fake+path.delimiter+process.env.PATH,FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
+ // The BAT pins the real GAS baseline to @196; this fake fixture always starts at @192.
+ // Explicitly isolate the synthetic baseline from any inherited production environment.
+ const env={PATH:fake+path.delimiter+process.env.PATH,
+   FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,
+   FM_WORKS_INITIAL_GAS_VERSION:String(INITIAL_EXPECTED_VERSION),
+   FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
+ assert.equal({...process.env,FM_WORKS_INITIAL_GAS_VERSION:'196',...env}.FM_WORKS_INITIAL_GAS_VERSION,
+   String(INITIAL_EXPECTED_VERSION),'fake baseline must override external production baseline');
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
