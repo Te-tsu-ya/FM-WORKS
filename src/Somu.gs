@@ -208,8 +208,8 @@ function somuMatchesSubmittedFields_(stored,fields){
   return Object.keys(fields).every(function(key){
     const actual=stored[key],expected=fields[key];
     if(typeof expected==='number'){
-      const formatted=String(actual==null?'':actual).replace(/[,，\\s]/g,'');
-      return formatted!==''&&Number.isFinite(Number(formatted))&&Number(formatted)===expected;
+      const formatted=String(actual==null?'':actual).replace(/[,，\s]/g,'');
+      return /^\d+$/.test(formatted)&&Number(formatted)===expected;
     }
     return String(actual==null?'':actual)===String(expected==null?'':expected);
   });

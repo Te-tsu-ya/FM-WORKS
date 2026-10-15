@@ -2764,3 +2764,4 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `saveSomuGrowthRecord` の新規登録では、契約・設備・依頼フォームを正規化した後にキー衝突先の保存内容と比較する。依頼の自動計算項目（完了日・依頼者）は保存済レコードを基準に再構成し、日付変更時の誤判定を避ける。
 - `resubmitSomuPurchase` は差戻し理由を保持する備考以外のフォーム項目を検証してから再送成功を返す。送信識別子はレスポンスへ公開しない。データ原本やDB列を変更せず、`test_somu_integration.mjs` と `test_somu_growth.mjs` で回帰する。
 - 既存の `FM-WORKS_GAS_Update_SAFE_v3.bat` で全機能テストと配信照合が成功するまではGAS公開しない。GitHub Actionsは使わない。
+- 数値項目の比較では、整形後の文字列を `/^\d+$/` で検証し、`Number(...)` の指数表現・不正文字吸収を許さない。

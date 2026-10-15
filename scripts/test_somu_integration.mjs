@@ -103,6 +103,8 @@ assert.equal(loan.record.status,'貸出中');
 assert.equal(call('createSomuLoan','token',{assetId,borrower:'架空社員A',quantity:2,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-test-key-001'}).duplicate,true);
 assert.throws(()=>call('createSomuLoan','token',{assetId,borrower:'別の貸出先',quantity:2,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-test-key-001'}),/送信識別子の内容が一致/);
 assert.equal(call('somuMatchesSubmittedFields_',{quantity:'1,000'},{quantity:1000}),true);
+assert.equal(call('somuMatchesSubmittedFields_',{quantity:'1s000'},{quantity:1000}),false);
+assert.equal(call('somuMatchesSubmittedFields_',{quantity:'1e3'},{quantity:1000}),false);
 assert.throws(()=>call('createSomuLoan','token',{assetId,borrower:'架空社員B',quantity:2,loanDate:'2026-10-10',dueDate:'2026-10-20',requestKey:'somu-test-key-002'}),/貸出可能数/);
 assert.throws(()=>call('saveSomuAsset','token',{id:assetId,revision:1,code:'AS-001',name:'架空PC',quantity:1,minimum:0}),/貸出中/);
 assert.equal(call('returnSomuLoan','token',loan.record.id).record.status,'返却済');
