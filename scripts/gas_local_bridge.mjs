@@ -38,6 +38,40 @@ function run(command, argv, cwd, timeout=120000) {
   }
   return String(result.stdout || '');
 }
+
+function runFunctionalSuite(worktree, requestedSha) {
+  // Keep local-only diagnostics before the temporary release worktree is deleted.
+  const result=spawnSync(process.execPath,['scripts/run_local_checks.mjs','--functional'],{
+    cwd:worktree,encoding:'utf8',timeout:1800000,maxBuffer:12*1024*1024,
+    windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}
+  });
+  const reportSrc=path.join(worktree,'artifacts/local-verification/report.json');
+  const reportDst=path.join(output,'last-functional-report.json');
+  const logDst=path.join(output,'last-functional-suite.log');
+  fs.writeFileSync(logDst,
+    'GitHub commit: '+requestedSha+'\nExit: '+String(result.status)+'\n'+
+    'STDOUT\n'+String(result.stdout||'')+'\nSTDERR\n'+String(result.stderr||result.error?.message||'')+'\n',
+    {mode:0o600});
+  let report=null;
+  if(fs.existsSync(reportSrc)){
+    fs.copyFileSync(reportSrc,reportDst);
+    try{report=JSON.parse(fs.readFileSync(reportDst,'utf8'));}
+    catch(e){errorLog('Local functional report cannot be parsed.');}
+  }
+  const failed=Array.isArray(report?.checks)?report.checks.filter(x=>x.status==='FAIL'):[];
+  const validReport=report?.mode==='functional' && Array.isArray(report?.checks) &&
+    Number.isInteger(report?.failed) && Number.isInteger(report?.passed);
+  if(result.error || result.status!==0 || !validReport || report.failed!==0){
+    const names=failed.map(x=>String(x.file||'')).filter(x=>/^scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x));
+    const fallback=String(result.stdout||'').split(/\r?\n/).filter(x=>/^FAIL scripts\/[A-Za-z0-9_/-]+\.mjs$/.test(x)).map(x=>x.slice(5));
+    errorLog('Functional suite failed: '+(names.length?names:fallback).join(', ') || 'unknown test');
+    errorLog('Saved local diagnostic output: '+logDst);
+    if(fs.existsSync(reportDst))errorLog('Saved test report: '+reportDst);
+    throw Error('Local functional tests failed before GAS push. Inspect the saved report; do not retry blindly.');
+  }
+  log('Local functional suite passed: '+report.passed+' PASS, '+report.skipped+' browser SKIPPED.');
+}
+
 function readState() {return fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath,'utf8')) : null;}
 function persist(file, value) {
   const tmp = file + '.tmp';
@@ -133,7 +167,7 @@ function cycle({preflight=false}={}) {
       return;
     }
     log('Running local functional suite (no GitHub Actions).');
-    run(process.execPath,['scripts/run_local_checks.mjs','--functional'],tree,1800000);
+    runFunctionalSuite(tree,requested);
     // Tests may run for minutes. Abort if anyone changed remote code during verification.
     const justBeforePush=pullSnapshot(path.join(sandbox,'remote-just-before-push'),cfg.scriptId);
     assertNoRemoteDrift(remoteBefore,justBeforePush);
