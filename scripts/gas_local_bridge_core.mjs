@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 
 export const RELEASE_BRANCH = 'deploy/gas-production';
 export const KNOWN_DEPLOYMENT_ID = 'AKfycbw7oWIZkrOE-ClTVNeI0Kq4hzsZrYaKSC0CqNVsV4bwpufgBVR5-7MYxVEuj_51A9YgvQ';
-export const INITIAL_EXPECTED_VERSION = 192;
-export const INITIAL_BASELINE_COMMIT = '067b070d2cf307d0a5aff52d716011238d8b819b';
+// Confirmed by docs/releases/GAS_v0258_20261014_PUBLISHED.md.
+export const INITIAL_EXPECTED_VERSION = 196;
+export const INITIAL_BASELINE_COMMIT = '600b99213a3de50234f09de673337d8a7cfe86ea';
 export const ACCEPTED_SOURCE = /^(?:[A-Za-z0-9_-]+\.(?:gs|html)|appsscript\.json)$/;
 
 // Windows npm global shims are .cmd files, which cannot be spawned as normal executables.
