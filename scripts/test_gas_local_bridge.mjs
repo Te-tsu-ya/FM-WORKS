@@ -26,6 +26,12 @@ const windowsList=claspInvocation(['list-deployments'],'win32',{ComSpec:'C:\\Win
 assert.deepEqual(windowsList.args,['/d','/s','/c','"clasp.cmd list-deployments"']);
 assert.equal(windowsList.windowsVerbatimArguments,true);
 const bridgeProgram=fs.readFileSync(new URL('./gas_local_bridge.mjs',import.meta.url),'utf8');
+assert.match(bridgeProgram,/last-functional-report\.json/,
+  'functional check report must survive temporary worktree removal');
+assert.match(bridgeProgram,/Functional suite failed/,
+  'failed checks must identify the blocked publication in the terminal');
+assert.match(bridgeProgram,/runFunctionalSuite\(tree,requested\)/,
+  'publisher must persist functional test results');
 assert.match(bridgeProgram,/windowsVerbatimArguments:resolved\.windowsVerbatimArguments === true/,
   'spawnSync must enable Windows verbatim mode for clasp');
 assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
@@ -124,7 +130,11 @@ try {
  fs.mkdirSync(path.join(work,'scripts'));fs.mkdirSync(path.join(work,'src'));
  for(const name of ['gas_local_bridge_core.mjs','gas_local_bridge.mjs'])
   fs.copyFileSync(path.join(self,name),path.join(work,'scripts',name));
- fs.writeFileSync(path.join(work,'scripts/run_local_checks.mjs'),"console.log('PASS simulated checks');\n");
+ fs.writeFileSync(path.join(work,'scripts/run_local_checks.mjs'),
+  "import fs from 'node:fs';\n"+
+  "fs.mkdirSync('artifacts/local-verification',{recursive:true});\n"+
+  "fs.writeFileSync('artifacts/local-verification/report.json',JSON.stringify({mode:'functional',passed:1,failed:0,skipped:0,checks:[{file:'scripts/simulated.mjs',status:'PASS'}]}));\n"+
+  "console.log('PASS simulated checks');\n");
  fs.writeFileSync(path.join(work,'.gitignore'),'.clasp.json\nartifacts/\n');
  fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.4'};\n");
  fs.writeFileSync(path.join(work,'src/Styles.html'),'<style>.sidebar{background:white}</style>\n');
