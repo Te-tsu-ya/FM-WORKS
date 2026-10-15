@@ -13,13 +13,15 @@ import {
 const old='a'.repeat(40),now='b'.repeat(40);
 assert.equal(RELEASE_BRANCH,'deploy/gas-production');
 assert.ok(KNOWN_DEPLOYMENT_ID.startsWith('AKfy'));
-assert.equal(INITIAL_EXPECTED_VERSION,192);
+assert.equal(INITIAL_EXPECTED_VERSION,196);
+assert.equal(INITIAL_BASELINE_COMMIT,'600b99213a3de50234f09de673337d8a7cfe86ea');
 assert.deepEqual(claspInvocation(['list-deployments'], 'linux'), {command:'clasp',args:['list-deployments']});
-const windowsInvocation=claspInvocation(['create-deployment','--deploymentId',KNOWN_DEPLOYMENT_ID,'--description','FM WORKS abcd'], 'win32', {ComSpec:'C:\\Windows\\System32\\cmd.exe'});
+const windowsInvocation=claspInvocation(['update-deployment',KNOWN_DEPLOYMENT_ID,'--description','FM_WORKS_abcd'], 'win32', {ComSpec:'C:\\Windows\\System32\\cmd.exe'});
 assert.equal(windowsInvocation.args[0],'/d');
 assert.equal(windowsInvocation.args[2],'/c');
-assert.match(windowsInvocation.args[3],/clasp\.cmd create-deployment/);
-assert.match(windowsInvocation.args[3],/"FM WORKS abcd"/);
+assert.match(windowsInvocation.args[3],/clasp\\.cmd update-deployment/);
+assert.match(windowsInvocation.args[3],/FM_WORKS_abcd/);
+assert.ok(!windowsInvocation.args[3].includes('create-deployment'));
 assert.throws(()=>claspInvocation(['foo & del *'], 'win32'),/Unsafe clasp/);
 
 // Windows registration is intentionally opt-in and runs a read-only preflight first.
@@ -98,7 +100,7 @@ try {
  for(const file of fs.readdirSync(path.join(work,'src')))
   fs.copyFileSync(path.join(work,'src',file),path.join(server,'source',file));
  fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.4'};\n");
- fs.writeFileSync(path.join(server,'version'),'192');
+ fs.writeFileSync(path.join(server,'version'),'196');
  const fakeCli=`import fs from 'node:fs';
 import path from 'node:path';
 const args=process.argv.slice(2),server=process.env.FM_FAKE_GAS,dep=process.env.FM_FAKE_DEPLOYMENT_ID;
@@ -112,8 +114,8 @@ if(args[0]==='list-deployments'){
  if(!fs.existsSync(source))process.exit(7);
  fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir,{recursive:true});
  for(const name of fs.readdirSync(source))if(/\.(?:gs|html|json)$/.test(name))fs.copyFileSync(path.join(source,name),path.join(dir,name));
-}else if(args[0]==='create-deployment'){
- if(args[1]!=='--deploymentId'||args[2]!==dep)process.exit(4);
+}else if(args[0]==='update-deployment'){
+ if(args[1]!==dep||args[2]!=='--description'||!/^FM_WORKS_[a-f0-9]{12}$/.test(args[3]))process.exit(4);
  const n=Number(fs.readFileSync(path.join(server,'version'),'utf8'))+1;
  fs.writeFileSync(path.join(server,'version'),String(n));console.log('Deployed '+dep+' @'+n);
 }else process.exit(7);
@@ -130,23 +132,23 @@ if(args[0]==='list-deployments'){
  const env={PATH:fake+path.delimiter+process.env.PATH,FM_FAKE_GAS:server,FM_FAKE_DEPLOYMENT_ID:KNOWN_DEPLOYMENT_ID,FM_WORKS_INITIAL_GAS_BASELINE_SHA:initialBaseline};
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'196','preflight never deploys');
  // The first-ever release also refuses unpublished manual changes to GAS HEAD.
  fs.writeFileSync(path.join(server,'source/Code.gs'),'function unexpectedManualEdit(){}\n');
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
  assert.notEqual(r.code,0,'initial baseline drift must block release');
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','unapproved first deployment is unchanged');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'196','unapproved first deployment is unchanged');
  fs.writeFileSync(path.join(server,'source/Code.gs'),"const APP={version:'0.25.4'};\n");
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
  assert.equal(r.code,0,'first publish: '+r.stderr);
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','existing deployment updated once');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'197','existing deployment updated once');
  const st=JSON.parse(fs.readFileSync(path.join(work,'artifacts/gas-local-bridge/state.json'),'utf8'));
  assert.equal(st.version,193);
  assert.equal(st.status,'DEPLOYED_SOURCE_VERIFIED_BROWSER_PENDING');
  assert.equal(ok('git',['rev-parse','refs/remotes/origin/main'],work).trim().length,40);
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
  assert.equal(r.code,0,'idle run: '+r.stderr);
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','idempotent release');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'197','idempotent release');
  assert.equal(ok('git',['ls-remote','origin','refs/heads/deploy/gas-published'],work).split('\t')[0].length,40,'GitHub published receipt exists');
  // Documentation-only release does not issue another GAS version.
  fs.writeFileSync(path.join(work,'README.md'),'documentation only\n');
@@ -155,7 +157,7 @@ if(args[0]==='list-deployments'){
  ok('git',['push','origin','main','deploy/gas-production'],work);
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
  assert.equal(r.code,0,'docs-only release: '+r.stderr);
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','docs-only change does not create new GAS version');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'197','docs-only change does not create new GAS version');
  const publishedReceipt=ok('git',['ls-remote','origin','refs/heads/deploy/gas-published'],work).split('\t')[0];
  const latestMain=ok('git',['rev-parse','main'],work).trim();
  assert.equal(publishedReceipt,latestMain,'receipt matches latest source-identical approval');
@@ -168,6 +170,6 @@ if(args[0]==='list-deployments'){
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
  assert.notEqual(r.code,0,'unexpected external GAS edit must fail');
  assert.match(r.stderr,/outside approved publisher/);
- assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'193','drift does not deploy');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8').trim(),'197','drift does not deploy');
  console.log('PASS local GAS bridge fake end-to-end: preflight read-only, one controlled deploy, idempotency, remote drift stops publication (portable Node/clasp fake)');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
