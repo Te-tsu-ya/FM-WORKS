@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.20',
+  version: '0.25.21',
   locale: 'ja-JP'
 });
 
@@ -437,7 +437,8 @@ function getPunchHistory(sessionToken, limit) {
   const employee = requireSession_(sessionToken).employee;
   const rows = getActivePunchRows_(employee.employeeId)
     .sort((a,b) => String(b[5]).localeCompare(String(a[5])))
-    .slice(0, Math.max(1, Number(limit) || 20));
+    // Clamp malformed or excessively large API requests before creating the RPC response.
+    .slice(0, Number.isFinite(Number(limit)) ? Math.min(100, Math.max(1, Math.floor(Number(limit)))) : 20);
 
   return rows.map(r => ({
     punchId: r[0],

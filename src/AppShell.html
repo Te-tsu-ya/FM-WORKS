@@ -457,15 +457,16 @@ function performLogout(confirmed=false){
 }
 
 function openChangePinModal(force=false){
+  const pinLength=Math.max(4,Number(state.publicConfig&&state.publicConfig.pinLength)||6);
   closeProfileMenu();
   const r=ensureModal();
   r.innerHTML=`<div class='modal-backdrop' ${force?'':"onclick='closeModal()'"}></div><section class='modal-card small' role='dialog' aria-modal='true'>
     <div class='modal-head'><div><small>${force?'初回ログイン':'アカウント設定'}</small><h2>PINを変更</h2></div>${force?'':"<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button>"}</div>
     ${force?"<div class='setup-note'>安全のため、管理者が発行した仮PINから新しいPINへ変更してください。</div>":''}
     <div class='form-grid'>
-      <label class='field full'><span>現在のPIN</span><input id='currentPin' type='password' inputmode='numeric' maxlength='6' autocomplete='current-password'></label>
-      <label class='field full'><span>新しいPIN</span><input id='newPin' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
-      <label class='field full'><span>新しいPIN（確認）</span><input id='newPinConfirm' type='password' inputmode='numeric' maxlength='6' autocomplete='new-password'></label>
+      <label class='field full'><span>現在のPIN</span><input id='currentPin' type='password' inputmode='numeric' maxlength='${pinLength}' autocomplete='current-password'></label>
+      <label class='field full'><span>新しいPIN</span><input id='newPin' type='password' inputmode='numeric' maxlength='${pinLength}' autocomplete='new-password'></label>
+      <label class='field full'><span>新しいPIN（確認）</span><input id='newPinConfirm' type='password' inputmode='numeric' maxlength='${pinLength}' autocomplete='new-password'></label>
     </div>
     <div class='modal-actions'><span></span><div>${force?'':"<button class='secondary-button' onclick='closeModal()'>キャンセル</button>"}<button class='primary-button' onclick="submitOwnPinChange(${force})">変更</button></div></div>
   </section>`;

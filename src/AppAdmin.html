@@ -444,16 +444,17 @@ function loadAuthAdmin(options={}){
 }
 
 function openTempPinModal(employeeId){
+  const pinLength=Math.max(4,Number(state.publicConfig&&state.publicConfig.pinLength)||6);
   const source=(state.authAdmin&&state.authAdmin.employees||[]).find(x=>x.employeeId===employeeId);
   const name=source?source.name:employeeId;
   const r=ensureModal();
   r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div>
   <section class='modal-card small' role='dialog' aria-modal='true'>
     <div class='modal-head'><div><small>管理者操作</small><h2>仮PINを発行</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>
-    <p class='muted'>${escapeHtml(name)}（${escapeHtml(employeeId)}）に6桁の仮PINを設定します。本人は初回ログイン時に変更が必要です。</p>
+    <p class='muted'>${escapeHtml(name)}（${escapeHtml(employeeId)}）に${pinLength}桁の仮PINを設定します。本人は初回ログイン時に変更が必要です。</p>
     <div class='form-grid'>
-      <label class='field full'><span>仮PIN</span><input id='tempPin' inputmode='numeric' maxlength='6' type='password' autocomplete='new-password'></label>
-      <label class='field full'><span>仮PIN（確認）</span><input id='tempPinConfirm' inputmode='numeric' maxlength='6' type='password' autocomplete='new-password'></label>
+      <label class='field full'><span>仮PIN</span><input id='tempPin' inputmode='numeric' maxlength='${pinLength}' type='password' autocomplete='new-password'></label>
+      <label class='field full'><span>仮PIN（確認）</span><input id='tempPinConfirm' inputmode='numeric' maxlength='${pinLength}' type='password' autocomplete='new-password'></label>
     </div>
     <div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="submitTempPin('${employeeId}')">発行</button></div></div>
   </section>`;

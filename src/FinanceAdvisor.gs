@@ -27,8 +27,11 @@ function financeSpendingDigest_(rows,year){
   (rows||[]).forEach(row=>{
     const dateText=String(row[0]||'').trim();
     const m=dateText.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
-    if(!m||Number(m[2])<1||Number(m[2])>12||Number(m[3])<1||Number(m[3])>31)return;
-    if(Number(m[1])!==year)return;
+    if(!m||Number(m[1])!==year)return;
+    const month=Number(m[2]),day=Number(m[3]);
+    // Reject impossible dates: JavaScript otherwise normalizes Feb 30 into March.
+    if(month<1||month>12||day<1||
+       day>new Date(Date.UTC(year,month,0)).getUTCDate())return;
     const amount=financeAdvisorNumber_(row[5]);
     if(amount===null){skipped++;return;}
     const ym=m[1]+'-'+m[2].padStart(2,'0');
