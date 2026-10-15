@@ -15,10 +15,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/gas-local-bridge');
 const statePath = path.join(output, 'state.json');
 const pendingPath = path.join(output, 'pending.json');
-const modes = new Set(['--once', '--watch', '--preflight']);
+const modes = new Set(['--once', '--watch', '--preflight', '--preflight-main']);
 const args = process.argv.slice(2);
 if (args.length !== 1 || !modes.has(args[0])) {
-  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight|--once|--watch');
+  console.error('Usage: node scripts/gas_local_bridge.mjs --preflight-main|--preflight|--once|--watch');
   process.exit(2);
 }
 const mode = args[0];
@@ -74,7 +74,7 @@ function pullSnapshot(baseDir, scriptId) {
   run('clasp',['pull'],baseDir,180000);
   return contentHashes(localFiles(baseDir));
 }
-function cycle({preflight=false}={}) {
+function cycle({preflight=false,candidateMain=false}={}) {
   const cfg=currentConfig();
   const oldState=readState();
   if (fs.existsSync(pendingPath))
@@ -84,7 +84,9 @@ function cycle({preflight=false}={}) {
     '+refs/heads/main:refs/remotes/origin/main',
     '+refs/heads/'+RELEASE_BRANCH+':refs/remotes/origin/'+RELEASE_BRANCH],root,180000);
   const main=run('git',['rev-parse','refs/remotes/origin/main'],root).trim();
-  const requested=run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  const releaseRequest=run('git',['rev-parse','refs/remotes/origin/'+RELEASE_BRANCH],root).trim();
+  const requested=candidateMain?main:releaseRequest;
+  if(candidateMain)log('Read-only candidate preflight: latest main; release pointer remains unchanged.');
   const necessary=validateRequestedCommit({mainSha:main,requestedSha:requested,previouslyPublishedSha:oldState?.commit});
   if (!necessary && !preflight) {log('No new approved GAS release request.');return;}
   const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-gas-release-'));
@@ -99,7 +101,7 @@ function cycle({preflight=false}={}) {
     const initialVersion=Number(process.env.FM_WORKS_INITIAL_GAS_VERSION || INITIAL_EXPECTED_VERSION);
     if (!Number.isSafeInteger(initialVersion) || initialVersion < 1) throw Error('Invalid expected initial GAS version.');
     if (!oldState && currentVersion !== initialVersion)
-      throw Error('Initial GAS version is not the expected @'+initialVersion+'. Inspect release history first.');
+      throw Error('Initial GAS version mismatch: deployed @'+currentVersion+', documented baseline @'+initialVersion+'. Verify GAS project and release record before retrying.');
     if (oldState && currentVersion !== oldState.version)
       throw Error('Remote deployment version changed outside this bridge.');
     const remoteBefore=pullSnapshot(path.join(sandbox,'remote-before'),cfg.scriptId);
@@ -130,8 +132,10 @@ function cycle({preflight=false}={}) {
     pushStarted=true;
     run('clasp',['push','--force'],tree,300000);
     persist(pendingPath,{requestedCommit:requested,previousVersion:currentVersion,startedAt:stamp(),phase:'source-pushed-deployment-unknown'});
-    const deployed=run('clasp',['create-deployment','--deploymentId',KNOWN_DEPLOYMENT_ID,
-      '--description','FM WORKS '+requested.slice(0,12)],tree,180000);
+    // clasp v3 updates an existing /exec URL with this command. Keep the
+    // description one token to avoid Windows cmd.exe argument splitting.
+    const deployed=run('clasp',['update-deployment',KNOWN_DEPLOYMENT_ID,
+      '--description','FM_WORKS_'+requested.slice(0,12)],tree,180000);
     const newVersion=verifyDeployResult(deployed);
     if (newVersion <= currentVersion) throw Error('Deployment version did not advance.');
     const currentAfter=requireDeployment(tree);
@@ -168,5 +172,5 @@ if (mode==='--watch') {
     await sleep(5*60*1000);
   }
 } else {
-  try{cycle({preflight:mode==='--preflight'});}catch(e){errorLog(String(e.message||e));process.exitCode=1;}
+  try{cycle({preflight:mode==='--preflight'||mode==='--preflight-main',candidateMain:mode==='--preflight-main'});}catch(e){errorLog(String(e.message||e));process.exitCode=1;}
 }
