@@ -11,6 +11,18 @@ import {
 } from './gas_local_bridge_core.mjs';
 
 const old='a'.repeat(40),now='b'.repeat(40);
+const reusableBat=fs.readFileSync(new URL('../FM-WORKS_GAS_Update.bat',import.meta.url),'utf8');
+assert.ok(reusableBat.includes('FM WORKS - permanent GitHub main to existing GAS updater'));
+const batchPreflight=reusableBat.indexOf('node scripts\\gas_local_bridge.mjs --preflight-main');
+const batchPush=reusableBat.indexOf('git -C "%PUBLISH_DIR%" push origin "%MAIN_SHA%:refs/heads/deploy/gas-production"');
+const batchPublish=reusableBat.indexOf('node scripts\\gas_local_bridge.mjs --once');
+assert.ok(batchPreflight>=0&&batchPush>batchPreflight&&batchPublish>batchPush,
+  'Windows updater must preflight main before updating release pointer or GAS');
+assert.ok(!reusableBat.includes('An automatic GAS publisher task already exists.'),
+  'A registered but idle scheduled task must not prevent manual publishing');
+assert.ok(reusableBat.includes('update-deployment --help'),
+  'Require a compatible clasp version before any changes');
+
 assert.equal(RELEASE_BRANCH,'deploy/gas-production');
 assert.ok(KNOWN_DEPLOYMENT_ID.startsWith('AKfy'));
 assert.equal(INITIAL_EXPECTED_VERSION,196);
@@ -136,7 +148,7 @@ if(args[0]==='list-deployments'){
  assert.notEqual(r.code,0,'old pointer should not pass normal preflight');
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight-main'],work,env);
  assert.equal(r.code,0,'read-only preflight-main: '+r.stderr);
- assert.equal(ok('git',['ls-remote','origin','refs/heads/deploy/gas-production'],work).split('\\t')[0],initialBaseline,
+ assert.equal(ok('git',['ls-remote','origin','refs/heads/deploy/gas-production'],work).split('\t')[0],initialBaseline,
    'read-only preflight must not advance the release pointer');
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'196','candidate preflight never deploys');
  ok('git',['push','origin','main:refs/heads/deploy/gas-production'],work);
