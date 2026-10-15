@@ -176,7 +176,18 @@ Object.assign(gctx,{
  getEmployee_:id=>({...people[id],active:true}),
  readRowsByDateRange_:(sheet,col,width,start,end)=>sheet.rows.slice(1).filter(r=>String(r[1])>=start&&String(r[1])<=end).map(r=>r.map(x=>String(x??'')))
 });
+// The production GAS runtime loads both Code.gs and Worklog.gs globally.
+// This isolated VM must load the real shared range guard before Worklog.gs.
+// Do not stub it: the test must cover the same 400-day safety check as GAS.
+const codeSource=fs.readFileSync('src/Code.gs','utf8');
+const guardStart=codeSource.indexOf('function assertReadWindow_(');
+const guardEnd=codeSource.indexOf('\nfunction normalizeTime_(',guardStart);
+assert.ok(guardStart>=0&&guardEnd>guardStart,
+  'Worklog VM requires the real assertReadWindow_ from Code.gs');
+vm.runInContext(codeSource.slice(guardStart,guardEnd),gctx);
 vm.runInContext(fs.readFileSync('src/Worklog.gs','utf8'),gctx);
+assert.throws(()=>gctx.getWorklogs('U',{start:'2025-01-01',end:'2026-10-10',includeProjects:false}),
+  /400日/,'oversized project worklog ranges must be rejected before Sheets reads');
 const worklogPayload={date:'2026-10-10',project:'架空のテスト案件',taskId:'TASK-1',category:'設計',
  description:'新規設計',start:'13:00',end:'14:00',note:'',requestKey:'WORKLOG-full-save-123456'};
 const savedWorklog=gctx.saveWorklog('U',worklogPayload);
