@@ -133,7 +133,9 @@ try {
  fs.writeFileSync(path.join(work,'scripts/run_local_checks.mjs'),
   "import fs from 'node:fs';\n"+
   "fs.mkdirSync('artifacts/local-verification',{recursive:true});\n"+
-  "fs.writeFileSync('artifacts/local-verification/report.json',JSON.stringify({mode:'functional',passed:1,failed:0,skipped:0,checks:[{file:'scripts/simulated.mjs',status:'PASS'}]}));\n"+
+  "const fail=process.env.FM_SIMULATE_FUNCTIONAL_FAILURE==='1';\n"+
+  "fs.writeFileSync('artifacts/local-verification/report.json',JSON.stringify({mode:'functional',passed:fail?0:1,failed:fail?1:0,skipped:0,checks:[{file:'scripts/simulated.mjs',status:fail?'FAIL':'PASS',details:fail?'Intentional local fixture error':''}]}));\n"+
+  "if(fail){console.error('FAIL scripts/simulated.mjs');process.exit(1);}\n"+
   "console.log('PASS simulated checks');\n");
  fs.writeFileSync(path.join(work,'.gitignore'),'.clasp.json\nartifacts/\n');
  fs.writeFileSync(path.join(work,'src/Code.gs'),"const APP={version:'0.25.4'};\n");
@@ -188,6 +190,15 @@ if(args[0]==='list-deployments'){
  let r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--preflight'],work,env);
  assert.equal(r.code,0,'preflight: '+r.stderr);
  assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','preflight never deploys');
+ // A failing local suite must report its precise test, preserve evidence and never push GAS.
+ const broken=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,{...env,FM_SIMULATE_FUNCTIONAL_FAILURE:'1'});
+ assert.notEqual(broken.code,0,'synthetic local test failure blocks release');
+ assert.match(broken.stderr,/Functional suite failed: scripts\/simulated\.mjs/);
+ const savedReport=path.join(work,'artifacts/gas-local-bridge/last-functional-report.json');
+ assert.equal(JSON.parse(fs.readFileSync(savedReport,'utf8')).failed,1,'failure evidence survives worktree cleanup');
+ assert.equal(fs.readFileSync(path.join(server,'version'),'utf8'),'192','failed checks may not deploy GAS');
+ assert.equal(fs.existsSync(path.join(work,'artifacts/gas-local-bridge/pending.json')),false,
+   'functional suite failure does not begin a source push');
  // The first-ever release also refuses unpublished manual changes to GAS HEAD.
  fs.writeFileSync(path.join(server,'source/Code.gs'),'function unexpectedManualEdit(){}\n');
  r=cmd(process.execPath,['scripts/gas_local_bridge.mjs','--once'],work,env);
