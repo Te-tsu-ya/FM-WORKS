@@ -54,7 +54,16 @@ function saveCashFlowPlanLink(token,payload){
  const reason=cfpText_(p.reason,'確認・解除の理由',160,true);
  const requestedPlanId=String(p.planId||''),requestedDate=String(p.plannedDate||'');
  return withScriptLock_(()=>{
-  const source=cfmlRows_(false),old=source.rows.find(r=>r.transactionId===transactionId);
+  const source=cfmlRows_(false);
+  // A corrupted/partial ledger must never make an idempotent replay
+  // ambiguous. Validate both identities before any early success return.
+  const transactionMatches=source.rows.filter(r=>r.transactionId===transactionId);
+  const keyMatches=source.rows.filter(r=>r.requestKey===requestKey);
+  if(transactionMatches.length>1)
+   throw Error('同じ銀行明細に照合記録が複数存在します。管理者に確認してください。');
+  if(keyMatches.length>1)
+   throw Error('送信識別子が複数の照合記録に重複しています。管理者に確認してください。');
+  const old=transactionMatches[0];
   const tx=cfpRows_('tx',false).rows.find(r=>r.id===transactionId);
   if(!tx)throw Error('銀行明細が存在しません。');cfaAssertUnlocked_(tx.date);
   if((old?Number(old.revision):0)!==revision&&(!old||old.requestKey!==requestKey))
@@ -83,11 +92,17 @@ function saveCashFlowPlanLink(token,payload){
    planId=old.planId;plannedDate=old.plannedDate;status='UNLINKED';
    txFingerprint=old.txFingerprint;planFingerprint=old.planFingerprint;
   }
-  const reused=source.rows.find(r=>r.requestKey===requestKey);
+  const reused=keyMatches[0];
   if(reused){
    if(reused.transactionId===transactionId&&reused.status===status&&reused.planId===planId&&
-    reused.plannedDate===plannedDate&&reused.reason===reason)
+    reused.plannedDate===plannedDate&&reused.reason===reason){
+    // An unchanged requestKey cannot re-confirm a link whose source
+    // transaction or scheduled occurrence has changed since approval.
+    if(status==='APPROVED'&&
+      (reused.txFingerprint!==txFingerprint||reused.planFingerprint!==planFingerprint))
+     throw Error('銀行明細または入出金予定が承認時から変更されています。照合を再読み込みして確認してください。');
     return {ok:true,status,revision:Number(reused.revision),duplicate:true,auditRecorded:null};
+   }
    throw Error('同じ送信識別子を異なる照合操作に使用できません。');
   }
   if((old?Number(old.revision):0)!==revision)throw Error('照合が変更されています。再読み込みしてください。');

@@ -152,6 +152,34 @@ const saved=ctx.saveCashFlowPlanLink('ADMIN',link);
 assert.equal(saved.ok,true);assert.equal(saved.status,'APPROVED');assert.equal(saved.revision,1);
 assert.equal(ctx.saveCashFlowPlanLink('ADMIN',link).duplicate,true,'same request can be safely retried');
 assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{...link,reason:'changed'}),/送信識別子/);
+// An approval becomes STALE after a source edit. Replaying the old
+// approval key must not incorrectly report that the new facts were approved.
+const manualPlanRow=planSheet.rows.find(r=>r[0]==='P-MANUAL');
+assert.ok(manualPlanRow,'synthetic bank plan must exist');
+const oldPlanTitle=manualPlanRow[1];
+manualPlanRow[1]='照合承認後に変更した入金予定';
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',link),/承認時から変更/,
+ 'a changed plan must not be confirmed by an old approval request key');
+manualPlanRow[1]=oldPlanTitle;
+const originalTxRow=sheets.get('資金取引').rows.find(r=>r[0]===bankTx.id);
+assert.ok(originalTxRow,'synthetic bank original must exist');
+const oldTxDescription=originalTxRow[5];
+originalTxRow[5]='照合承認後に変更した銀行摘要';
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',link),/承認時から変更/,
+ 'a changed bank statement must not be confirmed by an old approval key');
+originalTxRow[5]=oldTxDescription;
+// A historically duplicated key or two records for one bank transaction
+// must not be treated as an unambiguous idempotent success.
+put('資金予定照合',['TX-OTHER','P-MANUAL','2026-04-10','UNLINKED','hash','hash',
+ '異なる明細の重複キー',1,'2026-10-16','A',link.requestKey]);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',link),/送信識別子.*重複/);
+manualSheet.rows.pop();
+put('資金予定照合',[bankTx.id,'P-MANUAL','2026-04-10','UNLINKED','hash','hash',
+ '同じ明細に複数の照合行',1,'2026-10-16','A','OTHER-LINK-000002']);
+assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',link),/照合記録が複数/);
+manualSheet.rows.pop();
+assert.equal(ctx.saveCashFlowPlanLink('ADMIN',link).duplicate,true,
+ 'a valid retry remains idempotent after all negative cases');
 const linked=ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'});
 assert.equal(linked.linkReady,true);
 assert.equal(linked.rows.find(x=>x.id===bankTx.id).planLink.status,'APPROVED');

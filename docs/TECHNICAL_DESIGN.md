@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.33
+**文書版:** 0.25.34
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2815,3 +2815,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `getMonthlySnapshotSummaries_` は `employeeIds=[]` の場合、スナップショットの全社員を取得する既存仕様を保持し、ID・年月・社員要約重複・社員ごとの28/29/30/31日の完全性を検証する。要約が空なら保存ファイル作成前にエラーで停止する。
 - 既存の一括Excel構築・税理士向けメール文・一時Driveファイルの後片付けは変更しない。 `getPayrollEmployees_` は `closeMonthlyPeriod` の給与確定時には引き続き使用する。
 - `scripts/test_monthly_input_guard.mjs` は有効な月で未締め状態照合に進む仕様へ更新し、`scripts/test_closed_month_roster.mjs` は現在の社員一覧と確定時の社員が異なること、認証、欠損、正常Excel組立、削除処理を独立検証する。全機能79件・ブラウザー12件の一括確認は別ゲート。
+
+## v0.25.34｜CashFlowPlanLink保存時のスナップショット指紋・識別子一意性検証（2026-10-16）
+
+- `CashFlowPlanLink.gs/saveCashFlowPlanLink` の既存行検索では、ロック内で `transactionId` と `requestKey` のそれぞれに完全一致する行集合を作る。同一取引の照合行が複数、または同じ送信キーを持つ行が複数なら、最初の1行を任意採用せずエラーにする。
+- `APPROVE` の再送でID・予定日・理由・状態が一致した場合も、承認時に保存した `txFingerprint` および `planFingerprint` と、現在の銀行明細・予定内容から計算した指紋を比較し、不一致を再確認要求として拒否する。 `cfmlReadLink_` の `STALE` 判定と再送時の成功応答の不整合を解消する。
+- `UNLINK` は解除時点の指紋を保持しており、正常な解除の再送に変更後の取引・予定が必ずしも必要ではないため、従来の理由一致に基づく冪等性を維持する。ただし重複取引行・重複送信キーが見つかれば解除再送も拒否する。
+- `scripts/test_cashflow_analysis.mjs` の既存リンク統合シナリオを拡張。権限・revision・金額/口座/予定日・承認重複・正常再送を維持し、指紋変更・保存履歴重複と書込不変性を検証する。正式機能テスト79件/ブラウザー12件は変えない。GAS実運用・UI受入・実処理速度は別途検証。
