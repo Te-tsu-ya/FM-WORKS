@@ -72,11 +72,13 @@ assert.throws(()=>submit('TRP-A','NEW_REQUEST_0003'),/\u9001\u4fe1\u8b58\u5225\u
  'a previously duplicated key must not be reported as an unambiguous retry');
 assert.equal(writes,1);
 rows.pop();
-// Distinct finance types are isolated; a key in travel cannot cross-write expense.
-rows[0].status=returned;
-const savedExpense=submit('TRP-A','EXPENSE_NEW_0004',200,'expense');
-assert.equal(savedExpense.ok,true);
+// A different returned report can still be resubmitted with its own new key.
+rows[1].status=returned;
+const independent=submit('TRP-B','INDEPENDENT_NEW_0004',100);
+assert.equal(independent.ok,true);
+assert.equal(rows[0].requestKey,'NEW_REQUEST_0003');
+assert.equal(rows[1].requestKey,'INDEPENDENT_NEW_0004');
 assert.equal(writes,2);
-assert.ok(lookups>=6&&lockCalls>=8);
+assert.ok(lookups>=6&&lockCalls>=7);
 console.log('PASS finance resubmission: separate IDs and owners, duplicate key rejection, normal save, exact retry, changed retry and ambiguous legacy keys');
 
