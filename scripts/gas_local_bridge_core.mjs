@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const RELEASE_BRANCH = 'deploy/gas-production';
 export const KNOWN_DEPLOYMENT_ID = 'AKfycbw7oWIZkrOE-ClTVNeI0Kq4hzsZrYaKSC0CqNVsV4bwpufgBVR5-7MYxVEuj_51A9YgvQ';
@@ -20,6 +22,37 @@ export function claspInvocation(argv, platform = process.platform, env = process
   // cmd.exe /S /C strips the outer quote pair. Node must pass it verbatim
   // rather than escaping quotes and turning the line into one command name.
   return {command:env.ComSpec || 'cmd.exe',args:['/d','/s','/c','"' + line + '"'],windowsVerbatimArguments:true};
+}
+
+
+// Prefer invoking the installed official clasp JS entry point with the current
+// Node binary. A Windows npm .cmd shim adds an extra cmd.exe process boundary.
+// Only trust the first clasp.cmd on PATH, which is the one cmd.exe would use.
+// Custom/fake clasp commands retain the pre-existing, tested cmd.exe behavior.
+export function preferredClaspInvocation(argv, platform=process.platform, env=process.env, nodeBinary=process.execPath) {
+  const fallback=claspInvocation(argv,platform,env);
+  if(platform!=='win32')return {...fallback,transport:'native-clasp'};
+  for(const dir of String(env.PATH||env.Path||'').split(';').filter(Boolean)){
+    if(!fs.existsSync(path.join(dir,'clasp.cmd')))continue;
+    try{
+      const packageDir=path.join(dir,'node_modules','@google','clasp');
+      const info=JSON.parse(fs.readFileSync(path.join(packageDir,'package.json'),'utf8'));
+      const entry=info?.bin?.clasp;
+      if(info?.name!=='@google/clasp'||typeof entry!=='string'||
+        !/^build\/src\/[A-Za-z0-9_.-]+\.js$/.test(entry))
+        return {...fallback,transport:'cmd-shim'};
+      const cli=path.resolve(packageDir,entry),relative=path.relative(packageDir,cli);
+      if(relative.startsWith('..')||path.isAbsolute(relative)||!fs.statSync(cli).isFile())
+        return {...fallback,transport:'cmd-shim'};
+      return {command:nodeBinary,args:[cli,...argv.map(String)],
+        windowsVerbatimArguments:false,transport:'node-direct'};
+    }catch(_){return {...fallback,transport:'cmd-shim'};}
+  }
+  return {...fallback,transport:'cmd-shim'};
+}
+
+export function isWindowsFailFastExit(status,platform=process.platform){
+  return platform==='win32'&&Number.isInteger(status)&&(status>>>0)===0xC0000409;
 }
 
 export function checkClaspProject(config) {

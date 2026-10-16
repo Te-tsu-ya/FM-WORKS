@@ -133,3 +133,13 @@ node scripts/setup_gas_local_bridge.mjs --remove-windows
 GitHub Actionsの実行分数を使わない一方、PCの電力・ネットワーク・GitHub Git通信・Google Apps Script API・ChatGPT自体には別の使用条件と上限があります。
 
 参考: [Google clasp](https://github.com/google/clasp)、[Microsoftタスクスケジューラ](https://learn.microsoft.com/powershell/module/scheduledtasks/new-scheduledtasktrigger)、[Node.js child_processのWindows注意](https://nodejs.org/api/child_process.html)。
+
+## 2026-10-16｜Windows claspの異常終了時の自動切り分け
+
+- 終了コード \`3221226505\`（\`0xC0000409\`）はWindowsのFail Fast異常終了であり、この番号だけでGoogle認証切れとは判定しません。
+- ローカルにある公式 \`@google/clasp\` のnpmインストールが確認できれば、\`clasp.cmd\`／\`cmd.exe\` を経由せず、既存のNode.jsからCLIのJavaScript本体を起動します。特殊なインストールやテスト用のshimでは、従来のcmd経由へ戻します。
+- \`list-deployments\` と \`pull\` は読み取り専用操作なので、Windows Fail Fastのときだけ1回再試行します。失敗したpullは一時フォルダーを作り直し、不完全なファイル一覧を採用しません。
+- **\`push\` と \`create-deployment\` は自動再試行しません。** 途中失敗では従来の \`pending.json\` を維持し、GASの版とソースを確認するまで公開を繰り返しません。
+- 異常終了が続く場合は \`artifacts/gas-local-bridge/last-clasp-failure.json\` の \`operation\`・\`transport\`・\`exitHex\`・\`nodeVersion\` を確認します。ファイルにOAuthトークン・Script ID・出力本文は記録しません。
+- 従来のSAFE v3バッチを再利用できます。バッチを実行する前に新mainへの更新を確認し、公開後はGASのソース反映・版更新・ログイン後操作を別々に確認してください。
+
