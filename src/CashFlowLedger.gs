@@ -24,8 +24,14 @@ function saveCashFlowLedgerRows(token,payload){
   if(r.kind==='ACTUAL'&&plans.some(x=>x.requestKey===r.requestKey)||r.kind==='PLAN'&&prior.some(x=>x.externalId===r.tx.externalId))
    throw Error('同じ送信識別子で実績と予定を変更できません。');
   if(r.kind!=='ACTUAL')return;cfaAssertUnlocked_(r.tx.date);
-  const old=prior.find(x=>x.accountId===accountId&&x.externalId===r.tx.externalId);
-  if(old&&old.fingerprint!==r.tx.fingerprint)throw Error('同じ送信識別子で台帳の内容を変更できません。');
+  // A manual request key belongs to one entry across all bank accounts.
+  // Preflight the entire chunk; the importer also rechecks under script lock.
+  const matched=prior.filter(x=>x.externalId===r.tx.externalId);
+  if(matched.length>1||matched.some(x=>x.accountId!==accountId))
+   throw Error('同じ送信識別子が別口座または複数の台帳記録に存在します。登録せず確認してください。');
+  const old=matched[0];
+  if(old&&(old.fingerprint!==r.tx.fingerprint||!cfpSameImportedFingerprint_(old,r.tx)))
+   throw Error('同じ送信識別子で台帳の内容を変更できません。');
   const annotation=old&&notes.find(n=>n.transactionId===old.id);
   if(annotation&&(annotation.requestKey!==r.requestKey+'-NOTE'||annotation.category!==r.category||annotation.note!==r.note))
    throw Error('保存済みの分類・メモが変更されています。再読込してください。');

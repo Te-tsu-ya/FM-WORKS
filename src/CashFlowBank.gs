@@ -174,8 +174,24 @@ function importCashFlowBankRows(token,payload){
   if(!accounts.some(a=>a.id===accountId))throw Error('金融機関が見つかりません。');
   const source=cfpRows_('tx',false),known=new Map(
     source.rows.filter(row=>row.fingerprint).map(row=>[row.fingerprint,row]));
+  // Reserve LEDGER- for manual-entry request keys. Their uniqueness is
+  // global across accounts and must be checked INSIDE this write lock.
+  const manualKeys=new Map();
+  source.rows.forEach(old=>{
+   const ext=String(old.externalId||'');
+   if(!ext.startsWith('LEDGER-'))return;
+   if(!manualKeys.has(ext))manualKeys.set(ext,[]);
+   manualKeys.get(ext).push(old);
+  });
   const add=[],at=cfpStamp_();
   normalized.forEach(row=>{
+   if(row.externalId.startsWith('LEDGER-')){
+    const saved=manualKeys.get(row.externalId)||[];
+    if(saved.length>1||saved.some(old=>old.accountId!==accountId||
+      old.fingerprint!==row.fingerprint||!cfpSameImportedFingerprint_(old,row)))
+     throw Error('手入力台帳の送信識別子が別口座または異なる取引に使用されています。保存せず確認してください。');
+    if(!saved.length)manualKeys.set(row.externalId,[row]);
+   }
    const prior=known.get(row.fingerprint);
    if(prior){
     if(!cfpSameImportedFingerprint_(prior,row))
