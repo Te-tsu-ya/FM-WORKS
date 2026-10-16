@@ -411,3 +411,14 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - Q-CASH-LINK-OCCURRENCE-01（High・ソース修正／GAS未検証）：別の銀行取引が同一予定ID・予定日を承認した履歴は、従来の表示用Mapで検知できず、二重の承認表示になり得る。双方をCONFLICT警告へ変更。
 - Q-CASH-LEDGER-DUPLICATE-01（High・ソース修正／GAS未検証）：銀行明細・予定・注記の重複IDを任意採用したり、二重計上したりせず管理者確認を要求。元データは不変。
 - 新規テストファイルなし。既存の2回帰に異常系を追加。GitHub Actionsは使用せず、Windows SAFE v3の実GAS公開と認証付き操作は保留。
+
+## 2026-10-16｜v0.25.35 継続レビュー検証ログ（PR #167）
+
+- 起点mainは `41e38e3bab9739e8626fb71dfb39f78569202988`。PRブランチ上に追加保護をコミットした。mainと既存GASの公開版は変更していない。
+- PASS（GitHub取得ソース＋JavaScriptのNode VM代替検証）: `test_cashflow_ledger_scoped_read.mjs`。口座別取引/予定/注記、重複ID拒否、管理者権限、集計・残高起点のテスト。
+- PASS（同検証。暗号ハッシュにテスト用の決定的代替を使用）: `test_cashflow_analysis.mjs`。銀行原本不変、分類・注記、予定照合承認、同一予定の複数承認検出、シナリオ、出力署名、権限の架空テスト。
+- PASS（GitHub取得ソース＋VM代替検証）: `test_cashflow_ledger_client.mjs`。同日残高拒否、日付移動、再送時キー保持、古いレスポンス・セッションのガード、20行分割。
+- PASS（GitHub取得ソースを用いた契約検証）: `test_app_version_contract.mjs`。APP 0.25.35 と要件・技術設計・GeneratedDocsの完全一致。
+- 未判定: `test_cashflow_analysis_client.mjs` は代替VMのスコープ再現が不十分で完全なNode試験と判定できない。テスト失敗と誤認せず、実Nodeで再実行する。
+- BLOCKED: 本作業環境はプライベートGitHubリポジトリをローカルにcloneできない（DNS制約）。`node scripts/run_local_checks.mjs --functional` の全80項目、および12ブラウザー検査は未実行。4項目の模擬PASSを全体PASSとして扱わない。
+- RELEASE GATE: 全80項目の実Node機能テストPASSが確認できるまでPRはDraftに保つ。Windows SAFE v3公開バッチはmainの正常統合後に実行する。GitHub ActionsとGAS更新、DB移行は実施していない。
