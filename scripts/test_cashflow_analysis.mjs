@@ -197,6 +197,12 @@ put('資金予定照合',['TX-HISTORICAL-OTHER','P-MANUAL','2026-04-10','UNLINKE
 assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
  .rows.find(x=>x.id===bankTx.id).planLink.status,'CONFLICT');
 manualSheet.rows.pop();
+put('資金予定照合',['TX-HISTORICAL-OTHER','P-MANUAL','2026-04-10','APPROVED','hash','hash',
+ '同じ予定に複数取引の承認',1,'2026-10-16','A','OTHER-OCCURRENCE-KEY-01']);
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
+ .rows.find(x=>x.id===bankTx.id).planLink.status,'CONFLICT',
+ 'two transactions approved for one planned occurrence must not appear settled');
+manualSheet.rows.pop();
 assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
  .rows.find(x=>x.id===bankTx.id).planLink.status,'APPROVED');
 assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{action:'UNLINK',transactionId:bankTx.id,revision:0,

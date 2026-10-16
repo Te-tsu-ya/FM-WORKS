@@ -68,11 +68,26 @@ function getCashFlowLedgerRows(token,payload){
  if(p.offset!==undefined&&(!Number.isSafeInteger(Number(p.offset))||Number(p.offset)<0))throw Error('台帳の表示位置が不正です。');
  const account=cfpRows_('account',false).rows.find(a=>a.id===accountId);if(!account)throw Error('金融機関が見つかりません。');
  const all=cflRowsByValues_(CFP.tx,cfpSheet_('tx',false),'accountId',[accountId]).filter(r=>months.includes(r.date.slice(0,7)));
+ const txIds=new Set();
+ all.forEach(r=>{
+  if(txIds.has(r.id))throw Error('同じ銀行明細IDが複数登録されています。管理者に確認してください。');
+  txIds.add(r.id);
+ });
  const noteSheet=cfaSheet_('note',false);
- const notes=new Map((all.length?cflRowsByValues_(CFA.note,noteSheet,'transactionId',all.map(r=>r.id)):[]).map(n=>[n.transactionId,n]));
+ const noteRows=all.length?cflRowsByValues_(CFA.note,noteSheet,'transactionId',all.map(r=>r.id)):[];
+ const notes=new Map();
+ noteRows.forEach(n=>{
+  if(notes.has(n.transactionId))throw Error('同じ銀行明細に分類・メモが複数登録されています。管理者に確認してください。');
+  notes.set(n.transactionId,n);
+ });
  const rows=all.map(r=>{const n=notes.get(r.id);return {id:r.id,date:r.date,description:r.description,incoming:Number(r.incoming),outgoing:Number(r.outgoing),
   balance:r.balance===''?null:Number(r.balance),category:n?n.category:r.transfer==='TRUE'?'内部振替':'未分類',note:n?n.note:'',kind:'ACTUAL'};});
  const plans=cflRowsByValues_(CFP.plan,cfpSheet_('plan',false),'accountId',[accountId]);
+ const planIds=new Set();
+ plans.forEach(r=>{
+  if(planIds.has(r.id))throw Error('同じ入出金予定IDが複数登録されています。管理者に確認してください。');
+  planIds.add(r.id);
+ });
  plans.forEach(r=>months.forEach(month=>{if(!cfpPlannedMonth_(r,month))return;
   const day=Math.min(Number(r.day),new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate());
   rows.push({id:r.id+'@'+month,date:month+'-'+String(day).padStart(2,'0'),description:r.title,category:r.category,note:r.note,kind:'PLAN',balance:null,

@@ -2829,3 +2829,9 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `AppCashFlowLedger.html/cflBalances_`: 残高起点の金額を整数確認した後、同日以前の明細が含まれれば書込を開始せず拒否する。翌日以降の行は安全な整数範囲内で自動計算する。
 - `CashFlowPlanLink.gs/cfmlLinksByTransaction_`: 照合履歴の取引ID/送信キーの重複をMapとSetで検出し、関係する取引を `CONFLICT` にする。`cfmlReadLink_` は矛盾状態を画面へ伝える。`CashFlowAnalysis.gs/getCashFlowAnalysisMonth` は重複上書きMapを使わない。`AppCashFlowAnalysis.html` は警告を表示して承認・解除操作を提供しない。
 - DB変更、外部データ操作、GitHub Actionsは行わない。SAFE v3更新バッチによる全テスト合格・認証付きGAS検証・読み込み速度の実測は別途必要。
+
+### v0.25.35 追加保護：入出金予定の承認一意性と台帳の行識別子
+
+- `cfmlLinksByTransaction_` は `APPROVED` のレコードのみ `JSON.stringify([planId,plannedDate])` をキーとして承認済み予定の一意性も検証する。2つ以上の取引が同一予定日・予定IDへ承認されていれば、両方の取引IDを `CONFLICT` とする。解除済み行は対象外とする。
+- `getCashFlowLedgerRows` は口座・年度で絞り込んだ取引IDと口座の予定IDの重複、および取引IDで限定検索した注記行の重複を検出し、安全停止する。Mapの後勝ち採用と同じ予定の二重集計を避ける。
+- `test_cashflow_analysis.mjs` および `test_cashflow_ledger_scoped_read.mjs` に架空の重複行テストを追加。正常な別日予定と解除済みの過去記録は既存表示を保持する。手動公開バッチの品質ゲート・権限・DB書込み処理に変更なし。
