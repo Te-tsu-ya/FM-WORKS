@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.31
+**文書版:** 0.25.32
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2801,3 +2801,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `CashFlowBank.gs/importCashFlowBankRows` は既存 `withScriptLock_` 内で手入力識別子を全取引からMap化する。保存前に衝突を検査し、同時送信および同じバッチ内の異内容重複を拒否する。Map更新は書込み前なので、一件でも衝突すれば該当バッチは書き込まない。既存のfingerprint照合と残高照合を維持する。
 - 通常の銀行側取引番号（`BANK-` 等）は口座別のまま。利用者が変更する内部振替の区分フラグは、再送識別子の不変項目に含めない。DB移行と公開バッチの改変は不要。
 - 新規回帰テスト `scripts/test_cashflow_ledger_key_scope.mjs` と `scripts/test_cashflow_bank_ledger_namespace.mjs` は架空2口座を使って、正常再送・銀行口座間衝突・内容改変・同一チャンク内衝突・通常銀行IDの口座別取込を確認する。本番GASとブラウザーテストは独立して判定する。
+
+## v0.25.32｜Finance再申請のidempotency key衝突検知（2026-10-16）
+
+- `Finance.gs/resubmitFinanceRequest` は従来の `withScriptLock_` 内で所有者を確認したあと、`FINANCE_MODELS[kind].keys` から`requestKey`の列位置を取得する。 `readRowsByColumnValues_(sheet,keyColumn,width,[key])` で該当キーだけを抽出し、検索後も文字列で完全一致を再確認する。
+- 対象の申請以外に同じキーを持つ行がある、または同じキーに該当する行が2件以上ある場合は、`setValues`実行前に停止する。既存申請の承認待ち状態での同一再送は、キーが当該申請固有であり、保存項目が全一致する場合に限り従来どおり冪等成功とする。
+- この修正は経理の再申請APIに限定する。新規登録`financeWriteNew_`の既存VerifiedFinderと、DBのid・requestKey・revision列、および既存の承認者チェックに変更を加えない。実機のデータベース読取速度は公開後に別途測定する。
+- `scripts/test_finance_resubmit_key_scope.mjs` を公開前のNode機能検証一覧に登録し、同じ社員の別申請、他社員、既存の不正重複、正常再申請、同一再送、差分再送を検証する。GitHub Actionsは実行しない。
