@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.34
+**文書版:** 0.25.36
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2822,3 +2822,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `APPROVE` の再送でID・予定日・理由・状態が一致した場合も、承認時に保存した `txFingerprint` および `planFingerprint` と、現在の銀行明細・予定内容から計算した指紋を比較し、不一致を再確認要求として拒否する。 `cfmlReadLink_` の `STALE` 判定と再送時の成功応答の不整合を解消する。
 - `UNLINK` は解除時点の指紋を保持しており、正常な解除の再送に変更後の取引・予定が必ずしも必要ではないため、従来の理由一致に基づく冪等性を維持する。ただし重複取引行・重複送信キーが見つかれば解除再送も拒否する。
 - `scripts/test_cashflow_analysis.mjs` の既存リンク統合シナリオを拡張。権限・revision・金額/口座/予定日・承認重複・正常再送を維持し、指紋変更・保存履歴重複と書込不変性を検証する。正式機能テスト79件/ブラウザー12件は変えない。GAS実運用・UI受入・実処理速度は別途検証。
+
+## v0.25.36｜`previewRequest` の日付境界・営業日チェック（2026-10-16）
+
+- `Requests.gs/previewRequest` は従来の認証と `normalizeDate_` の後、`submitRequest` と同じ4種（午前半休・午後半休・1/4日有給・打刻修正）の単日制約を適用する。逆転期間や複数日指定の入力で `maybeReconcileLeave_` を呼ばない。
+- 消化対象の有給4種では既存 `calculateLeaveDaysForRequest_` の結果が0以下なら送信時と同じメッセージで停止し、正常な0.25/0.5/1日以上の残日数計算は維持する。
+- プレビュー呼出し頻度を考慮し、月次締め状態や他申請との競合を追加RPCで照会する変更は行わない。これらは `submitRequest` のスクリプトロック内で最終検証する。
+- `scripts/test_request_preview_validation.mjs` は本体関数を `vm` に抜き出し、単日制約4種、逆転期間、休業日、正常半休・複数日有給、無効入力時の台帳アクセス0件を検証する。ブラウザー/GAS実機は別検証とする。

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.34',
+  version: '0.25.36',
   locale: 'ja-JP'
 });
 
