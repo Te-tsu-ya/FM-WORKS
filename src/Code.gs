@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.25.28',
+  version: '0.25.29',
   locale: 'ja-JP'
 });
 
@@ -937,6 +937,9 @@ function saveSchedule(sessionToken, payload) {
       if (!canEditScheduleRow_(employee,old)) {
         throw new Error('この予定を編集する権限がありません。');
       }
+      if (old[12] === '削除') {
+        throw new Error('削除済みの予定は編集できません。新しい予定として登録してください。');
+      }
       createdBy = owner || employee.employeeId;
       createdAt = old[14] || nowText;
       source = old[16] || 'FM WORKS';
@@ -999,10 +1002,11 @@ function deleteSchedule(sessionToken, scheduleId) {
 
     const row = found.getRow();
     const values = sheet.getRange(row, 1, 1, 18).getDisplayValues()[0];
-    if (values[12] === '削除') return { ok: true };
+    // Even an already deleted event is private to its owner/editors.
     if (!canEditScheduleRow_(employee,values)) {
       throw new Error('この予定を削除する権限がありません。');
     }
+    if (values[12] === '削除') return { ok: true };
 
     const title = values[7] || '';
     const nowText = Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM-dd HH:mm:ss');
