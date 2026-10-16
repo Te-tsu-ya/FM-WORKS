@@ -32,6 +32,7 @@ const tasks=[
 const updates=[{id:'MEMO-1',projectId:'P',kind:'決定事項',body:'次の設計方針',createdBy:'O',createdAt:'2026-10-10 12:00:00'}];
 const blobData=new Map();let seq=0;let currentFolder;
 const db={};
+const indexedProjectReads=[];
 const hubContext=vm.createContext({});
 vm.runInContext(fs.readFileSync('src/ProjectHub.gs','utf8'),hubContext);
 const hubModels=JSON.parse(JSON.stringify(vm.runInContext('PROJECT_HUB_MODELS',hubContext)));
@@ -46,7 +47,10 @@ const gctx=vm.createContext({
  withScriptLock_:fn=>fn(),getProjectsInternal_:()=>projects,getEmployees_:()=>Object.values(people),
  PROJECT_HUB_MODELS:hubModels,
  projectHubStorage_:()=>({ready:true,sheets:{plan:hubSheet('plan'),task:hubSheet('task'),resource:hubSheet('resource'),update:hubSheet('update')}}),
- readRowsByColumnValues_:(sheet,col,width,ids)=>{const rows=sheet.getRange(2,1,sheet.getLastRow()-1,width).getDisplayValues();return rows.filter(r=>ids.includes(r[col-1]));},
+ readRowsByColumnValues_:(sheet,col,width,ids)=>{
+  indexedProjectReads.push({name:Object.entries(db).find(([name,value])=>value===sheet)?.[0]||'',column:col,projectIds:Array.from(ids)});
+  const rows=sheet.getRange(2,1,sheet.getLastRow()-1,width).getDisplayValues();return rows.filter(r=>ids.includes(r[col-1]));
+ },
  projectHubRows_:kind=>kind==='plan'?plans:kind==='task'?tasks:kind==='update'?updates:[],
  projectHubCanManage_:(u,p)=>u.role==='ADMIN'||p.ownerId===u.employeeId,
  projectHubWorklogRows_:()=>db['工数'].rows.slice(1).map(r=>r.map(x=>String(x??''))),
@@ -84,12 +88,39 @@ assert.equal(newSheets.filter(x=>specs[x]).length,6);
 assert.equal(gctx.projectAdvancedReady_().ready,true,'all six extension sheets ready');
 
 assert.throws(()=>gctx.getProjectAdvanced('Z','P'),/権限/);
+// Include one synthetic row per ledger. An empty sheet correctly skips the
+// index, so tests must exercise populated sheets to prove every indexed column.
+const foreignLedgers={
+ 'プロジェクト依存':{id:'TASK-OTHER',projectColumn:2},
+ 'プロジェクト添付':{id:'PHF-OTHER',projectColumn:2},
+ 'プロジェクト工数対応':{id:'W-OTHER',projectColumn:2},
+ 'プロジェクト原価':{id:'COST-OTHER',projectColumn:2},
+ 'プロジェクト予算':{id:'OTHER',projectColumn:1}
+};
+for(const [name,fixture] of Object.entries(foreignLedgers)){
+ const row=Array(specs[name].length).fill('');
+ row[0]=fixture.id;
+ row[fixture.projectColumn-1]='OTHER';
+ if(name==='プロジェクト添付')row[8]='有効';
+ if(name==='プロジェクト工数対応')row[2]='TASK-OTHER';
+ db[name].rows.push(row);
+}
 const staff=gctx.getProjectAdvanced('U','P');
+assert.equal(staff.attachments.some(x=>x.id==='PHF-OTHER'),false);
 assert.equal(staff.isAdmin,false);
 assert.equal(Object.hasOwn(staff,'budget'),false,'staff response must never expose financial budget');
 assert.equal(Object.hasOwn(staff,'costs'),false,'staff response must never expose manual cost records');
+const priorIndexedReads=indexedProjectReads.length;
 const admin=gctx.getProjectAdvanced('A','P');
 assert.equal(admin.isAdmin,true);
+const used=new Set(indexedProjectReads.slice(priorIndexedReads)
+  .filter(x=>x.projectIds.length===1&&x.projectIds[0]==='P')
+  .map(x=>x.name+':'+x.column));
+for(const index of ['プロジェクト依存:2','プロジェクト添付:2','プロジェクト工数対応:2',
+                    'プロジェクト予算:1','プロジェクト原価:2'])
+ assert.ok(used.has(index),'project detail must use scoped index: '+index);
+assert.equal(admin.attachments.some(x=>x.id==='PHF-OTHER'),false);
+for(const name of Object.keys(foreignLedgers))db[name].rows.pop();
 
 assert.throws(()=>gctx.saveProjectDependencies('U','P','TASK-1',['TASK-2'],0),/責任者/);
 assert.throws(()=>gctx.saveProjectDependencies('O','P','TASK-1',['TASK-1'],0),/同一案件/);

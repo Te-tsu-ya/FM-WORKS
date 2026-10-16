@@ -71,6 +71,7 @@
     "node scripts/test_pin_presence_search.mjs",
     "node scripts/test_prefetch_priority.mjs",
     "node scripts/test_temporary_pin_gate.mjs",
+    "node scripts/test_monthly_input_guard.mjs",
     "node scripts/test_read_window_contract.mjs",
     "node scripts/test_auth_session_callback_guard.mjs"
   ],
