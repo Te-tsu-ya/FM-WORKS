@@ -363,3 +363,9 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - Q-CASH-REPLAY-01（High、修正実装／GAS実機未検証）：銀行取引番号が同じ場合にfingerprintから残高と連番が省略され、矛盾した取引明細でも重複として破棄される経路があった。差異検出時はバッチ全体を保存前に停止し、既存原本を保護する。取引番号の確認・調整が必要なデータは手動レビューに回す。
 - Q-WORKLOG-ACL-01（Medium、修正実装／GAS実機未検証）：工数削除APIで削除済みステータス判定が他社員の権限チェックより先だった。まず所有者・管理者権限を検証し、本人の再削除だけ冪等成功とする。
 - 回帰試験を `test_cashflow_bank.mjs` と `test_worklog_integrity.mjs` に追加。全73件機能・12件ブラウザーは別判定。GitHub Actionsは使わない。
+
+## 2026-10-16｜v0.25.29 継続レビュー（公開前）
+
+- Q-SCHEDULE-01（High、GitHub修正）：`saveSchedule` が削除済み予定を編集すると `有効` に戻せる状態だった。編集権限の確認後に削除済み編集を拒否し、新規予定の作成は維持。 `deleteSchedule` の削除済み冪等成功も認可より前に実行されないよう修正。
+- Q-MONTHLY-PERF-01（Medium、GitHub修正）：確定月の一括Excelで、過去全スナップショット・全日次の24列フル読込と、対象社員数回の締め状態再読込が起きていた。ID索引取得と締め状態の1回再利用へ切替。実GASの秒数は未計測。
+- QA: `test_schedule_mutation_integrity.mjs` と `test_monthly_snapshot_index.mjs` を追加。機能テストは73→75件になる予定。実PC上での全テスト・ブラウザー12本・認証付き実操作は別受入。GitHub Actionsは使用しない。

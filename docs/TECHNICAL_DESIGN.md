@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.28
+**文書版:** 0.25.29
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2780,3 +2780,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `Worklog.gs/deleteWorklog` はID検索後に従来の社員本人・ADMIN権限判定を先に行い、その後に月次締めと削除済み状態を検査する。権限のない利用者への成功応答・既存状態の漏洩を防止。
 - 機能テストの既存取込3件と重複再取込に加え、保存済み衝突・同一バッチ内衝突・無権限の削除済み工数を回帰対象とする。GAS/DB実操作とブラウザー表示の確認は別ゲート。
 - 数値残高の桁区切りや空白は `/,|，|\s|￥|¥/g` 相当で正規化し、十進整数表現だけを検証する。指数表現等を任意に数値化しない。
+
+## v0.25.29｜Schedule tombstone ACLと月次スナップショットの索引化（2026-10-16）
+
+- `Code.gs/saveSchedule` は `canEditScheduleRow_` による認可のあと、既存予定の状態列13（配列のindex12）が `削除` なら更新を拒否する。意図しないソフト削除データの復活を防ぐ。 `deleteSchedule` も状態確認より先に同じACLを検査する。元の所有者の重複削除は既存の冪等性を維持する。
+- `MonthlySnapshot.gs/getMonthlySnapshotSummaries_` の2シート（確定要約・確定日次）は `readRowsByColumnValues_(sheet,1,24,[snapshotId])` に切り替える。データアクセス共通関数の小規模一括・大規模索引・失敗時フォールバックを利用し、取得後もスナップショットID、対象年月、社員集合を正確に再検証する。
+- 同関数で月次締め状態 `getMonthlyCloseStatusInternal_(ym)` は要約レコードがあるときに1回だけ呼び、全社員の返却用レコードに共有する。単一社員エクスポート、全社員一括エクスポートの双方に適用する。
+- 新規Node回帰テスト `test_schedule_mutation_integrity.mjs` は削除済みACL・編集復活拒否・本人削除再送・正常な新規作成を、`test_monthly_snapshot_index.mjs` は両シートの索引・年月/社員の再検証・月次締め状態読込回数を確認する。本番GASブラウザーと処理時間は公開後に別途確認する。

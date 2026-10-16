@@ -103,12 +103,12 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
   const dailySheet = getDb_().getSheetByName(DB.sheets.monthlySnapshotDaily);
   if (!summarySheet || !dailySheet) throw new Error('月次確定スナップショットが利用できません。');
 
-  const summaryRows = summarySheet.getLastRow() < 2 ? [] :
-    summarySheet.getRange(2,1,summarySheet.getLastRow()-1,24).getDisplayValues()
-      .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
-  const dailyRows = dailySheet.getLastRow() < 2 ? [] :
-    dailySheet.getRange(2,1,dailySheet.getLastRow()-1,24).getDisplayValues()
-      .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
+  // Restrict both historical ledgers to the requested snapshot ID before
+  // reading 24-column rows. Recheck month and employee in application code.
+  const summaryRows = readRowsByColumnValues_(summarySheet,1,24,[id])
+    .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
+  const dailyRows = readRowsByColumnValues_(dailySheet,1,24,[id])
+    .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
 
   const dailyByEmployee = {};
   dailyRows.forEach(r => {
@@ -128,6 +128,8 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
   });
   Object.values(dailyByEmployee).forEach(rows => rows.sort((a,b)=>a.date.localeCompare(b.date)));
 
+  if (!summaryRows.length) return [];
+  const closeStatus = getMonthlyCloseStatusInternal_(ym);
   return summaryRows.map(r => ({
     yearMonth:ym,
     snapshotId:id,
@@ -144,7 +146,7 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
     labor:{ruleStatus:r[23]||'UNCONFIGURED',profile:'SNAPSHOT',weekStartDay:'',warnings:[]},
     daily:dailyByEmployee[r[2]]||[],
     requests:[],
-    closeStatus:getMonthlyCloseStatusInternal_(ym),
+    closeStatus,
     reviewStatus:null
   }));
 }
