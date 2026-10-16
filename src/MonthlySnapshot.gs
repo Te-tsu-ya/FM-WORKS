@@ -107,6 +107,15 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
   // reading 24-column rows. Recheck month and employee in application code.
   const summaryRows = readRowsByColumnValues_(summarySheet,1,24,[id])
     .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
+  if (!summaryRows.length) return [];
+  // Reject interrupted/duplicated month-close summary writes before export.
+  const summaryEmployees=new Set();
+  summaryRows.forEach(r=>{
+    const employeeId=String(r[2]||'');
+    if(!employeeId||summaryEmployees.has(employeeId))
+      throw new Error('月次確定データの社員別集計が重複または欠落しています。締めを解除して再締めしてください。');
+    summaryEmployees.add(employeeId);
+  });
   const dailyRows = readRowsByColumnValues_(dailySheet,1,24,[id])
     .filter(r => r[0] === id && r[1] === ym && (!wanted.size || wanted.has(r[2])));
 
@@ -127,8 +136,16 @@ function getMonthlySnapshotSummaries_(yearMonth, snapshotId, employeeIds) {
     (dailyByEmployee[r[2]]||(dailyByEmployee[r[2]]=[])).push(item);
   });
   Object.values(dailyByEmployee).forEach(rows => rows.sort((a,b)=>a.date.localeCompare(b.date)));
-
-  if (!summaryRows.length) return [];
+  // persistMonthlyCloseSnapshots_ writes every calendar day (including
+  // weekends/holidays). Missing or repeated dates cannot be paid as valid.
+  const [year,month]=ym.split('-').map(Number);
+  const expectedDays=new Date(year,month,0).getDate();
+  for(const employeeId of summaryEmployees){
+    const days=dailyByEmployee[employeeId]||[];
+    if(days.length!==expectedDays||days.some((day,i)=>
+      day.date!==ym+'-'+String(i+1).padStart(2,'0')))
+      throw new Error('月次確定データの日別明細が不足・重複しています。締めを解除して再締めしてください。');
+  }
   const closeStatus = getMonthlyCloseStatusInternal_(ym);
   return summaryRows.map(r => ({
     yearMonth:ym,

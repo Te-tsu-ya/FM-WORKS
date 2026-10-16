@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.29
+**文書版:** 0.25.30
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2787,3 +2787,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `MonthlySnapshot.gs/getMonthlySnapshotSummaries_` の2シート（確定要約・確定日次）は `readRowsByColumnValues_(sheet,1,24,[snapshotId])` に切り替える。データアクセス共通関数の小規模一括・大規模索引・失敗時フォールバックを利用し、取得後もスナップショットID、対象年月、社員集合を正確に再検証する。
 - 同関数で月次締め状態 `getMonthlyCloseStatusInternal_(ym)` は要約レコードがあるときに1回だけ呼び、全社員の返却用レコードに共有する。単一社員エクスポート、全社員一括エクスポートの双方に適用する。
 - 新規Node回帰テスト `test_schedule_mutation_integrity.mjs` は削除済みACL・編集復活拒否・本人削除再送・正常な新規作成を、`test_monthly_snapshot_index.mjs` は両シートの索引・年月/社員の再検証・月次締め状態読込回数を確認する。本番GASブラウザーと処理時間は公開後に別途確認する。
+
+## v0.25.30｜MonthlySnapshot確定データ完全性検証（2026-10-16）
+
+- `getMonthlySnapshotSummaries_` は `readRowsByColumnValues_` によるsnapshotId限定検索のあと、選択された要約行に対して `employeeId` の一意性を確認する。要約がない場合は `[]` を直ちに返して日次台帳を取得しない。
+- 復元した日次明細を社員ごとに昇順で並べ、`new Date(year,month,0).getDate()` の月末日数と、`YYYY-MM-01` から末日までの連続した文字列を厳密比較する。日付欠落・二重日付・日付不整合はすべて中断し、給与出力を行わない。元のスナップショットに変更は加えない。
+- 取得後の月・社員の完全一致、管理者による給与一括出力と本人/権限者の個別出力、月次締め状態の応答内1回共有は保持する。
+- 追加回帰は従来の `scripts/test_monthly_snapshot_index.mjs` を拡張（テスト本数75のまま）。Node全75件、ブラウザー12件とGAS実操作は別ゲートで確認する。
