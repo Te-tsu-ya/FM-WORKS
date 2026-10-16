@@ -150,6 +150,20 @@ function cfpTxValidate_(entry,accountId){
  return {accountId,date,incoming:incoming||0,outgoing:outgoing||0,description,balance:balance===null?'':balance,
   externalId:ext,occurrence,fingerprint,transfer:p.transfer===true?'TRUE':'FALSE'};
 }
+// A bank's external transaction ID alone does not prove that two statement
+// rows are the same: the historical fingerprint intentionally omits balance
+// and occurrence when externalId exists. Never silently discard conflicting
+// statement rows as duplicates. Transfer classification is user-maintained and
+// is deliberately excluded from this source-identity comparison.
+function cfpSameImportedFingerprint_(prior,next){
+ const balance=value=>{
+  if(value==null||String(value).trim()==='')return '';
+  const plain=String(value).replace(/[,，\s￥¥]/g,'');
+  return /^-?\d+$/.test(plain)?String(Number(plain)):'INVALID:'+String(value);
+ };
+ return balance(prior.balance)===balance(next.balance)&&
+  (!String(next.externalId||'')||Number(prior.occurrence||1)===Number(next.occurrence||1));
+}
 function importCashFlowBankRows(token,payload){
  const admin=requireAdminSession_(token).employee,p=payload||{},key=cfpKey_(p.requestKey);
  const accountId=String(p.accountId||''),rows=p.rows,sourceFile=cfpText_(p.fileName,'取込ファイル名',130,true);
@@ -158,11 +172,17 @@ function importCashFlowBankRows(token,payload){
  return withScriptLock_(()=>{
   const accounts=cfpRows_('account',false).rows;
   if(!accounts.some(a=>a.id===accountId))throw Error('金融機関が見つかりません。');
-  const source=cfpRows_('tx',false),known=new Set(source.rows.map(row=>row.fingerprint));
+  const source=cfpRows_('tx',false),known=new Map(
+    source.rows.filter(row=>row.fingerprint).map(row=>[row.fingerprint,row]));
   const add=[],at=cfpStamp_();
   normalized.forEach(row=>{
-   if(known.has(row.fingerprint))return;
-   known.add(row.fingerprint);
+   const prior=known.get(row.fingerprint);
+   if(prior){
+    if(!cfpSameImportedFingerprint_(prior,row))
+     throw Error('銀行明細の重複判定で残高または連番が一致しません。保存せず取込内容を確認してください。');
+    return;
+   }
+   known.set(row.fingerprint,row);
    add.push(Object.assign({},row,{id:cfpId_(),sourceFile,importedAt:at,editorId:admin.employeeId,revision:1}));
   });
   if(add.length){

@@ -157,11 +157,13 @@ function deleteWorklog(sessionToken, worklogId) {
 
     const row = found.getRow();
     const values = sheet.getRange(row, 1, 1, 15).getDisplayValues()[0];
-    assertMonthOpenForDate_(values[1],'工数を削除');
-    if (values[12] === '削除') return { ok: true };
+    // An already-deleted row still belongs to its owner. Check authorization
+    // before revealing its existence/state through an idempotent success.
     if (employee.role !== 'ADMIN' && values[2] !== employee.employeeId) {
       throw new Error('この工数を削除する権限がありません。');
     }
+    assertMonthOpenForDate_(values[1],'工数を削除');
+    if (values[12] === '削除') return { ok: true };
 
     const nowText = toTimestamp_(new Date());
     sheet.getRange(row, 13, 1, 3).setValues([['削除', nowText, nowText]]);

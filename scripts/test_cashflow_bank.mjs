@@ -80,6 +80,33 @@ assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{accountId:account.id,rows:
 assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{accountId:'missing',rows:[tx],fileName:'fixture.csv',requestKey:'CFB-BAD-TX-KEY-0003'}),/見つかりません/);
 const first=ctx.importCashFlowBankRows('ADMIN',{accountId:account.id,rows:[tx,payment,internal],fileName:'statement.csv',requestKey:'CFB-BANK-BATCH-00001'});
 assert.equal(first.added,3);assert.equal(first.skipped,0);
+// A repeated external bank reference does not authorize dropping an otherwise
+// different statement entry. Reject the WHOLE batch before any append.
+const initialCount=sheets.get('資金取引').rows.length;
+assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{
+  accountId:account.id,rows:[{...tx,balance:500100}],
+  fileName:'conflicting-balance.csv',requestKey:'CFB-COLLISION-BALANCE-001'
+}),/残高または連番/);
+assert.equal(sheets.get('資金取引').rows.length,initialCount);
+assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{
+  accountId:account.id,rows:[{...tx,occurrence:2}],
+  fileName:'conflicting-occurrence.csv',requestKey:'CFB-COLLISION-OCCUR-00001'
+}),/残高または連番/);
+assert.equal(sheets.get('資金取引').rows.length,initialCount);
+const newTx={...tx,externalId:'BANK-NEW-COLLISION'};
+assert.throws(()=>ctx.importCashFlowBankRows('ADMIN',{
+  accountId:account.id,rows:[newTx,{...newTx,balance:500111}],
+  fileName:'within-batch-conflict.csv',requestKey:'CFB-COLLISION-BATCH-00001'
+}),/残高または連番/);
+assert.equal(sheets.get('資金取引').rows.length,initialCount);
+assert.equal(ctx.cfpSameImportedFingerprint_({...tx,balance:'500,000'},tx),true,
+  'formatted Sheet balance and original integer are the same');
+assert.equal(ctx.cfpSameImportedFingerprint_(tx,{...tx,balance:500100}),false);
+assert.equal(ctx.cfpSameImportedFingerprint_(tx,{...tx,occurrence:2}),false);
+const withoutExternalId={...tx,externalId:'',balance:500000};
+assert.notEqual(ctx.cfpTxValidate_(withoutExternalId,account.id).fingerprint,
+  ctx.cfpTxValidate_({...withoutExternalId,occurrence:2},account.id).fingerprint,
+  'no bank transaction number: user-supplied occurrence must preserve real repeated rows');
 const again=ctx.importCashFlowBankRows('ADMIN',{accountId:account.id,rows:[tx,payment,internal],fileName:'another-name.csv',requestKey:'CFB-BANK-BATCH-00002'});
 assert.equal(again.added,0);assert.equal(again.skipped,3);
 assert.equal(sheets.get('資金取引').rows.length,4);
