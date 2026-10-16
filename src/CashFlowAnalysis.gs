@@ -344,7 +344,7 @@ function getCashFlowAnalysisMonth(token,payload){
   .sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.rowNo-a.rowNo);
  const rules=cfaRulesSorted_(cfaRows_('rule',false).rows);
  const plans=tx.length?cfpRows_('plan',false).rows:[],occurrences=cfaPlanOccurrences_(plans,month);
- const linkSource=cfmlRows_(true),links=new Map((linkSource?linkSource.rows:[]).map(r=>[r.transactionId,r]));
+ const linkSource=cfmlRows_(true),links=cfmlLinksByTransaction_(linkSource?linkSource.rows:[]);
  return {ok:true,month,page,total:tx.length,linkReady:!!linkSource,rows:tx.slice(page*100,(page+1)*100).map(r=>{
   const row=cfaAnnotated_(r,notes.get(r.id),rules);
   row.planMatch=cfaPlanMatch_(r,occurrences);

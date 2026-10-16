@@ -1,4 +1,13 @@
 /* Account-first vertical ledger; uses the existing bank/plan/annotation tables. */
+function cflRowsByValues_(model,sheet,key,values){
+ const column=model.keys.indexOf(key)+1;
+ if(!column)throw Error('台帳の検索列が不正です。');
+ return readRowsByColumnValues_(sheet,column,model.keys.length,values,false,true).map(hit=>{
+  const row={rowNo:hit.rowNumber};
+  model.keys.forEach((field,i)=>{row[field]=hit.values[i]||'';});
+  return row;
+ }).filter(row=>row[model.keys[0]]);
+}
 function cashFlowLedgerNormalize_(row,accountId){
  const p=row||{},date=cfpDate_(p.date),kind=String(p.kind||'ACTUAL');
  if(!['ACTUAL','PLAN'].includes(kind))throw Error('実績または予定を選択してください。');
@@ -58,12 +67,13 @@ function getCashFlowLedgerRows(token,payload){
  if(p.kind&&!['ALL','ACTUAL','PLAN'].includes(p.kind))throw Error('実績・予定の表示区分が不正です。');
  if(p.offset!==undefined&&(!Number.isSafeInteger(Number(p.offset))||Number(p.offset)<0))throw Error('台帳の表示位置が不正です。');
  const account=cfpRows_('account',false).rows.find(a=>a.id===accountId);if(!account)throw Error('金融機関が見つかりません。');
- const all=cfpRows_('tx',false).rows.filter(r=>r.accountId===accountId&&months.includes(r.date.slice(0,7)));
- const notes=new Map(cfaRows_('note',false).rows.map(n=>[n.transactionId,n]));
+ const all=cflRowsByValues_(CFP.tx,cfpSheet_('tx',false),'accountId',[accountId]).filter(r=>months.includes(r.date.slice(0,7)));
+ const noteSheet=cfaSheet_('note',false);
+ const notes=new Map((all.length?cflRowsByValues_(CFA.note,noteSheet,'transactionId',all.map(r=>r.id)):[]).map(n=>[n.transactionId,n]));
  const rows=all.map(r=>{const n=notes.get(r.id);return {id:r.id,date:r.date,description:r.description,incoming:Number(r.incoming),outgoing:Number(r.outgoing),
   balance:r.balance===''?null:Number(r.balance),category:n?n.category:r.transfer==='TRUE'?'内部振替':'未分類',note:n?n.note:'',kind:'ACTUAL'};});
- const plans=cfpRows_('plan',false).rows;
- plans.filter(r=>r.accountId===accountId).forEach(r=>months.forEach(month=>{if(!cfpPlannedMonth_(r,month))return;
+ const plans=cflRowsByValues_(CFP.plan,cfpSheet_('plan',false),'accountId',[accountId]);
+ plans.forEach(r=>months.forEach(month=>{if(!cfpPlannedMonth_(r,month))return;
   const day=Math.min(Number(r.day),new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate());
   rows.push({id:r.id+'@'+month,date:month+'-'+String(day).padStart(2,'0'),description:r.title,category:r.category,note:r.note,kind:'PLAN',balance:null,
    incoming:r.direction==='IN'?Number(r.amount):0,outgoing:r.direction==='OUT'?Number(r.amount):0});

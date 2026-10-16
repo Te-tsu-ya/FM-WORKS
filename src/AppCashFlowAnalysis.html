@@ -293,6 +293,7 @@ function cfaPlanAction_(action,transactionId,planId,plannedDate){
 
 function cfaPlanMatchHtml_(match,transactionId,link,ready){
  const m=match||{},total=Number(m.total)||0,stored=link||{status:'NONE',revision:0};
+ if(stored.status==='CONFLICT')return '<span class="cfa-plan-match-warning" role="alert">照合履歴が重複しています。管理者による原本確認が必要です。承認・解除操作を停止しています。</span>';
  if(stored.status==='APPROVED'||stored.status==='STALE'){
   const stale=stored.status==='STALE';
   return '<div class="cfa-plan-approved"><strong>'+(stale?'要再確認：承認後に元データが変更':'照合承認済み・会計未確定')+'</strong>'+

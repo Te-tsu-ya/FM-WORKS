@@ -187,6 +187,18 @@ const record=ctx.cfmlRows_(false).rows.find(x=>x.transactionId===bankTx.id),
  bankPlan=ctx.cfpRows_('plan',false).rows.find(x=>x.id==='P-MANUAL');
 assert.equal(ctx.cfmlReadLink_(record,bankTx,[{...bankPlan,title:'名称変更'}]).status,'STALE');
 assert.equal(ctx.cfmlReadLink_(record,{...bankTx,description:'別の銀行明細'},[bankPlan]).status,'STALE');
+put('資金予定照合',[bankTx.id,'P-MANUAL','2026-04-10','UNLINKED','hash','hash',
+ '重複取引ID',1,'2026-10-16','A','DIFFERENT-LINK-KEY-01']);
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
+ .rows.find(x=>x.id===bankTx.id).planLink.status,'CONFLICT');
+manualSheet.rows.pop();
+put('資金予定照合',['TX-HISTORICAL-OTHER','P-MANUAL','2026-04-10','UNLINKED','hash','hash',
+ '重複送信キー',1,'2026-10-16','A',link.requestKey]);
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
+ .rows.find(x=>x.id===bankTx.id).planLink.status,'CONFLICT');
+manualSheet.rows.pop();
+assert.equal(ctx.getCashFlowAnalysisMonth('ADMIN',{fiscalYear:2026,month:'2026-04'})
+ .rows.find(x=>x.id===bankTx.id).planLink.status,'APPROVED');
 assert.throws(()=>ctx.saveCashFlowPlanLink('ADMIN',{action:'UNLINK',transactionId:bankTx.id,revision:0,
  reason:'取消',requestKey:'MANUAL-UNLINK-BAD1'}),/変更/);
 const unlink={action:'UNLINK',transactionId:bankTx.id,reason:'照合のやり直し',

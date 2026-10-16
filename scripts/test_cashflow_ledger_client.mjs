@@ -15,6 +15,10 @@ ctx.cflLoad_();ctx.cflLoad_();assert.equal(calls.length,1,'coalesce repeated loa
 calls.shift().ok({ok:true,total:1,rows:[],balanceAnchor:{date:'2026-10-12',balance:5000}});ctx.cflLoad_();assert.equal(calls.length,0,'fresh cache is reused');
 ctx.cflLoad_(true);assert.equal(ui().data?.total,1,'same-page refresh retains the displayed ledger');const old=calls.shift();ctx.cashFlowUi.year=2027;old.ok({ok:true,rows:[{description:'OLD YEAR'}]});assert.equal(ui().data,null,'old-year response never replaces current data');
 ctx.cashFlowUi.year=2026;ctx.cflLoad_(true);calls.shift().ok({ok:true,total:1,rows:[],balanceAnchor:{date:'2026-10-12',balance:5000}});
+ui().rows=[{...row(81),date:'2026/10/12'}];ctx.cflBalances_();
+assert.equal(ui().rows[0].balance,'','same-day bank transactions do not have a known order');
+ui().rows=[{...row(82),date:'2026/10/11'}];ctx.cflBalances_();
+assert.equal(ui().rows[0].balance,'','older bank transactions do not have a known order');
 ui().rows=[row()];ctx.cflBalances_();assert.equal(ui().rows[0].balance,6000,'balance continues from the known last bank balance');
 let prevented=false;ctx.cflPaste_({clipboardData:{getData:()=> '2026/10/14\t架空出金\t250\t\t5750\t経費\tメモ\t実績'},preventDefault:()=>prevented=true},1,0);
 assert.equal(prevented,true);assert.equal(ui().rows[1].outgoing,'250');assert.equal(ui().rows[1].kind,'ACTUAL');
