@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.32
+**文書版:** 0.25.33
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2808,3 +2808,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - 対象の申請以外に同じキーを持つ行がある、または同じキーに該当する行が2件以上ある場合は、`setValues`実行前に停止する。既存申請の承認待ち状態での同一再送は、キーが当該申請固有であり、保存項目が全一致する場合に限り従来どおり冪等成功とする。
 - この修正は経理の再申請APIに限定する。新規登録`financeWriteNew_`の既存VerifiedFinderと、DBのid・requestKey・revision列、および既存の承認者チェックに変更を加えない。実機のデータベース読取速度は公開後に別途測定する。
 - `scripts/test_finance_resubmit_key_scope.mjs` を公開前のNode機能検証一覧に登録し、同じ社員の別申請、他社員、既存の不正重複、正常再申請、同一再送、差分再送を検証する。GitHub Actionsは実行しない。
+
+## v0.25.33｜Historical payroll roster from immutable monthly-close snapshot（2026-10-16）
+
+- `Monthly.gs/createTeamMonthlyExport` は `requireAdminSession_` と `normalizeYearMonth_` の後、従来どおり `getMonthlyCloseStatusInternal_` の `CLOSED` と `snapshotId` を検査する。 `getPayrollEmployees_` による現在の社員マスタ取得と現在IDによるフィルタは行わず、`getMonthlySnapshotSummaries_(ym,snapshotId,[])` により、当該IDへ確定した全社員の記録を復元する。
+- `getMonthlySnapshotSummaries_` は `employeeIds=[]` の場合、スナップショットの全社員を取得する既存仕様を保持し、ID・年月・社員要約重複・社員ごとの28/29/30/31日の完全性を検証する。要約が空なら保存ファイル作成前にエラーで停止する。
+- 既存の一括Excel構築・税理士向けメール文・一時Driveファイルの後片付けは変更しない。 `getPayrollEmployees_` は `closeMonthlyPeriod` の給与確定時には引き続き使用する。
+- `scripts/test_monthly_input_guard.mjs` は有効な月で未締め状態照合に進む仕様へ更新し、`scripts/test_closed_month_roster.mjs` は現在の社員一覧と確定時の社員が異なること、認証、欠損、正常Excel組立、削除処理を独立検証する。全機能79件・ブラウザー12件の一括確認は別ゲート。
