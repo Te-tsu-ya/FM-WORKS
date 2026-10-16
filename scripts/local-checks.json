@@ -79,7 +79,8 @@
     "node scripts/test_monthly_snapshot_index.mjs",
     "node scripts/test_closed_month_roster.mjs",
     "node scripts/test_read_window_contract.mjs",
-    "node scripts/test_auth_session_callback_guard.mjs"
+    "node scripts/test_auth_session_callback_guard.mjs",
+    "node scripts/test_request_preview_validation.mjs"
   ],
   "browser": [
     "node scripts/test_cashflow_grid_viewport.mjs",

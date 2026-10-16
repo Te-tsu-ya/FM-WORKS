@@ -143,7 +143,6 @@ function getRequestsForEmployee_(employeeId) {
 }
 function previewRequest(sessionToken, payload) {
   const employee = requireSession_(sessionToken).employee;
-  maybeReconcileLeave_(employee.employeeId);
   payload = payload || {};
   const type = String(payload.type || '');
   if (!REQUEST_TYPES.includes(type)) throw new Error('申請種別を確認してください。');
@@ -151,6 +150,11 @@ function previewRequest(sessionToken, payload) {
   const startDate = normalizeDate_(payload.startDate);
   const endDate = normalizeDate_(payload.endDate || startDate);
   if (startDate > endDate) throw new Error('終了日は開始日以降にしてください。');
+  if (['午前半休','午後半休','1/4日有給','打刻修正'].includes(type) && startDate !== endDate) {
+    throw new Error(type + 'は1日単位で申請してください。');
+  }
+  // Reject invalid input before refreshing employee leave state.
+  maybeReconcileLeave_(employee.employeeId);
 
   const paidTypes = ['有給','午前半休','午後半休','1/4日有給'];
   const context = getLeaveRequestContext_(employee.employeeId);
@@ -159,6 +163,9 @@ function previewRequest(sessionToken, payload) {
 
   if (paidTypes.includes(type)) {
     requestedDays = calculateLeaveDaysForRequest_(type, startDate, endDate);
+    if (requestedDays <= 0) {
+      throw new Error('この日付では有給を消化しません。会社カレンダーの勤務日を確認してください。');
+    }
     projectedBalance = context.availableLeaveDays == null
       ? null
       : Math.round((context.availableLeaveDays - requestedDays) * 4) / 4;
