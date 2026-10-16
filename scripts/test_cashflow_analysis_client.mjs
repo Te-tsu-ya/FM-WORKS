@@ -65,6 +65,9 @@ read('cfaUi.planPending=null;');
 const activeLink={status:'APPROVED',revision:1,title:'架空保守予定',plannedDate:'2026-10-10',
  editorId:'A',updatedAt:'2026-10-11'};
 assert.ok(ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',activeLink,true).includes('照合承認済み・会計未確定'));
+const conflictHtml=ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',{status:'CONFLICT',revision:1},true);
+assert.match(conflictHtml,/照合履歴が重複/);
+assert.doesNotMatch(conflictHtml,/onclick=/,'corrupt history cannot expose approve/unlink actions');
 assert.ok(ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',{...activeLink,status:'STALE'},true).includes('要再確認'));
 assert.ok(!ctx.cfaPlanMatchHtml_(tx.planMatch,'TX-1',{status:'NONE'},false).includes('この予定を照合承認'));
 

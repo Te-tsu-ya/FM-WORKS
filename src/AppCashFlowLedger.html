@@ -45,8 +45,8 @@ function cflPaste_(event,i,col){
 function cflBalances_(){
  if(!cflCanLeave_())return;const anchor=cflUi.data?.balanceAnchor;
  if(!anchor){showToast('保存済み明細の最新残高が未入力です。残高を確認して入力してください。');return;}
- try{let balance=anchor.balance;const rows=cflUi.rows.filter(r=>r.kind==='ACTUAL'&&String(r.date||'').trim()).map(r=>({r,tx:cfbBankGridNormalize_({...r,externalId:''})})).sort((a,b)=>a.tx.date.localeCompare(b.tx.date));
- if(rows.some(x=>x.tx.date<anchor.date))throw Error('最新明細より前の日付は、残高を確認して手入力してください。');
+ try{let balance=Number(anchor.balance);if(!Number.isSafeInteger(balance))throw Error('保存済みの残高を確認してください。');const rows=cflUi.rows.filter(r=>r.kind==='ACTUAL'&&String(r.date||'').trim()).map(r=>({r,tx:cfbBankGridNormalize_({...r,externalId:''})})).sort((a,b)=>a.tx.date.localeCompare(b.tx.date));
+ if(rows.some(x=>x.tx.date<=anchor.date))throw Error('保存済みの最新明細と同日以前の取引は、自動計算できません。残高を確認して手入力してください。');
  const values=rows.map(x=>{balance+=x.tx.incoming-x.tx.outgoing;if(!Number.isSafeInteger(balance))throw Error('残高の計算範囲を超えています。');return {r:x.r,balance};});values.forEach(x=>x.r.balance=x.balance);renderPageIfActive('finance');
  }catch(e){showToast(e.message);}
 }

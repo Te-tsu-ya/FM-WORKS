@@ -398,3 +398,27 @@ FM WORKSは法令判定そのものを専門家相談の代替として扱わな
 - Q-CASH-LINK-REPLAY-01（High・ソース修正済／GAS未検証）：銀行明細または入出金予定が承認後に変更され、照合リンクがSTALEになる場合でも、元のrequestKeyを再送すると内容指紋を比較せず `duplicate:true` で成功していた。再送の指紋一致を確認し、実際の承認内容が古い場合は明示エラーとする。
 - Q-CASH-LINK-COLLISION-01（Medium・ソース修正済／GAS未検証）：同一銀行取引に複数の照合行、または送信キー重複の既存行があっても先頭行の照合結果を使っていた。ロック内で一意性を検査し、曖昧な記録があれば保存せず管理者確認を案内する。
 - 回帰：元の承認・再送・解除と、予定名変更/銀行摘要変更・送信キー重複・取引照合行重複を一連の架空テストで検証。正式登録79機能チェック・12ブラウザーチェック、実GAS認証操作/速度の確認は別ゲート。GitHub Actions/実DB/既存デプロイは変更しない。
+
+## 2026-10-16｜v0.25.35 継続監査（実機公開待ち）
+
+- High: 同日銀行取引の順序不明でも残高を自動加算するリスクを、同日以前の自動計算拒否で防止。
+- High: 照合履歴の重複ID/送信キーを表示側で上書きして承認済みと誤認するリスクを、CONFLICT警告で防止。
+- Medium: 口座別資金台帳の読取を既存の値検索APIで限定。速度改善はGAS実機計測待ち。
+- 作業用ブランチのソース修正と簡易テストを行う。本番認証付き業務操作、Windows一括テスト、既存GASへの公開、DB移行は別ゲートとする。
+
+### v0.25.35 同一入出金予定の複数承認と台帳重複原本（2026-10-16）
+
+- Q-CASH-LINK-OCCURRENCE-01（High・ソース修正／GAS未検証）：別の銀行取引が同一予定ID・予定日を承認した履歴は、従来の表示用Mapで検知できず、二重の承認表示になり得る。双方をCONFLICT警告へ変更。
+- Q-CASH-LEDGER-DUPLICATE-01（High・ソース修正／GAS未検証）：銀行明細・予定・注記の重複IDを任意採用したり、二重計上したりせず管理者確認を要求。元データは不変。
+- 新規テストファイルなし。既存の2回帰に異常系を追加。GitHub Actionsは使用せず、Windows SAFE v3の実GAS公開と認証付き操作は保留。
+
+## 2026-10-16｜v0.25.35 継続レビュー検証ログ（PR #167）
+
+- 起点mainは `41e38e3bab9739e8626fb71dfb39f78569202988`。PRブランチ上に追加保護をコミットした。mainと既存GASの公開版は変更していない。
+- PASS（GitHub取得ソース＋JavaScriptのNode VM代替検証）: `test_cashflow_ledger_scoped_read.mjs`。口座別取引/予定/注記、重複ID拒否、管理者権限、集計・残高起点のテスト。
+- PASS（同検証。暗号ハッシュにテスト用の決定的代替を使用）: `test_cashflow_analysis.mjs`。銀行原本不変、分類・注記、予定照合承認、同一予定の複数承認検出、シナリオ、出力署名、権限の架空テスト。
+- PASS（GitHub取得ソース＋VM代替検証）: `test_cashflow_ledger_client.mjs`。同日残高拒否、日付移動、再送時キー保持、古いレスポンス・セッションのガード、20行分割。
+- PASS（GitHub取得ソースを用いた契約検証）: `test_app_version_contract.mjs`。APP 0.25.35 と要件・技術設計・GeneratedDocsの完全一致。
+- 未判定: `test_cashflow_analysis_client.mjs` は代替VMのスコープ再現が不十分で完全なNode試験と判定できない。テスト失敗と誤認せず、実Nodeで再実行する。
+- BLOCKED: 本作業環境はプライベートGitHubリポジトリをローカルにcloneできない（DNS制約）。`node scripts/run_local_checks.mjs --functional` の全80項目、および12ブラウザー検査は未実行。4項目の模擬PASSを全体PASSとして扱わない。
+- RELEASE GATE: 全80項目の実Node機能テストPASSが確認できるまでPRはDraftに保つ。Windows SAFE v3公開バッチはmainの正常統合後に実行する。GitHub ActionsとGAS更新、DB移行は実施していない。

@@ -23,6 +23,28 @@ function cfmlRows_(optional){
    return row;
   }).filter(r=>r.transactionId)};
 }
+function cfmlLinksByTransaction_(rows){
+ const found=new Map(),byKey=new Map(),byPlanOccurrence=new Map(),conflicts=new Set();
+ (rows||[]).forEach(row=>{
+  if(found.has(row.transactionId))conflicts.add(row.transactionId);
+  else found.set(row.transactionId,row);
+  if(row.requestKey){
+   const previous=byKey.get(row.requestKey);
+   if(previous){conflicts.add(previous.transactionId);conflicts.add(row.transactionId);}
+   else byKey.set(row.requestKey,row);
+  }
+  // A single planned occurrence cannot be approved by two bank records.
+  // Historical collisions are displayed as conflicts, never as settled.
+  if(row.status==='APPROVED'&&row.planId&&row.plannedDate){
+   const occurrenceKey=JSON.stringify([row.planId,row.plannedDate]);
+   const previous=byPlanOccurrence.get(occurrenceKey);
+   if(previous){conflicts.add(previous.transactionId);conflicts.add(row.transactionId);}
+   else byPlanOccurrence.set(occurrenceKey,row);
+  }
+ });
+ conflicts.forEach(id=>{const row=found.get(id);if(row)found.set(id,{...row,status:'CONFLICT'});});
+ return found;
+}
 function cfmlTxFingerprint_(tx){
  return cfpHash_([tx.id,tx.accountId,tx.date,tx.incoming,tx.outgoing,
   tx.description,tx.balance,tx.externalId,tx.fingerprint,tx.transfer].map(x=>String(x??'')).join('\u001f'));
@@ -34,6 +56,7 @@ function cfmlPlanFingerprint_(plan,occurrence){
 }
 function cfmlReadLink_(link,tx,plans){
  const base={status:'NONE',revision:link?Number(link.revision):0};
+ if(link&&link.status==='CONFLICT')return {status:'CONFLICT',revision:Number(link.revision)||0};
  if(!link||link.status!=='APPROVED')return base;
  const plan=(plans||[]).find(x=>x.id===link.planId);
  const occurrence=plan?cfaPlanOccurrences_([plan],String(tx.date).slice(0,7))
