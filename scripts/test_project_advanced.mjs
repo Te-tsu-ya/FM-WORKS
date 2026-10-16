@@ -88,10 +88,23 @@ assert.equal(newSheets.filter(x=>specs[x]).length,6);
 assert.equal(gctx.projectAdvancedReady_().ready,true,'all six extension sheets ready');
 
 assert.throws(()=>gctx.getProjectAdvanced('Z','P'),/権限/);
-// A foreign project's row must never be exposed by a project-scoped read.
-const outside=Array(specs['プロジェクト添付'].length).fill('');
-outside[0]='PHF-OTHER';outside[1]='OTHER';outside[8]='有効';
-db['プロジェクト添付'].rows.push(outside);
+// Include one synthetic row per ledger. An empty sheet correctly skips the
+// index, so tests must exercise populated sheets to prove every indexed column.
+const foreignLedgers={
+ 'プロジェクト依存':{id:'TASK-OTHER',projectColumn:2},
+ 'プロジェクト添付':{id:'PHF-OTHER',projectColumn:2},
+ 'プロジェクト工数対応':{id:'W-OTHER',projectColumn:2},
+ 'プロジェクト原価':{id:'COST-OTHER',projectColumn:2},
+ 'プロジェクト予算':{id:'OTHER',projectColumn:1}
+};
+for(const [name,fixture] of Object.entries(foreignLedgers)){
+ const row=Array(specs[name].length).fill('');
+ row[0]=fixture.id;
+ row[fixture.projectColumn-1]='OTHER';
+ if(name==='プロジェクト添付')row[8]='有効';
+ if(name==='プロジェクト工数対応')row[2]='TASK-OTHER';
+ db[name].rows.push(row);
+}
 const staff=gctx.getProjectAdvanced('U','P');
 assert.equal(staff.attachments.some(x=>x.id==='PHF-OTHER'),false);
 assert.equal(staff.isAdmin,false);
@@ -107,7 +120,7 @@ for(const index of ['プロジェクト依存:2','プロジェクト添付:2','�
                     'プロジェクト予算:1','プロジェクト原価:2'])
  assert.ok(used.has(index),'project detail must use scoped index: '+index);
 assert.equal(admin.attachments.some(x=>x.id==='PHF-OTHER'),false);
-db['プロジェクト添付'].rows.pop();
+for(const name of Object.keys(foreignLedgers))db[name].rows.pop();
 
 assert.throws(()=>gctx.saveProjectDependencies('U','P','TASK-1',['TASK-2'],0),/責任者/);
 assert.throws(()=>gctx.saveProjectDependencies('O','P','TASK-1',['TASK-1'],0),/同一案件/);
