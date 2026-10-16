@@ -158,8 +158,8 @@ function cfpTxValidate_(entry,accountId){
 function cfpSameImportedFingerprint_(prior,next){
  const balance=value=>{
   if(value==null||String(value).trim()==='')return '';
-  const plain=String(value).replace(/[,，\\s￥¥]/g,'');
-  return /^-?\\d+$/.test(plain)?String(Number(plain)):'INVALID:'+String(value);
+  const plain=String(value).replace(/[,，\s￥¥]/g,'');
+  return /^-?\d+$/.test(plain)?String(Number(plain)):'INVALID:'+String(value);
  };
  return balance(prior.balance)===balance(next.balance)&&
   (!String(next.externalId||'')||Number(prior.occurrence||1)===Number(next.occurrence||1));
