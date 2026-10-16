@@ -22,6 +22,19 @@ function projectAdvancedRows_(name,optional,checkedSheet){
  return sheet.getRange(2,1,last-1,width).getDisplayValues().map((r,i)=>{r._row=i+2;return r;}).filter(r=>r[0]);
 }
 
+
+ // Read-only project views fetch only matching project rows; writes still
+ // use projectAdvancedRows_ with true spreadsheet row numbers.
+function projectAdvancedProjectRows_(name,projectId,column,checkedSheet,optional){
+ const sheet=checkedSheet||projectAdvancedSheet_(name,optional);
+ if(!sheet||sheet.getLastRow()<2)return [];
+ const id=String(projectId||'');
+ if(!id)return [];
+ const width=DB_SCHEMA_SPECS[name].length;
+ return readRowsByColumnValues_(sheet,column,width,[id])
+   .filter(row=>row[0]&&String(row[column-1]||'')===id);
+}
+
 function projectAdvancedNeed_(sessionToken,projectId,manage){
  const user=requireSession_(sessionToken).employee;
  const project=getProjectsInternal_(true).find(p=>p.projectId===String(projectId||''));
@@ -69,10 +82,11 @@ function projectAdvancedDetectCycle_(map){
 
 function getProjectAdvanced(sessionToken,projectId){
  const ctx=projectAdvancedNeed_(sessionToken,projectId,false);
- const sheets={},status=projectAdvancedReady_(sheets),read=name=>projectAdvancedRows_(name,false,sheets[name]);
+ const sheets={},status=projectAdvancedReady_(sheets);
+ const read=(name,column=2)=>projectAdvancedProjectRows_(name,ctx.project.projectId,column,sheets[name],false);
  if(!status.ready)return {setupRequired:true,missing:status.missing,canManage:ctx.manager,isAdmin:ctx.user.role==='ADMIN'};
- const deps=read('プロジェクト依存').filter(r=>r[1]===ctx.project.projectId);
- const docs=read('プロジェクト添付').filter(r=>r[1]===ctx.project.projectId&&r[8]!=='削除');
+ const deps=read('プロジェクト依存');
+ const docs=read('プロジェクト添付').filter(r=>r[8]!=='削除');
  const depsByTask=new Map(deps.map(r=>[r[0],{prerequisites:projectAdvancedJsonList_(r[2]),revision:Number(r[3]||0)}]));
  const taskMap=new Map(ctx.tasks.map(t=>[t.id,t]));
  const graph=ctx.tasks.map(t=>{
@@ -85,9 +99,9 @@ function getProjectAdvanced(sessionToken,projectId){
  const response={setupRequired:false,canManage:ctx.manager,isAdmin:ctx.user.role==='ADMIN',dependencies:graph,attachments:latestDocs,
   taskEffort:projectAdvancedTaskEffort_(ctx.project.projectId,ctx.tasks,sheets['プロジェクト工数対応'],ctx.project,ctx.plan),filesAccess:'案件責任者・案件の作業担当者・管理者のみ'};
  if(ctx.user.role==='ADMIN'){
-  const budget=read('プロジェクト予算').find(r=>r[0]===ctx.project.projectId);
+  const budget=read('プロジェクト予算',1)[0];
   response.budget=budget?{amount:Number(budget[1]||0),note:budget[2],revision:Number(budget[3]||0)}:{amount:null,note:'',revision:0};
-  response.costs=read('プロジェクト原価').filter(r=>r[1]===ctx.project.projectId&&r[7]!=='削除')
+  response.costs=read('プロジェクト原価').filter(r=>r[7]!=='削除')
     .map(r=>({id:r[0],date:r[2],kind:r[3],note:r[4],amount:Number(r[5]||0),revision:Number(r[6]||0)}));
   const orderValue=ctx.plan.orderValue===''||ctx.plan.orderValue==null?null:Number(ctx.plan.orderValue);
   const sum=response.costs.reduce((total,r)=>total+r.amount,0);
@@ -99,7 +113,7 @@ function getProjectAdvanced(sessionToken,projectId){
 }
 
 function projectAdvancedTaskEffort_(projectId,tasks,checkedSheet,project,plan){
- const refs=projectAdvancedRows_('プロジェクト工数対応',true,checkedSheet).filter(r=>r[1]===projectId&&r[2]);
+ const refs=projectAdvancedProjectRows_('プロジェクト工数対応',projectId,2,checkedSheet,true).filter(r=>r[2]);
  if(!refs.length)return [];
  project=project||getProjectsInternal_(true).find(p=>p.projectId===projectId);
  if(!project)return [];

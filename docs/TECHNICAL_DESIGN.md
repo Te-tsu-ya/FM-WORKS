@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.26
+**文書版:** 0.25.27
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2765,3 +2765,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `resubmitSomuPurchase` は差戻し理由を保持する備考以外のフォーム項目を検証してから再送成功を返す。送信識別子はレスポンスへ公開しない。データ原本やDB列を変更せず、`test_somu_integration.mjs` と `test_somu_growth.mjs` で回帰する。
 - 既存の `FM-WORKS_GAS_Update_SAFE_v3.bat` で全機能テストと配信照合が成功するまではGAS公開しない。GitHub Actionsは使わない。
 - 数値項目の比較では、整形後の文字列を `/^\d+$/` で検証し、`Number(...)` の指数表現・不正文字吸収を許さない。
+
+## v0.25.27｜ProjectAdvanced/Monthlyの実装修正（2026-10-16）
+
+- `ProjectAdvanced.gs/projectAdvancedProjectRows_(name,projectId,column,checkedSheet,optional)` は `readRowsByColumnValues_` を呼び、シート上の案件IDと取得結果の案件IDを完全一致で再検査する。依存/添付/工数対応/原価は2列目、予算は1列目を使う。
+- `getProjectAdvanced` と `projectAdvancedTaskEffort_` の読み取り経路を限定取得へ置き換える。`projectAdvancedRows_` は書き込みに必要な `_row` を維持するため変更しない。認可・管理者限定の予算・Drive保管・監査内容は変更しない。
+- `Monthly.gs/getMonthlySummary` と `createTeamMonthlyExport` は既存 `normalizeYearMonth_` を呼び、形式は合うが存在しない月をDBアクセスより前に拒否する。
+- `test_project_advanced.mjs` で予算列1・他台帳列2の索引利用と別案件の行非公開を検証。`test_monthly_input_guard.mjs` で無効月のDB未アクセスを確認する。全機能バッチ・本番速度実測・ブラウザー確認は別工程。

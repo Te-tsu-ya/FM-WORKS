@@ -411,8 +411,7 @@ function getLegacyDailySnapshots_(employeeId, start, end) {
 function getMonthlySummary(sessionToken, yearMonth, employeeId) {
   const perfStarted=Date.now();
   const session = requireSession_(sessionToken);
-  const ym = String(yearMonth || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM'));
-  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('対象月を確認してください。');
+  const ym = normalizeYearMonth_(yearMonth);
 
   const requestedId = employeeId ? String(employeeId).trim().toUpperCase() : session.employee.employeeId;
   if (requestedId !== session.employee.employeeId && !canManageEmployee_(session.employee, requestedId)) throw new Error('この社員の月次勤怠を表示する権限がありません。');
@@ -722,8 +721,7 @@ function createMonthlyExport(sessionToken, yearMonth, employeeId) {
 
 function createTeamMonthlyExport(sessionToken, yearMonth) {
   requireAdminSession_(sessionToken);
-  const ym = String(yearMonth || Utilities.formatDate(new Date(), DB.timeZone, 'yyyy-MM'));
-  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('対象月を確認してください。');
+  const ym = normalizeYearMonth_(yearMonth);
 
   const employees = getPayrollEmployees_();
   if (!employees.length) throw new Error('給与集計対象の社員が設定されていません。社員マスタを確認してください。');
