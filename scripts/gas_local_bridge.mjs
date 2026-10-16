@@ -7,7 +7,8 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 import {
   RELEASE_BRANCH, KNOWN_DEPLOYMENT_ID, INITIAL_EXPECTED_VERSION, INITIAL_BASELINE_COMMIT, ACCEPTED_SOURCE,
-  checkClaspProject, claspInvocation, extractDeployment, verifyDeployResult, validateRequestedCommit,
+  checkClaspProject, preferredClaspInvocation, isWindowsFailFastExit,
+  extractDeployment, verifyDeployResult, validateRequestedCommit,
   contentHashes, compareInventories, assertNoRemoteDrift, assertPublishedSnapshot, sameSourceSnapshot
 } from './gas_local_bridge_core.mjs';
 
@@ -27,15 +28,39 @@ const lockPath = path.join(output, 'bridge.lock');
 const stamp = () => new Date().toISOString();
 const log = message => console.log('[' + stamp() + '] ' + message);
 const errorLog = message => console.error('[' + stamp() + '] ' + message);
+// Persist only safe process metadata. stdout, stderr, command line arguments,
+// local paths and environment variables can contain secrets and are never logged.
+const lastClaspFailure=path.join(output,'last-clasp-failure.json');
 function run(command, argv, cwd, timeout=120000) {
-  const resolved=command==='clasp' ? claspInvocation(argv) : {command,args:argv};
-  const result = spawnSync(resolved.command, resolved.args, {cwd, encoding:'utf8', timeout, maxBuffer:8*1024*1024,
+  const isClasp=command==='clasp',operation=isClasp?String(argv[0]):command;
+  const resolved=isClasp?preferredClaspInvocation(argv):{command,args:argv};
+  if(isClasp)log('clasp '+operation+' ['+resolved.transport+'] started.');
+  const started=Date.now();
+  const result=spawnSync(resolved.command, resolved.args, {cwd, encoding:'utf8', timeout, maxBuffer:8*1024*1024,
     windowsHide:true, windowsVerbatimArguments:resolved.windowsVerbatimArguments === true,
     env:{...process.env, GIT_TERMINAL_PROMPT:'0'}});
   if (result.error || result.status !== 0) {
-    // Do not echo full stdout/stderr: OAuth/token-bearing external messages may occur.
-    throw Error(command + ' command failed (' + (result.error?.code || result.status) + '). Check credentials and local logs.');
+    if(isClasp){
+      const nativeFailFast=isWindowsFailFastExit(result.status);
+      const unsigned=Number.isInteger(result.status)?result.status>>>0:null;
+      const summary={
+        at:stamp(),operation,transport:resolved.transport,
+        exitCode:result.status,exitHex:unsigned===null?null:'0x'+unsigned.toString(16).toUpperCase().padStart(8,'0'),
+        nodeVersion:process.version,platform:process.platform,
+        durationMs:Date.now()-started,spawnErrorCode:String(result.error?.code||''),
+        signal:String(result.signal||''),nativeFailFast
+      };
+      try{persist(lastClaspFailure,summary);}catch(_){errorLog('Could not save the local clasp crash summary.');}
+      const why=nativeFailFast?'Windows Fail Fast 0xC0000409 (not evidence of invalid Google credentials)':
+        (result.error?.code||summary.exitHex||result.signal||'unknown');
+      const failure=Error('clasp '+operation+' ['+resolved.transport+'] failed: '+why+
+        '. Safe diagnostic: artifacts/gas-local-bridge/last-clasp-failure.json');
+      failure.claspFailFast=nativeFailFast;
+      throw failure;
+    }
+    throw Error(command + ' command failed (' + (result.error?.code || result.status) + '). Check local logs.');
   }
+  if(isClasp)fs.rmSync(lastClaspFailure,{force:true});
   return String(result.stdout || '');
 }
 
@@ -118,18 +143,32 @@ function currentConfig() {
   return checkClaspProject(JSON.parse(fs.readFileSync(file,'utf8')));
 }
 function requireDeployment(worktree) {
-  const listed=run('clasp',['list-deployments'],worktree);
+  let listed;
+  try{listed=run('clasp',['list-deployments'],worktree);}
+  catch(error){
+    if(!error.claspFailFast)throw error;
+    errorLog('Windows native crash during read-only deployment listing. Retrying this READ-ONLY command once.');
+    listed=run('clasp',['list-deployments'],worktree);
+  }
   return extractDeployment(listed);
 }
 function pullSnapshot(baseDir, scriptId) {
-  fs.mkdirSync(baseDir,{recursive:true});
-  // clasp defaults to writing Script files with .js extension when pulling.
-  // Our GitHub source inventory uses .gs; pin the preferred extension so
-  // read-only remote snapshots compare against the same filenames.
-  const pullConfig={scriptId,rootDir:'.',scriptExtensions:['.gs','.js'],htmlExtensions:['.html']};
-  fs.writeFileSync(path.join(baseDir,'.clasp.json'),JSON.stringify(pullConfig)+'\n',{mode:0o600});
-  run('clasp',['pull'],baseDir,180000);
-  return contentHashes(localFiles(baseDir));
+  // Clean the disposable snapshot folder before each attempt. A failed read-only
+  // pull may have written only some files; never compare a mixed snapshot.
+  const attempt=()=>{
+    fs.rmSync(baseDir,{recursive:true,force:true});
+    fs.mkdirSync(baseDir,{recursive:true});
+    const pullConfig={scriptId,rootDir:'.',scriptExtensions:['.gs','.js'],htmlExtensions:['.html']};
+    fs.writeFileSync(path.join(baseDir,'.clasp.json'),JSON.stringify(pullConfig)+'\n',{mode:0o600});
+    run('clasp',['pull'],baseDir,180000);
+    return contentHashes(localFiles(baseDir));
+  };
+  try{return attempt();}
+  catch(error){
+    if(!error.claspFailFast)throw error;
+    errorLog('Windows native crash during read-only GAS snapshot. Retrying in a CLEAN temporary folder once.');
+    return attempt();
+  }
 }
 function cycle({preflight=false}={}) {
   const cfg=currentConfig();
@@ -214,6 +253,7 @@ function cycle({preflight=false}={}) {
     log('GAS existing deployment updated to @'+newVersion+' and source verified. Browser/login test remains separate.');
   } catch (error) {
     if (pushStarted) errorLog('Remote source or deployment may have changed. Pending record retained; inspect before retry.');
+    else errorLog('GAS source push and deployment were NOT STARTED by this run.');
     throw error;
   } finally {
     if (worktreeAdded) {

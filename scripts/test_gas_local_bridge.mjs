@@ -6,6 +6,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {
   RELEASE_BRANCH, KNOWN_DEPLOYMENT_ID, INITIAL_EXPECTED_VERSION, INITIAL_BASELINE_COMMIT, checkClaspProject, claspInvocation,
+  preferredClaspInvocation, isWindowsFailFastExit,
   extractDeployment, verifyDeployResult, validateRequestedCommit, contentHashes,
   compareInventories, assertNoRemoteDrift, assertPublishedSnapshot, sameSourceSnapshot
 } from './gas_local_bridge_core.mjs';
@@ -25,7 +26,43 @@ assert.equal(windowsInvocation.windowsVerbatimArguments,true,
 const windowsList=claspInvocation(['list-deployments'],'win32',{ComSpec:'C:\\Windows\\System32\\cmd.exe'});
 assert.deepEqual(windowsList.args,['/d','/s','/c','"clasp.cmd list-deployments"']);
 assert.equal(windowsList.windowsVerbatimArguments,true);
+
+assert.equal(isWindowsFailFastExit(3221226505,'win32'),true);
+assert.equal(isWindowsFailFastExit(-1073740791,'win32'),true);
+assert.equal(isWindowsFailFastExit(3221226505,'linux'),false);
+assert.equal(isWindowsFailFastExit(1,'win32'),false);
+// Simulate a standard global npm installation with spaces in its directory.
+// The publisher should use the official JS entry point, without cmd.exe.
+// If an earlier PATH directory shadows clasp.cmd, keep that earlier shim.
+const claspInstallTmp=fs.mkdtempSync(path.join(os.tmpdir(),'fmworks-direct-clasp-'));
+try{
+  const bin=path.join(claspInstallTmp,'npm global with spaces');
+  const pkg=path.join(bin,'node_modules','@google','clasp');
+  fs.mkdirSync(path.join(pkg,'build','src'),{recursive:true});
+  fs.writeFileSync(path.join(bin,'clasp.cmd'),'@echo off\r\n');
+  fs.writeFileSync(path.join(pkg,'package.json'),JSON.stringify({
+    name:'@google/clasp',bin:{clasp:'build/src/index.js'}}));
+  fs.writeFileSync(path.join(pkg,'build','src','index.js'),
+    'console.log(JSON.stringify(process.argv.slice(2)));\n');
+  const argv=['create-deployment','--deploymentId',KNOWN_DEPLOYMENT_ID,
+    '--description','FM WORKS test'];
+  const direct=preferredClaspInvocation(argv,'win32',{PATH:bin,ComSpec:'cmd.exe'});
+  assert.equal(direct.transport,'node-direct');
+  assert.equal(direct.command,process.execPath);
+  const child=spawnSync(direct.command,direct.args,{encoding:'utf8',timeout:15000});
+  assert.equal(child.status,0,String(child.stderr||child.error?.message||''));
+  assert.deepEqual(JSON.parse(String(child.stdout).trim()),argv);
+  const shadow=path.join(claspInstallTmp,'earlier fake');
+  fs.mkdirSync(shadow);fs.writeFileSync(path.join(shadow,'clasp.cmd'),'@echo off\r\n');
+  assert.equal(preferredClaspInvocation(['pull'],'win32',{
+    PATH:shadow+';'+bin,ComSpec:'cmd.exe'}).transport,'cmd-shim');
+  assert.equal(preferredClaspInvocation(['pull'],'linux',{PATH:bin}).transport,'native-clasp');
+}finally{fs.rmSync(claspInstallTmp,{recursive:true,force:true});}
+
 const bridgeProgram=fs.readFileSync(new URL('./gas_local_bridge.mjs',import.meta.url),'utf8');
+assert.match(bridgeProgram,/last-clasp-failure\.json/);
+assert.match(bridgeProgram,/Ret[r]?ying this READ-ONLY command once/);
+assert.match(bridgeProgram,/GAS source push and deployment were NOT STARTED/);
 assert.match(bridgeProgram,/last-functional-report\.json/,
   'functional check report must survive temporary worktree removal');
 assert.match(bridgeProgram,/Functional suite failed/,
