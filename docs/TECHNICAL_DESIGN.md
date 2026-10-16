@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.30
+**文書版:** 0.25.31
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2794,3 +2794,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - 復元した日次明細を社員ごとに昇順で並べ、`new Date(year,month,0).getDate()` の月末日数と、`YYYY-MM-01` から末日までの連続した文字列を厳密比較する。日付欠落・二重日付・日付不整合はすべて中断し、給与出力を行わない。元のスナップショットに変更は加えない。
 - 取得後の月・社員の完全一致、管理者による給与一括出力と本人/権限者の個別出力、月次締め状態の応答内1回共有は保持する。
 - 追加回帰は従来の `scripts/test_monthly_snapshot_index.mjs` を拡張（テスト本数75のまま）。Node全75件、ブラウザー12件とGAS実操作は別ゲートで確認する。
+
+## v0.25.31｜CashFlowLedgerの手入力キーとCashFlowBank書込みロック（2026-10-16）
+
+- `CashFlowLedger.gs/saveCashFlowLedgerRows` は手入力行の `externalId` （`LEDGER-` + `requestKey`）を全口座の資金取引台帳から検索する。既存行が2行以上、または別口座の行、同じ口座でもfingerprint・残高・連番に差異がある場合は全チャンクの保存前に拒否する。元口座への完全一致再送は許可する。
+- `CashFlowBank.gs/importCashFlowBankRows` は既存 `withScriptLock_` 内で手入力識別子を全取引からMap化する。保存前に衝突を検査し、同時送信および同じバッチ内の異内容重複を拒否する。Map更新は書込み前なので、一件でも衝突すれば該当バッチは書き込まない。既存のfingerprint照合と残高照合を維持する。
+- 通常の銀行側取引番号（`BANK-` 等）は口座別のまま。利用者が変更する内部振替の区分フラグは、再送識別子の不変項目に含めない。DB移行と公開バッチの改変は不要。
+- 新規回帰テスト `scripts/test_cashflow_ledger_key_scope.mjs` と `scripts/test_cashflow_bank_ledger_namespace.mjs` は架空2口座を使って、正常再送・銀行口座間衝突・内容改変・同一チャンク内衝突・通常銀行IDの口座別取込を確認する。本番GASとブラウザーテストは独立して判定する。
