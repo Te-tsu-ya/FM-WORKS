@@ -723,14 +723,14 @@ function createTeamMonthlyExport(sessionToken, yearMonth) {
   requireAdminSession_(sessionToken);
   const ym = normalizeYearMonth_(yearMonth);
 
-  const employees = getPayrollEmployees_();
-  if (!employees.length) throw new Error('給与集計対象の社員が設定されていません。社員マスタを確認してください。');
+  // A closed snapshot owns its original payroll roster. Do not rely on
+  // current employee/payroll flags, which can change after hiring or leaving.
   const closeStatus = getMonthlyCloseStatusInternal_(ym);
   if (!closeStatus.closed || !closeStatus.snapshotId) {
     throw new Error('給与対象の一括出力は月次締め後に実行してください。');
   }
-  const summaries = getMonthlySnapshotSummaries_(ym, closeStatus.snapshotId, employees.map(e=>e.employeeId));
-  if (summaries.length !== employees.length) {
+  const summaries = getMonthlySnapshotSummaries_(ym, closeStatus.snapshotId, []);
+  if (!summaries.length) {
     throw new Error('締め済み月の確定データが不足しています。締めを解除し、再締めしてください。');
   }
 
