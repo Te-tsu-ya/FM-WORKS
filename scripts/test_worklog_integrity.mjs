@@ -89,4 +89,18 @@ assert.equal(save('ADMIN',{...draft,id:'',date:'2026-10-11',start:'12:00',end:'1
 assert.equal(rows.at(-1)[2],'FM0001','new admin worklog belongs to admin by default');
 assert.ok(indexedReadCount>=6,'overlap tests must use indexed single-date lookup');
 assert.ok(saveCalls>=5);
-console.log('PASS: worklog owner preservation, authorization, overlap integrity and indexed date lookup');
+// A tombstone may be idempotent for its owner, but never for another staffer.
+// Even knowledge of a deleted worklog ID must not bypass record ACL.
+const archived=['W-ARCHIVED','2026-10-10','FM0002','架空社員B','案件A','開発',
+  '過去の作業','08:00','09:00',60,'','','削除','',''];
+rows.push(archived);
+const writesBeforeDeniedDelete=saveCalls;
+assert.throws(()=>ctx.deleteWorklog('STAFF_C','W-ARCHIVED'),/権限/,
+  'deleted worklog IDs must not bypass employee ACL');
+assert.equal(saveCalls,writesBeforeDeniedDelete,'denied delete must not write any sheet');
+assert.equal(ctx.deleteWorklog('STAFF_B','W-ARCHIVED').ok,true,
+  'owner is allowed to safely retry deleting their own already-deleted record');
+assert.equal(saveCalls,writesBeforeDeniedDelete,'idempotent delete must never mutate tombstone');
+assert.throws(()=>ctx.deleteWorklog('STAFF_B','W-1'),/権限/,
+  'active worklog still requires ownership');
+console.log('PASS: worklog owner preservation, authorization, overlap integrity, deleted-row ACL and indexed date lookup');

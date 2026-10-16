@@ -2,7 +2,7 @@
 
 > **2026-10-12 運用変更:** 最初に [`AGENTS.md`](../AGENTS.md) を読む。GitHub Actions・課金枠を使う機能は禁止。検証はGPT環境の `node scripts/run_local_checks.mjs` で行う。以下の過去のCI/自動Deploy記載は履歴であり、再実行・復元しない。GAS公開は認証済み直接操作またはローカルclaspで別途確認する。
 
-**文書版:** 0.25.27
+**文書版:** 0.25.28
 **更新日:** 2026-10-16
 **正本:** GitHub `docs/TECHNICAL_DESIGN.md`
 
@@ -2772,3 +2772,10 @@ ID/送信キーの単一行finderはmatchCase(true)を設定し、既存の正�
 - `getProjectAdvanced` と `projectAdvancedTaskEffort_` の読み取り経路を限定取得へ置き換える。`projectAdvancedRows_` は書き込みに必要な `_row` を維持するため変更しない。認可・管理者限定の予算・Drive保管・監査内容は変更しない。
 - `Monthly.gs/getMonthlySummary` と `createTeamMonthlyExport` は既存 `normalizeYearMonth_` を呼び、形式は合うが存在しない月をDBアクセスより前に拒否する。
 - `test_project_advanced.mjs` で予算列1・他台帳列2の索引利用と別案件の行非公開を検証。`test_monthly_input_guard.mjs` で無効月のDB未アクセスを確認する。全機能バッチ・本番速度実測・ブラウザー確認は別工程。
+
+## v0.25.28｜銀行重複IDの内容整合性・工数Tombstone ACL（2026-10-16）
+
+- `CashFlowBank.gs/cfpTxValidate_` の重複識別値は既存互換を維持する。取引番号がある場合、旧方式では残高と連番がfingerprintに含まれないため、`importCashFlowBankRows` のロック内で、既存行と今回の行のfingerprintが同じとき `cfpSameImportedFingerprint_` を実行する。
+- 比較対象は残高（Sheetsの桁区切り表記を正規化）と、外部取引番号が存在する場合の連番。衝突した場合は`setValues`より前にエラーとし、同じfingerprintでも取引が異なる可能性を黙って消さない。通常の完全同一再送と内部振替区分の手動修正は従来どおり。元データのfingerprint再計算やDB移行はしない。
+- `Worklog.gs/deleteWorklog` はID検索後に従来の社員本人・ADMIN権限判定を先に行い、その後に月次締めと削除済み状態を検査する。権限のない利用者への成功応答・既存状態の漏洩を防止。
+- 機能テストの既存取込3件と重複再取込に加え、保存済み衝突・同一バッチ内衝突・無権限の削除済み工数を回帰対象とする。GAS/DB実操作とブラウザー表示の確認は別ゲート。
