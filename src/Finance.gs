@@ -419,6 +419,15 @@ function resubmitFinanceRequest(sessionToken,kind,id,payload){
     const target=financeFindRow_(kind,id),item=target.item,model=FINANCE_MODELS[kind];
     if(String(item.employeeId)!==String(employee.employeeId))
       throw new Error('他の社員の申請は修正できません。');
+    // The same request key must identify exactly one request, not merely
+    // a payload of the same employee. Enforce under the existing script lock.
+    // The shared reader rechecks literal key equality after TextFinder.
+    const keyIndex=model.keys.indexOf('requestKey');
+    if(keyIndex<1)throw new Error('経理申請の送信識別子列が見つかりません。');
+    const matches=readRowsByColumnValues_(target.sheet,keyIndex+1,model.keys.length,[key])
+      .filter(row=>String(row[keyIndex]||'')===key);
+    if(matches.length>1||matches.some(row=>String(row[0]||'')!==String(item.id)))
+      throw new Error('送信識別子が他の申請に使用されています。再読み込みして新しい送信識別子で再申請してください。');
     if(item.status==='承認待ち'&&item.requestKey===key){
       if(!financeSameSubmittedRecord_(kind,item,values))
         throw new Error('前回と異なる内容で再送されています。申請履歴を確認してください。');
