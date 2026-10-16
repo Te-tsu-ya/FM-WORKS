@@ -65,7 +65,8 @@ periodRows[701]=row(day399,'OTHER');
 periodRows[800]=row(day399,'STAFF');
 const fourHundred=make(periodRows);
 const indexed=ctx.readRowsByDateRange_(fourHundred,2,15,base,day399,3,['STAFF']);
-assert.deepEqual(indexed.map(r=>r[1]).sort(),[base,day395,day399].sort(),
+// A vm-created array has a different prototype: compare host-realm arrays, not realms.
+assert.deepEqual(Array.from(indexed,r=>r[1]).sort(),[base,day395,day399].sort(),
   '400-day index must include the final month and never expose other employees');
 assert.equal(fourHundred.stats.finders,1,'valid 400-day request must stay indexed');
 assert.ok(new RegExp(ctx.dateRangeRegex_(base,day399,400)).test(day399),
@@ -75,7 +76,7 @@ assert.equal(ctx.dateRangeRegex_(base,day400,400),'',
   'incomplete date index must not be returned to a caller');
 const fourHundredOne=make(periodRows);
 const fallback=ctx.readRowsByDateRange_(fourHundredOne,2,15,base,day400,3,['STAFF']);
-assert.deepEqual(fallback.map(r=>r[1]).sort(),[base,day395,day399].sort(),
+assert.deepEqual(Array.from(fallback,r=>r[1]).sort(),[base,day395,day399].sort(),
   'long-range fallback must still include every authorized row');
 assert.equal(fourHundredOne.stats.finders,0,'overlong requests must not run truncated indexed search');
 console.log('PASS adaptive date indexes: sparse, dense, complete 400-day range, long-range fallback, owner ACL');
