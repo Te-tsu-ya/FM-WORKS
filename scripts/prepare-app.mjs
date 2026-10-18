@@ -6,6 +6,8 @@ import {createDemoRuntime,MemorySheet} from './seed-builder.mjs';
 const {version:appVersion}=JSON.parse(fs.readFileSync('package.json','utf8'));
 fs.mkdirSync('src/generated',{recursive:true});
 const runtime=createDemoRuntime();
+const runtimeVersion=vm.runInContext('APP.version',runtime.context);
+if(runtimeVersion!==appVersion)throw new Error(`Version mismatch: package.json=${appVersion}, src/domain/core/Code.js=${runtimeVersion}`);
 runtime.sheets.set('社内文書',new MemorySheet('社内文書',vm.runInContext('COMPANY_DOC_HEADERS',runtime.context)));
 const meta=vm.runInContext('({specs:DB_SCHEMA_SPECS,db:DB.sheets,finance:FINANCE_MODELS,bank:CFP,analysis:CFA,quote:QUOTE_MODEL,somu:SOMU_MODELS,hub:PROJECT_HUB_MODELS})',runtime.context);
 const tableNames={

@@ -88,3 +88,13 @@ test('Sites time formatter supports single-digit H and m in Asia/Tokyo',()=>{
  assert.equal(u.formatDate(at,'Asia/Tokyo','HH:mm'),'09:05');
  assert.equal(u.formatDate(at,'Asia/Tokyo','yyyy-MM-dd'),'2026-10-18');
 });
+
+// The generated SQL engine and visible UI must use the same version as the package.
+test('prototype version matches package before generation',async()=>{
+ const {createDemoRuntime}=await import('../scripts/seed-builder.mjs');
+ const {runInContext}=await import('node:vm');
+ const {readFileSync}=await import('node:fs');
+ const packageVersion=JSON.parse(readFileSync('package.json','utf8')).version;
+ const version=runInContext('APP.version',createDemoRuntime().context);
+ assert.equal(version,packageVersion);
+});

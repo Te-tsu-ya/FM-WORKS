@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import {formatDate} from '../src/server/runtime-services.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -21,7 +22,7 @@ export class MemorySheet{
 export function createDemoRuntime(input=JSON.parse(fs.readFileSync(path.join(root,'db/seeds/fixtures.json'),'utf8'))){
  const seed=structuredClone(input);if(seed.meta.kind!=='SYNTHETIC_ONLY')throw Error('Only synthetic data may initialize the repository demo');
  const sheets=new Map(),cache=new Map(),audits=[];
- const format=(value,_zone,pattern)=>{const d=new Date(value);const parts=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(d).split(' ');return pattern==='yyyy-MM-dd'?parts[0]:pattern==='yyyy-MM'?parts[0].slice(0,7):parts.join(' ');};
+ const format=formatDate;
  const noExternal=()=>{throw Error('ダミーデータ生成では外部サービス・実DB・公開・ファイル発行は実行しません。');};
  const props={getProperty:()=>null,setProperty:noExternal};
  const ctx=vm.createContext({console:{log(){},warn(){},error(){}},Date,Math,Object,Array,String,Number,Map,Set,JSON,RegExp,
