@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {TestD1} from './sql-fixture.mjs';
-import {SqlRepository} from '../lib/sql-repository.mjs';
-import {definitions,seed} from '../lib/generated/schema-meta.mjs';
-import {createEngine} from '../lib/generated/engine.mjs';
-import {createServices} from '../lib/runtime-services.mjs';
-import {handleRpc} from '../lib/api.mjs';
+import {SqlRepository} from '../src/server/sql-repository.mjs';
+import {definitions,seed} from '../src/generated/schema-meta.mjs';
+import {createEngine} from '../src/generated/engine.mjs';
+import {createServices} from '../src/server/runtime-services.mjs';
+import {handleRpc} from '../src/server/api.mjs';
 
 test('SQL schema, synthetic seed, durable reload and guarded atomic commit',async()=>{
  const db=new TestD1();try{
@@ -20,7 +20,7 @@ test('SQL schema, synthetic seed, durable reload and guarded atomic commit',asyn
  }finally{db.close();}
 });
 
-test('legacy business rules execute against SQL: initial, calendar, finance, projects, worklog, docs and Somu',async()=>{
+test('business rules execute against SQL: initial, calendar, finance, projects, worklog, docs and Somu',async()=>{
  const db=new TestD1();try{
   const repository=await new SqlRepository(db,definitions,seed).load();const engine=createEngine(createServices(repository),{employeeId:'FM0001'},'TEST-TOKEN');
   const initial=engine.initial();assert.equal(initial.user.employeeId,'FM0001');assert.equal(initial.permissions.adminConsole,true);

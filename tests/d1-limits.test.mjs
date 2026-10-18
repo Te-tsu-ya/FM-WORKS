@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {TestD1} from './sql-fixture.mjs';
-import {SqlRepository} from '../lib/sql-repository.mjs';
-import {definitions,seed} from '../lib/generated/schema-meta.mjs';
+import {SqlRepository} from '../src/server/sql-repository.mjs';
+import {definitions,seed} from '../src/generated/schema-meta.mjs';
 test('D1 compound SELECT cap: all 54 tables load without any compound SELECT',async()=>{
  const db=new TestD1({forbidCompound:true});try{
   assert.ok(definitions.length>50);

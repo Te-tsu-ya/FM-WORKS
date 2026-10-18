@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {TestD1} from './sql-fixture.mjs';
-import {SqlRepository} from '../lib/sql-repository.mjs';
-import {definitions,seed} from '../lib/generated/schema-meta.mjs';
-import {createEngine} from '../lib/generated/engine.mjs';
-import {createServices} from '../lib/runtime-services.mjs';
+import {SqlRepository} from '../src/server/sql-repository.mjs';
+import {definitions,seed} from '../src/generated/schema-meta.mjs';
+import {createEngine} from '../src/generated/engine.mjs';
+import {createServices} from '../src/server/runtime-services.mjs';
 
 const fixture=async()=>{const db=new TestD1(),repository=await new SqlRepository(db,definitions,seed).load();return {db,repository,engine:createEngine(createServices(repository),{employeeId:'FM0001'},'TOKEN')};};
 for(const [method,args,check] of [
@@ -45,7 +45,21 @@ test('non-admin finance access is denied by original business rules on SQL',asyn
 });
 
 test('published shell has valid scripts, Sites transport, no Google RPC dependency and current login',()=>{
- const module=fs.readFileSync('lib/generated/shell.mjs','utf8');const html=JSON.parse(module.slice(module.indexOf('=')+1).trim().replace(/;$/,''));
+ const module=fs.readFileSync('src/generated/shell.mjs','utf8');const html=JSON.parse(module.slice(module.indexOf('=')+1).trim().replace(/;$/,''));
  let count=0;for(const script of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){new vm.Script(script[1]);count++;}
  assert.ok(count>20);assert.ok(!html.includes('global.google'));assert.ok(!html.includes('google.script.run'));assert.ok(html.includes('global.FMApi&&global.FMApi.run'));assert.ok(html.includes('/api/rpc/'));assert.ok(html.includes('開発版をはじめる'));assert.ok(html.includes('すべて架空データ'));
+});
+
+test('admin documentation serves the canonical current files and denies ordinary employees',async()=>{
+ const f=await fixture();try{
+  const version=JSON.parse(fs.readFileSync('package.json','utf8')).version;
+  assert.equal(f.engine.initial().app.version,version);
+  for(const [type,file] of [['requirements','REQUIREMENTS.md'],['technical','TECHNICAL_DESIGN.md']]){
+   const doc=f.engine.invoke('getSystemDocument',['TOKEN',type]);
+   assert.equal(doc.version,version);
+   assert.equal(doc.markdown,fs.readFileSync('docs/'+file,'utf8'));
+  }
+  const ordinary=createEngine(createServices(f.repository),{employeeId:'FM0003'},'USER');
+  assert.throws(()=>ordinary.invoke('getSystemDocument',['USER','requirements']),/管理者/);
+ }finally{f.db.close();}
 });
