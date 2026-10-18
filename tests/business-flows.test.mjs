@@ -63,3 +63,10 @@ test('admin documentation serves the canonical current files and denies ordinary
   assert.throws(()=>ordinary.invoke('getSystemDocument',['USER','requirements']),/管理者/);
  }finally{f.db.close();}
 });
+
+test('legacy GAS HTML service is absent from the current Sites engine source',()=>{
+ const source=fs.readFileSync('src/domain/core/Code.js','utf8');
+ assert.doesNotMatch(source,/\bHtmlService\b/);
+ assert.doesNotMatch(source,/\bfunction doGet\s*\(/);
+ assert.doesNotMatch(source,/\bfunction include_\s*\(/);
+});

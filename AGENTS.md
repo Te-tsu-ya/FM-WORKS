@@ -1,5 +1,7 @@
 # FM WORKS 開発指示
 
+開発版のアプリ表記は v0.0.0 から開始し、DBスキーマの管理番号とは分ける。
+
 1. 最新のユーザー指示を優先する。作業前にREADMEと`docs/`の3文書、GitHub最新main・関連PR、Sitesの現在のソースを確認する。並行変更を上書きしない。
 2. 現在のアプリが仕様の基準。機能は`docs/REQUIREMENTS.md`、構成は`docs/TECHNICAL_DESIGN.md`、運用・変更手順は`docs/RULES.md`を正本とする。独立した引継ぎ書・役職別説明・進捗文書を増やさない。
 3. 公開はGPT Sites、DBはSites内蔵SQL/D1、データは全件架空。スプレッドシート連携・GAS公開・clasp・GitHub Actions・Codespaces・有料ランナーは使わない。

@@ -1,6 +1,6 @@
 const APP = Object.freeze({
   name: 'FM WORKS',
-  version: '0.26.4',
+  version: '0.0.0',
   locale: 'ja-JP'
 });
 
@@ -45,52 +45,6 @@ function isWorkLocation_(value) {
 }
 function isTimePunchAction_(action) {
   return TIME_PUNCH_ACTIONS.includes(String(action || ''));
-}
-
-// Cache only the static application shell. No session, employee or DB values are
-// rendered into Index; every business API still authenticates against live rows.
-// A release version is part of the key so old deployments cannot serve new code.
-function doGet() {
-  const content=getApplicationShell_();
-  return HtmlService.createHtmlOutput(content).setTitle(APP.name)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
-}
-function getApplicationShell_() {
-  const key='fm:static-shell:v1:'+APP.version;
-  let cache;
-  try {
-    cache=CacheService.getScriptCache();
-    const manifest=JSON.parse(cache.get(key)||'null');
-    if(manifest&&/^[A-Za-z0-9-]+$/.test(manifest.generation)&&
-       Number.isInteger(manifest.count)&&manifest.count>0&&manifest.count<=40){
-      const keys=Array.from({length:manifest.count},(_,i)=>key+':'+manifest.generation+':'+i);
-      const parts=cache.getAll(keys);
-      if(keys.every(k=>typeof parts[k]==='string'))return keys.map(k=>parts[k]).join('');
-    }
-  } catch(_){ /* Cache eviction/outage is a miss, never an application failure. */ }
-  const template=HtmlService.createTemplateFromFile('Index');
-  template.appName=APP.name;template.appVersion=APP.version;
-  const content=template.evaluate().getContent();
-  try {
-    if(!cache)cache=CacheService.getScriptCache();
-    const parts={},generation=Utilities.getUuid();let part='',size=0,count=0;
-    for(const ch of content){
-      const cp=ch.codePointAt(0),bytes=cp<128?1:cp<2048?2:cp<65536?3:4;
-      if(size+bytes>60000){parts[key+':'+generation+':'+count++]=part;part='';size=0;}
-      part+=ch;size+=bytes;
-    }
-    if(part)parts[key+':'+generation+':'+count++]=part;
-    if(count>0&&count<=40){
-      cache.putAll(parts,21600);
-      // Publish manifest last. Concurrent readers never mix release generations.
-      cache.put(key,JSON.stringify({generation,count}),21600);
-    }
-  } catch(_){ /* Rendering remains available without CacheService. */ }
-  return content;
-}
-
-function include_(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 function getInitialData(sessionToken) {

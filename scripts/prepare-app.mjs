@@ -102,7 +102,7 @@ const domainPaths=fs.readdirSync('src/domain',{recursive:true}).filter(n=>n.ends
 const sources=domainPaths.map(n=>fs.readFileSync(path.join('src/domain',n),'utf8')).join('\n');
 const publicNames=[...sources.matchAll(/^function ([A-Za-z]\w*)\(/gm)].map(m=>m[1]).filter(n=>!n.endsWith('_'));
 const blocked=/install|Job|Pin|Prototype|Backup|Trigger|initialize|migrate|export|Export|Attachment|issueQuote|retryQuote|getQuoteFile|createRelatedDocument|retryRelatedDocument|getRelatedDocumentFile|importJapan|importHolidays/;
-const allowed=publicNames.filter(n=>!blocked.test(n)&&!['doGet','login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
+const allowed=publicNames.filter(n=>!blocked.test(n)&&!['login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
 const generatedDocs={requirements:{title:'FM WORKS 要件定義書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/REQUIREMENTS.md','utf8')},technical:{title:'FM WORKS 技術設計書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/TECHNICAL_DESIGN.md','utf8')}};
 const engine='export const appVersion = '+JSON.stringify(appVersion)+';\nexport const apiMethods = '+JSON.stringify(allowed)+';\nexport function createEngine(services,actor,sessionToken){\nconst {Utilities,CacheService,PropertiesService,SpreadsheetApp,DriveApp,UrlFetchApp,LockService,Session,ScriptApp}=services;\n'+sources+'\nconst GENERATED_DOCS='+JSON.stringify(generatedDocs)+';\n'+`
  getDb_=services.getDb;getDatabaseSpreadsheetId_=()=> 'SITES_SQL_ONLY';getRuntimeEnvironment_=()=> 'DEVELOPMENT';
