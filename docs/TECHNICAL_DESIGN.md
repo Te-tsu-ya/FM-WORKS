@@ -105,3 +105,5 @@ GAS専用HTML入口、Google Driveバックアップ、時間トリガーによ�
 社内文書のSheets列追加・Drive退避ボタンも撤去し、未準備時はサイト管理側のSQLスキーマ確認を案内する。業務レコードの初期化は行わない。
 
 UIは`FMApi.run`経由で同一オリジンのSites APIへ接続し、GAS式`google.script.run`をビルド時に文字置換する処理は使用しない。
+
+管理文書の小規模な読み取り関数は`core/Maintenance.js`に、資金取引貼付け用CSSは`styles/StylesCashFlowBankGrid.html`に統合し、不要な単独ファイルを削除した。

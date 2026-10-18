@@ -105,3 +105,12 @@ test('Sites UI source no longer uses GAS transport substitutions',()=>{
  const build=fs.readFileSync('scripts/prepare-app.mjs','utf8');
  assert.doesNotMatch(build,/replaceAll\('google\.script\.run'/);
 });
+
+test('small shared UI/document helpers are folded into active modules',()=>{
+ const main=fs.readFileSync('src/domain/core/Maintenance.js','utf8');
+ const bankStyles=fs.readFileSync('src/ui/styles/StylesCashFlowBankGrid.html','utf8');
+ const index=fs.readFileSync('src/ui/Index.html','utf8');
+ assert.match(main,/function getSystemDocument\(/);
+ assert.match(bankStyles,/\.cfb-paste-panel/);
+ assert.doesNotMatch(index,/StylesCashFlowPaste/);
+});
