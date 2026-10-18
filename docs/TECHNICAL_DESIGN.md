@@ -98,14 +98,10 @@ Sitesビルド用の`build/sites-vite-plugin.ts`とライセンス、Worker入�
 
 同じSite IDへ更新し、認証情報はメモリーとstdinだけで扱う。GitHub Actions等は使用しない。ブラウザーQAが利用できなければ未実施と明記しHTTP確認と区別する。未対応事項は[要件定義書](REQUIREMENTS.md)へ集約する。
 
-## Sites初版の旧機能整理
+## 8. Sites専用の実装境界
 
-GAS専用HTML入口、Google Driveバックアップ、時間トリガーによる年休・バックアップ処理、Sheetsスキーマ更新のコードは削除した。SitesのDBバックアップ・復旧や自動ジョブは別途実装・検証する。監査ログと業務上の勤怠・申請・有給履歴、適用済みD1マイグレーションは保存する。これらはアプリの表示版 `0.0.0` と別管理する。
-
-社内文書のSheets列追加・Drive退避ボタンも撤去し、未準備時はサイト管理側のSQLスキーマ確認を案内する。業務レコードの初期化は行わない。
-
-UIは`FMApi.run`経由で同一オリジンのSites APIへ接続し、GAS式`google.script.run`をビルド時に文字置換する処理は使用しない。
-
-管理文書の小規模な読み取り関数は`core/Maintenance.js`に、資金取引貼付け用CSSは`styles/StylesCashFlowBankGrid.html`に統合し、不要な単独ファイルを削除した。
-
-HTMLの部品読み込みはビルド専用コメント `<!-- FM_INCLUDE:... -->` で指定し、生成時に実ファイルへ展開する。GASのHTMLテンプレート記法は使わない。
+- UI通信は`FMApi.run`、HTML部品の組込みは`<!-- FM_INCLUDE:... -->`で統一する。
+- 管理画面はSQLの状態、業務の監査記録、労務設定を扱う。Drive複製やApps Scriptトリガーを実行しない。
+- バックアップ・復元、ファイル発行、自動ジョブはSites方式の実装と検証が終わるまで未対応と表示する。
+- 管理文書の参照は`core/Maintenance.js`、資金明細の貼付けスタイルは`styles/StylesCashFlowBankGrid.html`に置く。
+- アプリ表示版`0.0.0`とD1スキーマ番号は別。業務履歴・監査ログ・適用済みSQL変更履歴を維持する。
