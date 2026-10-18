@@ -22,9 +22,8 @@ function renderPage(transition=false){
     const canRestoreFocus=state.page==='worklog'&&previouslyFocused&&['worklogPrevDate','worklogToday','worklogNextDate','worklogDatePicker',...WORKLOG_QUICK_FIELDS].includes(previouslyFocused.id);
     const focusId=canRestoreFocus?previouslyFocused.id:'';
     rememberWorklogQuickDraft();
-    content.classList.toggle('one-screen',state.page==='home'||state.page==='attendance'||state.page==='worklog');
-    content.classList.toggle('attendance-one-screen',state.page==='attendance');
-    content.classList.toggle('worklog-one-screen',state.page==='worklog');
+    content.classList.remove('one-screen','attendance-one-screen','worklog-one-screen');
+    content.dataset.page=state.page;
     content.innerHTML=`<div id='globalActionBannerSlot' class='global-action-banner-slot' aria-live='polite'>${globalActionBanners()}</div>`+fn();
     content.dataset.renderedPage=state.page;
     openSections.forEach(([key,open])=>{const el=Array.from(content.querySelectorAll('details[data-form-section]')).find(x=>x.dataset.formSection===key);if(el)el.open=open;});
