@@ -78,7 +78,7 @@ function cashFlowLoad_(force=false){
  if(!force&&ui.data&&ui.data.fiscalYear===ui.year&&(ui.dirty||Date.now()-(ui.at||0)<300000))return;
  const token=state.sessionToken,year=ui.year,seq=++ui.seq;
  ui.loading=true;ui.error='';renderPageIfActive('finance');
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
   ui.loading=false;
   if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}
@@ -176,7 +176,7 @@ function cashFlowSave_(){
  if(!ui.key)ui.key='CF'+Date.now().toString(36)+Math.random().toString(36).slice(2,15);
  const token=state.sessionToken,year=ui.year,seq=ui.seq,payload={fiscalYear:year,openingBalance:ui.draft.openingBalance,revision:ui.draft.revision,months:ui.draft.months.map(x=>({...x})),requestKey:ui.key};
  ui.busy=true;ui.error='';renderPageIfActive('finance');
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(res=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(res=>{
   if(token!==state.sessionToken||!cashFlowUi.open||year!==cashFlowUi.year||seq!==cashFlowUi.seq)return;
   ui.busy=false;
   if(!res||res.ok!==true){ui.uncertain=true;ui.error='保存結果を確認できません。同じ内容と送信キーで再試行してください。';renderPageIfActive('finance');return;}

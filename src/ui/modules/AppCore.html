@@ -257,7 +257,7 @@ function changeWorkLocation(location){
   state.busy=true;
   showToast(`勤務場所を${location}へ変更しています...`);
   const operationToken=state.sessionToken;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(operationToken!==state.sessionToken||!state.data)return;
     if(data&&data.attendance){
       state.data.attendance=data.attendance;
@@ -320,7 +320,7 @@ function performPunch(action){
   if(state.busy)return;
   state.busy=true;showToast(`${action}を登録しています...`);
   const operationToken=state.sessionToken;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(operationToken!==state.sessionToken||!state.data)return;
     if(data&&data.attendance){
       state.data.attendance=data.attendance;
@@ -505,7 +505,7 @@ function loadHomeOverview(options={}){
   state.homeOverview.loading=true;
   state.homeOverview.error='';
   if(!options.silent&&state.page==='home')renderPageIfActive('home');
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     endPageLoad(ticket);
     if(requestSession!==state.sessionToken||requestData!==state.data)return;
     const rerun=state.homeOverview.reloadRequested;

@@ -14,7 +14,7 @@ function cfbKey_(){return 'CFB-'+Date.now().toString(36)+'-'+Math.random().toStr
 function cfbRpc_(method,params,onSuccess,onFailure){
  if(cfbUi.demo)throw Error('架空データ表示中は本番DBに通信しません。');
  const token=state.sessionToken;
- const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run);
+ const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run);
  const prepared=runner.withSuccessHandler(value=>{if(token===state.sessionToken)onSuccess(value);})
   .withFailureHandler(error=>{if(token===state.sessionToken)onFailure(error);});
  return params===undefined?prepared[method](token):prepared[method](token,params);

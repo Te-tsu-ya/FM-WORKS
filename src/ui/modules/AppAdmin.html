@@ -150,7 +150,7 @@ function saveProjectFromModal(projectId){
  if(start&&end&&start>end){if(error)error.textContent='終了予定日は開始日以降にしてください。';document.getElementById('prjEnd').focus();return;}
  const payload={projectId:projectId||'',name,client:document.getElementById('prjClient').value,status:document.getElementById('prjStatus').value,startDate:start,endDate:end,note:document.getElementById('prjNote').value};
  button.disabled=true;button.textContent='保存しています…';if(error)error.textContent='';
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(!result||result.ok!==true){button.disabled=false;button.textContent='保存する';if(error)error.textContent='保存結果を確認できませんでした。更新して内容をご確認ください。';return;}
   closeModal();showToast('プロジェクトを保存しました');
   invalidatePageCache('worklog','authAdmin');
@@ -204,7 +204,7 @@ function loadSystemDocument(type,options={}){
   if(state.documents[type]&&!options.force){renderPageIfActive('admin');return}
   if(state.documents.loading===type)return;
   state.documents.loading=type;renderPageIfActive('admin');
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(doc=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(doc=>{
     state.documents[type]=doc;state.documents.loading=null;markPageCache('documents',type);renderPageIfActive('admin');
   }).withFailureHandler(err=>{
     state.documents.loading=null;handleApiError(err,'文書を読み込めませんでした');renderPageIfActive('admin');
@@ -291,7 +291,7 @@ function adminClearRpcPerformance_(){
 
 function saveLaborRulesFromAdmin(){
   const profile=document.getElementById('laborProfile').value,weekStartDay=document.getElementById('laborWeekStart').value,agreementStartMonth=document.getElementById('laborAgreementStart').value,specialClause=document.getElementById('laborSpecialClause').value,note=document.getElementById('laborRuleNote').value;
-  openConfirmDialog('労務ルールを保存','就業規則・36協定の起算月・特別条項を確認した内容として保存します。','保存',()=>(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast('労務ルールを保存しました');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'保存できませんでした')).saveLaborRuleConfig(state.sessionToken,{profile,weekStartDay,agreementStartMonth,specialClause,note}),true);
+  openConfirmDialog('労務ルールを保存','就業規則・36協定の起算月・特別条項を確認した内容として保存します。','保存',()=>(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast('労務ルールを保存しました');loadMaintenance({force:true});}).withFailureHandler(err=>handleApiError(err,'保存できませんでした')).saveLaborRuleConfig(state.sessionToken,{profile,weekStartDay,agreementStartMonth,specialClause,note}),true);
 }
 function maintenanceSection(){
   const m=state.maintenance||{},s=m.status;
@@ -339,8 +339,8 @@ function loadMaintenance(options={}){
     renderPageIfActive('admin');
   };
   const fail=message=>err=>{if(!current())return;failed=true;const obsolete=view.refreshNeeded;done();if(!obsolete)handleApiError(err,message);};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{if(!current())return;status=data;done()}).withFailureHandler(fail('システム状態を読み込めませんでした')).getSystemStatus(identity);
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{if(!current())return;audit=data||[];done()}).withFailureHandler(fail('監査ログを読み込めませんでした')).getAuditLogs(identity,100);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{if(!current())return;status=data;done()}).withFailureHandler(fail('システム状態を読み込めませんでした')).getSystemStatus(identity);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{if(!current())return;audit=data||[];done()}).withFailureHandler(fail('監査ログを読み込めませんでした')).getAuditLogs(identity,100);
 }
 
 function authAdminScope_(options={}){
@@ -362,7 +362,7 @@ function loadAuthAdmin(options={}){
   const ticket=beginPageLoad(cacheName,key);if(!ticket)return;
   const hasCurrent=cacheHas(cacheName,key)&&!!state.authAdmin;
   if(!hasCurrent&&!options.silent)renderPage();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run)
     .withSuccessHandler(data=>{
       endPageLoad(ticket);
       if(identity!==String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||''))return;
@@ -395,14 +395,14 @@ function submitTempPin(employeeId){
   const pin=document.getElementById('tempPin').value;
   const confirmPin=document.getElementById('tempPinConfirm').value;
   if(pin!==confirmPin){showToast('確認用PINが一致しません');return}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{closeModal();showToast('仮PINを発行しました');invalidatePageCache('authAdmin');loadAuthAdmin({force:true})})
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{closeModal();showToast('仮PINを発行しました');invalidatePageCache('authAdmin');loadAuthAdmin({force:true})})
     .withFailureHandler(err=>handleApiError(err,'仮PINを発行できませんでした'))
     .adminSetTemporaryPin(state.sessionToken,employeeId,pin);
 }
 
 function unlockAccount(employeeId){
   openConfirmDialog('ログインロックを解除','このアカウントのログインロックを解除しますか？','解除する',function(){
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast('ロックを解除しました');invalidatePageCache('authAdmin');loadAuthAdmin({force:true})})
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast('ロックを解除しました');invalidatePageCache('authAdmin');loadAuthAdmin({force:true})})
     .withFailureHandler(err=>handleApiError(err,'ロック解除に失敗しました'))
     .adminUnlockAccount(state.sessionToken,employeeId);
   },false);
@@ -410,7 +410,7 @@ function unlockAccount(employeeId){
 
 function saveSupportSettingsFromAdmin(){
   const payload={name:document.getElementById('supportName').value,email:document.getElementById('supportEmail').value,phone:document.getElementById('supportPhone').value,note:document.getElementById('supportNote').value};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(support=>{state.authAdmin.support=support;state.publicConfig.support=support;renderPage();showToast('連絡先を保存しました')})
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(support=>{state.authAdmin.support=support;state.publicConfig.support=support;renderPage();showToast('連絡先を保存しました')})
     .withFailureHandler(err=>handleApiError(err,'連絡先を保存できませんでした'))
     .saveAuthSupportSettings(state.sessionToken,payload);
 }

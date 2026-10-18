@@ -2,7 +2,7 @@
 /* FM WORKS rotary activity integration. Covers every foreground GAS RPC without
  * changing individual success/failure handlers. The supplied rotary component is
  * the visual engine; this file binds it to real request lifecycle events.
- * Percent remains hidden because google.script.run does not report true progress.
+ * Percent remains hidden because FMApi.run does not report true progress.
  */
 (function(global){
 'use strict';
@@ -183,12 +183,12 @@ activity={begin,settle,reset,route,loaders,pending,snapshot:()=>({
 global.FMRotaryActivity=activity;
 return activity;
 }
-/* Chain-compatible proxy for google.script.run. It only wraps callbacks and
+/* Chain-compatible proxy for FMApi.run. It only wraps callbacks and
  * dispatch; method arguments, user objects, and API results remain unchanged.
- * Existing code/tests can fall back to native google.script.run if absent.
+ * Existing code/tests can fall back to native FMApi.run if absent.
  */
 function FMRotaryRPC(){
-const raw=global.google&&global.google.script&&global.google.script.run;
+const raw=global.FMApi&&global.FMApi.run;
 if(!raw)throw Error('GAS client is unavailable');
 let success=null,failure=null,userObject,hasUserObject=false;
 let proxy=null;
