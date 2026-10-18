@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import vm from 'node:vm';
 import {createDemoRuntime,MemorySheet} from './seed-builder.mjs';
 
@@ -94,7 +95,9 @@ schema+="export const siteSessions=sqliteTable('site_sessions',{tokenHash:text('
 for(const [i,s] of specs.entries())schema+='export const domain'+i+' = sqliteTable('+JSON.stringify(s.table)+',{rowNo:integer("row_no").primaryKey(),'+s.columns.map((col,j)=>'c'+j+':text('+JSON.stringify(col)+')').join(',')+'});\n';
 fs.writeFileSync('db/schema.ts',schema);
 
-const sources=fs.readdirSync('src/domain').filter(n=>n.endsWith('.js')).sort().map(n=>fs.readFileSync('src/domain/'+n,'utf8')).join('\n');
+const domainPaths=fs.readdirSync('src/domain',{recursive:true}).filter(n=>n.endsWith('.js'))
+ .sort((a,b)=>{const left=path.basename(a),right=path.basename(b);return left<right?-1:left>right?1:0;});
+const sources=domainPaths.map(n=>fs.readFileSync(path.join('src/domain',n),'utf8')).join('\n');
 const publicNames=[...sources.matchAll(/^function ([A-Za-z]\w*)\(/gm)].map(m=>m[1]).filter(n=>!n.endsWith('_'));
 const blocked=/install|Job|Pin|Prototype|Backup|Trigger|initialize|migrate|export|Export|Attachment|issueQuote|retryQuote|getQuoteFile|createRelatedDocument|retryRelatedDocument|getRelatedDocumentFile|importJapan|importHolidays/;
 const allowed=publicNames.filter(n=>!blocked.test(n)&&!['doGet','login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
@@ -111,7 +114,7 @@ const engine='export function createEngine(services,actor,sessionToken){\nconst 
 fs.writeFileSync('src/generated/engine.mjs',engine);
 
 const index=fs.readFileSync('src/ui/Index.html','utf8');
-let html=index.replace(/<\?!= include_\('([A-Za-z0-9_]+)'\); \?>/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8')).replace(/<\?= appName \?>/g,'FM WORKS').replace(/<\?= appVersion \?>/g,appVersion);
+let html=index.replace(/<\?!= include_\('([A-Za-z0-9_/-]+)'\); \?>/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8')).replace(/<\?= appName \?>/g,'FM WORKS').replace(/<\?= appVersion \?>/g,appVersion);
 html=html.replaceAll('google.script.run','FMApi.run').replaceAll('window.google.script.run','window.FMApi.run').replaceAll('global.google&&global.google.script&&global.FMApi.run','global.FMApi&&global.FMApi.run');
 const bridge=fs.readFileSync('src/browser/bridge.js','utf8');
 const overrides=fs.readFileSync('src/browser/overrides.js','utf8').replaceAll('__APP_VERSION__',appVersion);

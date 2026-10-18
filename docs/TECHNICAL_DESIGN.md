@@ -10,17 +10,17 @@
 | 層 | 実装 | 責任 |
 |---|---|---|
 | HTTP入口 | `app/route.ts`、`app/api/rpc/[method]/route.ts` | HTML応答、D1 bindingの受渡し |
-| UI | `src/ui/*.html` | 画面・スタイル・操作・ローディング |
+| UI | `src/ui/Index.html`、`src/ui/{modules,styles,components}/*.html` | 画面・スタイル・操作・ローディング |
 | ブラウザー連携 | `src/browser/bridge.js`、`overrides.js` | 同一オリジン通信、開発用担当者選択、Sites設定 |
 | API | `src/server/api.mjs` | 入力形式、Origin、セッション、業務実行、SQL確定 |
-| 業務 | `src/domain/*.js` | 勤怠・申請・月次・見積・経理等の検証と権限 |
+| 業務 | `src/domain/{core,people,time,projects,finance,office}/*.js` | 勤怠・申請・月次・見積・経理等の検証と権限 |
 | SQL | `src/server/sql-repository.mjs` | 初期投入、読取、変更検出、改訂競合、原子的保存 |
 | 実行補助 | `src/server/table-adapter.mjs`、`runtime-services.mjs` | 要求内の表、時刻・ハッシュ・キャッシュ、Google接続拒否 |
 | DB定義 | `db/schema.ts`、`db/table-mapping.json` | SQL列と業務名・列の対応 |
 | マイグレーション | `drizzle/` | 適用順とスキーマ履歴。Sites標準ビルドが成果物へ収録 |
 | 生成 | `scripts/prepare-app.mjs`、`seed-builder.mjs` | 業務関数・HTML・文書・初期データの組立て |
 
-`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
+`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。業務ファイルは保存フォルダーに関係なくファイル名順で読み込み、従来の実行順を維持する。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
 
 ## 2. 生成と正本
 

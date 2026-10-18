@@ -29,7 +29,9 @@ export function createDemoRuntime(input=JSON.parse(fs.readFileSync(path.join(roo
   CacheService:{getScriptCache:()=>({get:k=>cache.get(k)||null,put:(k,v)=>cache.set(k,v),remove:k=>cache.delete(k),getAll:ks=>Object.fromEntries(ks.filter(k=>cache.has(k)).map(k=>[k,cache.get(k)])),putAll:o=>Object.entries(o).forEach(([k,v])=>cache.set(k,v)),removeAll:ks=>ks.forEach(k=>cache.delete(k))})},
   PropertiesService:{getScriptProperties:()=>props},SpreadsheetApp:{flush(){},openById:noExternal,create:noExternal},DriveApp:new Proxy({}, {get:()=>noExternal}),UrlFetchApp:{fetch:noExternal},
   LockService:{getScriptLock:()=>({waitLock(){},tryLock:()=>true,releaseLock(){}})}});
- for(const name of fs.readdirSync(path.join(root,'src/domain')).filter(n=>n.endsWith('.js')).sort())vm.runInContext(fs.readFileSync(path.join(root,'src/domain',name),'utf8'),ctx,{filename:name});
+ const domainPaths=fs.readdirSync(path.join(root,'src/domain'),{recursive:true}).filter(n=>n.endsWith('.js'))
+  .sort((a,b)=>{const left=path.basename(a),right=path.basename(b);return left<right?-1:left>right?1:0;});
+ for(const name of domainPaths)vm.runInContext(fs.readFileSync(path.join(root,'src/domain',name),'utf8'),ctx,{filename:name});
  const specs=vm.runInContext('DB_SCHEMA_SPECS',ctx);
  for(const [name,header] of Object.entries(specs))sheets.set(name,new MemorySheet(name,header));
  const baseSheets={'プロジェクト':['ID','案件','顧客','状態','開始','終了','備考','更新者','日時'],'工数':Array.from({length:15},(_,i)=>'工数'+i),'打刻ログ':Array.from({length:12},(_,i)=>'打刻'+i),'予定':Array.from({length:18},(_,i)=>'予定'+i),'会社カレンダー':Array.from({length:8},(_,i)=>'会社日'+i),'月次締め':Array.from({length:7},(_,i)=>'締め'+i)};

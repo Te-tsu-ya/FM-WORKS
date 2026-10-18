@@ -21,8 +21,9 @@ GPT Sitesで公開し、Sites内蔵SQL/D1へ保存します。データはすべ
 | 場所 | 役割 |
 |---|---|
 | `app/` | ページとAPIの入口 |
-| `src/ui/` | 画面・スタイル・ローディング表示 |
-| `src/domain/` | 業務ルール |
+| `src/ui/Index.html` | 画面の組込み順と入口 |
+| `src/ui/modules/`、`styles/`、`components/` | 機能別画面・CSS・共通部品 |
+| `src/domain/` | `core/`・`people/`・`time/`・`projects/`・`finance/`・`office/`の業務ルール |
 | `src/browser/` | ブラウザー通信と開発用ログイン |
 | `src/server/` | セッション、SQL、実行環境 |
 | `db/` | SQLスキーマ・列対応・ダミーデータの編集元 |

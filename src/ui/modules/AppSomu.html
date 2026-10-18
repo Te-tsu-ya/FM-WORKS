@@ -349,4 +349,5 @@ function somuAction_(api,args,message){
   showToast(message);somuReload();
  }).withFailureHandler(err=>{if(identity!==somuSessionIdentity())return;somuUi.busy=false;handleApiError(err,'処理できませんでした');})[api](state.sessionToken,...args);
 }
+function officePage(){return somuPage();}
 </script>
