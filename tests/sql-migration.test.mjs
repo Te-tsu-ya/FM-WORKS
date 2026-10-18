@@ -53,3 +53,48 @@ test('HTTP sessions, role selection, logout, source-independent persistence and 
   assert.equal((await rpc('logout',[token])).status,200);assert.equal((await rpc('getInitialData',[token])).status,401);
  }finally{db.close();}
 });
+
+test('rejected RPCs and logout avoid full SQL snapshots',async()=>{
+ const db=new TestD1();
+ const originalBatch=db.batch.bind(db);
+ let snapshots=0;
+ db.batch=async statements=>{if(statements.some(s=>s.sql.includes(' AS domain, row_no,')))snapshots++;return originalBatch(statements);};
+ const rpc=async(method,args=[],headers={})=>handleRpc(new Request('http://localhost/api/rpc/'+method,{
+  method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({args})
+ }),db,method);
+ try{
+  assert.equal((await rpc('getFinanceOverview',['invalid'])).status,401);
+  assert.equal((await rpc('unsupportedMethod',['invalid'])).status,401);
+  assert.equal(snapshots,0,'no 54-table snapshot without a valid session');
+  assert.equal((await rpc('getPublicAuthConfig')).status,200);
+  const login=await rpc('login',['FM0001','000000',{},true]);
+  assert.equal(login.status,200);
+  const cookie=login.headers.get('set-cookie').split(';')[0];
+  const token=(await login.json()).result.sessionToken;
+  const baseline=snapshots;
+  assert.equal((await rpc('getFinanceOverview',['wrong'],{Cookie:cookie})).status,401);
+  assert.equal((await rpc('unsupportedMethod',[token],{Cookie:cookie})).status,501);
+  assert.equal(snapshots,baseline,'invalid requests never reload business tables');
+  assert.equal((await rpc('logout',[token],{Cookie:cookie})).status,200);
+  assert.equal(snapshots,baseline,'logout only removes SQL session');
+ }finally{db.close();}
+});
+
+test('Sites time formatter supports single-digit H and m in Asia/Tokyo',()=>{
+ const u=createServices({getDb:()=>null}).Utilities;
+ const at=new Date('2026-10-18T00:05:00.000Z');
+ assert.equal(u.formatDate(at,'Asia/Tokyo','H'),'9');
+ assert.equal(u.formatDate(at,'Asia/Tokyo','m'),'5');
+ assert.equal(u.formatDate(at,'Asia/Tokyo','HH:mm'),'09:05');
+ assert.equal(u.formatDate(at,'Asia/Tokyo','yyyy-MM-dd'),'2026-10-18');
+});
+
+// The generated SQL engine and visible UI must use the same version as the package.
+test('prototype version matches package before generation',async()=>{
+ const {createDemoRuntime}=await import('../scripts/seed-builder.mjs');
+ const {runInContext}=await import('node:vm');
+ const {readFileSync}=await import('node:fs');
+ const packageVersion=JSON.parse(readFileSync('package.json','utf8')).version;
+ const version=runInContext('APP.version',createDemoRuntime().context);
+ assert.equal(version,packageVersion);
+});

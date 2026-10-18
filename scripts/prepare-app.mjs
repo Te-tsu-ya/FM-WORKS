@@ -5,6 +5,7 @@ import {createDemoRuntime,MemorySheet} from './seed-builder.mjs';
 const {version:appVersion}=JSON.parse(fs.readFileSync('package.json','utf8'));
 fs.mkdirSync('src/generated',{recursive:true});
 const runtime=createDemoRuntime();
+if(vm.runInContext("APP.version",runtime.context)!==appVersion)throw Error("Package and engine versions differ");
 runtime.sheets.set('社内文書',new MemorySheet('社内文書',vm.runInContext('COMPANY_DOC_HEADERS',runtime.context)));
 const meta=vm.runInContext('({specs:DB_SCHEMA_SPECS,db:DB.sheets,finance:FINANCE_MODELS,bank:CFP,analysis:CFA,quote:QUOTE_MODEL,somu:SOMU_MODELS,hub:PROJECT_HUB_MODELS})',runtime.context);
 const tableNames={
@@ -99,7 +100,7 @@ const publicNames=[...sources.matchAll(/^function ([A-Za-z]\w*)\(/gm)].map(m=>m[
 const blocked=/install|Job|Pin|Prototype|Backup|Trigger|initialize|migrate|export|Export|Attachment|issueQuote|retryQuote|getQuoteFile|createRelatedDocument|retryRelatedDocument|getRelatedDocumentFile|importJapan|importHolidays/;
 const allowed=publicNames.filter(n=>!blocked.test(n)&&!['doGet','login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
 const generatedDocs={requirements:{title:'FM WORKS 要件定義書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/REQUIREMENTS.md','utf8')},technical:{title:'FM WORKS 技術設計書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/TECHNICAL_DESIGN.md','utf8')}};
-const engine='export function createEngine(services,actor,sessionToken){\nconst {Utilities,CacheService,PropertiesService,SpreadsheetApp,DriveApp,UrlFetchApp,LockService,Session,ScriptApp}=services;\n'+sources+'\nconst GENERATED_DOCS='+JSON.stringify(generatedDocs)+';\n'+`
+const engine='export const appVersion = '+JSON.stringify(appVersion)+';\nexport const apiMethods = '+JSON.stringify(allowed)+';\nexport function createEngine(services,actor,sessionToken){\nconst {Utilities,CacheService,PropertiesService,SpreadsheetApp,DriveApp,UrlFetchApp,LockService,Session,ScriptApp}=services;\n'+sources+'\nconst GENERATED_DOCS='+JSON.stringify(generatedDocs)+';\n'+`
  getDb_=services.getDb;getDatabaseSpreadsheetId_=()=> 'SITES_SQL_ONLY';getRuntimeEnvironment_=()=> 'DEVELOPMENT';
  getRuntimeInfo_=()=>({environment:'DEVELOPMENT',databaseId:'Sites SQL / D1',explicitDb:true,usingDefaultStagingDb:false});
  requireSession_=(token)=>{if(!actor||token!==sessionToken)throw Error('AUTH_REQUIRED');const employee=getEmployee_(actor.employeeId);if(!employee.active)throw Error('AUTH_REQUIRED');return {employee};};
@@ -111,8 +112,8 @@ const engine='export function createEngine(services,actor,sessionToken){\nconst 
 fs.writeFileSync('src/generated/engine.mjs',engine);
 
 const index=fs.readFileSync('src/ui/Index.html','utf8');
-let html=index.replace(/<\?!= include_\('([A-Za-z0-9_]+)'\); \?>/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8')).replace(/<\?= appName \?>/g,'FM WORKS').replace(/<\?= appVersion \?>/g,appVersion);
-html=html.replaceAll('google.script.run','FMApi.run').replaceAll('window.google.script.run','window.FMApi.run').replaceAll('global.google&&global.google.script&&global.FMApi.run','global.FMApi&&global.FMApi.run');
+let html=index.replace(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8'));
+if(html.includes('<!-- FM_INCLUDE:'))throw Error('Unresolved HTML include');
 const bridge=fs.readFileSync('src/browser/bridge.js','utf8');
 const overrides=fs.readFileSync('src/browser/overrides.js','utf8').replaceAll('__APP_VERSION__',appVersion);
 html=html.replace('<head>','<head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script>'+bridge+'</script>');

@@ -1,0 +1,1771 @@
+<script>
+/* v0.21 annual fiscal cashflow; amounts never use browser persistent storage. */
+let cashFlowUi={open:false,year:0,seq:0,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:'',uncertain:false};
+function resetCashFlowUi(){if(typeof cfbReset_==='function')cfbReset_();cashFlowUi={open:false,year:0,seq:cashFlowUi.seq+1,at:0,loading:false,busy:false,dirty:false,data:null,draft:null,error:'',notice:'',auditWarning:'',key:'',uncertain:false};}
+function cashFlowAllowed_(){return !!(state.sessionToken&&state.data&&state.data.permissions&&state.data.permissions.cashFlowWorkspace&&state.data.permissions.adminConsole);}
+function cashFlowAnalysisBusy_(){return typeof cfaUi!=='undefined'&&!!(cfaUi.busy||cfaUi.exporting);}
+function cashFlowAuxDraft_(){return !!(
+ (typeof cfaUi!=='undefined'&&(cfaUi.editor||cfaUi.ruleDraft||cfaUi.scenarioDraft))||
+ (typeof cfbUi!=='undefined'&&(cfbUi.accountForm||cfbUi.planForm)));}
+function cashFlowAuxDiscard_(next){
+ if(!cashFlowAuxDraft_()){next();return;}
+ openConfirmDialog('未保存の資金繰り入力','分類・条件・金融機関・入出金予定に保存前の入力があります。破棄して移動しますか？','入力を破棄して移動',()=>{
+  if(typeof cfaUi!=='undefined'){cfaUi.editor=null;cfaUi.ruleDraft=null;cfaUi.scenarioDraft=null;}
+  if(typeof cfbUi!=='undefined'){cfbUi.accountForm=null;cfbUi.planForm=null;}
+  next();
+ });
+}
+function cashFlowThisYear_(){
+ const s=String(state.data&&state.data.today||new Date().toISOString().slice(0,10)),m=/^(\d{4})-(\d{2})/.exec(s);
+ return m?Number(m[1])+(Number(m[2])===12?1:0):new Date().getFullYear();
+}
+function cashFlowDiscard_(next){
+ if(typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
+ if(cashFlowAuxDraft_()){cashFlowAuxDiscard_(()=>cashFlowDiscard_(next));return;}
+ if(typeof cflDirty_==='function'&&cflDirty_()){openConfirmDialog('台帳の未保存入力','保存していない台帳の入力を破棄して移動しますか？','入力を破棄して移動',()=>{cflUi.rows=[];cflUi.serial++;cflUi.data=null;cashFlowDiscard_(next);});return;}
+ if(!cashFlowUi.dirty){next();return;}
+ openConfirmDialog('未保存の変更',cashFlowUi.uncertain?'保存結果が未確認です。先に同じ内容と送信キーで再試行し、登録内容を照合してください。破棄すると再送の手掛かりがなくなります。破棄しますか？':'保存していない金額があります。破棄して移動しますか？','破棄して移動',next);
+}
+function cashFlowOpen_(){
+ if(!cashFlowAllowed_())return;
+ if(financeUi.demo){showToast('資金繰り表は実データです。サンプル表示を解除してから開いてください。');return;}
+ financeUi.insightMode=false;cashFlowUi.open=true;cashFlowUi.year=cashFlowUi.year||cashFlowThisYear_();
+ renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(false);
+}
+function cashFlowClose_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.importPending){
+  showToast('銀行明細の取込結果が未確認です。同じ送信情報で再開してから画面を閉じてください。');return;
+ }
+ if(typeof cfbUi!=='undefined'&&cfbUi.preview&&cfbUi.preview.length&&!cfbUi.demo){
+  openConfirmDialog('取込前の銀行明細を破棄','取込前の表に銀行明細が残っています。閉じると内容が失われます。続行しますか？',
+   '保存せず閉じる',()=>{cfbUi.preview=null;cfbUi.bankGridEdited=false;cashFlowClose_();});return;
+ }
+
+ if(cashFlowAnalysisBusy_()||cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込みが終わるまでお待ちください。');return;}
+ cashFlowDiscard_(()=>{
+  const bank=typeof cfbUi!=='undefined'?cfbUi:null,demo=!!(bank&&bank.demo);
+  if(typeof cfbReset_==='function'){
+   cfbReset_();if(bank&&!demo){cfbUi.loaded=bank.loaded;cfbUi.year=bank.year;cfbUi.at=bank.at;cfbUi.tab=bank.tab;cfbUi.active=bank.active;}
+  }
+  if(demo){cashFlowUi.data=null;cashFlowUi.at=0;}
+  const record=cashFlowUi.data&&cashFlowUi.data.record;
+  cashFlowUi.open=false;cashFlowUi.loading=false;cashFlowUi.refreshNeeded=false;cashFlowUi.draft=record?{openingBalance:record.openingBalance,revision:record.revision,months:record.months.map(x=>({...x}))}:null;
+  cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.seq++;
+  renderPageIfActive('finance');
+  if(typeof loadFinanceOverview==='function')loadFinanceOverview({silent:true});
+ });
+}
+function cashFlowChangeYear_(value){
+ if(typeof cfbUi!=='undefined'&&cfbUi.importPending){showToast('銀行明細の取込を再開・完了してから年度を切り替えてください。');return;}
+
+ if(cashFlowAnalysisBusy_()||cashFlowUi.busy||typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)){showToast('保存・取り込み中は年度を切替できません。');return;}
+ const y=Number(value),input=document.getElementById('cfYear');
+ if(!Number.isInteger(y)||y<2000||y>2100){if(input)input.value=String(cashFlowUi.year);return;}
+ if(y===cashFlowUi.year)return;
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(y));return;}
+ cashFlowDiscard_(()=>{
+  cashFlowUi.seq++;cashFlowUi.year=y;cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.loading=false;cashFlowUi.refreshNeeded=false;
+  cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowUi.error='';cashFlowUi.notice='';cashFlowUi.auditWarning='';
+  if(typeof cfbReset_==='function')cfbReset_();
+  renderPageIfActive('finance');cashFlowLoad_();if(typeof cfbLoad_==='function')cfbLoad_(true);
+ });
+ if(input)input.value=String(cashFlowUi.year);
+}
+function cashFlowLoad_(force=false){
+ const ui=cashFlowUi;if(typeof cfbUi!=='undefined'&&cfbUi.demo)return;
+ if(!ui.open||!cashFlowAllowed_()||ui.busy)return;
+ if(ui.loading){if(force)ui.refreshNeeded=true;return;}
+ if(!force&&ui.data&&ui.data.fiscalYear===ui.year&&(ui.dirty||Date.now()-(ui.at||0)<300000))return;
+ const token=state.sessionToken,year=ui.year,seq=++ui.seq;
+ ui.loading=true;ui.error='';renderPageIfActive('finance');
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+  if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
+  ui.loading=false;
+  if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}
+  if(!result||result.ok!==true){ui.error='取得したデータが正しくありません。';renderPageIfActive('finance');return;}
+  ui.data=result;ui.at=Date.now();ui.draft={openingBalance:result.record.openingBalance,revision:result.record.revision,months:result.record.months.map(x=>({...x}))};
+  ui.dirty=false;ui.key='';ui.uncertain=false;renderPageIfActive('finance');
+ }).withFailureHandler(err=>{
+  if(seq!==cashFlowUi.seq||token!==state.sessionToken||year!==cashFlowUi.year||!cashFlowUi.open)return;
+  ui.loading=false;if(ui.refreshNeeded){ui.refreshNeeded=false;cashFlowLoad_(true);return;}ui.error=cleanApiErrorMessage(err,'資金繰り表を読み込めませんでした。');renderPageIfActive('finance');
+ }).getCashFlowYear(token,year);
+}
+function cashFlowReload_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cashFlowDiscard_(()=>cfbDemoActivate_(cashFlowUi.year));return;}
+ if(typeof cfbReload_==='function'){cfbReload_();return;}
+ cashFlowDiscard_(()=>{
+  cashFlowUi.data=null;cashFlowUi.draft=null;cashFlowUi.dirty=false;cashFlowUi.key='';cashFlowLoad_(true);
+ });
+}
+function cashFlowInt_(value,negative=false){
+ if(value==null||String(value).trim()==='')return null;
+ const t=String(value).trim(),re=negative?/^-?(0|[1-9]\d{0,11})$/:/^(0|[1-9]\d{0,11})$/;
+ return re.test(t)?Number(t):null;
+}
+function cashFlowCalc_(){
+ const d=cashFlowUi.draft;if(!d)return null;
+ const start=cashFlowInt_(d.openingBalance,true);let plan=start,actual=start,forecast=start,low=start,first='';
+ const totals={planIn:0,planOut:0,actualIn:0,actualOut:0},counts={plan:0,actual:0};
+ const months=d.months.map(row=>{
+  const v={};for(const key of ['planIn','planOut','actualIn','actualOut']){v[key]=cashFlowInt_(row[key]);if(v[key]!==null)totals[key]+=v[key];}
+  const hp=v.planIn!==null&&v.planOut!==null,ha=v.actualIn!==null&&v.actualOut!==null;
+  if(hp)counts.plan++;if(ha)counts.actual++;
+  plan=plan!==null&&hp?plan+(v.planIn||0)-(v.planOut||0):null;
+  actual=actual!==null&&ha?actual+(v.actualIn||0)-(v.actualOut||0):null;
+  forecast=forecast!==null&&(ha||hp)?forecast+(ha?v.actualIn||0:v.planIn||0)-(ha?v.actualOut||0:v.planOut||0):null;
+  if(forecast!==null){if(low===null||forecast<low)low=forecast;if(!first&&forecast<0)first=row.month;}
+  return {month:row.month,planEnd:plan,actualEnd:actual,forecastEnd:forecast};
+ });
+ return {months,counts,totals,yearEnd:forecast,minimum:low,first};
+}
+function cashFlowYen_(v){return v===null||v===undefined?'—':Number(v).toLocaleString('ja-JP')+'円';}
+function cashFlowMetricHtml_(s){
+ const item=(label,value,help)=>'<div class="cf-metric"><small>'+label+'</small><strong>'+value+'</strong><span>'+help+'</span></div>';
+ return item('年間の計画入金',s.counts.plan?cashFlowYen_(s.totals.planIn):'未入力',s.counts.plan+'/12か月 入力済')+
+        item('年間の計画出金',s.counts.plan?cashFlowYen_(s.totals.planOut):'未入力',s.counts.plan+'/12か月 入力済')+
+        item('11月末の見込み残高',cashFlowYen_(s.yearEnd),'実績がある月は実績を優先')+
+        item('最初の資金不足予測',s.first?escapeHtml(s.first):'—','見込み残高が0円を下回る月');
+}
+function cashFlowChartHtml_(s){
+ const values=s.months.flatMap(r=>[r.planEnd,r.actualEnd,r.forecastEnd]).filter(v=>v!==null);
+ if(!values.length)return '<p class="cf-note">期首残高と入出金を入力するとグラフを表示します。</p>';
+ const max=Math.max(0,...values),min=Math.min(0,...values),span=Math.max(1,max-min);
+ const xy=(i,v)=>(35+i*54)+','+(157-(v-min)/span*130).toFixed(1);
+ const series=[['planEnd','#2563eb','計画'],['actualEnd','#0d9488','実績'],['forecastEnd','#d97706','見込み']];
+ let lines='';
+ for(const [key,color] of series){
+  let points=[];const flush=()=>{if(points.length)lines+='<polyline fill="none" stroke="'+color+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="'+points.join(' ')+'"/>';points=[];};
+  s.months.forEach((m,i)=>{if(m[key]===null)flush();else points.push(xy(i,m[key]));});flush();
+ }
+ const labels=s.months.map((m,i)=>'<text x="'+(35+i*54)+'" y="187" text-anchor="middle">'+Number(m.month.slice(-2))+'月</text>').join('');
+ return '<svg viewBox="0 0 660 205" role="img" aria-label="12か月の計画・実績・見込み月末残高"><line x1="35" x2="633" y1="'+(157-(0-min)/span*130).toFixed(1)+'" y2="'+(157-(0-min)/span*130).toFixed(1)+'" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="5 4"/>'+lines+'<g class="cf-chart-labels">'+labels+'</g></svg>'+
+  '<div class="cf-legend"><span>● 計画（青）</span><span>● 実績（緑）</span><span>● 見込み（橙）</span></div>';
+}
+function cashFlowRefresh_(){
+ const ui=cashFlowUi,s=cashFlowCalc_();if(!s)return;
+ const sum=document.getElementById('cfMetrics'),chart=document.getElementById('cfChart'),status=document.getElementById('cfStatus'),save=document.getElementById('cfSave');
+ if(sum)sum.innerHTML=cashFlowMetricHtml_(s);
+ if(chart)chart.innerHTML=cashFlowChartHtml_(s);
+ if(status)status.textContent='未保存の変更あり';
+ if(save)save.disabled=false;
+ s.months.forEach((m,i)=>[['planEnd','plan'],['actualEnd','actual'],['forecastEnd','forecast']].forEach(pair=>{
+  const cell=document.getElementById('cf-'+pair[1]+'-'+i);if(cell)cell.textContent=cashFlowYen_(m[pair[0]]);
+ }));
+ if(typeof cashFlowGridSync_==='function')cashFlowGridSync_();
+}
+function cashFlowEdit_(node){
+ const ui=cashFlowUi;if(!ui.draft||ui.busy||ui.uncertain||!cashFlowAllowed_())return;
+ const key=node.dataset.key;
+ if(key==='openingBalance')ui.draft.openingBalance=node.value;
+ else{
+  const i=Number(node.dataset.index);
+  if(!Number.isInteger(i)||i<0||i>=12||!['planIn','planOut','actualIn','actualOut','note'].includes(key))return;
+  ui.draft.months[i][key]=node.value;
+ }
+ ui.dirty=true;ui.key='';ui.error='';cashFlowRefresh_();
+}
+function cashFlowSave_(){
+ if(typeof cfbUi!=='undefined'&&cfbUi.demo){cfbDemoSaveYear_();return;}
+ const ui=cashFlowUi;
+ if(!cashFlowAllowed_()||!ui.draft||!ui.data||ui.data.setupRequired||!ui.dirty||ui.busy)return;
+ if(cashFlowInt_(ui.draft.openingBalance,true)===null){ui.error='期首残高を入力してください。';renderPageIfActive('finance');return;}
+ for(const m of ui.draft.months){
+  for(const k of ['planIn','planOut','actualIn','actualOut'])if(m[k]!=null&&String(m[k])!==''&&cashFlowInt_(m[k])===null){ui.error=m.month+'の金額を確認してください。';renderPageIfActive('finance');return;}
+  if(String(m.note||'').length>300){ui.error='備考は300文字以内にしてください。';renderPageIfActive('finance');return;}
+ }
+ if(!ui.key)ui.key='CF'+Date.now().toString(36)+Math.random().toString(36).slice(2,15);
+ const token=state.sessionToken,year=ui.year,seq=ui.seq,payload={fiscalYear:year,openingBalance:ui.draft.openingBalance,revision:ui.draft.revision,months:ui.draft.months.map(x=>({...x})),requestKey:ui.key};
+ ui.busy=true;ui.error='';renderPageIfActive('finance');
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(res=>{
+  if(token!==state.sessionToken||!cashFlowUi.open||year!==cashFlowUi.year||seq!==cashFlowUi.seq)return;
+  ui.busy=false;
+  if(!res||res.ok!==true){ui.uncertain=true;ui.error='保存結果を確認できません。同じ内容と送信キーで再試行してください。';renderPageIfActive('finance');return;}
+  ui.auditWarning=res.auditRecorded===false?'金額は保存されましたが監査ログの記録に失敗しました。管理者が確認してください。':res.auditRecorded===null?'保存済みデータを確認しました。監査ログの状態は未確認です。':'';
+  ui.notice='保存済みです。';ui.dirty=false;ui.uncertain=false;ui.key='';ui.data=null;ui.draft=null;cashFlowLoad_(true);
+ }).withFailureHandler(err=>{
+  if(token!==state.sessionToken||!cashFlowUi.open||year!==cashFlowUi.year||seq!==cashFlowUi.seq)return;
+  ui.busy=false;ui.uncertain=true;ui.error=cleanApiErrorMessage(err,'保存結果が不明です。入力と送信キーを保持しています。')+'　すでに保存された可能性があるため、内容を変えずに再試行してください。';renderPageIfActive('finance');
+ }).saveCashFlowYear(token,payload);
+}
+function cashFlowPage_(){
+ if(!cashFlowAllowed_())return pageHead('年間資金繰り表','管理者専用です。');
+ if(typeof cfbUi!=='undefined'&&cfbUi.active)return cfbPage_();
+ const u=cashFlowUi,year=u.year,title=year+'年11月期（'+(year-1)+'年12月～'+year+'年11月）';
+ const buttons='<button class="secondary-button" type="button" onclick="cashFlowClose_()">← 経理に戻る</button><button class="secondary-button" type="button" onclick="cashFlowReload_()">更新</button><button class="secondary-button" type="button" onclick="cfbShowNew_()">金融機関・年間の見込みへ</button>';
+ const picker='<div class="cf-period"><button type="button" class="secondary-button" onclick="cashFlowChangeYear_('+(year-1)+')">‹ 前期</button>'+
+  '<label>決算年度 <input id="cfYear" type="number" min="2000" max="2100" step="1" value="'+year+'" onchange="cashFlowChangeYear_(this.value)"></label>'+
+  '<button type="button" class="secondary-button" onclick="cashFlowChangeYear_('+(year+1)+')">翌期 ›</button></div>';
+ const header='<header class="cf-head"><div><span class="eyebrow">FINANCE / CASH FLOW</span><h1>年間資金繰り表</h1><p>'+title+'</p></div><div class="cf-actions">'+buttons+'</div></header>'+picker;
+ if(u.loading&&!u.data)return '<div class="cf-workspace">'+header+'<section class="card cf-empty" role="status">資金繰り表を読み込み中です。</section></div>';
+ if(!u.data)return '<div class="cf-workspace">'+header+'<section class="card cf-empty" role="alert">'+escapeHtml(u.error||'読み込み待ちです。')+'</section></div>';
+ if(u.data.setupRequired)return '<div class="cf-workspace">'+header+'<section class="card cf-empty"><h2>初回設定が必要です</h2><p>管理・設定 → 運用・労務 からバックアップ付きDB更新を実行してください。既存Excelは変更しません。</p><button class="secondary-button" onclick="setAdminTab('+"'operation'"+')">DB更新画面を開く</button></section></div>';
+ const d=u.draft,s=cashFlowCalc_();if(!d||!s)return '<div class="cf-workspace">'+header+'</div>';
+ const input=(i,key,row)=>'<input data-index="'+i+'" data-key="'+key+'" type="number" inputmode="numeric" min="0" max="999999999999" step="1" value="'+escapeHtml(row[key]==null?'':row[key])+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(row.month)+' '+key+'"'+(u.busy||u.uncertain?' disabled':'')+'>';
+ const rows=d.months.map((r,i)=>{
+  const t=s.months[i];
+  return '<tr><th scope="row">'+escapeHtml(r.month.replace('-','年')+'月')+'</th>'+
+   ['planIn','planOut','actualIn','actualOut'].map(k=>'<td>'+input(i,k,r)+'</td>').join('')+
+   '<td class="cf-num" id="cf-plan-'+i+'">'+cashFlowYen_(t.planEnd)+'</td>'+
+   '<td class="cf-num" id="cf-actual-'+i+'">'+cashFlowYen_(t.actualEnd)+'</td>'+
+   '<td class="cf-num" id="cf-forecast-'+i+'">'+cashFlowYen_(t.forecastEnd)+'</td>'+
+   '<td><input class="cf-note-input" type="text" maxlength="300" data-index="'+i+'" data-key="note" value="'+escapeHtml(r.note||'')+'" oninput="cashFlowEdit_(this)" aria-label="'+escapeHtml(r.month)+' 備考"'+(u.busy||u.uncertain?' disabled':'')+'></td></tr>';
+ }).join('');
+ const feedback=(u.error?'<p class="finance-error" role="alert">'+escapeHtml(u.error)+'</p>':'')+
+  (u.auditWarning?'<p class="finance-error" role="alert">'+escapeHtml(u.auditWarning)+'</p>':'')+
+  (u.notice?'<p class="cf-success" role="status">'+escapeHtml(u.notice)+'</p>':'');
+ return '<div class="cf-workspace">'+header+(typeof cfbUi!=='undefined'&&cfbUi.demo?cfbDemoBanner_():'')+'<section class="card cf-toolbar"><label>期首現預金残高（12月1日／円）<input type="number" step="1" min="-999999999999" max="999999999999" data-key="openingBalance" value="'+escapeHtml(d.openingBalance==null?'':d.openingBalance)+'" placeholder="例：1000000" oninput="cashFlowEdit_(this)"'+(u.busy||u.uncertain?' disabled':'')+'></label>'+
+  '<div class="cf-save"><span id="cfStatus" role="status">'+(u.uncertain?'保存結果を確認中':u.dirty?'未保存の変更あり':u.data.record.exists?'保存済み':'未作成')+'</span><button type="button" id="cfSave" class="primary-button" onclick="cashFlowSave_()"'+(!u.dirty||u.busy?' disabled':'')+'>'+(u.busy?'保存中…':u.uncertain?'同じ内容で再試行':'年度を保存')+'</button></div></section>'+feedback+cashFlowGridHtml_()+
+  '<div class="cf-metrics" id="cfMetrics">'+cashFlowMetricHtml_(s)+'</div>'+
+  '<section class="card cf-chart"><h2>月末残高の推移</h2><div id="cfChart">'+cashFlowChartHtml_(s)+'</div></section>'+
+  '<details class="cfg-legacy"><summary>従来の縦型入力表を開く（必要な場合のみ）</summary><section class="card cf-table-card"><h2>月別入出金</h2><p>計画・実績は現金ベースです。空欄＝未入力、0＝入力済み0円。入金・出金の両方が入力済みの月だけ残高を計算します（片方がない場合は0を入力）。</p>'+
+  '<div class="cf-scroll" role="region" aria-label="12か月の入出金" tabindex="0"><table class="cf-table"><thead><tr><th>対象月</th><th>計画入金</th><th>計画出金</th><th>実績入金</th><th>実績出金</th><th>計画末</th><th>実績末</th><th>見込み末</th><th>備考</th></tr></thead><tbody>'+rows+'</tbody></table></div></section></details>'+
+  '<p class="cf-note">手入力の資金繰り表です。銀行口座、既存経費、試算表とは自動同期していません。年間残高は他年度へ自動引き継ぎしません。</p></div>';
+}
+</script>
+<script>
+/* November-close fiscal cashflow: Excel-style 12-month horizontal input.
+ * Pure browser-memory editing; existing admin-only saveCashFlowYear is unchanged. */
+const CF_GRID_FIELDS=[
+ ['planIn','計画入金'],['planOut','計画出金'],
+ ['actualIn','実績入金'],['actualOut','実績出金'],['note','備考']
+];
+function cashFlowGridCanEdit_(){
+ return cashFlowAllowed_()&&!!cashFlowUi.draft&&!cashFlowUi.busy&&!cashFlowUi.uncertain;
+}
+function cashFlowGridNormalize_(key,text){
+ const value=String(text==null?'':text).trim();
+ if(key==='note'){
+  if(value.length>300||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))
+   throw Error('備考は300文字以内で入力してください。');
+  return value;
+ }
+ if(!['planIn','planOut','actualIn','actualOut'].includes(key))throw Error('入力列が不正です。');
+ if(value==='')return null;
+ const s=value.replace(/[,，\s¥￥円]/g,'');
+ if(!/^(0|[1-9]\d{0,11})$/.test(s)||Number(s)>999999999999)
+  throw Error('金額は0～9999億9999万9999円の整数で入力してください。');
+ return Number(s);
+}
+function cashFlowGridApplyMatrix_(text,fieldIndex,monthIndex){
+ if(!cashFlowGridCanEdit_())throw Error('保存中・結果未確認の資金繰り表は編集できません。');
+ const ui=cashFlowUi,src=String(text||'').replace(/\r\n?/g,'\n');
+ if(!src||src.length>30000)throw Error('1回の貼付は3万文字以内にしてください。');
+ const lines=src.split('\n');if(lines[lines.length-1]==='')lines.pop();
+ const matrix=lines.map(row=>row.split('\t'));
+ const height=matrix.length,width=Math.max(...matrix.map(row=>row.length));
+ if(!height||height>5||width>12||fieldIndex+height>CF_GRID_FIELDS.length||
+    monthIndex+width>12||fieldIndex<0||monthIndex<0)
+  throw Error('貼付範囲が5項目×12か月の入力表を超えています。');
+ // Validate the entire pasted rectangle before changing any month.
+ const pending=matrix.map((row,r)=>row.map(v=>cashFlowGridNormalize_(CF_GRID_FIELDS[fieldIndex+r][0],v)));
+ for(let r=0;r<pending.length;r++)for(let m=0;m<pending[r].length;m++){
+  ui.draft.months[monthIndex+m][CF_GRID_FIELDS[fieldIndex+r][0]]=pending[r][m];
+ }
+ ui.dirty=true;ui.key='';ui.error='';ui.notice='入力表へ '+height+'行×'+width+'列を貼り付けました。まだ保存していません。';
+ return {rows:height,months:width};
+}
+function cashFlowGridPasteEvent_(event,fieldIndex,monthIndex){
+ if(!cashFlowGridCanEdit_())return;
+ const value=event.clipboardData?.getData('text/plain');
+ if(!value||!(/[\t\r\n]/.test(value)))return;
+ event.preventDefault();
+ try{cashFlowGridApplyMatrix_(value,fieldIndex,monthIndex);}
+ catch(e){cashFlowUi.error=String(e.message||e);}
+ renderPageIfActive('finance');
+ const node=document.querySelector('[data-cfg-cell="'+fieldIndex+'-'+monthIndex+'"]');
+ if(node)node.focus();
+}
+function cashFlowGridInput_(node){
+ if(!cashFlowGridCanEdit_())return;
+ const key=node.dataset.cfgKey,i=Number(node.dataset.cfgMonth);
+ if(!CF_GRID_FIELDS.some(x=>x[0]===key)||!Number.isInteger(i)||i<0||i>=12)return;
+ cashFlowUi.draft.months[i][key]=node.value;
+ cashFlowUi.dirty=true;cashFlowUi.key='';cashFlowUi.error='';
+ cashFlowRefresh_();
+}
+function cashFlowGridBlur_(node){
+ if(!cashFlowGridCanEdit_())return;
+ const key=node.dataset.cfgKey,i=Number(node.dataset.cfgMonth);
+ if(!Number.isInteger(i)||i<0||i>=12)return;
+ try{
+  const next=cashFlowGridNormalize_(key,node.value);
+  cashFlowUi.draft.months[i][key]=next;
+  node.value=next==null?'':String(next);
+  node.removeAttribute('aria-invalid');
+  cashFlowRefresh_();
+ }catch(e){node.setAttribute('aria-invalid','true');cashFlowUi.error=String(e.message||e);}
+ if(typeof cashFlowGridSync_==='function')cashFlowGridSync_();
+}
+function cashFlowGridNavigate_(event,fieldIndex,monthIndex){
+ if(event.isComposing||!cashFlowGridCanEdit_())return;
+ let r=fieldIndex,c=monthIndex;
+ if(event.key==='Enter')r+=event.shiftKey?-1:1;
+ else if(event.key==='ArrowRight'&&event.altKey)c++;
+ else if(event.key==='ArrowLeft'&&event.altKey)c--;
+ else return;
+ if(r<0||r>=CF_GRID_FIELDS.length||c<0||c>=12)return;
+ event.preventDefault();
+ const next=document.querySelector('[data-cfg-cell="'+r+'-'+c+'"]');
+ if(next){next.focus();next.select();}
+}
+function cashFlowGridSync_(){
+ const u=cashFlowUi;if(!u.draft)return;
+ const data=cashFlowCalc_();if(!data)return;
+ for(const [kind,key] of [['plan','planEnd'],['actual','actualEnd'],['forecast','forecastEnd']]){
+  data.months.forEach((row,i)=>{
+   const el=document.getElementById('cfg-'+kind+'-'+i);
+   if(el)el.textContent=cashFlowYen_(row[key]);
+  });
+ }
+ if(typeof document.querySelectorAll!=='function')return;
+ for(const input of document.querySelectorAll('[data-cfg-key][data-cfg-month]')){
+  if(input===document.activeElement)continue;
+  const key=input.dataset.cfgKey,index=Number(input.dataset.cfgMonth);
+  if(!Number.isInteger(index)||index<0||index>=12)continue;
+  const current=u.draft.months[index][key];
+  input.value=current==null?'':String(current);
+ }
+}
+function cashFlowGridCopy_(){
+ if(!cashFlowUi.draft)return;
+ const safe=v=>String(v==null?'':v).replace(/[\t\r\n]/g,' ').replace(/^[=+\-@]/,"'$&");
+ const tsv=CF_GRID_FIELDS.map(([key])=>
+  cashFlowUi.draft.months.map(row=>safe(row[key])).join('\t')).join('\n');
+ const fallback=()=>{
+  const area=document.getElementById('cfg-copy');if(!area)return;
+  area.hidden=false;area.value=tsv;area.focus();area.select();
+  showToast('入力データを選択しました。Ctrl+Cでコピーしてください。');
+ };
+ if(typeof navigator!=='undefined'&&navigator.clipboard?.writeText)
+  navigator.clipboard.writeText(tsv).then(()=>showToast('12か月の入力値をコピーしました。')).catch(fallback);
+ else fallback();
+}
+function cashFlowGridHtml_(){
+ const ui=cashFlowUi;if(!ui.draft)return '';
+ const data=cashFlowCalc_(),locked=!cashFlowGridCanEdit_();
+ const months=ui.draft.months;
+ const heads=months.map(m=>'<th scope="col">'+escapeHtml(m.month.replace('-','年')+'月')+'</th>').join('');
+ const editable=CF_GRID_FIELDS.map(([key,label],r)=>{
+  const cols=months.map((m,i)=>{
+   const current=m[key]==null?'':String(m[key]);
+   return '<td><input type="text"'+(key==='note'?'':' inputmode="numeric"')+
+    ' data-cfg-key="'+key+'" data-cfg-month="'+i+'" data-cfg-cell="'+r+'-'+i+'"'+
+    ' value="'+escapeHtml(current)+'" aria-label="'+escapeHtml(m.month+' '+label)+'"'+
+    ' oninput="cashFlowGridInput_(this)" onblur="cashFlowGridBlur_(this)"'+
+    ' onpaste="cashFlowGridPasteEvent_(event,'+r+','+i+')"'+
+    ' onkeydown="cashFlowGridNavigate_(event,'+r+','+i+')"'+(locked?' readonly':'')+'></td>';
+  }).join('');
+  return '<tr><th scope="row">'+escapeHtml(label)+'</th>'+cols+'</tr>';
+ }).join('');
+ const computed=[['計画末残高','planEnd','plan'],['実績末残高','actualEnd','actual'],
+  ['見込み末残高','forecastEnd','forecast']].map(([label,key,id])=>
+  '<tr class="cfg-total"><th scope="row">'+label+'</th>'+
+   data.months.map((m,i)=>'<td id="cfg-'+id+'-'+i+'">'+cashFlowYen_(m[key])+'</td>').join('')+'</tr>').join('');
+ return '<section class="card cfg-panel"><div class="cfg-head"><div><h2>12か月を横に並べて入力</h2>'+
+  '<p>左から12月～翌11月。Excelから1行×12か月や4行×12か月をコピーして貼り付けできます。</p></div>'+
+  '<button type="button" class="secondary-button" onclick="cashFlowGridCopy_()">入力値（5行×12か月）をコピー</button></div>'+
+  '<div class="cf-scroll cfg-scroll" role="region" aria-label="年間資金繰り・Excel型12か月入力表" tabindex="0">'+
+  '<table class="cfg-table"><thead><tr><th scope="col">入出金項目</th>'+heads+'</tr></thead>'+
+  '<tbody>'+editable+computed+'</tbody></table></div>'+
+  '<p class="cf-note">空欄は未入力、0は確認した0円です。月末残高は計画・実績の入出金が両方そろった月だけ表示します。'+
+  '貼り付けだけでは保存されず、上部の「年度を保存」を押して確定します。</p>'+
+  (ui.uncertain?'<p role="alert" class="finance-error">保存結果が不明です。金額を変更せず「同じ内容で再試行」で確認してください。</p>':'')+
+  '<textarea id="cfg-copy" hidden aria-label="コピー用の資金繰りデータ"></textarea></section>';
+}
+</script><script>
+/* v0.23.1: recoverable private bank statement import. */
+let cfbUi={active:true,year:0,at:0,loaded:null,loading:false,busy:false,seq:0,fileReadSerial:0,error:'',notice:'',tab:'overview',
+ accountForm:null,planForm:null,closeMonth:'',closeKey:'',
+ csvRows:null,csvName:'',csvMap:null,csvAccountId:'',preview:null,importing:false,importIndex:0,importAdded:0,importSkipped:0,importPending:null,importChunkKey:''};
+function cfbReset_(){
+ cfbUi={active:true,year:0,at:0,loaded:null,loading:false,busy:false,seq:cfbUi.seq+1,fileReadSerial:0,error:'',notice:'',tab:'overview',
+  accountForm:null,planForm:null,closeMonth:'',closeKey:'',csvRows:null,csvName:'',csvMap:null,csvAccountId:'',preview:null,
+  importing:false,importIndex:0,importAdded:0,importSkipped:0,importPending:null,importChunkKey:''};
+ if(typeof cfaReset_==='function')cfaReset_();
+ if(typeof cflReset_==='function')cflReset_();
+}
+function cfbKey_(){return 'CFB-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15);}
+function cfbRpc_(method,params,onSuccess,onFailure){
+ if(cfbUi.demo)throw Error('架空データ表示中は本番DBに通信しません。');
+ const token=state.sessionToken;
+ const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run);
+ const prepared=runner.withSuccessHandler(value=>{if(token===state.sessionToken)onSuccess(value);})
+  .withFailureHandler(error=>{if(token===state.sessionToken)onFailure(error);});
+ return params===undefined?prepared[method](token):prepared[method](token,params);
+}
+function cfbLoadActiveSection_(){
+ if(cfbUi.tab==='ledger'&&typeof cflLoad_==='function')cflLoad_();
+ if(['analysis','scenarios','reports'].includes(cfbUi.tab)&&typeof cfaLoad_==='function')cfaLoad_(false);
+}
+function cfbLoad_(force){
+ if(cfbUi.demo)return;
+ if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.importing)return;
+ if(cfbUi.loading){if(force)cfbUi.refreshNeeded=true;return;}
+ const year=cashFlowUi.year;
+ if(!force&&cfbUi.loaded&&cfbUi.year===year&&Date.now()-(cfbUi.at||0)<300000){cfbLoadActiveSection_();return;}
+ const seq=++cfbUi.seq;
+ cfbUi.year=year;cfbUi.loading=true;cfbUi.error='';renderPageIfActive('finance');
+ cfbRpc_('getCashFlowBankWorkspace',year,data=>{
+  if(seq!==cfbUi.seq||year!==cashFlowUi.year||!cashFlowUi.open)return;
+  cfbUi.loading=false;
+  if(cfbUi.refreshNeeded){cfbUi.refreshNeeded=false;cfbLoad_(true);return;}
+  if(!data||data.ok!==true){cfbUi.error='資金管理のデータを取得できません。';renderPageIfActive('finance');return;}
+  cfbUi.loaded=data;cfbUi.at=Date.now();cfbUi.closeMonth=data.closing&&data.closing.through||'';
+  cfbUi.csvAccountId=cfbUi.csvAccountId||data.accounts&&data.accounts[0]&&data.accounts[0].id||'';
+  cfbLoadActiveSection_();
+  renderPageIfActive('finance');
+ },error=>{
+  if(seq!==cfbUi.seq||year!==cashFlowUi.year||!cashFlowUi.open)return;
+  cfbUi.loading=false;if(cfbUi.refreshNeeded){cfbUi.refreshNeeded=false;cfbLoad_(true);return;}cfbUi.error=cleanApiErrorMessage(error,'資金管理データを読み込めませんでした。');renderPageIfActive('finance');
+ });
+}
+function cfbReload_(){
+ if(typeof cashFlowAnalysisBusy_==='function'&&cashFlowAnalysisBusy_()){showToast('分析の保存・出力が終わるまでお待ちください。');return;}
+ if(cfbUi.importPending){showToast('銀行明細の保存結果が未確認です。同じ内容で取込を再開してから更新してください。');return;}
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集済み明細の破棄','再取得すると、取込前プレビューに加えた修正が失われます。先に表をコピーすることをおすすめします。',
+   '修正を破棄して更新',()=>{cfbUi.bankGridEdited=false;cfbReload_();});return;
+ }
+ if(cfbUi.demo){openConfirmDialog('架空データの初期化','操作中の架空データを最初の状態に戻します。','最初から試す',()=>cfbDemoActivate_(cashFlowUi.year));return;}
+ if(cfbUi.busy||cfbUi.importing||cashFlowUi.busy){showToast('保存・取り込みが終わるまでお待ちください。');return;}
+ cashFlowDiscard_(()=>{
+  if(typeof cfaInvalidateReads_==='function')cfaInvalidateReads_();
+  if(typeof cflUi!=='undefined'){cflUi.cache.clear();cflUi.serial++;cflUi.loadingKey='';}
+  cfbUi.loaded=null;cfbUi.error='';cfbUi.planForm=null;cfbUi.accountForm=null;
+   // A manual refresh must not discard a paused import.
+   if(!cfbUi.importPending){cfbUi.preview=null;cfbUi.csvRows=null;cfbUi.csvMap=null;}
+  cashFlowUi.dirty=false;cashFlowUi.key='';cfbLoad_(true);cashFlowLoad_(true);
+ });
+}
+function cfbSection_(name){
+ if(typeof cashFlowAnalysisBusy_==='function'&&cashFlowAnalysisBusy_())return;
+ if(typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
+ if(!['ledger','overview','schedules','banks','analysis','scenarios','reports'].includes(name)||cfbUi.busy||cfbUi.importing)return;
+ const apply=()=>{
+  cfbUi.tab=name;if(name==='ledger'&&typeof cflLoad_==='function')cflLoad_();cfbUi.accountForm=null;cfbUi.planForm=null;renderPageIfActive('finance');
+  if(['analysis','scenarios','reports'].includes(name)&&typeof cfaLoad_==='function')cfaLoad_(false);
+ };
+ if(name!==cfbUi.tab&&typeof cashFlowAuxDiscard_==='function')cashFlowAuxDiscard_(apply);else apply();
+}
+function cfbShowOld_(){cfbUi.active=false;renderPageIfActive('finance');}
+function cfbShowNew_(){cfbUi.active=true;renderPageIfActive('finance');cfbLoad_(false);}
+function cfbEscape_(value){return escapeHtml(value==null?'':String(value));}
+function cfbAccountName_(id){
+ if(!id)return '口座未指定';
+ const account=cfbUi.loaded&&cfbUi.loaded.accounts.find(x=>x.id===id);
+ return account?account.name+'（'+account.bank+'）':'口座不明';
+}
+function cfbMoney_(value){return Number(value||0).toLocaleString('ja-JP')+'円';}
+function cfbMonthLabel_(m){return String(m||'').replace('-','年')+'月';}
+function cfbForecast_(){
+ const data=cfbUi.loaded,year=cashFlowUi.data;
+ if(!data||data.setupRequired)return null;
+ const saved=year&&year.record||{},opening=saved.openingBalance==null?null:Number(saved.openingBalance),
+  old=new Map((saved.months||[]).map(x=>[x.month,x])),confirm=data.closing&&data.closing.through||'';
+ 
+  // The existence of any schedule does not certify all 12 months as explicitly planned.
+ let plannedBalance=opening,actualBalance=opening,forecastBalance=opening,firstShort='',lowest=opening;
+ let totalPlannedIn=0,totalPlannedOut=0,confirmedCount=0,bankMonths=0;
+ const rows=data.monthly.map(row=>{
+  const adjustment=old.get(row.month)||{},manualPlan=adjustment.planIn!=null&&adjustment.planOut!=null,
+    manualActual=adjustment.actualIn!=null&&adjustment.actualOut!=null,hasBank=row.importedCount>0;
+  const hasPlan=Number(row.scheduledCount||0)>0||manualPlan,planIn=hasPlan?row.scheduledIn+(manualPlan?Number(adjustment.planIn):0):null,
+   planOut=hasPlan?row.scheduledOut+(manualPlan?Number(adjustment.planOut):0):null;
+  const confirmed=!!confirm&&row.month<=confirm,verified=row.reconciled!==false,
+   authoritative=confirmed&&row.reconciled===true;
+  const actualReady=authoritative||hasBank||manualActual,
+   actualIn=authoritative?Number(row.actualIn||0):hasBank?row.actualIn:manualActual?Number(adjustment.actualIn):null,
+   actualOut=authoritative?Number(row.actualOut||0):hasBank?row.actualOut:manualActual?Number(adjustment.actualOut):null;
+  if(hasPlan){totalPlannedIn+=planIn;totalPlannedOut+=planOut;}
+  if(hasBank)bankMonths++;
+  if(confirmed)confirmedCount++;
+  plannedBalance=plannedBalance!=null&&hasPlan?plannedBalance+planIn-planOut:null;
+  actualBalance=actualBalance!=null&&confirmed&&actualReady&&verified?actualBalance+actualIn-actualOut:null;
+  const useActual=confirmed&&actualReady&&verified;
+  const estimateKnown=confirmed&&!verified?false:useActual||hasPlan;
+  forecastBalance=forecastBalance!=null&&estimateKnown?forecastBalance+(useActual?actualIn:planIn)-(useActual?actualOut:planOut):null;
+  if(forecastBalance!=null){lowest=lowest===null?forecastBalance:Math.min(lowest,forecastBalance);if(forecastBalance<0&&!firstShort)firstShort=row.month;}
+  return {...row,planIn,planOut,actualIn,actualOut,confirmed,
+    planEnd:plannedBalance,actualEnd:actualBalance,forecastEnd:forecastBalance,source:confirmed&&!verified?'要照合':useActual?'確定実績':hasPlan?'予定':'未入力'};
+ });
+ return {opening,rows,months:rows.map(x=>({month:x.month,planEnd:x.planEnd,actualEnd:x.actualEnd,forecastEnd:x.forecastEnd})),
+  planIn:rows.some(r=>r.planIn!==null)?totalPlannedIn:null,planOut:rows.some(r=>r.planOut!==null)?totalPlannedOut:null,
+  yearEnd:forecastBalance,firstShort,lowest,confirmedCount,bankMonths};
+}
+function cfbSummary_(f){
+ const card=(title,value,note)=>'<section class="card cf-metric"><small>'+title+'</small><strong>'+value+'</strong><span>'+note+'</span></section>';
+ return card('年間の予定入金',f.planIn==null?'未登録':cfbMoney_(f.planIn),'定期予定＋月別調整')+
+  card('年間の予定出金',f.planOut==null?'未登録':cfbMoney_(f.planOut),'家賃・人件費・返済など')+
+  card('11月末の見込み残高',f.yearEnd===null?'期首または予定が不足':cfbMoney_(f.yearEnd),'確定月は取込実績を優先')+
+  card('資金不足の見込み',f.firstShort?cfbMonthLabel_(f.firstShort):'—','月末残高がマイナスになる最初の月');
+}
+function cfbYearOptions_(){
+ return '<div class="cf-period"><button class="secondary-button" type="button" onclick="cashFlowChangeYear_('+(cashFlowUi.year-1)+')">‹ 前期</button>'+
+  '<label>決算年度 <input id="cfYear" type="number" min="2000" max="2100" step="1" value="'+cashFlowUi.year+'" onchange="cashFlowChangeYear_(this.value)"></label>'+
+  '<button class="secondary-button" type="button" onclick="cashFlowChangeYear_('+(cashFlowUi.year+1)+')">翌期 ›</button></div>';
+}
+function cfbActualCell_(row,direction){
+ const amount=direction==='IN'?row.actualIn:row.actualOut;
+ if(row.source==='確定実績')return cfbMoney_(amount==null?0:amount);
+ if(row.importedCount>0)return '取込途中 '+cfbMoney_(amount||0);
+ return '未取込・未照合';
+}
+function cfbPreviewTable_(f){
+ return '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>対象月</th><th>予定入金</th><th>予定出金</th><th>銀行入金（取込分）</th><th>銀行出金（取込分）</th><th>計画末残高</th><th>見込み末残高</th><th>採用値</th></tr></thead><tbody>'+
+  f.rows.map(row=>'<tr><th>'+cfbMonthLabel_(row.month)+'</th>'+
+   '<td class="cf-num">'+(row.planIn===null?'未登録':cfbMoney_(row.planIn))+'</td>'+
+   '<td class="cf-num">'+(row.planOut===null?'未登録':cfbMoney_(row.planOut))+'</td>'+
+   '<td>'+cfbActualCell_(row,'IN')+'</td><td>'+cfbActualCell_(row,'OUT')+'</td>'+
+   '<td>'+cashFlowYen_(row.planEnd)+'</td><td class="cf-num">'+cashFlowYen_(row.forecastEnd)+'</td>'+
+   '<td>'+row.source+'</td></tr>').join('')+'</tbody></table></div>';
+}
+function cfbCloseMonth_(value){if(cfbUi.busy)return;cfbUi.closeMonth=String(value||'');cfbUi.closeKey='';}
+function cfbSaveClose_(){
+ const ui=cfbUi;if(ui.busy||!ui.loaded||!cashFlowAllowed_())return;
+ if(!ui.closeKey)ui.closeKey=cfbKey_();
+ const year=cashFlowUi.year,rev=ui.loaded.closing.revision,payload={fiscalYear:year,through:ui.closeMonth,revision:rev,requestKey:ui.closeKey};
+ if(ui.demo){openConfirmDialog('架空の実績確定','選択した月まで架空の銀行明細を確定として試します。','画面内で確定',()=>{ui.loaded.closing={through:ui.closeMonth,revision:rev+1};ui.notice='架空データの確定月を変更しました。';renderPageIfActive('finance');});return;}
+ openConfirmDialog('実績確定月の変更','確定月までの金融機関明細をすべて取り込み、口座間振替も確認しましたか？ 確定済みの月の見込みに実績を使います。','確定月を保存',()=>{
+  ui.busy=true;renderPageIfActive('finance');
+  cfbRpc_('saveCashFlowClosedThrough',payload,result=>{
+   if(!result||result.ok!==true){cfbUnconfirmedReply_('実績確定月',true);return;}
+   ui.busy=false;ui.notice=result.auditRecorded===false?'保存しましたが監査ログの確認が必要です。':'実績確定月を保存しました。';
+   ui.closeKey='';cfbReload_();
+  },error=>{ui.busy=false;ui.error=cleanApiErrorMessage(error,'確定月を保存できませんでした。');renderPageIfActive('finance');});
+ });
+}
+function cfbOverview_(){
+ const f=cfbForecast_(),d=cfbUi.loaded;
+ if(!f)return '';
+ const choices=['<option value="">未確定（すべて予定を使用）</option>',...d.monthly.map(x=>'<option value="'+x.month+'"'+(x.month===cfbUi.closeMonth?' selected':'')+'>'+cfbMonthLabel_(x.month)+'まで</option>')].join('');
+ return '<div class="cf-metrics">'+cfbSummary_(f)+'</div>'+
+  (d.transferReview&&d.transferReview.attentionCount?'<p class="cf-note" role="status">口座間振替に '+Number(d.transferReview.attentionCount)+'件の要確認明細があります。「金融機関・明細取込」で両側の入出金を確認してください。</p>':'')+
+  '<section class="card cfb-confirm"><div><h2>実績に切り替える月</h2><p>銀行CSVを読み込んだだけでは月全体の実績は確定しません。すべての銀行口座の明細を確認後、月を選択してください。</p></div>'+
+  '<select aria-label="実績確定月" onchange="cfbCloseMonth_(this.value)"'+(cfbUi.busy?' disabled':'')+'>'+choices+'</select>'+
+  '<button class="secondary-button" type="button" onclick="cfbSaveClose_()"'+(cfbUi.busy?' disabled':'')+'>確定月を保存</button></section>'+
+  '<section class="card cf-chart"><h2>12か月の資金残高推移</h2>'+cashFlowChartHtml_(f)+'</section>'+
+  '<section class="card cf-table-card"><h2>月別の資金繰り（計画と取込明細）</h2><p>定期予定と「その他調整」を合算。実績欄は金融機関で取込んだ分です。内部振替は会社全体の実績から除外しています。</p>'+
+  cfbPreviewTable_(f)+'</section>'+
+  '<section class="card cfb-bank-summary"><h2>金融機関別の明細（当期）</h2><p>銀行明細は内部振替を含みます。全社資金繰りでは内部振替を除外します。</p>'+
+   (d.accounts.length?'<div class="cfb-bank-grid">'+d.bankSummaries.map(row=>'<div class="cfb-bank-item"><strong>'+
+    cfbEscape_(cfbAccountName_(row.accountId))+'</strong><span>銀行明細 入金 '+cfbMoney_(row.statementIn==null?row.incoming:row.statementIn)+' ／ 出金 '+cfbMoney_(row.statementOut==null?row.outgoing:row.statementOut)+'</span>'+ 
+    '<small>うち内部振替 入金 '+cfbMoney_(row.transferIn)+' ／ 出金 '+cfbMoney_(row.transferOut)+' ｜ 対外収支 入金 '+cfbMoney_(row.incoming)+' ／ 出金 '+cfbMoney_(row.outgoing)+'</small>'+
+    '<small>取込明細 '+row.importedCount+'件'+(row.latestBalance===null?'':' ／ 直近CSV残高 '+cfbMoney_(row.latestBalance))+'</small></div>').join('')+'</div>':
+    '<p class="cf-note">まだ金融機関が登録されていません。「銀行明細」から口座を追加してください。</p>')+'</section>'+
+  '<p class="cf-note">※ 当期の期首残高は「12か月の手入力・期首設定」で管理します。旧画面の計画金額は「その他調整」として加算するため、同じ支払を定期予定と重複登録しないでください。</p>';
+}
+function cfbFormValue_(type,key,val){
+ const form=type==='account'?cfbUi.accountForm:cfbUi.planForm;
+ if(!form||cfbUi.busy)return;form[key]=val;if(key!=='requestKey')form.requestKey='';
+}
+function cfbUnconfirmedReply_(label,retryWithSameKey){
+ cfbUi.busy=false;
+ cfbUi.error=label+'の保存結果を確認できませんでした。'+(retryWithSameKey?'入力内容は保持しています。同じ内容・識別子で再試行してください。':'最新の明細を確認してから再試行してください。');
+ renderPageIfActive('finance');
+}
+function cfbNewAccount_(id){
+ const found=id&&cfbUi.loaded&&cfbUi.loaded.accounts.find(a=>a.id===id);
+ cfbUi.accountForm=found?{...found,requestKey:''}:{id:'',bank:'',branch:'',name:'',last4:'',active:true,revision:0,requestKey:''};
+ renderPageIfActive('finance');
+}
+function cfbSaveAccount_(){
+ const form=cfbUi.accountForm;if(!form||cfbUi.busy)return;
+ if(cfbUi.demo){cfbDemoAccountSave_(form);return;}
+ if(!form.requestKey)form.requestKey=cfbKey_();
+ cfbUi.busy=true;cfbUi.error='';
+ cfbRpc_('saveCashFlowBankAccount',form,res=>{
+  if(!res||res.ok!==true){cfbUnconfirmedReply_('金融機関',true);return;}
+  cfbUi.busy=false;cfbUi.accountForm=null;cfbUi.notice='金融機関を保存しました。';cfbReload_();
+ },err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'口座を登録できませんでした。');renderPageIfActive('finance');});
+}
+function cfbNewPlan_(id){
+ const found=id&&cfbUi.loaded&&cfbUi.loaded.plans.find(p=>p.id===id),year=cashFlowUi.year;
+ cfbUi.planForm=found?{...found,requestKey:''}:{id:'',title:'',direction:'OUT',amount:0,accountId:'',category:'固定費',
+  frequency:'MONTHLY',startMonth:(year-1)+'-12',endMonth:'',day:25,active:true,note:'',revision:0,requestKey:''};
+ renderPageIfActive('finance');
+}
+function cfbSavePlan_(){
+ const f=cfbUi.planForm;if(!f||cfbUi.busy)return;
+ if(cfbUi.demo){cfbDemoPlanSave_(f);return;}
+ if(!f.requestKey)f.requestKey=cfbKey_();
+ cfbUi.busy=true;cfbUi.error='';
+ cfbRpc_('saveCashFlowScheduledItem',f,res=>{
+  if(!res||res.ok!==true){cfbUnconfirmedReply_('入出金予定',true);return;}
+  cfbUi.busy=false;cfbUi.planForm=null;cfbUi.notice='入出金予定を保存しました。';cfbReload_();
+ },err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'入出金予定を保存できませんでした。');renderPageIfActive('finance');});
+}
+function cfbAccountOptions_(selected,empty){
+ const accounts=cfbUi.loaded&&cfbUi.loaded.accounts||[];
+ return (empty?'<option value="">口座未指定</option>':'')+
+  accounts.map(a=>'<option value="'+cfbEscape_(a.id)+'"'+(selected===a.id?' selected':'')+'>'+cfbEscape_(cfbAccountName_(a.id))+'</option>').join('');
+}
+function cfbInput_(form,key,label,type,wide){
+ return '<label class="'+(wide?'cfb-wide':'')+'">'+label+'<input type="'+(type||'text')+'" value="'+cfbEscape_(form[key]==null?'':form[key])+'" oninput="cfbFormValue_('+"'"+(form===cfbUi.accountForm?'account':'plan')+"'"+','+"'"+key+"'"+',this.value)"'+(cfbUi.busy?' disabled':'')+'></label>';
+}
+function cfbAccountForm_(){
+ const f=cfbUi.accountForm;if(!f)return '';
+ return '<section class="card cfb-edit"><h3>'+(f.id?'金融機関を編集':'金融機関を登録')+'</h3><div class="cfb-form">'+
+  cfbInput_(f,'bank','金融機関名')+cfbInput_(f,'branch','支店名')+cfbInput_(f,'name','口座表示名')+cfbInput_(f,'last4','口座番号の末尾4桁')+
+  '<label>状態<select onchange="cfbFormValue_('+"'account','active'"+',this.value==='+"'true'"+')"'+(cfbUi.busy?' disabled':'')+'><option value="true"'+(f.active?' selected':'')+'>有効</option><option value="false"'+(!f.active?' selected':'')+'>非表示</option></select></label></div>'+
+  '<p class="cf-note">セキュリティのため銀行ID・パスワードや口座番号全文は登録しません。</p>'+
+  '<div class="cfb-actions"><button class="primary-button" type="button" onclick="cfbSaveAccount_()"'+(cfbUi.busy?' disabled':'')+'>保存</button>'+
+  '<button class="secondary-button" type="button" onclick="cfbUi.accountForm=null;renderPageIfActive('+"'finance'"+')">キャンセル</button></div></section>';
+}
+function cfbPlanForm_(){
+ const f=cfbUi.planForm;if(!f)return '';
+ const select=(key,label,options)=>'<label>'+label+'<select onchange="cfbFormValue_('+"'plan','"+key+"'"+',this.value)">'+options.map(([value,name])=>'<option value="'+value+'"'+(String(f[key])===String(value)?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
+ return '<section class="card cfb-edit"><h3>'+(f.id?'入出金予定を編集':'入出金予定を追加')+'</h3><div class="cfb-form">'+
+  cfbInput_(f,'title','項目名（例：事務所家賃）','text',true)+
+  select('direction','入出金区分',[['OUT','出金'],['IN','入金']])+cfbInput_(f,'amount','1回の金額（円）','number')+
+  select('frequency','繰り返し',[['MONTHLY','毎月'],['QUARTERLY','3か月ごと'],['YEARLY','毎年'],['ONCE','1回のみ']])+
+  cfbInput_(f,'startMonth','開始月','month')+cfbInput_(f,'endMonth','終了月（空欄なら無期限）','month')+
+  cfbInput_(f,'day','予定日（1〜31日）','number')+
+  '<label>金融機関<select onchange="cfbFormValue_('+"'plan','accountId'"+',this.value)">'+cfbAccountOptions_(f.accountId,true)+'</select></label>'+
+  cfbInput_(f,'category','分類')+cfbInput_(f,'note','備考','text',true)+
+  select('active','状態',[['true','有効'],['false','停止']])+
+  '</div><div class="cfb-actions"><button class="primary-button" type="button" onclick="cfbSavePlan_()"'+(cfbUi.busy?' disabled':'')+'>予定を保存</button>'+
+  '<button class="secondary-button" type="button" onclick="cfbUi.planForm=null;renderPageIfActive('+"'finance'"+')">キャンセル</button></div></section>';
+}
+function cfbScheduledPage_(){
+ const plans=cfbUi.loaded.plans||[];
+ const freq={ONCE:'単発',MONTHLY:'毎月',QUARTERLY:'3か月',YEARLY:'毎年'};
+ return '<div class="cfb-actions"><button type="button" class="primary-button" onclick="cfbNewPlan_()">＋ 入出金予定を追加</button></div>'+
+  cfbPlanForm_()+
+  '<section class="card cf-table-card"><h2>入金・出金の予定一覧</h2><p>毎月の家賃・人件費・返済などを登録します。金額は必ず会社の実際の予定額を入力してください。</p>'+
+  '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>項目名</th><th>入出金</th><th>金額</th><th>繰り返し</th><th>開始〜終了</th><th>金融機関</th><th>状態</th><th>操作</th></tr></thead><tbody>'+
+  (plans.map(p=>'<tr><th>'+cfbEscape_(p.title)+'</th><td>'+(p.direction==='IN'?'入金':'出金')+'</td>'+
+   '<td class="cf-num">'+cfbMoney_(p.amount)+'</td><td>'+(freq[p.frequency]||'—')+'</td>'+
+   '<td>'+cfbEscape_(p.startMonth)+(p.endMonth?' 〜 '+cfbEscape_(p.endMonth):' 〜')+'</td>'+
+   '<td>'+cfbEscape_(cfbAccountName_(p.accountId))+'</td><td>'+(p.active?'有効':'停止')+'</td>'+
+   '<td><button class="secondary-button" type="button" data-id="'+cfbEscape_(p.id)+'" onclick="cfbNewPlan_(this.dataset.id)">編集</button></td></tr>').join('')||
+   '<tr><td colspan="8">予定はまだ登録されていません。</td></tr>')+'</tbody></table></div></section>';
+}
+function cfbParseCSV_(text){
+ const src=String(text||'').replace(/^\ufeff/,'');
+ const result=[],record=[];let cell='',quoted=false;
+ for(let i=0;i<src.length;i++){
+  const c=src[i];
+  if(c==='"'){
+   if(quoted&&src[i+1]==='"'){cell+='"';i++;}
+   else if(!quoted&&cell.trim()==='')quoted=true;
+   else if(quoted)quoted=false;
+   else throw Error('CSVの引用符が不正です。');
+  }else if(c===','&&!quoted){record.push(cell);cell='';}
+  else if((c==='\n'||c==='\r')&&!quoted){
+   if(c==='\r'&&src[i+1]==='\n')i++;
+   record.push(cell);if(record.some(x=>x!==''))result.push(record.slice());
+   record.length=0;cell='';
+   if(result.length>3001)throw Error('CSVの行数が多すぎます。3000行以内の明細を選んでください。');
+  }else{cell+=c;}
+ }
+ if(quoted)throw Error('CSVの引用符が閉じられていません。');
+ record.push(cell);if(record.some(x=>x!==''))result.push(record);
+ if(result.length<2)throw Error('日付や金額が含まれるCSVを選んでください。');
+ const width=Math.max(...result.map(row=>row.length));
+ if(width>80)throw Error('CSVの列数が多すぎます。');
+ return result;
+}
+function cfbGuessCSV_(header){
+ const compact=s=>String(s||'').replace(/[\s\u3000・（）()\[\]]/g,'').toLowerCase();
+ const heads=header.map(compact);
+ const find=(aliases,avoid=[])=>heads.findIndex(v=>aliases.some(t=>v===t||v.includes(t))&&!avoid.some(t=>v.includes(t)));
+ return {date:find(['取引日','お取引日','お取扱日','取扱日','日付','年月日','日']),
+  incoming:find(['入金額','預入金額','お預り金額','お預入','入金','預り'],['区分']),
+  outgoing:find(['出金額','支払金額','お引出','出金','引出','払戻'],['区分']),
+  amount:find(['取引金額','金額','amount'],['入金','出金','残高']),
+  direction:find(['入払区分','入出金区分','入出区分']),
+  description:find(['摘要','取引内容','お取引内容','内容','取引先','明細','備考']),
+  balance:find(['残高','balance']),
+  externalId:find(['取引番号','明細番号','取引id','reference','伝票番号'])
+ };
+}
+async function cfbChooseFile_(node){
+ const file=node.files&&node.files[0];if(!file)return;
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集中の銀行明細を破棄','別のCSVを選択すると、取込前の表で修正した値が消えます。切り替えますか？',
+    '修正を破棄して読み込む',()=>{cfbUi.bankGridEdited=false;cfbChooseFile_(node);});return;
+ }
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='取込中・再開待ちの明細があるため別ファイルには切り替えられません。';
+  if(node&&typeof node.value==='string')node.value='';
+  renderPageIfActive('finance');return;
+ }
+ const ui=cfbUi,session=state.sessionToken,seq=ui.seq;
+ const fileReadSerial=++ui.fileReadSerial;
+ const current=()=>ui===cfbUi&&session===state.sessionToken&&seq===ui.seq&&fileReadSerial===ui.fileReadSerial;
+ ui.csvRows=null;ui.preview=null;ui.error='';
+ try{
+  if(file.size>3*1024*1024)throw Error('3MB以内のCSVを選んでください。');
+  const bytes=await file.arrayBuffer();
+  if(!current())return;
+  let text='';
+  try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
+  catch(_){text=new TextDecoder('shift_jis').decode(bytes);}
+  const records=cfbParseCSV_(text);
+  if(!current()||!cashFlowAllowed_()||ui.importing||ui.importPending)return;
+  ui.csvRows=records;ui.csvName=file.name;ui.csvMap=cfbGuessCSV_(records[0]);
+  ui.csvAccountId=ui.csvAccountId||ui.loaded.accounts[0]&&ui.loaded.accounts[0].id||'';
+ }catch(err){if(!current())return;ui.error=String(err.message||err);}
+ if(current())renderPageIfActive('finance');
+}
+function cfbMapCSV_(key,value){
+ if(!cfbUi.csvMap)return;
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='取込中や再開待ちの明細は列対応を変更できません。';renderPageIfActive('finance');return;}
+ if(cfbUi.bankGridEdited){
+  openConfirmDialog('列対応の変更','表で修正した内容があるため、列を変更するとプレビューを再作成する必要があります。修正内容を破棄して列を変更しますか？',
+    '修正を破棄して変更',()=>{cfbUi.bankGridEdited=false;cfbMapCSV_(key,value);});
+  renderPageIfActive('finance');return;
+ }
+ cfbUi.csvMap[key]=Number(value);cfbUi.preview=null;renderPageIfActive('finance');
+}
+function cfbCSVNumber_(raw,label){
+ const s=String(raw==null?'':raw).replace(/[,，\s￥¥円]/g,'').trim();
+ if(!s||s==='-')return 0;
+ const x=s.replace(/^\((\d+)\)$/,'-$1');
+ if(!/^-?\d{1,12}$/.test(x))throw Error(label+'の金額が不正です: '+String(raw).slice(0,20));
+ return Number(x);
+}
+function cfbPreviewCSV_(){
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='取込中・再開待ちの明細を新たに解析できません。まず同じ送信情報で再開してください。';
+  renderPageIfActive('finance');return;
+ }
+ if(cfbUi.bankGridEdited){
+  openConfirmDialog('編集済みの明細を再解析','現在の表の修正は消えます。銀行から貼り付けた元データに戻して再解析しますか？',
+   '修正を破棄して再解析',()=>{cfbUi.bankGridEdited=false;cfbPreviewCSV_();});
+  return;
+ }
+ cfbUi.importChunkKey='';cfbUi.importIndex=0;
+ cfbUi.importAdded=0;cfbUi.importSkipped=0;
+ try{
+  const ui=cfbUi,map=ui.csvMap,rows=ui.csvRows;
+  if(!rows||!map||map.date<0||map.description<0)throw Error('日付と摘要の列を選択してください。');
+  if(!(map.incoming>=0&&map.outgoing>=0)&&map.amount<0)throw Error('入金・出金の両列か、金額の列を指定してください。');
+  if(!ui.csvAccountId)throw Error('金融機関口座を選択してください。');
+  const occurrences=new Map();
+  ui.preview=rows.slice(1).map((raw,index)=>{
+   const cell=key=>map[key]<0?'':String(raw[map[key]]==null?'':raw[map[key]]);
+   const date=cell('date').trim();
+   if(!date){if(raw.some(v=>String(v==null?'':v).trim()!==''))throw Error((index+2)+'行目の取引日が未入力です。');return null;}
+   let incoming=0,outgoing=0;
+   if(map.incoming>=0&&map.outgoing>=0){incoming=cfbCSVNumber_(cell('incoming'),'入金');outgoing=cfbCSVNumber_(cell('outgoing'),'出金');}
+   else{
+    let amount=cfbCSVNumber_(cell('amount'),'取引');
+    const direction=cell('direction').trim();
+    if(direction){
+     if(/^(2|出|支払|引)/.test(direction))amount=-Math.abs(amount);
+     else if(/^(1|入|預)/.test(direction))amount=Math.abs(amount);
+     else throw Error((index+2)+'行目の入出金区分が不明です。');
+    }
+    incoming=amount>0?amount:0;outgoing=amount<0?-amount:0;
+   }
+   if(incoming<0||outgoing<0||(!incoming&&!outgoing)||incoming&&outgoing)throw Error((index+2)+'行目の入出金額を確認してください。');
+   const description=cell('description').trim()||'取引',balance=map.balance>=0&&cell('balance').trim()!==''?cfbCSVNumber_(cell('balance'),'残高'):null;
+   const externalId=map.externalId>=0?cell('externalId').trim():'';
+   const fingerprint=[date,incoming,outgoing,description,balance,externalId].join('|');
+   const occurrence=(occurrences.get(fingerprint)||0)+1;occurrences.set(fingerprint,occurrence);
+   return {date,incoming,outgoing,description,balance,externalId,occurrence,transfer:false};
+  }).filter(Boolean);
+  if(!ui.preview.length)throw Error('取り込める明細がありません。');
+  ui.bankGridPage=0;ui.bankGridEdited=false;
+  if(typeof cfbBankGridReindex_==='function')cfbBankGridReindex_();
+  ui.error='';ui.notice=ui.preview.length+'件を取込前に確認しています。まだ保存されていません。';
+ }catch(err){cfbUi.error=String(err.message||err);cfbUi.preview=null;}
+ renderPageIfActive('finance');
+}
+function cfbCSVTransfer_(index,checked){
+ if(cfbUi.importing||cfbUi.importPending)return;
+ if(cfbUi.preview&&cfbUi.preview[index]){
+  cfbUi.preview[index].transfer=!!checked;cfbUi.bankGridEdited=true;
+ }
+}
+function cfbBeginImport_(){
+ const ui=cfbUi;if(ui.importing)return;
+ if(ui.demo){if(ui.preview&&ui.preview.length)cfbDemoImport_();return;}
+ if(!ui.importPending){
+  if(!ui.preview||!ui.preview.length||!ui.csvAccountId)return;
+  const problems=ui.preview.map((row,index)=>{
+   const errors=cfbBankGridErrors_(row);return errors.length?(index+1)+'行目: '+errors.join('・'):'';
+  }).filter(Boolean);
+  if(problems.length){
+   ui.error='修正が必要です：'+problems.slice(0,4).join(' ／ ')+(problems.length>4?' ほか'+(problems.length-4)+'行':'');
+   renderPageIfActive('finance');return;
+  }
+  // Normalize and capture exactly the staged rows before locking this batch.
+  cfbBankGridReindex_();
+  const snapshot=ui.preview.map(row=>({...cfbBankGridNormalize_(row),occurrence:row.occurrence}));
+  ui.importPending={accountId:ui.csvAccountId,fileName:ui.csvName,rows:snapshot};
+  ui.importIndex=0;ui.importAdded=0;ui.importSkipped=0;ui.importChunkKey='';
+ }
+ ui.importing=true;ui.error='';cfbImportChunk_();
+}
+function cfbImportChunk_(){
+ const ui=cfbUi,pending=ui.importPending;
+ if(!pending||!ui.importing)return;
+ const start=ui.importIndex,items=pending.rows;
+ if(start>=items.length){
+  ui.importing=false;ui.importPending=null;ui.importChunkKey='';
+  ui.preview=null;ui.csvRows=null;ui.csvMap=null;ui.bankGridEdited=false;ui.bankGridPage=0;
+  ui.notice='銀行明細を'+ui.importAdded+'件登録、重複'+ui.importSkipped+'件をスキップしました。';
+  cfbLoadAfterWrite_();return;
+ }
+ const subset=items.slice(start,start+200);
+ if(!ui.importChunkKey)ui.importChunkKey=cfbKey_();
+ const payload={accountId:pending.accountId,fileName:pending.fileName,rows:subset,requestKey:ui.importChunkKey};
+ const fail=err=>{
+  if(ui.importPending!==pending)return;
+  ui.importing=false;
+  ui.error=cleanApiErrorMessage(err,'取込の完了を確認できません。登録済みの行を消さず、失敗位置から再開できます。');
+  renderPageIfActive('finance');
+ };
+ try{
+  cfbRpc_('importCashFlowBankRows',payload,res=>{
+   if(!ui.importing||ui.importPending!==pending)return;
+   const added=Number(res&&res.added),skipped=Number(res&&res.skipped);
+   if(!res||res.ok!==true||!Number.isInteger(added)||!Number.isInteger(skipped)||
+      added<0||skipped<0||added+skipped!==subset.length){
+    fail({message:'取込結果の件数を検証できません。現在のチャンクを同じ送信識別子で再試行してください。'});return;
+   }
+   ui.importAdded+=added;ui.importSkipped+=skipped;ui.importIndex+=subset.length;ui.importChunkKey='';
+   renderPageIfActive('finance');cfbImportChunk_();
+  },fail);
+ }catch(err){fail(err);}
+}
+function cfbLoadAfterWrite_(){
+ if(typeof cfaInvalidateReads_==='function')cfaInvalidateReads_();
+ if(typeof cflUi!=='undefined'){cflUi.cache.clear();cflUi.serial++;cflUi.loadingKey='';}
+ const tab=cfbUi.tab,notice=cfbUi.notice;
+ cfbUi.loaded=null;cfbUi.loading=false;cfbUi.seq++;cfbLoad_(true);
+ cfbUi.tab=tab;cfbUi.notice=notice;
+}
+function cfbToggleTransfer_(id,value,revision){
+ if(cfbUi.busy)return;
+ openConfirmDialog('口座間振替の区分','この明細を会社内部の口座間振替として扱いますか？ 会社全体の収支合計から除外する操作です。','分類を更新',()=>{
+  if(cfbUi.demo){cfbDemoTransfer_(id,value);return;}
+  cfbUi.busy=true;renderPageIfActive('finance');
+  cfbRpc_('setCashFlowTransfer',{id,value,revision},res=>{if(!res||res.ok!==true){cfbUnconfirmedReply_('内部振替区分',false);return;}cfbUi.busy=false;cfbUi.notice='内部振替の区分を更新しました。';cfbLoadAfterWrite_();},
+   err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'区分を変更できませんでした。');renderPageIfActive('finance');});
+ });
+}
+function cfbCSVPage_(){
+ const d=cfbUi.loaded,rows=cfbUi.csvRows||[],map=cfbUi.csvMap;
+ const mapping=[['date','取引日'],['incoming','入金額'],['outgoing','出金額'],['amount','金額（入出金が同じ列の場合）'],
+  ['direction','入払区分（1=入、2=出）'],['description','摘要'],['balance','残高'],['externalId','銀行側の取引番号']];
+ const locked=!!cfbUi.importing||!!cfbUi.importPending;
+ const selectors=map?'<div class="cfb-map">'+mapping.map(([k,label])=>'<label>'+label+'<select onchange="cfbMapCSV_('+"'"+k+"'"+',this.value)"'+(locked?' disabled':'')+'>'+
+  '<option value="-1">使わない</option>'+rows[0].map((h,i)=>'<option value="'+i+'"'+(map[k]===i?' selected':'')+'>'+cfbEscape_(h||'列'+(i+1))+'</option>').join('')+
+  '</select></label>').join('')+'</div>':'';
+ const preview=cfbUi.preview,pending=cfbUi.importPending;
+ const resumeInfo=pending?'<p role="status">処理済み '+cfbUi.importIndex+'/'+pending.rows.length+'件。通信エラー後も同じ口座・取込明細で再開します。</p>':'';
+ return '<section class="card cf-table-card"><h2>CSVファイルから取り込む（任意）</h2><p>CSVがない場合は上の「Webページから貼り付ける」を使ってください。CSVをダウンロードできる場合はファイルを選択します。ここでファイルを確認し、登録操作を行うまでDBには保存されません。</p>'+
+  '<div class="cfb-form"><label>取込先の金融機関<select onchange="cfbBankGridSetAccount_(this.value)"'+(locked?' disabled':'')+'>'+cfbAccountOptions_(cfbUi.csvAccountId,false)+'</select></label>'+
+  '<label>CSVファイル（UTF-8 / Shift-JIS）<input type="file" accept=".csv,text/csv,text/plain" onchange="cfbChooseFile_(this)"'+(locked?' disabled':'')+'></label></div>'+
+  (rows.length?'<h3>CSV列の対応（先頭行を見出しとして利用）</h3>'+selectors+
+  '<button type="button" class="secondary-button" onclick="cfbPreviewCSV_()"'+(locked?' disabled':'')+'>内容を確認する</button>':'')+
+  (preview?resumeInfo+'<p role="status">取込対象 '+preview.length+'件。25行ごとに表で確認・修正できます。</p>'+
+   cfbBankGridPreview_()+
+   '<button type="button" id="cbg-import" class="primary-button" onclick="cfbBeginImport_()"'+
+    (cfbUi.importing||(!cfbUi.importPending&&cfbBankGridStats_().invalid)?' disabled':'')+'>'+
+    (cfbUi.importing?'取込中 '+cfbUi.importIndex+'/'+preview.length:pending?'中断位置から再開（'+cfbUi.importIndex+'/'+pending.rows.length+'件）':'確認した'+preview.length+'件を取り込む')+'</button>':'')+
+  '<p class="cf-note">銀行のCSV形式は統一されていません。6桁の和暦日付などは誤解釈を防ぐため取込を停止し、銀行に対応した変換が必要です。CSVをGoogle以外の外部サービスへ送信しません。</p></section>';
+}
+function cfbTransferReviewPanel_(){
+ const r=cfbUi.loaded&&cfbUi.loaded.transferReview;if(!r||!r.total)return '';
+ const candidates=r.candidates||[],attention=r.attention||[];
+ const name=id=>cfbEscape_(cfbAccountName_(id));
+ return '<section class="card cf-table-card"><h2>口座間振替の両側確認（候補）</h2>'+
+  '<p>当期の内部振替について、別の自社口座で同額・前後3日以内の反対方向の明細を探します。銀行の原本や振替区分は変更しません。<strong>候補は未承認であり、照合済みではありません。</strong></p>'+
+  '<p role="status">確認対象 '+Number(r.total||0)+'件 ／ 組み合わせ候補 '+Number(r.candidateCount||0)+'組 ／ 要確認 '+Number(r.attentionCount||0)+'件</p>'+
+  (candidates.length?'<h3>見つかった組み合わせ候補</h3><div class="cf-scroll"><table class="cf-table"><thead><tr><th>出金日</th><th>出金元</th><th>入金日</th><th>入金先</th><th>同額</th><th>判定</th></tr></thead><tbody>'+
+    candidates.map(x=>'<tr><td>'+cfbEscape_(x.fromDate)+'</td><td>'+name(x.fromAccountId)+'</td><td>'+cfbEscape_(x.toDate)+'</td><td>'+name(x.toAccountId)+'</td><td>'+cfbMoney_(x.amount)+'</td><td>候補・未確認</td></tr>').join('')+
+    '</tbody></table></div>':'')+
+  (attention.length?'<h3>確認が必要な明細</h3><div class="cf-scroll"><table class="cf-table"><thead><tr><th>取引日</th><th>金融機関</th><th>区分</th><th>金額</th><th>確認理由</th></tr></thead><tbody>'+
+    attention.map(x=>'<tr><td>'+cfbEscape_(x.date)+'</td><td>'+name(x.accountId)+'</td><td>'+(x.direction==='IN'?'入金':x.direction==='OUT'?'出金':'要確認')+'</td><td>'+cfbMoney_(x.amount)+'</td><td>'+cfbEscape_(x.reason)+'</td></tr>').join('')+
+    '</tbody></table></div>':'')+
+  ((r.candidateCount>candidates.length||r.attentionCount>attention.length)?'<p class="cf-note">表示は各12件までです。集計件数には残りの明細も含まれます。</p>':'')+
+  '<p class="cf-note">確認は両方の銀行Web明細で行ってください。同額の取引を自動確定しません。振替の両側の確認記録を保存する機能は今後の対応範囲です。</p></section>';
+}
+
+function cfbBanksPage_(){
+ const data=cfbUi.loaded;
+ const accounts='<section class="card cf-table-card"><h2>登録した金融機関</h2><div class="cfb-actions"><button type="button" class="secondary-button" onclick="cfbNewAccount_()">＋ 口座を登録</button></div>'+
+  cfbAccountForm_()+
+  '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>表示名</th><th>金融機関</th><th>支店</th><th>末尾</th><th>状態</th><th>操作</th></tr></thead><tbody>'+
+  (data.accounts.map(a=>'<tr><th>'+cfbEscape_(a.name)+'</th><td>'+cfbEscape_(a.bank)+'</td><td>'+cfbEscape_(a.branch)+'</td>'+
+   '<td>'+(a.last4?'****'+a.last4:'—')+'</td><td>'+(a.active?'有効':'非表示')+'</td>'+
+   '<td><button class="secondary-button" type="button" data-id="'+cfbEscape_(a.id)+'" onclick="cfbNewAccount_(this.dataset.id)">編集</button></td></tr>').join('')||
+    '<tr><td colspan="6">金融機関を追加してください。</td></tr>')+'</tbody></table></div></section>';
+ const transactions='<section class="card cf-table-card"><h2>取込済み入出金明細（直近120件）</h2>'+
+  '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>取引日</th><th>金融機関</th><th>摘要</th><th>入金</th><th>出金</th><th>状態</th><th>操作</th></tr></thead><tbody>'+
+   (data.transactions.map(r=>'<tr><td>'+cfbEscape_(r.date)+'</td><td>'+cfbEscape_(cfbAccountName_(r.accountId))+'</td>'+
+    '<td>'+cfbEscape_(r.description)+'</td><td>'+cfbMoney_(r.incoming)+'</td><td>'+cfbMoney_(r.outgoing)+'</td>'+
+    '<td>'+(r.transfer?'内部振替':'通常取引')+'</td><td><button type="button" class="secondary-button" data-id="'+cfbEscape_(r.id)+'" data-rev="'+r.revision+'" onclick="cfbToggleTransfer_(this.dataset.id,'+(!r.transfer)+',Number(this.dataset.rev))">'+
+    (r.transfer?'通常取引に戻す':'内部振替にする')+'</button></td></tr>').join('')||
+    '<tr><td colspan="7">明細はまだありません。</td></tr>')+'</tbody></table></div></section>';
+ return accounts+(data.accounts.length?cfbPastePanel_()+cfbCSVPage_():'')+cfbTransferReviewPanel_()+transactions;
+}
+function cfbSetup_(){
+ if(cfbUi.demo||cfbUi.busy||!cashFlowAllowed_())return;
+ openConfirmDialog('資金管理の初回設定','既存データの検査・バックアップを行った後、必要なシートを追加します。既存Excelの内容は変更しません。続行しますか？','バックアップして初期設定',()=>{
+  cfbUi.busy=true;cfbUi.error='';renderPageIfActive('finance');
+  cfbRpc_('migrateDatabaseToCurrent',undefined,res=>{
+   cfbUi.busy=false;
+   if(!res||!res.ok||!res.after||!res.after.ready){cfbUi.error='DBの更新結果を確認できません。管理者へご連絡ください。';renderPageIfActive('finance');return;}
+   cfbUi.notice='バックアップ付きDB初期設定が完了しました。';
+   cfbUi.loaded=null;cfbUi.seq++;cashFlowUi.data=null;cashFlowLoad_(true);cfbLoad_(true);
+  },err=>{cfbUi.busy=false;cfbUi.error=cleanApiErrorMessage(err,'DB初期設定を完了できませんでした。');renderPageIfActive('finance');});
+ });
+}
+function cfbPage_(){
+ if(!cashFlowAllowed_())return pageHead('資金繰り','管理者専用です。');
+ const ui=cfbUi,year=cashFlowUi.year;
+ const header='<header class="cf-head"><div><span class="eyebrow">FM WORKS / CASH FLOW</span><h1>年間資金繰り</h1>'+
+  '<p>'+year+'年11月期（'+(year-1)+'年12月〜'+year+'年11月）</p></div>'+
+  '<div class="cfb-actions"><button type="button" class="secondary-button" onclick="cashFlowClose_()">← 経理へ戻る</button>'+
+  '<button type="button" class="secondary-button" onclick="cfbReload_()">最新に更新</button></div></header>'+cfbYearOptions_();
+ const feedback=(ui.error?'<p class="finance-error" role="alert">'+cfbEscape_(ui.error)+'</p>':'')+
+ (ui.notice?'<p class="cf-success" role="status">'+cfbEscape_(ui.notice)+'</p>':'');
+ if(ui.loading&&!ui.loaded)return '<div class="cf-workspace">'+header+'<section class="card cf-empty" role="status">金融機関と予定を読み込んでいます…</section></div>';
+ if(!ui.loaded)return '<div class="cf-workspace">'+header+feedback+'<section class="card cf-empty">資金繰り表のデータを取得してください。</section></div>';
+ if(ui.loaded.setupRequired)return '<div class="cf-workspace">'+header+feedback+'<section class="card cf-empty"><h2>初回設定（管理者のみ）</h2><p>現時点では保存するためのシートがありません。下のボタンでバックアップ付きの安全確認を実行し、口座と予定の登録を利用できるようにします。</p>'+
+  '<button type="button" class="primary-button" onclick="cfbSetup_()"'+(ui.busy?' disabled':'')+'>バックアップして資金管理を有効化する</button></section></div>';
+ const tabs=[['ledger','金融機関別入力台帳'],['overview','年間の見込み'],['schedules','毎月の入出金予定'],['banks','金融機関・明細取込'],['analysis','分類・月次照合'],['scenarios','条件別シミュレーション'],['reports','提出用Excel・PDF']];
+ const nav='<div class="cfb-tabs">'+tabs.map(([key,name])=>'<button type="button" class="'+(ui.tab===key?'active':'')+'" aria-pressed="'+(ui.tab===key)+'" onclick="cfbSection_('+"'"+key+"'"+')">'+name+'</button>').join('')+
+  '<button type="button" class="secondary-button" onclick="cfbShowOld_()">12か月の手入力・期首設定</button></div>';
+ const body=ui.tab==='ledger'?cflLedgerPage_():ui.tab==='overview'?(typeof cflAnnualTable_==='function'?cflAnnualTable_():'')+cfbOverview_():ui.tab==='schedules'?cfbScheduledPage_():ui.tab==='banks'?cfbBanksPage_():cfaPage_();
+ return '<div class="cf-workspace cfb-workspace">'+header+(ui.demo?cfbDemoBanner_():'')+nav+feedback+body+
+  '<p class="cf-note">金融機関の実績は入力台帳で保存した分とCSVから取り込んだ分を表示します。取込漏れはゼロ円ではありません。銀行サイトとの自動連携や自動引落しは行いません。</p></div>';
+}
+</script>
+<script>
+/* Editable bank import preview. This module edits ONLY the in-memory staging
+ * rows. Import is performed by the existing admin-authorized server method. */
+const CFB_GRID_FIELDS=[
+ ['date','取引日'],['description','摘要'],['incoming','入金（円）'],
+ ['outgoing','出金（円）'],['balance','残高（円）'],['externalId','取引番号']
+];
+const CFB_GRID_PAGE_SIZE=25;
+function cfbBankGridEditable_(){return !cfbUi.importing&&!cfbUi.importPending&&!cfbUi.busy;}
+function cfbBankGridSetAccount_(accountId){
+ if(cfbUi.importing||cfbUi.importPending){
+  cfbUi.error='通信結果が未確認のため、別口座には切り替えられません。';
+  renderPageIfActive('finance');return;
+ }
+ const next=String(accountId||'');
+ if(next===cfbUi.csvAccountId)return;
+ const apply=()=>{cfbUi.csvAccountId=next;cfbUi.preview=null;cfbUi.bankGridEdited=false;
+  cfbUi.bankGridPage=0;cfbUi.error='';renderPageIfActive('finance');};
+ if(cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('取込先口座の変更','口座を切り替えると取込前の明細プレビューは破棄されます。元データを再度解析する必要があります。',
+   'プレビューを破棄して変更',apply);renderPageIfActive('finance');return;
+ }
+ apply();
+}
+function cfbBankGridDate_(value){
+ const s=String(value==null?'':value).trim().replace(/年|[/.]/g,'-').replace(/月/g,'-').replace(/日/g,'');
+ let m=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+ if(!m)m=/^(\d{4})(\d{2})(\d{2})$/.exec(s);
+ if(!m)throw Error('取引日は西暦の年月日で入力');
+ const year=Number(m[1]),month=Number(m[2]),day=Number(m[3]);
+ const expected=String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+ if(year<2000||year>2100||month<1||month>12||day<1||day>31||
+   new Date(Date.UTC(year,month-1,day)).toISOString().slice(0,10)!==expected)
+  throw Error('存在しない取引日');
+ return expected;
+}
+function cfbBankGridMoney_(value,label,optional,negative){
+ const s=String(value==null?'':value).replace(/[,，\s￥¥円]/g,'').trim();
+ if(optional&&(value==null||s===''||s==='-'))return null;
+ if(!s||s==='-')return 0;
+ const m=s.replace(/^\((\d+)\)$/,'-$1');
+ if(!/^-?(0|[1-9]\d{0,11})$/.test(m)||(!negative&&m.startsWith('-')))
+  throw Error(label+'は整数の円単位');
+ const n=Number(m);
+ if(!Number.isSafeInteger(n)||Math.abs(n)>999999999999)throw Error(label+'が上限超過');
+ return n;
+}
+function cfbBankGridNormalize_(row){
+ const date=cfbBankGridDate_(row.date),
+  description=String(row.description==null?'':row.description).trim(),
+  externalId=String(row.externalId==null?'':row.externalId).trim(),
+  incoming=cfbBankGridMoney_(row.incoming,'入金額',false,false),
+  outgoing=cfbBankGridMoney_(row.outgoing,'出金額',false,false),
+  balance=cfbBankGridMoney_(row.balance,'残高',true,true);
+ if(!description||description.length>240)throw Error('摘要は1～240文字');
+ if(externalId.length>100)throw Error('取引番号は100文字以内');
+ if((incoming>0)===(outgoing>0))throw Error('入金・出金はどちらか一方のみ1円以上');
+ return {date,description,incoming,outgoing,balance,externalId,transfer:row.transfer===true};
+}
+function cfbBankGridErrors_(row){
+ try{cfbBankGridNormalize_(row);return [];}catch(e){return [String(e.message||e)];}
+}
+function cfbBankGridStats_(){
+ const preview=cfbUi.preview||[];let inTotal=0,outTotal=0,invalid=0;
+ for(const row of preview){
+  try{const r=cfbBankGridNormalize_(row);inTotal+=r.incoming;outTotal+=r.outgoing;}
+  catch(_){invalid++;}
+ }
+ return {count:preview.length,inTotal,outTotal,invalid};
+}
+function cfbBankGridReindex_(){
+ const ui=cfbUi,occurrences=new Map();
+ (ui.preview||[]).forEach(row=>{
+  let normalized;
+  try{normalized=cfbBankGridNormalize_(row);}catch(_){row.occurrence=1;return;}
+  // Recompute index after edits/removals. The server deduplicates via this
+  // fingerprint; independently real repeated payments must stay distinguishable.
+  const k=[normalized.date,normalized.incoming,normalized.outgoing,normalized.description,
+   normalized.balance,normalized.externalId].join('|');
+  const nth=(occurrences.get(k)||0)+1;occurrences.set(k,nth);row.occurrence=nth;
+ });
+}
+function cfbBankGridRefreshStats_(){
+ const s=cfbBankGridStats_();
+ for(const [id,val] of [['cbg-total',s.count+'件'],['cbg-in',s.inTotal.toLocaleString('ja-JP')+'円'],
+  ['cbg-out',s.outTotal.toLocaleString('ja-JP')+'円'],['cbg-invalid',s.invalid+'件']]){
+  const node=document.getElementById(id);if(node)node.textContent=val;
+ }
+ const action=document.getElementById('cbg-import');
+ if(action)action.disabled=!s.count||!!s.invalid||!cfbUi.csvAccountId||cfbUi.importing;
+}
+function cfbBankGridCell_(index,key,value){
+ if(!cfbBankGridEditable_()||!cfbUi.preview||!cfbUi.preview[index]||
+    !CFB_GRID_FIELDS.some(([k])=>k===key))return;
+ cfbUi.preview[index][key]=String(value==null?'':value);
+ cfbUi.bankGridEdited=true;cfbBankGridReindex_();
+ const status=document.getElementById('cbg-error-'+index);
+ const errors=cfbBankGridErrors_(cfbUi.preview[index]);
+ if(status){status.textContent=errors.length?errors.join('・'):'確認OK';status.dataset.valid=errors.length?'false':'true';}
+ cfbBankGridRefreshStats_();
+}
+function cfbBankGridCellBlur_(index,key,node){
+ if(!cfbBankGridEditable_()||!cfbUi.preview||!cfbUi.preview[index])return;
+ const row=cfbUi.preview[index];
+ // Standardize only valid fields, never erase invalid input while correcting it.
+ try{
+  if(key==='date')row.date=cfbBankGridDate_(row.date);
+  else if(['incoming','outgoing','balance'].includes(key))
+   row[key]=cfbBankGridMoney_(row[key],key,key==='balance',key==='balance');
+  node.value=String(row[key]==null?'':row[key]);
+ }catch(_){}
+ cfbBankGridReindex_();cfbBankGridRefreshStats_();
+}
+function cfbBankGridApplyPaste_(text,startRow,startCol){
+ if(!cfbBankGridEditable_())throw Error('取込中・通信結果未確認の明細は変更できません。');
+ const src=String(text||'').replace(/\r\n?/g,'\n');
+ if(!src||src.length>150000)throw Error('貼付は15万文字以内です。');
+ const lines=src.split('\n');if(lines[lines.length-1]==='')lines.pop();
+ const matrix=lines.map(line=>line.split('\t'));
+ if(!matrix.length||matrix.length>3000||matrix.some(line=>line.length>6))
+  throw Error('貼り付ける行と列を確認してください（6列まで）。');
+ if(startCol+Math.max(...matrix.map(r=>r.length))>6||
+   startRow+matrix.length>(cfbUi.preview||[]).length)
+  throw Error('貼付先がプレビュー表を超えています。明細全体を貼り直す場合は上の貼り付け欄を使ってください。');
+ // Validate the entire range before modifying any input cell.
+ for(let i=0;i<matrix.length;i++)for(let j=0;j<matrix[i].length;j++){
+  const key=CFB_GRID_FIELDS[startCol+j][0];
+  if(!['date','description','incoming','outgoing','balance','externalId'].includes(key))
+   throw Error('列が正しくありません。');
+ }
+ for(let i=0;i<matrix.length;i++)for(let j=0;j<matrix[i].length;j++){
+  cfbUi.preview[startRow+i][CFB_GRID_FIELDS[startCol+j][0]]=matrix[i][j].trim();
+ }
+ cfbUi.bankGridEdited=true;cfbUi.bankGridPage=Math.floor(startRow/CFB_GRID_PAGE_SIZE);
+ cfbBankGridReindex_();
+ return {rows:matrix.length,columns:Math.max(...matrix.map(r=>r.length))};
+}
+function cfbBankGridPasteEvent_(event,index,col){
+ if(!cfbBankGridEditable_())return;
+ const text=event.clipboardData&&event.clipboardData.getData('text/plain');
+ if(!text||!(/[\t\r\n]/.test(text)))return;
+ event.preventDefault();
+ try{const v=cfbBankGridApplyPaste_(text,index,col);
+  cfbUi.error='';cfbUi.notice=v.rows+'行×'+v.columns+'列を貼り付けました。まだDBには登録されていません。';
+ }catch(e){cfbUi.error=String(e.message||e);}
+ renderPageIfActive('finance');
+ const el=document.querySelector('[data-cbg-cell="'+index+'-'+col+'"]');
+ if(el)el.focus();
+}
+function cfbBankGridPageChange_(page){
+ if(!cfbUi.preview||!cfbUi.preview.length)return;
+ const max=Math.ceil(cfbUi.preview.length/CFB_GRID_PAGE_SIZE)-1;
+ cfbUi.bankGridPage=Math.max(0,Math.min(max,Number(page)||0));
+ renderPageIfActive('finance');
+}
+function cfbBankGridRemove_(index){
+ if(!cfbBankGridEditable_()||!cfbUi.preview||!cfbUi.preview[index])return;
+ openConfirmDialog('明細を取込対象から除外','選んだ行をプレビューから除外します。銀行のWeb明細や既存のFM WORKS DBは変更しません。',
+  'この行を除外',()=>{
+   if(!cfbBankGridEditable_()||!cfbUi.preview||!cfbUi.preview[index])return;
+   cfbUi.preview.splice(index,1);
+   cfbUi.bankGridEdited=true;
+   cfbBankGridReindex_();
+   cfbUi.bankGridPage=Math.min(cfbUi.bankGridPage||0,
+    Math.max(0,Math.ceil(cfbUi.preview.length/CFB_GRID_PAGE_SIZE)-1));
+   cfbUi.notice='取込対象から1行除外しました。';renderPageIfActive('finance');
+  });
+}
+function cfbBankGridCopy_(){
+ const rows=cfbUi.preview||[];
+ if(!rows.length)return;
+ const safe=value=>String(value==null?'':value).replace(/[\r\n\t]/g,' ').replace(/^[=+\-@]/,"'$&");
+ const data=CFB_GRID_FIELDS.map(r=>r[1]).join('\t')+'\n'+
+   rows.map(row=>CFB_GRID_FIELDS.map(([k])=>safe(row[k])).join('\t')).join('\n');
+ const fallback=()=>{
+  const field=document.getElementById('cbg-copy');if(!field)return;
+  field.hidden=false;field.value=data;field.focus();field.select();
+  showToast('テキストを選択しました。Ctrl+Cでコピーしてください。');
+ };
+ if(typeof navigator!=='undefined'&&navigator.clipboard?.writeText)
+  navigator.clipboard.writeText(data).then(()=>showToast('プレビュー表をコピーしました。')).catch(fallback);
+ else fallback();
+}
+function cfbBankGridPreview_(){
+ const ui=cfbUi,rows=ui.preview||[];
+ if(!rows.length)return '<p class="cf-note">表示できる明細がありません。銀行のコピー内容を読み込み直してください。</p>';
+ const current=Math.max(0,Math.min(Number(ui.bankGridPage)||0,Math.ceil(rows.length/CFB_GRID_PAGE_SIZE)-1));
+ const start=current*CFB_GRID_PAGE_SIZE,items=rows.slice(start,start+CFB_GRID_PAGE_SIZE);
+ const locked=!cfbBankGridEditable_(),stat=cfbBankGridStats_();
+ const cols=CFB_GRID_FIELDS.map(([k,title],i)=>'<th scope="col"><small>'+String.fromCharCode(65+i)+'</small>'+title+'</th>').join('');
+ const body=items.map((r,i)=>{
+  const index=start+i,errors=cfbBankGridErrors_(r),cells=CFB_GRID_FIELDS.map(([key,label],j)=>{
+   const value=cfbEscape_(r[key]==null?'':r[key]);
+   return '<td class="'+(['incoming','outgoing','balance'].includes(key)?'cbg-money':'')+'">'+
+    '<input type="text" autocomplete="off" value="'+value+'" data-cbg-cell="'+index+'-'+j+'" '+
+    'aria-label="'+(index+1)+'行目 '+cfbEscape_(label)+'"'+
+    ' oninput="cfbBankGridCell_('+index+',\''+key+'\',this.value)"'+
+    ' onblur="cfbBankGridCellBlur_('+index+',\''+key+'\',this)"'+
+    ' onpaste="cfbBankGridPasteEvent_(event,'+index+','+j+')"'+
+    (locked?' readonly':'')+'></td>';
+  }).join('');
+  return '<tr class="'+(errors.length?'cbg-bad':'cbg-good')+'"><th scope="row">'+(index+1)+'</th>'+cells+
+   '<td><label class="cbg-check"><input type="checkbox"'+(r.transfer?' checked':'')+
+   ' onchange="cfbCSVTransfer_('+index+',this.checked)" aria-label="'+(index+1)+'行目を口座間振替として扱う"'+
+   (locked?' disabled':'')+'>内部振替</label></td>'+
+   '<td id="cbg-error-'+index+'" data-valid="'+(!errors.length)+'">'+cfbEscape_(errors.join('・')||'確認OK')+'</td>'+
+   '<td><button type="button" class="secondary-button" onclick="cfbBankGridRemove_('+index+')"'+
+   (locked?' disabled':'')+'>除外</button></td></tr>';
+ }).join('');
+ return '<div class="cbg-sheet"><div class="cbg-head"><div><h3>明細の確認・修正</h3>'+
+  '<p>各セルを直接編集できます。Excelの複数セルをコピーし、対応する先頭セルでCtrl/Cmd+Vを押してください。</p></div>'+
+  '<button type="button" class="secondary-button" onclick="cfbBankGridCopy_()">確認表をコピー</button></div>'+
+  '<div class="cbg-totals"><span>対象 <strong id="cbg-total">'+stat.count+'件</strong></span>'+
+  '<span>入金 <strong id="cbg-in">'+stat.inTotal.toLocaleString('ja-JP')+'円</strong></span>'+
+  '<span>出金 <strong id="cbg-out">'+stat.outTotal.toLocaleString('ja-JP')+'円</strong></span>'+
+  '<span>修正が必要 <strong id="cbg-invalid">'+stat.invalid+'件</strong></span></div>'+
+  (locked?'<p class="cf-note" role="status">保存開始後の明細は変更できません。中断時は同じ送信情報で再開します。</p>':'')+
+  '<div class="cf-scroll cbg-scroll" role="region" aria-label="取込前の銀行明細を編集" tabindex="0">'+
+  '<table class="cbg-table"><thead><tr><th>行</th>'+cols+'<th>内部振替</th><th>入力検証</th><th>除外</th></tr></thead>'+
+  '<tbody>'+body+'</tbody></table></div><div class="cbg-bottom">'+
+  '<span>表示 '+(start+1)+'〜'+(start+items.length)+' / '+rows.length+'件（25件ずつ）</span>'+
+  '<div><button type="button" class="secondary-button" onclick="cfbBankGridPageChange_('+(current-1)+')"'+
+  (!current?' disabled':'')+'>前へ</button><span>'+(current+1)+' / '+Math.ceil(rows.length/CFB_GRID_PAGE_SIZE)+'</span>'+
+  '<button type="button" class="secondary-button" onclick="cfbBankGridPageChange_('+(current+1)+')"'+
+  (current+1>=Math.ceil(rows.length/CFB_GRID_PAGE_SIZE)?' disabled':'')+'>次へ</button></div></div>'+
+  '<textarea id="cbg-copy" hidden aria-label="コピー用明細"></textarea></div>';
+}
+</script><script>
+/* Normal cashflow workspace. Drafts are memory-only and never included in totals. */
+let cflUi={accountId:'',kind:'ALL',rows:[],data:null,busy:false,uncertain:false,error:'',offset:0,cache:new Map(),serial:0};
+const CFL_FIELDS=[['date','日付'],['description','摘要'],['outgoing','出金'],['incoming','入金'],['balance','残高'],['category','分類'],['note','メモ'],['kind','実績／予定']];
+function cflReset_(){cflUi={accountId:'',kind:'ALL',rows:[],data:null,busy:false,uncertain:false,error:'',offset:0,cache:new Map(),serial:0};}
+function cflDirty_(){return cflUi.rows.some(r=>CFL_FIELDS.some(([k])=>k!=='kind'&&String(r[k]||'').trim()));}
+function cflCanLeave_(){if(cflUi.busy||cflUi.uncertain){showToast('保存結果を同じ入力で確認してから移動してください。');return false;}return true;}
+function cflAdd_(){if(!cflCanLeave_())return;cflUi.rows.push({date:'',description:'',outgoing:'',incoming:'',balance:'',category:'',note:'',kind:'ACTUAL',requestKey:cfbKey_()});renderPageIfActive('finance');}
+function cflSet_(i,key,value){if(cflUi.busy||cflUi.uncertain||!CFL_FIELDS.some(([k])=>k===key))return;const r=cflUi.rows[i];if(r)r[key]=value;}
+function cflSwitch_(accountId,kind){
+ if(!cflCanLeave_())return;
+ const apply=()=>{cflUi.accountId=accountId; cflUi.kind=kind||'ALL';cflUi.rows=[];cflUi.data=null;cflUi.offset=0;cflLoad_();renderPageIfActive('finance');};
+ if(cflDirty_()&&accountId!==cflUi.accountId){openConfirmDialog('未保存の入力','口座を変える前に保存してください。入力を破棄して変更しますか？','入力を破棄して変更',apply);return;}
+ if(accountId===cflUi.accountId){cflUi.kind=kind||'ALL';cflUi.offset=0;cflLoad_();renderPageIfActive('finance');return;}apply();
+}
+function cflLoad_(force=false){
+ if(!cfbUi.loaded||!cashFlowUi.open)return;
+ const ui=cflUi;ui.accountId=ui.accountId||cfbUi.loaded.accounts.find(a=>a.active)?.id||'';if(!ui.accountId)return;
+ const key=[cashFlowUi.year,ui.accountId,ui.kind,ui.offset].join('|'),cached=ui.cache.get(key);
+ if(!force&&ui.loadingKey===key)return;
+ if(!force&&cached&&Date.now()-cached.at<300000){ui.data=cached.data;ui.dataKey=key;ui.loadingKey='';ui.serial++;return;}
+ ui.loadingKey=key;
+ if(ui.dataKey!==key)ui.data=null;
+ const serial=++ui.serial,identity=financeIdentity();
+ const current=()=>{
+  const selectedKey=[cashFlowUi.year,ui.accountId,ui.kind,ui.offset].join('|');
+  if(ui===cflUi&&identity===financeIdentity()&&ui.dataKey!==selectedKey)ui.data=null;
+  return ui===cflUi&&serial===ui.serial&&identity===financeIdentity()&&key===selectedKey;
+ };
+ cfbRpc_('getCashFlowLedgerRows',{year:cashFlowUi.year,accountId:ui.accountId,kind:ui.kind,offset:ui.offset},data=>{
+  if(!current())return;ui.loadingKey='';
+  if(!data||data.ok!==true){ui.error='台帳の取得結果を確認できません。';renderPageIfActive('finance');return;}
+  ui.data=data;ui.dataKey=key;ui.cache.delete(key);ui.cache.set(key,{data,at:Date.now()});
+  while(ui.cache.size>40)ui.cache.delete(ui.cache.keys().next().value);ui.error='';renderPageIfActive('finance');
+ },err=>{if(!current())return;ui.loadingKey='';ui.error=cleanApiErrorMessage(err,'台帳を取得できません。');renderPageIfActive('finance');});
+}
+function cflPaste_(event,i,col){
+ const text=event.clipboardData?.getData('text/plain');if(!text||(!text.includes('\t')&&!text.includes('\n'))||!cflCanLeave_())return;
+ event.preventDefault();const matrix=text.replace(/\r/g,'').split('\n').filter(x=>x.trim()).map(x=>x.split('\t'));
+ if(i+matrix.length>100||matrix.some(r=>col+r.length>CFL_FIELDS.length)){showToast('貼り付けは100行以内、表示している列数以内にしてください。');return;}
+ while(cflUi.rows.length<i+matrix.length)cflUi.rows.push({kind:'ACTUAL',requestKey:cfbKey_()});
+ matrix.forEach((r,n)=>r.forEach((v,j)=>{const key=CFL_FIELDS[col+j][0];cflUi.rows[i+n][key]=key==='kind'?({'実績':'ACTUAL','予定':'PLAN'}[v.trim()]||v.trim()):v;}));
+ renderPageIfActive('finance');
+}
+function cflBalances_(){
+ if(!cflCanLeave_())return;const anchor=cflUi.data?.balanceAnchor;
+ if(!anchor){showToast('保存済み明細の最新残高が未入力です。残高を確認して入力してください。');return;}
+ try{let balance=Number(anchor.balance);if(!Number.isSafeInteger(balance))throw Error('保存済みの残高を確認してください。');const rows=cflUi.rows.filter(r=>r.kind==='ACTUAL'&&String(r.date||'').trim()).map(r=>({r,tx:cfbBankGridNormalize_({...r,externalId:''})})).sort((a,b)=>a.tx.date.localeCompare(b.tx.date));
+ if(rows.some(x=>x.tx.date<=anchor.date))throw Error('保存済みの最新明細と同日以前の取引は、自動計算できません。残高を確認して手入力してください。');
+ const values=rows.map(x=>{balance+=x.tx.incoming-x.tx.outgoing;if(!Number.isSafeInteger(balance))throw Error('残高の計算範囲を超えています。');return {r:x.r,balance};});values.forEach(x=>x.r.balance=x.balance);renderPageIfActive('finance');
+ }catch(e){showToast(e.message);}
+}
+function cflSave_(){
+ const ui=cflUi;if(ui.busy||!ui.accountId)return;
+ const rows=ui.rows.filter(r=>CFL_FIELDS.some(([k])=>k!=='kind'&&String(r[k]||'').trim()));if(!rows.length)return;
+ try{rows.forEach(r=>{cfbBankGridNormalize_({...r,externalId:''});if(!r.category||!['ACTUAL','PLAN'].includes(r.kind))throw Error('分類と実績／予定を入力してください。');});}catch(e){ui.error=e.message;renderPageIfActive('finance');return;}
+ ui.busy=true;cfbUi.busy=true;ui.error='';const identity=financeIdentity(),accountId=ui.accountId,snapshot=rows.map(r=>({...r}));let index=0;
+ const fail=err=>{if(ui!==cflUi||identity!==financeIdentity())return;ui.busy=false;cfbUi.busy=false;ui.uncertain=true;ui.error=cleanApiErrorMessage(err,'保存結果が未確認です。同じ内容で再試行してください。');renderPageIfActive('finance');};
+ const next=()=>{
+  if(ui!==cflUi||identity!==financeIdentity())return;
+  if(index>=snapshot.length){ui.busy=false;ui.uncertain=false;cfbUi.busy=false;ui.rows=[];ui.cache.clear();cfbLoadAfterWrite_();showToast('台帳を保存し、年間集計を更新しました。');return;}
+  const chunk=snapshot.slice(index,index+20).map(r=>({...r,incoming:cfbBankGridMoney_(r.incoming,'入金',false,false),outgoing:cfbBankGridMoney_(r.outgoing,'出金',false,false),balance:cfbBankGridMoney_(r.balance,'残高',true,true)}));
+  cfbRpc_('saveCashFlowLedgerRows',{accountId,rows:chunk},result=>{
+   if(ui!==cflUi||identity!==financeIdentity())return;
+   if(!result||result.ok!==true||!Array.isArray(result.results)||result.results.length!==chunk.length||result.results.some((r,i)=>!r.id||r.kind!==chunk[i].kind)||new Set(result.results.map(r=>r.kind+'|'+r.id)).size!==chunk.length){fail(Error('保存件数を確認できません。同じ入力で再試行してください。'));return;}
+   if(result.auditRecorded===false)showToast('保存済みですが、監査履歴は管理者が確認してください。');index+=chunk.length;next();
+  },fail);
+ };renderPageIfActive('finance');next();
+}
+function cflPage_(offset){if(!cflCanLeave_())return;cflUi.offset=Math.max(0,offset);cflLoad_();renderPageIfActive('finance');}
+function cflLedgerPage_(){
+ const ui=cflUi,accounts=cfbUi.loaded.accounts||[];ui.accountId=ui.accountId||accounts.find(a=>a.active)?.id||'';
+ const esc=cfbEscape_,locked=ui.busy||ui.uncertain;
+ const controls='<div class="cfb-form"><label>金融機関<select onchange="cflSwitch_(this.value,cflUi.kind)"'+(locked?' disabled':'')+'>'+accounts.filter(a=>a.active).map(a=>'<option value="'+esc(a.id)+'"'+(a.id===ui.accountId?' selected':'')+'>'+esc(a.bank+' / '+a.name)+'</option>').join('')+'</select></label><label>表示<select onchange="cflSwitch_(cflUi.accountId,this.value)"'+(locked?' disabled':'')+'><option value="ALL"'+(ui.kind==='ALL'?' selected':'')+'>実績と予定</option><option value="ACTUAL"'+(ui.kind==='ACTUAL'?' selected':'')+'>実績</option><option value="PLAN"'+(ui.kind==='PLAN'?' selected':'')+'>予定</option></select></label></div>';
+ const saved=(ui.data?.rows||[]).map(r=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.description)+'</td><td>'+cfbMoney_(r.outgoing)+'</td><td>'+cfbMoney_(r.incoming)+'</td><td>'+(r.balance===null?'—':cfbMoney_(r.balance))+'</td><td>'+esc(r.category)+'</td><td>'+esc(r.note)+'</td><td>'+(r.kind==='PLAN'?'予定':'実績')+'</td></tr>').join('');
+ const draft=ui.rows.map((r,i)=>'<tr class="cfl-draft">'+CFL_FIELDS.map(([key,label],j)=>'<td>'+(key==='kind'?'<select onchange="cflSet_('+i+',\'kind\',this.value)"'+(locked?' disabled':'')+'><option value="ACTUAL"'+(r.kind==='ACTUAL'?' selected':'')+'>実績</option><option value="PLAN"'+(r.kind==='PLAN'?' selected':'')+'>予定</option></select>':'<input value="'+esc(r[key]||'')+'" aria-label="入力'+(i+1)+'行 '+label+'" oninput="cflSet_('+i+',\''+key+'\',this.value)" onpaste="cflPaste_(event,'+i+','+j+')"'+(locked?' readonly':'')+'>')+'</td>').join('')+'</tr>').join('');
+ return '<section class="card cf-table-card"><h2>金融機関別の入力台帳</h2><p>Excelと同じ順で、下へ行を追加します。実績と予定を分けて保存し、全口座の年間表へ集計します。未保存行は集計に含めません。</p>'+controls+(ui.error?'<p role="alert">'+esc(ui.error)+'</p>':'')+'<div class="cf-scroll"><table class="cf-table cfl-table"><thead><tr>'+CFL_FIELDS.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>'+saved+draft+'</tbody></table></div><div class="cfb-actions"><button class="secondary-button" onclick="cflAdd_()"'+(locked||!ui.accountId?' disabled':'')+'>＋ 入力行を追加</button><button class="secondary-button" onclick="cflBalances_()"'+(locked?' disabled':'')+'>実績の残高を計算</button><button class="primary-button" onclick="cflSave_()"'+(ui.busy||!ui.accountId?' disabled':'')+'>'+(ui.uncertain?'同じ入力で再試行':'入力を保存・年間へ集計')+'</button><button class="secondary-button" onclick="cfbSection_(\'overview\')">年間資金繰りを見る</button></div><p>'+Number(ui.data?.total||0)+'件（50件ずつ表示）</p><div class="cfb-actions"><button class="secondary-button" onclick="cflPage_('+Math.max(0,ui.offset-50)+')"'+(ui.offset===0?' disabled':'')+'>前へ</button><button class="secondary-button" onclick="cflPage_('+(ui.offset+50)+')"'+(!ui.data||ui.offset+50>=ui.data.total?' disabled':'')+'>次へ</button></div></section>';
+}
+function cflAnnualTable_(){
+ const data=cfbUi.loaded;if(!data||!Array.isArray(data.monthly))return '';
+ const fields=[['scheduledIn','予定入金'],['scheduledOut','予定出金'],['actualIn','実績入金'],['actualOut','実績出金'],['transferIn','内部振替入金'],['transferOut','内部振替出金']];
+ return '<section class="card cf-table-card"><h2>全金融機関の年間集計</h2><p>各金融機関の保存済み明細と予定を、12月から翌11月へ集約します。実績の年間合計は取込済み分です。未取込月をゼロ確定とは扱いません。実績と予定を別々に示し、無条件に二重加算しません。</p><div class="cf-scroll"><table class="cf-table"><thead><tr><th>入出金項目</th>'+data.monthly.map(r=>'<th>'+cfbEscape_(r.month)+'</th>').join('')+'<th>年間合計</th></tr></thead><tbody>'+fields.map(([key,label])=>'<tr><th>'+label+'</th>'+data.monthly.map(r=>'<td>'+((key.startsWith('actual')||key.startsWith('transfer'))&&!r.importedCount&&!r.reconciled?'未取込':cfbMoney_(r[key]))+'</td>').join('')+'<td>'+cfbMoney_(data.monthly.reduce((n,r)=>n+Number(r[key]||0),0))+'</td></tr>').join('')+'</tbody></table></div><p class="cf-note">実績の内部振替は通常の入出金から分離します。将来の残高見込みと月次の照合状況は下の表で確認してください。</p></section>';
+}
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('beforeunload',event=>{if(cflDirty_()){event.preventDefault();event.returnValue='';}});
+</script>
+<script>
+function cfbParseBankPaste_(text){
+ const raw=String(text||'').replace(/^\ufeff/,'').trim();
+ if(raw.length>150000)throw Error('テキストが大きすぎます。15万文字以下に分けてください。');
+ if(!raw)throw Error('銀行画面の表をコピーして貼り付けてください。');
+ let records;
+ if(raw.includes('\t'))records=raw.split(/\r\n|\r|\n/).filter(Boolean).map(row=>row.split('\t').map(x=>x.trim()));
+ else if(/\s{2,}/.test(raw))records=raw.split(/\r\n|\r|\n/).filter(Boolean).map(row=>row.trim().split(/[\u3000 ]{2,}/));
+ else records=cfbParseCSV_(raw);
+ if(records.length>3001)throw Error('1回の入力は3000行以下にしてください。');
+ if(records.length<1||records.some(row=>row.length>80))throw Error('行・列の数を確認してください。');
+ const head=records[0];
+ const date=/^(?:\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{8})$/;
+ if(head.length===5&&date.test(String(head[0]).trim()))records.unshift(['取引日','摘要','出金額','入金額','残高']);
+ if(records.length<2)throw Error('見出しと明細行を貼り付けてください。');
+ return records;
+}
+function cfbPasteSample_(){
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の銀行明細の取込を完了してから操作してください。';renderPageIfActive('finance');return;}
+ cfbUi.pasteText='取引日\t摘要\t出金額\t入金額\t残高\n'+
+  cashFlowUi.year+'-02-25\t架空の業務入金\t\t120000\t1450000\n'+
+  cashFlowUi.year+'-02-26\t架空の通信費\t7500\t\t1442500';
+ renderPageIfActive('finance');
+}
+function cfbPasteText_(value){cfbUi.pasteText=String(value||'');}
+function cfbPastePreview_(){
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の取込を再開してから解析してください。';renderPageIfActive('finance');return;}
+ if(cfbUi.bankGridEdited&&cfbUi.preview&&cfbUi.preview.length){
+  openConfirmDialog('編集済みの銀行明細を置き換え','新しいコピー内容を解析すると、修正中のプレビューが消えます。続行しますか？',
+   '修正を破棄して解析',()=>{cfbUi.bankGridEdited=false;cfbPastePreview_();});return;
+ }
+ if(cfbUi.importing||cfbUi.importPending){cfbUi.error='未確認の銀行明細の取込を完了してから操作してください。';renderPageIfActive('finance');return;}
+ try{
+  cfbUi.csvRows=cfbParseBankPaste_(cfbUi.pasteText);
+  cfbUi.csvName='Web画面コピー';cfbUi.csvMap=cfbGuessCSV_(cfbUi.csvRows[0]);
+  cfbUi.csvAccountId=cfbUi.csvAccountId||cfbUi.loaded.accounts[0]&&cfbUi.loaded.accounts[0].id||'';
+  cfbUi.error='';cfbPreviewCSV_();
+ }catch(err){cfbUi.preview=null;cfbUi.error=String(err&&err.message||err);renderPageIfActive('finance');}
+}
+function cfbPastePanel_(){
+ return '<section class="card cf-table-card cfb-paste-panel"><h2>銀行Webページから貼り付ける</h2><p>銀行画面の取引表を選択→コピー→下の欄に貼り付け。区切りはタブ、2文字以上の空白、またはCSVに対応します。銀行ごとに列順を確認できます。</p>'+
+  '<textarea rows="5" spellcheck="false" aria-label="銀行のWeb明細を貼り付ける" placeholder="取引日　摘要　出金額　入金額　残高" oninput="cfbPasteText_(this.value)">'+cfbEscape_(cfbUi.pasteText||'')+'</textarea>'+
+  '<div class="cfb-actions"><button type="button" class="secondary-button" onclick="cfbPasteSample_()">架空の貼り付け例を入れる</button>'+
+  '<button type="button" class="primary-button" onclick="cfbPastePreview_()">内容を解析して確認する</button></div>'+
+  '<p class="cf-note">取込前に金額と列対応を確認してください。解析だけではスプレッドシートに保存されません。</p></section>';
+}
+</script>
+<script>
+/* CASH FLOW ANALYSIS: no persistent browser storage; never trust browser totals. */
+const CFA_READ_TTL=300000;
+let cfaUi={workspaceAt:0,monthAt:0,projectionAt:0,year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
+ loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:0,monthSeq:0,projectionSeq:0,
+ scenarioId:'',projection:null,editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,linkReady:false,planPending:null,error:'',notice:''};
+function cfaReset_(){
+ cfaUi={workspaceAt:0,monthAt:0,projectionAt:0,year:0,tab:'analysis',workspace:null,month:'',rows:null,total:0,page:0,
+  loading:false,loadingMonth:false,loadingProjection:false,busy:false,exporting:false,seq:cfaUi.seq+1,
+  monthSeq:cfaUi.monthSeq+1,projectionSeq:cfaUi.projectionSeq+1,scenarioId:'',projection:null,
+  editor:null,ruleDraft:null,scenarioDraft:null,reconcilePending:null,taxIncludeMemo:false,reviewOnly:false,linkReady:false,planPending:null,error:'',notice:''};
+}
+function cfaKey_(){return 'CFA-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,16);}
+function cfaMoney_(amount){return amount===null||amount===undefined?'未入力':Number(amount).toLocaleString('ja-JP')+'円';}
+function cfaEsc_(v){return escapeHtml(String(v===null||v===undefined?'':v));}
+function cfaShowError_(e,fallback){cfaUi.error=cleanApiErrorMessage(e,fallback||'資金繰りの処理に失敗しました。');cfaUi.busy=false;cfaUi.exporting=false;renderPageIfActive('finance');}
+function cfaReadError_(e,fallback){cfaUi.error=cleanApiErrorMessage(e,fallback||'資金繰りを取得できませんでした。');renderPageIfActive('finance');}
+function cfaEnsureYear_(){
+ const y=cashFlowUi.year;
+ if(cfaUi.year===y)return;
+ cfaReset_();cfaUi.year=y;
+}
+function cfaInvalidateReads_(){
+ const u=cfaUi;u.workspaceAt=0;u.monthAt=0;u.projectionAt=0;
+ u.seq++;u.monthSeq++;u.projectionSeq++;u.loading=false;u.loadingMonth=false;u.loadingProjection=false;
+ u.forceAfter=false;u.monthForceAfter=false;u.projectionForceAfter=false;
+}
+function cfaLoadActiveView_(force=false){
+ if(cfbUi.tab==='analysis')cfaLoadMonth_(force);
+ if(cfbUi.tab==='scenarios'||cfbUi.tab==='reports')cfaLoadProjection_(force);
+}
+function cfaLoad_(force){
+ if(!cashFlowAllowed_()||!cashFlowUi.open||cfbUi.demo)return;
+ cfaEnsureYear_();
+ const u=cfaUi,y=cashFlowUi.year;if(u.busy||u.exporting)return;
+ if(u.loading){if(force)u.forceAfter=true;return;}
+ if(!force&&u.workspace&&Date.now()-(u.workspaceAt||0)<CFA_READ_TTL){cfaLoadActiveView_();return;}
+ if(force)cfaInvalidateReads_();
+ const seq=++u.seq;u.loading=true;u.error='';
+ cfbRpc_('getCashFlowAnalysisWorkspace',y,data=>{
+  if(seq!==cfaUi.seq||cashFlowUi.year!==y||!cashFlowUi.open)return;
+  u.loading=false;if(u.forceAfter){u.forceAfter=false;cfaLoad_(true);return;}
+  if(!data||data.ok!==true){cfaReadError_({message:'分析情報が取得できません。'});return;}
+  u.workspace=data;u.workspaceAt=Date.now();
+  if(!u.month||!(data.months||[]).includes(u.month)){
+   const today=String(state.data&&state.data.today||'').slice(0,7);
+   u.month=(data.months||[]).includes(today)?today:(data.months||[]).at(-1)||'';
+  }
+  if(u.scenarioId&&!(data.scenarios||[]).some(s=>s.id===u.scenarioId))u.scenarioId='';
+  renderPageIfActive('finance');
+  cfaLoadActiveView_(true);
+ },e=>{if(seq!==cfaUi.seq)return;u.loading=false;if(u.forceAfter){u.forceAfter=false;cfaLoad_(true);return;}cfaReadError_(e,'分析情報を読み込めませんでした。');});
+}
+function cfaLoadMonth_(force){
+ const u=cfaUi;if(!u.workspace||u.workspace.setupRequired||!u.month||cfbUi.demo)return;
+ if(u.loadingMonth){if(force)u.monthForceAfter=true;return;}
+ if(!force&&u.rows&&Date.now()-(u.monthAt||0)<CFA_READ_TTL)return;
+ const y=cashFlowUi.year,month=u.month,page=u.page,seq=++u.monthSeq;
+ u.loadingMonth=true;
+ cfbRpc_('getCashFlowAnalysisMonth',{fiscalYear:y,month,page,onlyUnreviewed:u.reviewOnly===true},data=>{
+  if(seq!==u.monthSeq||cashFlowUi.year!==y||u.month!==month)return;
+  u.loadingMonth=false;
+  if(u.monthForceAfter){u.monthForceAfter=false;cfaLoadMonth_(true);return;}
+  if(!data||data.ok!==true){cfaReadError_({message:'明細を取得できません。'});return;}
+  u.rows=data.rows||[];u.monthAt=Date.now();u.total=Number(data.total||0);u.linkReady=data.linkReady===true;renderPageIfActive('finance');
+ },e=>{if(seq!==u.monthSeq)return;u.loadingMonth=false;cfaReadError_(e,'明細を読み込めませんでした。');});
+}
+function cfaLoadProjection_(force){
+ const u=cfaUi;
+ if(!u.workspace||u.workspace.setupRequired||cfbUi.demo)return;
+ if(u.loadingProjection){if(force)u.projectionForceAfter=true;return;}
+ if(!force&&u.projection&&u.projection.scenarioId===u.scenarioId&&Date.now()-(u.projectionAt||0)<CFA_READ_TTL)return;
+ const scenario=u.scenarioId,year=cashFlowUi.year,seq=++u.projectionSeq;
+ u.loadingProjection=true;
+ cfbRpc_('getCashFlowProjection',{fiscalYear:year,scenarioId:scenario},data=>{
+  if(seq!==u.projectionSeq||year!==cashFlowUi.year||scenario!==u.scenarioId)return;
+  u.loadingProjection=false;
+  if(u.projectionForceAfter){u.projectionForceAfter=false;cfaLoadProjection_(true);return;}
+  if(!data||data.ok!==true){cfaReadError_({message:'シミュレーションの結果を取得できません。'});return;}
+  u.projection=data;u.projectionAt=Date.now();renderPageIfActive('finance');
+ },e=>{if(seq!==u.projectionSeq)return;u.loadingProjection=false;cfaReadError_(e,'資金繰りの予測に失敗しました。');});
+}
+function cfaChangeMonth_(value){
+ if(cfaUi.busy)return;
+ cfaUi.reconcilePending=null;cfaUi.planPending=null;cfaUi.month=String(value||'');cfaUi.rows=null;cfaUi.editor=null;cfaUi.page=0;cfaUi.monthSeq++;cfaUi.loadingMonth=false;
+ renderPageIfActive('finance');cfaLoadMonth_(true);
+}
+function cfaToggleReviewOnly_(checked){
+ const u=cfaUi;if(u.busy||u.reviewOnly===!!checked)return;
+ u.reviewOnly=!!checked;u.planPending=null;u.page=0;u.rows=null;u.editor=null;u.loadingMonth=false;
+ u.monthSeq++;renderPageIfActive('finance');cfaLoadMonth_(true);
+}
+function cfaPageIndex_(index){
+ if(cfaUi.busy)return;
+ const last=Math.max(0,Math.ceil(cfaUi.total/100)-1);
+ cfaUi.page=Math.max(0,Math.min(last,Number(index)||0));cfaUi.planPending=null;cfaUi.rows=null;cfaUi.editor=null;cfaUi.loadingMonth=false;
+ cfaUi.monthSeq++;renderPageIfActive('finance');cfaLoadMonth_(true);
+}
+function cfaOpenEditor_(id){
+ if(cfaUi.busy)return;
+ const r=(cfaUi.rows||[]).find(x=>x.id===id);if(!r)return;
+ cfaUi.editor={id:r.id,category:r.reviewed?r.category:r.suggested?r.category:'',tags:r.tags,note:r.note,revision:r.revision,requestKey:''};
+ renderPageIfActive('finance');
+}
+function cfaEditorField_(name,value){
+ const d=cfaUi.editor;if(!d||cfaUi.busy)return;
+ const next=String(value);if(d[name]!==next){d[name]=next;d.requestKey='';}
+}
+function cfaSaveAnnotation_(){
+ const u=cfaUi,d=u.editor;if(!d||u.busy||cfbUi.demo)return;
+ if(!d.requestKey)d.requestKey=cfaKey_();
+ const key=d.requestKey;
+ u.busy=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('saveCashFlowAnnotation',{transactionId:d.id,category:d.category,tags:d.tags,note:d.note,revision:d.revision,requestKey:key},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'保存結果を確認できません。再試行してください。'});return;}
+  u.busy=false;u.editor=null;u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'分類・メモを保存しました。';
+  u.rows=null;cfaLoad_(true);
+ },e=>cfaShowError_(e,'分類・メモを保存できませんでした。'));
+}
+function cfaRuleNew_(id){
+ if(cfaUi.busy)return;
+ const source=(cfaUi.workspace&&cfaUi.workspace.rules||[]).find(x=>x.id===id);
+ cfaUi.ruleDraft=source?{...source}:{id:'',keyword:'',direction:'ANY',accountId:'',category:'',tags:'',priority:50,active:true,revision:0,requestKey:''};
+ renderPageIfActive('finance');
+}
+function cfaRuleChange_(field,val){
+ if(!cfaUi.ruleDraft||cfaUi.busy)return;
+ const d=cfaUi.ruleDraft,next=field==='priority'?Number(val):field==='active'?!!val:val;
+ if(d[field]!==next){d[field]=next;d.requestKey='';}
+}
+function cfaSaveRule_(){
+ const u=cfaUi;if(!u.ruleDraft||u.busy||cfbUi.demo)return;
+ if(!u.ruleDraft.requestKey)u.ruleDraft.requestKey=cfaKey_();
+ u.busy=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('saveCashFlowRule',{...u.ruleDraft},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'ルール保存結果が不明です。再試行してください。'});return;}
+  u.busy=false;u.ruleDraft=null;u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'自動分類ルールを保存しました。';cfaLoad_(true);
+ },e=>cfaShowError_(e,'分類ルールを保存できませんでした。'));
+}
+function cfaApplyCurrentRules_(){
+ if(cfaUi.busy)return;
+ const u=cfaUi,ids=(u.rows||[]).filter(r=>r.suggested&&!r.reviewed&&!r.transfer).map(r=>r.id).slice(0,100);
+ if(!ids.length){u.error='未確定の分類候補がありません。';renderPageIfActive('finance');return;}
+ openConfirmDialog('分類ルールを反映','候補の'+ids.length+'件を明細に保存します。保存済みの個別メモ・分類は上書きしません。','選択月の候補を反映',()=>{
+  if(u.busy)return;
+  u.busy=true;renderPageIfActive('finance');cfbRpc_('applyCashFlowRules',{transactionIds:ids,requestKey:cfaKey_()},res=>{
+   u.busy=false;u.rows=null;u.notice=res.added+'件に分類を反映しました。';cfaLoad_(true);
+  },e=>cfaShowError_(e,'自動分類を反映できませんでした。'));
+ });
+}
+function cfaReconcile_(index){
+ const u=cfaUi,records=(u.workspace&&u.workspace.checks||[]).filter(x=>x.month===u.month),r=records[index];
+ if(!r||u.busy||cfbUi.demo)return;
+ const balance=document.getElementById('cfa-bank-balance-'+index);
+ const note=document.getElementById('cfa-bank-note-'+index);
+ if(!balance||balance.value.trim()===''){u.error='銀行サイトの月末残高を入力してください。';renderPageIfActive('finance');return;}
+ const signature=JSON.stringify([cashFlowUi.year,u.month,r.accountId,r.revision,balance.value,note?note.value:'']);
+ if(!u.reconcilePending||u.reconcilePending.signature!==signature)
+  u.reconcilePending={signature,payload:{fiscalYear:cashFlowUi.year,month:u.month,accountId:r.accountId,
+   closingBalance:balance.value,note:note?note.value:'',revision:r.revision,requestKey:cfaKey_()}};
+ const payload=u.reconcilePending.payload;
+ openConfirmDialog('銀行月次照合','銀行のWeb画面ですべての入出金が取り込まれ、表示残高が一致することを確認しましたか？','照合結果を保存',()=>{
+  if(u.busy)return;
+  u.busy=true;renderPageIfActive('finance');cfbRpc_('saveCashFlowBankReconciliation',payload,res=>{
+   if(!res||res.ok!==true){cfaShowError_({message:'照合の保存結果が不明です。再試行してください。'});return;}
+   u.busy=false;u.reconcilePending=null;u.notice=res.auditRecorded===false?'照合済みですが監査履歴を確認してください。':'照合結果を保存しました。';
+   cfbLoadAfterWrite_();
+  },e=>cfaShowError_(e,'照合結果を保存できませんでした。'));
+ });
+}
+function cfaScenarioSelect_(id){
+ if(cfaUi.busy)return;
+ cfaUi.scenarioId=String(id||'');cfaUi.projection=null;cfaUi.projectionSeq++;cfaUi.loadingProjection=false;cfaUi.exporting=false;
+ renderPageIfActive('finance');cfaLoadProjection_(true);
+}
+function cfaScenarioNew_(id){
+ if(cfaUi.busy)return;
+ const s=(cfaUi.workspace&&cfaUi.workspace.scenarios||[]).find(x=>x.id===id);
+ cfaUi.scenarioDraft=s?{id:s.id,revision:s.revision,name:s.name,changes:s.changes.map(x=>({...x}))}:
+  {id:'',revision:0,name:'',changes:[]};
+ renderPageIfActive('finance');
+}
+function cfaScenarioName_(v){const d=cfaUi.scenarioDraft;if(d&&!cfaUi.busy&&d.name!==v){d.name=v;d.requestKey='';}}
+function cfaScenarioAdd_(type){
+ const d=cfaUi.scenarioDraft,plans=cfbUi.loaded&&cfbUi.loaded.plans||[];
+ if(!d||cfaUi.busy||d.changes.length>=30)return;
+ const month=cfaUi.month||cashFlowUi.year+'-01';
+ const first=plans.find(p=>p.active)||{};
+ const change=type==='EXTRA'?{type,month,direction:'OUT',amount:0,title:'臨時支出'}:
+  type==='SCALE'?{type,month,planId:first.id||'',percent:80}:
+  type==='SHIFT'?{type,month,planId:first.id||'',monthsDelta:1}:{type:'OMIT',month,planId:first.id||''};
+ d.changes.push(change);d.requestKey='';renderPageIfActive('finance');
+}
+function cfaScenarioField_(index,name,value){
+ const d=cfaUi.scenarioDraft;if(!d||cfaUi.busy||!d.changes[index])return;
+ const next=['monthsDelta','percent','amount'].includes(name)?Number(value):String(value);
+ if(d.changes[index][name]!==next){d.changes[index][name]=next;d.requestKey='';}
+}
+function cfaScenarioRemove_(index){
+ const d=cfaUi.scenarioDraft;if(!d||cfaUi.busy)return;d.changes.splice(index,1);d.requestKey='';renderPageIfActive('finance');
+}
+function cfaCancelDraft_(kind){
+ if(cfaUi.busy||!['editor','ruleDraft','scenarioDraft'].includes(kind))return;
+ cfaUi[kind]=null;renderPageIfActive('finance');
+}
+function cfaScenarioSave_(){
+ const u=cfaUi;if(!u.scenarioDraft||u.busy||cfbUi.demo)return;
+ const d=u.scenarioDraft;if(!d.requestKey)d.requestKey=cfaKey_();
+ u.busy=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('saveCashFlowScenario',{id:d.id,fiscalYear:cashFlowUi.year,name:d.name,changes:d.changes,
+  revision:d.revision,requestKey:d.requestKey},res=>{
+  if(!res||res.ok!==true){cfaShowError_({message:'シナリオ保存結果が不明です。再試行してください。'});return;}
+  u.busy=false;u.scenarioDraft=null;u.scenarioId=res.id;u.projection=null;u.loadingProjection=false;u.projectionSeq++;
+  u.notice=res.auditRecorded===false?'保存済みですが監査履歴を確認してください。':'条件別の資金繰りを保存しました。';
+  cfaLoad_(true);
+ },e=>cfaShowError_(e,'シミュレーション条件を保存できませんでした。'));
+}
+function cfaDownloadReport_(format){
+ const u=cfaUi;if(u.exporting||!cashFlowAllowed_()||!u.projection||cfbUi.demo)return;
+ const token=state.sessionToken,year=cashFlowUi.year,scenarioId=u.scenarioId,seq=u.seq;
+ const current=()=>token===state.sessionToken&&year===cashFlowUi.year&&scenarioId===cfaUi.scenarioId&&seq===cfaUi.seq&&cashFlowUi.open;
+ u.exporting=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('exportCashFlowReport',{fiscalYear:year,scenarioId,format},res=>{
+  if(!current())return;
+  u.exporting=false;
+  if(!res||!res.ok||!res.base64){cfaShowError_({message:'出力データが取得できませんでした。'});return;}
+  let href='';
+  try{
+   const bin=atob(res.base64),bytes=new Uint8Array(bin.length);
+   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+   const blob=new Blob([bytes],{type:res.mimeType});
+   href=URL.createObjectURL(blob);const a=document.createElement('a');
+   a.href=href;a.download=res.filename;document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(href),15000);
+   u.notice=res.status==='要確認'?'出力しました。照合不足・未確認項目があるため、提出前に必ず確認してください。':'資金繰り帳票を出力しました。';
+  }catch(error){if(href)URL.revokeObjectURL(href);u.error='ブラウザーでファイルを保存できませんでした。再試行してください。';}
+  renderPageIfActive('finance');
+ },e=>{if(current())cfaShowError_(e,'帳票の出力に失敗しました。');});
+}
+
+function cfaDownloadTaxCsv_(){
+ const u=cfaUi;if(u.exporting||!cashFlowAllowed_()||!u.workspace||u.workspace.setupRequired||cfbUi.demo)return;
+ const token=state.sessionToken,year=cashFlowUi.year,seq=u.seq,includeMemo=u.taxIncludeMemo===true;
+ const valid=()=>token===state.sessionToken&&year===cashFlowUi.year&&seq===cfaUi.seq&&cashFlowUi.open;
+ u.exporting=true;u.error='';renderPageIfActive('finance');
+ cfbRpc_('exportCashFlowTaxAdvisorCsv',{fiscalYear:year,includeMemo},res=>{
+  if(!valid())return;
+  u.exporting=false;
+  if(!res||res.ok!==true||!res.base64){cfaShowError_({message:'CSVの出力結果が不明です。'});return;}
+  let href='';
+  try{
+   const bin=atob(res.base64),bytes=new Uint8Array(bin.length);
+   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+   href=URL.createObjectURL(new Blob([bytes],{type:'text/csv;charset=utf-8'}));
+   const a=document.createElement('a');a.href=href;a.download=res.filename;
+   document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(href),15000);
+   u.notice='取込明細'+Number(res.count||0)+'件を出力。'+Number(res.attentionCount||0)+
+    '件は説明・振替が要確認です。税理士への送付前に必ず見直してください。';
+  }catch(error){if(href)URL.revokeObjectURL(href);u.error='CSVを保存できませんでした。再試行してください。';}
+  renderPageIfActive('finance');
+ },e=>{if(valid())cfaShowError_(e,'取引説明CSVを出力できませんでした。');});
+}
+
+function cfaPlanAction_(action,transactionId,planId,plannedDate){
+ const u=cfaUi,record=(u.rows||[]).find(r=>r.id===transactionId);
+ if(!u.linkReady||u.busy||cfbUi.demo||!record)return;
+ if(action==='APPROVE'&&(
+  record.planLink&&record.planLink.status!=='NONE'||
+  !(record.planMatch?.candidates||[]).some(p=>p.planId===planId&&p.plannedDate===plannedDate)
+ ))return;
+ if(action==='UNLINK'&&!['APPROVED','STALE'].includes(record.planLink&&record.planLink.status))return;
+ const approving=action==='APPROVE';
+ const same=u.planPending&&u.planPending.transactionId===transactionId&&
+  u.planPending.action===action&&u.planPending.planId===(approving?planId:'')&&
+  u.planPending.plannedDate===(approving?plannedDate:'');
+ if(!same){
+  u.planPending={action,transactionId,planId:approving?planId:'',
+   plannedDate:approving?plannedDate:'',
+   revision:record.planLink?Number(record.planLink.revision):0,
+   reason:approving?'金額・口座・予定日を確認して承認':'照合先の見直しのため承認を解除',
+   requestKey:cfaKey_()};
+ }
+ const payload={...u.planPending},seq=u.seq,token=state.sessionToken,month=u.month,year=cashFlowUi.year;
+ const valid=()=>seq===cfaUi.seq&&token===state.sessionToken&&month===u.month&&
+  year===cashFlowUi.year&&cashFlowUi.open;
+ const title=approving?'予定との照合を承認':'予定との照合を解除';
+ const message=approving?'選んだ入出金予定とこの銀行明細を目視確認し、承認履歴を保存します。会計確定や銀行月次照合は変更しません。':
+  'この銀行明細と入出金予定の承認を解除します。銀行原本と予定は変更されません。';
+ openConfirmDialog(title,message,approving?'この照合を承認':'承認を解除',()=>{
+  if(!valid()||u.busy)return;
+  u.busy=true;u.error='';renderPageIfActive('finance');
+  cfbRpc_('saveCashFlowPlanLink',payload,res=>{
+   if(!valid())return;
+   u.busy=false;
+   if(!res||res.ok!==true){cfaShowError_({message:'照合記録の保存結果を確認できませんでした。'});return;}
+   u.planPending=null;u.rows=null;u.monthSeq++;u.loadingMonth=false;
+   u.notice=res.auditRecorded===false?'照合記録を保存しましたが、監査履歴を管理者が確認してください。':
+    (approving?'予定との照合を承認しました（会計未確定）。':'予定との承認を解除しました。');
+   cfaLoadMonth_(true);renderPageIfActive('finance');
+  },e=>{if(valid())cfaShowError_(e,'予定との照合を保存できませんでした。');});
+ });
+}
+
+function cfaPlanMatchHtml_(match,transactionId,link,ready){
+ const m=match||{},total=Number(m.total)||0,stored=link||{status:'NONE',revision:0};
+ if(stored.status==='CONFLICT')return '<span class="cfa-plan-match-warning" role="alert">照合履歴が重複しています。管理者による原本確認が必要です。承認・解除操作を停止しています。</span>';
+ if(stored.status==='APPROVED'||stored.status==='STALE'){
+  const stale=stored.status==='STALE';
+  return '<div class="cfa-plan-approved"><strong>'+(stale?'要再確認：承認後に元データが変更':'照合承認済み・会計未確定')+'</strong>'+
+   '<span>'+cfaEsc_(stored.title)+' ／ '+cfaEsc_(stored.plannedDate)+'</span>'+
+   '<small>確認：'+cfaEsc_(stored.editorId)+' '+cfaEsc_(stored.updatedAt)+'</small>'+
+   '<button type="button" class="secondary-button" data-id="'+cfaEsc_(transactionId)+
+   '" onclick="cfaPlanAction_(\'UNLINK\',this.dataset.id)">承認を解除</button></div>';
+ }
+ if(m.status==='TRANSFER')return '<span class="cfa-plan-match-none">振替・対象外</span>';
+ if(m.status==='INVALID_DATE')return '<span class="cfa-plan-match-warning">日付要確認</span>';
+ if(!total)return '<span class="cfa-plan-match-none">候補なし</span>';
+ const items=(m.candidates||[]).map(p=>'<li><strong>'+cfaEsc_(p.title)+'</strong>'+
+  '<small>予定日 '+cfaEsc_(p.plannedDate)+' ／ '+cfaMoney_(p.amount)+
+  ' ／ '+cfaEsc_(Number(p.gapDays)||0)+'日差'+(p.accountId?' ／ 口座指定あり':' ／ 口座未指定')+
+  (p.descriptionMatch?' ／ 摘要の文字も一致':' ／ 摘要は別途確認')+'</small>'+
+  (ready?'<button type="button" class="secondary-button" data-id="'+cfaEsc_(transactionId)+
+  '" data-plan="'+cfaEsc_(p.planId)+'" data-date="'+cfaEsc_(p.plannedDate)+
+  '" onclick="cfaPlanAction_(\'APPROVE\',this.dataset.id,this.dataset.plan,this.dataset.date)">この予定を照合承認</button>':
+  '<small>承認記録を保存するにはDB v20への更新が必要です。</small>')+'</li>').join('');
+ return '<details class="cfa-plan-match"><summary class="'+(total>1?'cfa-plan-match-warning':'')+'">'+
+  (total>1?'候補'+total+'件・要確認':'候補1件・未確定')+'</summary><ul>'+items+'</ul>'+
+  (total>(m.candidates||[]).length?'<small>他にも候補があります。予定一覧で確認してください。</small>':'')+
+  '</details>';
+}
+
+function cfaAnalysisPage_(){
+ const u=cfaUi,w=u.workspace;if(!w)return '<p role="status">資金の分析情報を読み込み中です。</p>';
+ const months=(w.months||[]).map(m=>'<option value="'+cfaEsc_(m)+'"'+(m===u.month?' selected':'')+'>'+cfaEsc_(m.replace('-','年')+'月')+'</option>').join('');
+ const check=(w.checks||[]).filter(x=>x.month===u.month);
+ const rows=u.rows||[];
+ const bankNames=new Map((w.accounts||[]).map(a=>[a.id,a.bank+' / '+a.name]));
+ const table=rows.map(r=>{
+  const e=u.editor&&u.editor.id===r.id,category=r.reviewed?'確定：'+r.category:r.suggested?'候補：'+r.category:'未分類';
+  return '<tr><td>'+cfaEsc_(r.date)+'</td><td>'+cfaEsc_(bankNames.get(r.accountId)||'非表示口座')+'</td><td>'+cfaEsc_(r.description)+'</td>'+
+   '<td class="cf-num">'+(r.incoming?cfaMoney_(r.incoming):'')+'</td><td class="cf-num">'+(r.outgoing?cfaMoney_(r.outgoing):'')+'</td>'+
+   '<td>'+cfaEsc_(r.transfer?'口座間振替':category)+'</td><td>'+cfaEsc_(r.tags||'—')+'</td><td>'+cfaEsc_(r.note||'—')+'</td><td>'+cfaPlanMatchHtml_(r.planMatch,r.id,r.planLink,u.linkReady)+'</td>'+
+   '<td><button class="secondary-button" type="button" data-id="'+cfaEsc_(r.id)+'" onclick="cfaOpenEditor_(this.dataset.id)">分類・メモ</button></td></tr>'+
+   (e?'<tr class="cfa-editor-row"><td colspan="10"><div class="cfa-editor"><label>計上区分<input id="cfaCategory" maxlength="60" value="'+cfaEsc_(u.editor.category)+'" oninput="cfaEditorField_(\'category\',this.value)"></label>'+
+    '<label>タグ（カンマ区切り）<input id="cfaTags" maxlength="250" value="'+cfaEsc_(u.editor.tags)+'" oninput="cfaEditorField_(\'tags\',this.value)"></label>'+
+    '<label>内容メモ<textarea id="cfaNote" rows="2" maxlength="800" oninput="cfaEditorField_(\'note\',this.value)">'+cfaEsc_(u.editor.note)+'</textarea></label>'+
+    '<button class="primary-button" type="button" onclick="cfaSaveAnnotation_()"'+(u.busy?' disabled':'')+'>分類とメモを保存</button>'+
+    '<button class="secondary-button" type="button" onclick="cfaCancelDraft_(\'editor\')">閉じる</button></div></td></tr>':'');
+ }).join('');
+ const reconciliation=check.map((r,i)=>{
+  const pending=u.reconcilePending&&u.reconcilePending.payload,
+   draft=pending&&pending.month===u.month&&pending.accountId===r.accountId?pending:null;
+  return '<div class="cfa-reconcile-item"><div><strong>'+cfaEsc_(r.accountName)+'</strong><span>'+
+   (r.verified?'照合済':r.outdated?'要再照合':'未照合')+'／入金 '+cfaMoney_(r.actualIn)+'・出金 '+cfaMoney_(r.actualOut)+'／ '+r.importedCount+'件</span></div>'+
+   '<label>銀行Webの月末残高（円）<input type="number" id="cfa-bank-balance-'+i+'" value="'+(draft?cfaEsc_(draft.closingBalance):r.latestBalance!==null?cfaEsc_(r.latestBalance):'')+'" placeholder="銀行サイトで確認" /></label>'+
+   '<label>照合根拠・補足<input type="text" maxlength="500" id="cfa-bank-note-'+i+'" value="'+cfaEsc_(draft?draft.note:r.note||'')+'" placeholder="取引がない月も確認根拠を記入" /></label>'+
+   '<button class="secondary-button" onclick="cfaReconcile_('+i+')"'+(u.busy?' disabled':'')+'>照合して保存</button></div>';
+ }).join('');
+ return '<section class="card cfa-panel"><div class="cfa-toolbar"><label>対象月 <select onchange="cfaChangeMonth_(this.value)">'+months+'</select></label>'+
+  '<label><input type="checkbox" onchange="cfaToggleReviewOnly_(this.checked)"'+(u.reviewOnly?' checked':'')+'>説明待ちのみ表示</label>'+
+  '<div>未確定の分類（年度全体）：<strong>'+Number(w.unreviewedCount||0)+'件</strong></div>'+
+  '<button type="button" class="secondary-button" onclick="cfaApplyCurrentRules_()"'+(u.busy?' disabled':'')+'>このページの自動分類候補を確定</button></div>'+
+  '<h2>入出金明細と個別メモ</h2><p>銀行Webの原明細は変更しません。予定照合は同額・入出金方向・口座・予定日の前後3日で候補を探します。候補は未確定です。担当者が承認しても銀行月次確定・会計処理は自動変更されません。</p>'+
+  (u.loadingMonth?'<p role="status">銀行明細を読み込み中です。</p>':
+   '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>日付</th><th>金融機関</th><th>摘要</th><th>入金</th><th>出金</th><th>計上区分</th><th>タグ</th><th>メモ</th><th>予定との候補</th><th>操作</th></tr></thead><tbody>'+
+   (table||'<tr><td colspan="10">'+(u.reviewOnly?'対象月の説明待ち明細はありません。':'対象月の明細はまだありません。')+'</td></tr>')+'</tbody></table></div>'+
+   '<div class="cfa-pagination"><span>'+(u.page*100+1)+'〜'+Math.min((u.page+1)*100,u.total)+'件 / '+u.total+'件</span>'+
+    '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page-1)+')"'+(u.page===0?' disabled':'')+'>前へ</button>'+
+    '<button class="secondary-button" onclick="cfaPageIndex_('+(u.page+1)+')"'+((u.page+1)*100>=u.total?' disabled':'')+'>次へ</button></div>')+
+  '</section><section class="card cfa-panel"><h2>銀行口座別の月末残高を照合する</h2><p>銀行のWebページで月内すべての明細を確認し、末尾残高を入力してください。未照合の月は確定実績として採用されません。銀行別の明細合計は自社口座間振替を含みますが、会社全体の収支からは除外します。</p>'+
+  (reconciliation||'<p>登録済み銀行口座がありません。</p>')+'</section>'+cfaRulesPage_();
+}
+function cfaRulesPage_(){
+ const u=cfaUi,w=u.workspace||{},options=[['ANY','入金・出金'],['IN','入金だけ'],['OUT','出金だけ']];
+ const items=(w.rules||[]).map(r=>'<tr><td>'+cfaEsc_(r.keyword)+'</td><td>'+cfaEsc_(r.category)+'</td><td>'+cfaEsc_(r.tags||'—')+'</td><td>'+r.priority+'</td><td>'+(r.active?'有効':'無効')+'</td>'+
+  '<td><button class="secondary-button" data-id="'+cfaEsc_(r.id)+'" onclick="cfaRuleNew_(this.dataset.id)">編集</button></td></tr>').join('');
+ const d=u.ruleDraft;
+ const form=d?'<div class="cfa-editor cfa-rule-form"><label>摘要に含まれる文字<input maxlength="80" value="'+cfaEsc_(d.keyword)+'" oninput="cfaRuleChange_(\'keyword\',this.value)" /></label>'+
+  '<label>入出金<select onchange="cfaRuleChange_(\'direction\',this.value)">'+options.map(o=>'<option value="'+o[0]+'"'+(d.direction===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label>'+
+  '<label>対象口座<select onchange="cfaRuleChange_(\'accountId\',this.value)"><option value="">すべての口座</option>'+
+   (w.accounts||[]).map(a=>'<option value="'+cfaEsc_(a.id)+'"'+(a.id===d.accountId?' selected':'')+'>'+cfaEsc_(a.bank+' '+a.name)+'</option>').join('')+'</select></label>'+
+  '<label>計上区分<input maxlength="60" value="'+cfaEsc_(d.category)+'" oninput="cfaRuleChange_(\'category\',this.value)" /></label>'+
+  '<label>タグ<input maxlength="250" value="'+cfaEsc_(d.tags)+'" oninput="cfaRuleChange_(\'tags\',this.value)" /></label>'+
+  '<label>優先度（1〜100）<input type="number" min="1" max="100" value="'+d.priority+'" oninput="cfaRuleChange_(\'priority\',this.value)" /></label>'+
+  '<label>有効<input type="checkbox"'+(d.active?' checked':'')+' onchange="cfaRuleChange_(\'active\',this.checked)" /></label>'+
+  '<button type="button" class="primary-button" onclick="cfaSaveRule_()"'+(u.busy?' disabled':'')+'>ルールを保存</button>'+
+  '<button type="button" class="secondary-button" onclick="cfaCancelDraft_(\'ruleDraft\')">閉じる</button></div>':'';
+ return '<section class="card cfa-panel"><div class="cfa-toolbar"><h2>自動分類ルール</h2><button class="primary-button" onclick="cfaRuleNew_()">＋ ルールを追加</button></div>'+
+  '<p>銀行摘要のキーワード、入出金、口座で自動判定します。優先度が高いルールを先に適用し、確定したメモは上書きしません。</p>'+form+
+  '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>キーワード</th><th>計上区分</th><th>タグ</th><th>優先度</th><th>状態</th><th>編集</th></tr></thead><tbody>'+
+  (items||'<tr><td colspan="6">まだルールがありません。</td></tr>')+'</tbody></table></div></section>';
+}
+function cfaScenarioEditor_(){
+ const u=cfaUi,d=u.scenarioDraft;if(!d)return '';
+ const months=u.workspace&&u.workspace.months||[],plans=(cfbUi.loaded&&cfbUi.loaded.plans||[]).filter(p=>p.active);
+ const types={SHIFT:'月をずらす',OMIT:'予定を除外',SCALE:'金額を変更',EXTRA:'臨時入出金'};
+ const conditions=d.changes.map((c,i)=>{
+  const selector='<select onchange="cfaScenarioField_('+i+',\'month\',this.value)">'+months.map(m=>'<option value="'+cfaEsc_(m)+'"'+(c.month===m?' selected':'')+'>'+cfaEsc_(m)+'</option>').join('')+'</select>';
+  const chooser=c.type==='EXTRA'?
+   '<select onchange="cfaScenarioField_('+i+',\'direction\',this.value)"><option value="OUT"'+(c.direction==='OUT'?' selected':'')+'>出金</option><option value="IN"'+(c.direction==='IN'?' selected':'')+'>入金</option></select>'+
+    '<input type="number" min="0" value="'+c.amount+'" aria-label="臨時金額" oninput="cfaScenarioField_('+i+',\'amount\',this.value)" />'+
+    '<input value="'+cfaEsc_(c.title)+'" maxlength="90" aria-label="臨時予定名" oninput="cfaScenarioField_('+i+',\'title\',this.value)" />':
+   '<select aria-label="対象の予定" onchange="cfaScenarioField_('+i+',\'planId\',this.value)">'+plans.map(p=>'<option value="'+cfaEsc_(p.id)+'"'+(c.planId===p.id?' selected':'')+'>'+cfaEsc_(p.title)+'</option>').join('')+'</select>'+
+   (c.type==='SHIFT'?'<input type="number" min="-6" max="6" value="'+c.monthsDelta+'" aria-label="移動月数" oninput="cfaScenarioField_('+i+',\'monthsDelta\',this.value)" />':
+    c.type==='SCALE'?'<input type="number" min="0" max="200" value="'+c.percent+'" aria-label="変更後の割合（％）" oninput="cfaScenarioField_('+i+',\'percent\',this.value)" />':'');
+  return '<div class="cfa-condition"><strong>'+(i+1)+'. '+types[c.type]+'</strong>'+selector+chooser+
+   '<button class="secondary-button" onclick="cfaScenarioRemove_('+i+')">削除</button></div>';
+ }).join('');
+ return '<section class="card cfa-panel"><h2>シミュレーション条件を編集</h2><div class="cfa-editor">'+
+  '<label>条件の名前<input maxlength="100" value="'+cfaEsc_(d.name)+'" oninput="cfaScenarioName_(this.value)" /></label>'+
+  '<div class="cfa-condition-actions"><button class="secondary-button" onclick="cfaScenarioAdd_(\'SHIFT\')">入金・出金を遅らせる</button>'+
+  '<button class="secondary-button" onclick="cfaScenarioAdd_(\'OMIT\')">契約不成立・予定除外</button>'+
+  '<button class="secondary-button" onclick="cfaScenarioAdd_(\'SCALE\')">予定額を変更</button>'+
+  '<button class="secondary-button" onclick="cfaScenarioAdd_(\'EXTRA\')">臨時入出金</button></div>'+
+  (conditions||'<p>条件を追加してください。条件がない場合は通常計画と同じ結果です。</p>')+
+  '<button class="primary-button" onclick="cfaScenarioSave_()"'+(u.busy?' disabled':'')+'>条件を保存</button>'+
+  '<button class="secondary-button" onclick="cfaCancelDraft_(\'scenarioDraft\')">閉じる</button></div></section>';
+}
+function cfaScenarioControls_(){
+ const u=cfaUi,w=u.workspace||{};
+ const options='<option value="">通常計画（ベースライン）</option>'+(w.scenarios||[]).map(x=>
+  '<option value="'+cfaEsc_(x.id)+'"'+(u.scenarioId===x.id?' selected':'')+'>'+cfaEsc_(x.name)+'</option>').join('');
+ return '<div class="cfa-toolbar"><label>比較する条件 <select onchange="cfaScenarioSelect_(this.value)">'+options+'</select></label>'+
+  '<button class="primary-button" onclick="cfaScenarioNew_()">＋ シミュレーションを作る</button>'+
+  (u.scenarioId?'<button class="secondary-button" data-id="'+cfaEsc_(u.scenarioId)+'" onclick="cfaScenarioNew_(this.dataset.id)">この条件を編集</button>':'')+'</div>';
+}
+function cfaForecastTable_(){
+ const p=cfaUi.projection;if(!p||p.setupRequired)return '<p role="status">資金繰り予測を取得中です。</p>';
+ const rows=(p.rows||[]).map(r=>'<tr><th>'+cfaEsc_(r.month)+'</th>'+
+  '<td class="cf-num">'+cfaMoney_(r.plannedIn)+'</td><td class="cf-num">'+cfaMoney_(r.plannedOut)+'</td>'+
+  '<td class="cf-num">'+cfaMoney_(r.actualIn)+'</td><td class="cf-num">'+cfaMoney_(r.actualOut)+'</td>'+
+  '<td class="cf-num">'+cfaMoney_(r.forecastEnd)+'</td><td class="cf-num">'+cfaMoney_(r.difference)+'</td>'+
+  '<td>'+cfaEsc_(r.source)+'</td></tr>').join('');
+ return '<div class="cfa-summary"><div><span>11月末予測残高</span><strong>'+cfaMoney_(p.yearEnd)+'</strong></div>'+
+  '<div><span>年間予定入金</span><strong>'+cfaMoney_(p.plannedIn)+'</strong></div>'+
+  '<div><span>年間予定出金</span><strong>'+cfaMoney_(p.plannedOut)+'</strong></div>'+
+  '<div><span>注意が必要な最初の月</span><strong>'+(p.firstShort?cfaEsc_(p.firstShort):'—')+'</strong></div></div>'+
+  (p.warnings&&p.warnings.length?'<div class="cfa-warning" role="alert"><strong>要確認の項目</strong><ul>'+p.warnings.map(x=>'<li>'+cfaEsc_(x)+'</li>').join('')+'</ul></div>':'')+
+  '<div class="cf-scroll"><table class="cf-table"><thead><tr><th>月</th><th>予定入金</th><th>予定出金</th><th>取込入金</th><th>取込出金</th><th>見込み残高</th><th>通常との差</th><th>根拠</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function cfaScenariosPage_(){
+ return '<section class="card cfa-panel"><h2>条件別の資金繰りを比較する</h2><p>元の計画・銀行明細には手を加えません。入金遅延、契約不成立、設備投資などを条件として保存します。</p>'+
+  cfaScenarioControls_()+cfaForecastTable_()+'</section>'+cfaScenarioEditor_();
+}
+function cfaReportsPage_(){
+ const u=cfaUi,p=u.projection;
+ return '<section class="card cfa-panel"><h2>金融機関・税理士に提出する資金繰り表</h2>'+
+  '<p>2026年11月期など、前年12月から11月までの年間表を作成します。提出する前に実績確定月・銀行残高・未分類明細を確認してください。</p>'+
+  cfaScenarioControls_()+cfaForecastTable_()+
+  '<div class="cfa-export"><p>帳票には「予定／確定実績」の区別、比較条件、月別残高、銀行月次照合、明細分類を付けます。未照合や未入力がある場合、帳票に要確認と表示されます。</p>'+
+  '<button class="primary-button" onclick="cfaDownloadReport_(\'XLSX\')"'+(u.exporting||!p||p.setupRequired?' disabled':'')+'>年間資金繰りをExcel出力</button>'+
+  '<button class="secondary-button" onclick="cfaDownloadReport_(\'PDF\')"'+(u.exporting||!p||p.setupRequired?' disabled':'')+'>年間資金繰りをPDF出力</button>'+
+  (u.exporting?'<span role="status">帳票を作成中です...</span>':'')+'</div>'+
+  '<div class="cfa-export"><h3>税理士向け｜銀行取引の説明一覧</h3><p>入出金明細・分類・タグ・説明状態を出力します。銀行原本・帳簿は変更せず、外部へ自動送信しません。税理士による確認済みを意味しません。</p>'+
+  '<label><input type="checkbox" onchange="cfaUi.taxIncludeMemo=this.checked"'+(u.taxIncludeMemo?' checked':'')+'>個別メモを含める（初期状態は非表示）</label>'+
+  '<button class="secondary-button" onclick="cfaDownloadTaxCsv_()"'+(u.exporting?' disabled':'')+'>取引説明をCSV出力</button></div></section>';
+}
+function cfaPage_(){
+ if(cfaUi.year!==cashFlowUi.year)cfaEnsureYear_();
+ const u=cfaUi;if(cfbUi.demo)return '<section class="card cfa-panel"><h2>資金管理</h2><p>架空データ表示では本番用の分類・照合や帳票を保存できません。実データへ戻ってください。</p></section>';
+ if(!u.workspace){
+  if(u.error)return '<section class="card cfa-panel"><p class="finance-error" role="alert">'+cfaEsc_(u.error)+'</p><button class="secondary-button" type="button" onclick="cfaLoad_(true)">接続を再試行</button></section>';
+  if(!u.loading)cfaLoad_(false);return '<section class="card cfa-panel">明細・分類ルール・照合を読み込み中です。</section>';}
+ if(u.workspace.setupRequired)return '<section class="card cfa-panel"><h2>初回設定が必要です</h2><p>個別メモ・分類ルール・銀行照合を保存するため、管理者によるバックアップ付きDB更新が必要です。</p>'+
+  '<button class="primary-button" onclick="cfbSetup_()">バックアップして初期設定する</button></section>';
+ const feedback=(u.error?'<p class="finance-error" role="alert">'+cfaEsc_(u.error)+'</p><button class="secondary-button" type="button" onclick="cfaLoad_(true)">接続を再試行</button>':'')+
+  (u.notice?'<p class="cf-success" role="status">'+cfaEsc_(u.notice)+'</p>':'');
+ return '<div class="cfa-workspace">'+feedback+'<fieldset class="cfa-controls"'+(u.busy?' disabled':'')+'>'+
+  (cfbUi.tab==='analysis'?cfaAnalysisPage_():cfbUi.tab==='scenarios'?cfaScenariosPage_():cfaReportsPage_())+
+  '</fieldset></div>';
+}
+</script>

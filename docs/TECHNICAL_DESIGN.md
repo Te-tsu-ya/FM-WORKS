@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-対象：v0.26.3 / 更新：2026-10-18
+対象：v0.0.0 / 更新：2026-10-18
 
 ## 1. 実行構成
 
@@ -20,7 +20,9 @@
 | マイグレーション | `drizzle/` | 適用順とスキーマ履歴。Sites標準ビルドが成果物へ収録 |
 | 生成 | `scripts/prepare-app.mjs`、`seed-builder.mjs` | 業務関数・HTML・文書・初期データの組立て |
 
-`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
+`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。公開APIと現行業務から参照されないGAS認証・帳票生成・バックアップ・移行処理は削除し、未対応APIは引き続き501で拒否する。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
+
+業務はcore・people・attendance・projects・quotes・documents・finance・cashflow・cashflow-analysis・office・notificationsの11単位。UIは機能別の12ファイルへ統合し、組込み順を維持する。小さな改修ごとの追加ファイルを作らず、該当領域を編集する。
 
 ## 2. 生成と正本
 
@@ -29,7 +31,8 @@
 | `src/ui/`, `src/domain/`, `src/browser/`, `src/server/` | 編集するソース |
 | `docs/REQUIREMENTS.md`, `TECHNICAL_DESIGN.md`, `RULES.md` | 仕様・ルール。別の進捗文書を作らない |
 | `db/seeds/fixtures.json`＋生成スクリプト | 架空レコードの編集元 |
-| `db/schema.ts`, `db/table-mapping.json` | 現行列定義を生成してGit管理。マイグレーションと整合させる |
+| `db/schema.ts` | 現行列定義を生成してGit管理。マイグレーションと整合させる |
+| `db/table-mapping.json` | 業務名とSQL列の確認用投影。自動生成・Git対象外 |
 | `src/generated/` | engine、shell、schema-meta、API契約。自動生成・Git対象外 |
 | `db/seeds/workspace.json` | 初期データの確認用投影。自動生成・Git対象外 |
 | `dist/`とツール実行状態 | ビルド成果物・一時状態。Git対象外 |
@@ -64,7 +67,7 @@
 
 `POST /api/rpc/:method`へ`{"args":[...]}`をJSONで送る。応答は`{"result":...}`、失敗は`{"error":"理由"}`。`FMApi.run`が成功・失敗コールバックへ渡す。同一Sitesへcookieを同送する。
 
-業務公開メソッドは生成した`src/generated/api-contract.json`に列挙する。末尾`_`の内部関数は公開しない。ログイン・ログアウト・復帰・公開ログイン設定はAPI側で扱う。Google依存の発行・添付・バックアップ等は拒否する。外部サービスへ到達した場合も実行補助層が拒否する。
+業務公開メソッドは生成した`src/generated/api-contract.json`に列挙し、実行前に生成済み`apiMethods`と照合する。末尾`_`の内部関数は公開しない。ログイン・ログアウト・復帰・公開ログイン設定はAPI側で扱う。Google依存の発行・添付・バックアップ等は拒否する。外部サービスへ到達した場合も実行補助層が拒否する。
 
 | HTTP | 現行APIでの意味 |
 |---|---|
@@ -84,7 +87,7 @@ Sitesの入場制限を第一の境界とする。アプリ内で乱数トーク
 
 ブラウザー側はRPC引数用の同じトークンをlocalStorageまたはsessionStorageへ保持するため、HttpOnly cookieだけの認証ではない。テーマ・文字サイズ・選択担当者もブラウザーへ保持する。業務レコードは保持しない。
 
-認証済み訪問者IDが渡された場合はセッションと関連付ける。所有者限定Siteのサービスアクセスは訪問者IDを持たないため開発用共有境界とする。APIはcookie・送信トークン・期限・現在の社員状態を確認し、業務関数が権限を検証する。
+認証済み訪問者IDが渡された場合はセッションと関連付ける。所有者限定Siteのサービスアクセスは訪問者IDを持たないため開発用共有境界とする。APIは全表取得前にcookie・送信トークン・期限を確認し、社員状態・業務権限は業務実行前に検証する。ログアウトはセッション表だけを更新する。
 
 架空担当者選択は本人認証ではない。公開範囲拡大や実データ利用前に、本人紐付け・トークン保持・失効・監査を見直す。
 

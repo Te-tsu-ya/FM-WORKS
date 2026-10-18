@@ -1,0 +1,1435 @@
+<script>
+/* FM WORKS v0.14.0 - quotations for every authenticated employee.
+   All client calculations are previews; all amounts/permissions are validated on server. */
+const QUOTE_UI_TTL=300000;
+let quoteUi={data:null,at:0,identity:'',loading:false,refreshNeeded:false,busy:false,error:'',
+  mode:'list',id:'',editor:null,search:'',filter:'all',details:null,dirty:false,key:''};
+function quoteIdentity_(){
+  return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+}
+function resetQuoteUi(){
+  quoteUi={data:null,at:0,identity:'',loading:false,refreshNeeded:false,busy:false,error:'',
+    mode:'list',id:'',editor:null,search:'',filter:'all',details:null,dirty:false,key:''};
+  if(typeof resetDocumentUi==='function')resetDocumentUi();
+}
+function quoteNewKey_(){
+  return 'Q-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15);
+}
+function loadQuoteWorkspace(options={}){
+  if(!state.sessionToken||!state.data)return;
+  const ui=quoteUi,identity=quoteIdentity_();
+  if(!options.force&&quoteUi.data&&quoteUi.identity===identity&&Date.now()-quoteUi.at<QUOTE_UI_TTL)return;
+  if(quoteUi.loading){
+    if(options.force)quoteUi.refreshNeeded=true;
+    return;
+  }
+  quoteUi.loading=true;quoteUi.error='';quoteUi.identity=identity;
+  if(!options.silent&&state.page==='quotes')renderPageIfActive('quotes');
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    quoteUi.loading=false;
+    // Do not render an older snapshot after a save or forced refresh.
+    if(quoteUi.refreshNeeded){
+      quoteUi.refreshNeeded=false;
+      loadQuoteWorkspace({force:true,silent:true});
+      return;
+    }
+    if(!data||!Array.isArray(data.vendors)||!Array.isArray(data.quotes)||!Array.isArray(data.relatedDocs)){
+      quoteUi.error='見積・書類一覧の応答を確認できませんでした。もう一度更新してください。';
+      quoteRenderWorkspace_();renderPageIfActive('documentHistory');
+      if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
+      return;
+    }
+    quoteUi.data=data;quoteUi.at=Date.now();quoteUi.error='';
+    if(typeof documentReconcileList_==='function')documentReconcileList_();
+    if(quoteUi.pendingVendorCode&&quoteUi.editor&&data.vendors.some(v=>v.code===quoteUi.pendingVendorCode)){
+      quoteUi.editor.vendorCode=quoteUi.pendingVendorCode;quoteUi.dirty=true;quoteUi.pendingVendorCode='';
+    }
+    quoteRenderWorkspace_();renderPageIfActive('documentHistory');
+    if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_()||quoteUi.identity!==identity)return;
+    quoteUi.loading=false;
+    if(quoteUi.refreshNeeded){
+      quoteUi.refreshNeeded=false;
+      loadQuoteWorkspace({force:true,silent:true});
+      return;
+    }
+    quoteUi.error=cleanApiErrorMessage(error,'見積一覧を読み込めませんでした。');
+    quoteRenderWorkspace_();renderPageIfActive('documentHistory');
+    if(state.page==='admin'&&state.adminTab==='quotes')renderPageIfActive('admin');
+  }).getQuoteWorkspace(state.sessionToken);
+}
+function quoteRenderWorkspace_(){
+  if(state.page==='quotes'&&quoteUi.mode==='edit'&&quoteUi.dirty){quoteUpdateIssueButton_();quotePaintSaveStatus_();return;}
+  renderPageIfActive('quotes');
+}
+function quoteSetupStorage_(){
+  if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card small' role='dialog' aria-modal='true' aria-label='見積機能のDB初期化確認'>"+
+    "<div class='modal-head'><h2>見積書のデータ保存先を準備します</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>FM WORKSのデータベースをバックアップした後、見積管理に必要なシートを追加します。"+
+    "既存の勤怠・工数・申請データは変更しません。バックアップできない場合は処理を中断します。</p>"+
+    "<div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button>"+
+    "<button type='button' class='primary-button' onclick='quoteConfirmSetupStorage_()'>バックアップして初期化</button></div></section>";
+}
+function quoteConfirmSetupStorage_(){
+  if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
+  closeModal();quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;showToast('見積書の保存先を準備しました');
+    loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'DB初期化に失敗しました');
+    renderPageIfActive('quotes');
+  }).migrateDatabaseToCurrent(state.sessionToken);
+}
+function quoteQuickVendorDialog_(){
+  if(!quoteUi.data||!quoteUi.data.canConfigure){showToast('取引先の新規登録は管理者に依頼してください。');return;}
+  if(quoteUi.busy)return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card doc-modal' role='dialog' aria-modal='true' aria-label='取引先とベンダーコードを登録'>"+
+    "<div class='modal-head'><div><h2>取引先をその場で登録</h2><p>登録すると入力画面に自動で反映されます。</p></div>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<div class='doc-modal-fields'>"+
+    "<label class='doc-modal-field'>取引先名<input id='quoteQuickVendorName' maxlength='140' placeholder='株式会社サンプル' required></label>"+
+    "<label class='doc-modal-field'>ベンダーコード<input id='quoteQuickVendorCode' maxlength='7' placeholder='FI-0001' required></label>"+
+    "<label class='doc-modal-field'>適格請求書登録番号（任意）<input id='quoteQuickVendorInvoice' maxlength='24'></label>"+
+    "<label class='doc-modal-field'>所在地（任意）<input id='quoteQuickVendorAddress' maxlength='220'></label></div>"+
+    "<p class='doc-modal-note'>ベンダーコードとインボイス登録番号は別の項目です。既存の見積採番末尾を管理者が確認するまで正式発行はできません。</p>"+
+    "<div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button>"+
+    "<button type='button' class='primary-button' onclick='quoteAddSingleVendor_()'>登録して入力に戻る</button></div></section>";
+}
+function quoteAddSingleVendor_(){
+  if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
+  const get=id=>String(document.getElementById(id)&&document.getElementById(id).value||'').trim();
+  const vendor={name:get('quoteQuickVendorName'),code:get('quoteQuickVendorCode').toUpperCase(),
+    invoice:get('quoteQuickVendorInvoice'),address:get('quoteQuickVendorAddress'),industry:''};
+  if(!vendor.name||!/^[A-Z]{2}-\d{4}$/.test(vendor.code)){
+    showToast('取引先名と、形式「FI-0001」のコードを入力してください');return;
+  }
+  quoteUi.busy=true;quoteUi.pendingVendorCode=vendor.code;
+  closeModal();
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;showToast('取引先を登録しました。採番を確認すると正式発行できます');
+    loadQuoteWorkspace({force:true,silent:true});
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');
+    renderPageIfActive('quotes');
+  }).importQuoteVendors(state.sessionToken,[vendor]);
+}
+
+function quoteVendor_(){
+  const data=quoteUi.data;
+  if(!data||!quoteUi.editor)return null;
+  return (data.vendors||[]).find(x=>x.code===quoteUi.editor.vendorCode)||null;
+}
+function quoteFormValue_(value){return escapeHtml(String(value==null?'':value));}
+function quoteEmptyEditor_(){
+  const today=state.data&&state.data.today||new Date().toISOString().slice(0,10);
+  return {id:'',revision:0,vendorCode:'',quoteDate:today,subject:'',delivery:'ご相談',
+    payment:'銀行振込',expires:'見積日から1か月',contact:(state.data&&state.data.user&&(state.data.user.fullName||state.data.user.displayName))||'',
+    bank:'',note:'',taxRate:10,lines:[{description:'',quantity:1,unit:'式',price:0,noteOnly:false}]};
+}
+function quoteNew(){
+  if(quoteUi.busy)return;
+  if(quoteUi.editor&&quoteUi.dirty){quoteUi.mode='edit';renderPageIfActive('quotes');showToast('入力途中の見積を再開しました');return;}
+  if(!quoteUi.data||quoteUi.data.setupRequired){
+    showToast('取引先マスタまたはDBの初期設定が必要です。');return;
+  }
+  quoteUi.editor=quoteEmptyEditor_();quoteUi.mode='edit';quoteUi.id='';quoteUi.dirty=true;
+  quoteUi.key=quoteNewKey_();renderPageIfActive('quotes');
+}
+function quoteBack(){
+  if(quoteUi.busy)return;
+  if(quoteUi.mode==='edit'&&quoteUi.dirty){quoteConfirmDiscard();return;}
+  quoteUi.mode='list';quoteUi.editor=null;quoteUi.dirty=false;quoteUi.id='';quoteUi.details=null;
+  renderPageIfActive('quotes');
+}
+function quoteOpen(id){
+  if(quoteUi.busy||!state.sessionToken)return;
+  if(quoteUi.editor&&quoteUi.dirty){
+    quoteUi.mode='edit';renderPageIfActive('quotes');
+    showToast('入力途中の見積を保存するか、取消してから別の見積を開いてください。');return;
+  }
+  quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;
+    quoteUi.id=String(id);quoteUi.details=result;quoteUi.editor=Object.assign({},result.header,{lines:result.lines});
+    quoteUi.mode=['下書き','保存処理中'].includes(result.header.status)?'edit':'detail';
+    quoteUi.key=quoteNewKey_();quoteUi.dirty=false;renderPageIfActive('quotes');
+  }).withFailureHandler(err=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(err,'見積を開けませんでした。');renderPageIfActive('quotes');
+  }).getQuote(state.sessionToken,id);
+}
+function quoteConfirmDiscard(){
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='下書きの変更を破棄'>"+
+    "<div class='modal-head'><h2>変更内容を破棄しますか？</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>保存していない見積の変更は消えます。</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' onclick='quoteDiscard()'>破棄して一覧へ</button></div></section>";
+}
+function quoteDiscard(){
+  closeModal();quoteUi.dirty=false;quoteBack();
+}
+function quoteUpdateField(name,value){
+  if(!quoteUi.editor||quoteUi.busy)return;
+  if(!['vendorCode','quoteDate','subject','delivery','payment','expires','contact','bank','note'].includes(name))return;
+  quoteUi.editor[name]=String(value);quoteUi.dirty=true;quoteUpdateIssueButton_();quotePaintSaveStatus_();
+  if(name==='vendorCode'){
+    const vendor=quoteVendor_(),node=document.getElementById('quoteVendorPreview');
+    if(node)node.textContent=vendor?('ベンダー：'+vendor.code+' ／ '+vendor.name+
+      (vendor.invoice?' ／ 登録番号 '+vendor.invoice:'')):'取引先を選択してください。';
+    quoteUpdateIssueButton_();
+  }
+  quoteRefreshPreview_();
+}
+function quoteUpdateLine(index,name,value){
+  const row=quoteUi.editor&&quoteUi.editor.lines[index];
+  if(!row||quoteUi.busy)return;
+  if(!['description','quantity','unit','price','noteOnly'].includes(name))return;
+  row[name]=name==='noteOnly'?!!value:String(value);
+  quoteUi.dirty=true;
+  quotePaintSaveStatus_();quotePaintTotals_();
+  quoteUpdateIssueButton_();
+  quoteRefreshPreview_();
+}
+function quoteTogglePreview_(){
+  quoteUi.previewVisible=!quoteUi.previewVisible;renderPageIfActive('quotes');
+}
+function quoteFilterVendors_(value){
+  const select=document.getElementById('quoteVendorSelect');if(!select)return;
+  const query=String(value||'').trim().toLocaleLowerCase('ja-JP');
+  Array.from(select.options).forEach(option=>{option.hidden=!!option.value&&option.value!==select.value&&!option.textContent.toLocaleLowerCase('ja-JP').includes(query)});
+}
+function quotePasteDialog_(){
+  if(quoteUi.busy||!quoteUi.editor)return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card' role='dialog' aria-modal='true' aria-label='Excelから見積明細を追加'><div class='modal-head'><h2>Excelから明細を追加</h2><button type='button' class='icon-button' aria-label='閉じる' onclick='closeModal()'>×</button></div><p>Excelの「品名・数量・単位・単価」の4列をコピーして貼り付けてください。見出し行は含めず、現在の明細に追加します。</p><label class='qb-field'><span>明細（4列）</span><textarea id='quotePasteText' rows='7' placeholder='例：ホームページ保守　1　式　30,000'></textarea></label><p id='quotePasteError' role='alert'></p><div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button><button type='button' class='primary-button' onclick='quoteApplyPaste_()'>明細に追加</button></div></section>";
+}
+function quoteParsePaste_(text){
+  return String(text||'').trim().split(/\r?\n/).filter(line=>line.trim()).map((line,index)=>{
+    const cells=line.split('\t').map(x=>x.trim());
+    if(cells.length!==4||!cells[0])throw Error((index+1)+'行目：品名・数量・単位・単価の4列にしてください');
+    const number=value=>Number(value.replace(/[,￥¥]/g,''));
+    const quantity=number(cells[1]),price=number(cells[3]);
+    if(!cells[1]||!cells[3]||!Number.isFinite(quantity)||quantity<=0||quantity>100000||!Number.isFinite(price)||!Number.isInteger(price)||Math.abs(price)>9999999999)
+      throw Error((index+1)+'行目：数量と単価を数値で確認してください');
+    if(cells[0].length>240||cells[2].length>20)throw Error((index+1)+'行目：品名または単位が長すぎます');
+    return {description:cells[0],quantity:quantity,unit:cells[2]||'式',price:price,noteOnly:false};
+  });
+}
+function quoteApplyPaste_(){
+  if(quoteUi.busy||!quoteUi.editor)return;
+  try{
+    const rows=quoteParsePaste_(document.getElementById('quotePasteText').value);
+    const current=quoteUi.editor.lines||[];
+    const existing=current.filter(row=>String(row.description||'').trim()||Number(row.price)!==0||Number(row.quantity)!==1||row.noteOnly);
+    if(!rows.length)throw Error('明細を貼り付けてください');
+    if(existing.length+rows.length>21)throw Error('追加後の明細は21行以内にしてください');
+    quoteUi.editor.lines=existing.concat(rows);quoteUi.dirty=true;closeModal();renderPageIfActive('quotes');
+    showToast(rows.length+'行を追加しました');
+  }catch(error){const target=document.getElementById('quotePasteError');if(target)target.textContent=error.message;}
+}
+function quoteAddLine(){
+  if(!quoteUi.editor||quoteUi.busy||quoteUi.editor.lines.length>=21)return;
+  quoteUi.editor.lines.push({description:'',quantity:1,unit:'式',price:0,noteOnly:false});
+  quoteUi.dirty=true;renderPageIfActive('quotes');
+}
+function quoteRemoveLine(index){
+  if(!quoteUi.editor||quoteUi.busy||quoteUi.editor.lines.length<=1)return;
+  quoteUi.editor.lines.splice(index,1);quoteUi.dirty=true;renderPageIfActive('quotes');
+}
+function quoteDuplicateLine(index){
+  if(!quoteUi.editor||quoteUi.busy||quoteUi.editor.lines.length>=21)return;
+  const row=quoteUi.editor.lines[index];if(!row)return;
+  quoteUi.editor.lines.splice(index+1,0,Object.assign({},row));
+  quoteUi.dirty=true;renderPageIfActive('quotes');
+}
+function quoteMoveLine(index,offset){
+  if(!quoteUi.editor||quoteUi.busy)return;
+  const next=index+offset,rows=quoteUi.editor.lines;
+  if(next<0||next>=rows.length)return;
+  [rows[index],rows[next]]=[rows[next],rows[index]];
+  quoteUi.dirty=true;renderPageIfActive('quotes');
+}
+function quoteTotals_(lines){
+  let subtotal=0;
+  (lines||[]).forEach(row=>{
+    if(row.noteOnly||!row.description)return;
+    const qty=Number(row.quantity),price=Number(String(row.price).replace(/,/g,''));
+    if(Number.isFinite(qty)&&Number.isFinite(price))subtotal+=Math.round(qty*price);
+  });
+  const tax=Math.round(subtotal*0.1);
+  return {subtotal,tax,total:subtotal+tax};
+}
+function quotePaintTotals_(){
+  const d=quoteTotals_(quoteUi.editor&&quoteUi.editor.lines);
+  [['quoteSubtotal',d.subtotal],['quoteTax',d.tax],['quoteTotal',d.total],['quoteSideSubtotal',d.subtotal],['quoteSideTax',d.tax],['quoteSideTotal',d.total]].forEach(([id,val])=>{
+    const el=document.getElementById(id);if(el)el.textContent=financeYen(val);
+  });
+  (quoteUi.editor&&quoteUi.editor.lines||[]).forEach((row,i)=>{
+    const el=document.getElementById('quoteLineTotal'+i);
+    if(el){
+      const n=Number(row.quantity),p=Number(String(row.price).replace(/,/g,''));
+      el.textContent=row.noteOnly?'—':financeYen(n*p);
+    }
+  });
+}
+function quotePaintSaveStatus_(){
+  const node=document.getElementById('quoteSaveStatus');if(node)node.textContent=quoteUi.dirty?'● 未保存の変更あり':'✓ 保存済みの下書き';
+}
+function quoteUpdateIssueButton_(){
+  const button=document.getElementById('quoteIssueButton');
+  if(button)button.disabled=quoteUi.busy||quoteUi.dirty||!quoteUi.editor||quoteUi.editor.status==='保存処理中'||!quoteUi.editor.id||
+      !quoteUi.data||(quoteUi.data.sequencesReady||[]).indexOf(quoteUi.editor.vendorCode)===-1;
+}
+function quoteEditorPayload_(){
+  const obj=Object.assign({},quoteUi.editor);
+  obj.requestKey=quoteUi.key;
+  obj.lines=(quoteUi.editor.lines||[]).filter(row=>String(row.description||'').trim()).map(row=>({
+    description:row.description,quantity:row.quantity,unit:row.unit,price:row.price,noteOnly:!!row.noteOnly
+  }));
+  return obj;
+}
+function quoteSaveDraft(){
+  if(quoteUi.busy||!quoteUi.editor)return;
+  const incomplete=(quoteUi.editor.lines||[]).find(row=>!String(row.description||'').trim()&&
+    (Number(row.price)!==0||Number(row.quantity)!==1||row.noteOnly));
+  if(incomplete){showToast('金額・数量を入力した行には品名・内容も入力してください');return;}
+  const obj=quoteEditorPayload_();
+  if(!obj.vendorCode){showToast('取引先を選択してください');return;}
+  if(!obj.lines.length){showToast('明細を1行以上入力してください');return;}
+  quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.editor.id=result.id;quoteUi.editor.revision=result.revision;quoteUi.editor.status=result.status;
+    quoteUi.id=result.id;quoteUi.dirty=false;quoteUi.key=quoteNewKey_();
+    showToast(result.auditRecorded===false?'下書きは保存しましたが、監査記録を確認できません。管理者へ連絡してください。':result.duplicate?'保存済みの内容です':'下書きを保存しました');
+    loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'下書きを保存できませんでした');
+    renderPageIfActive('quotes');
+  }).saveQuoteDraft(state.sessionToken,obj);
+}
+function quoteIssue(){
+  const e=quoteUi.editor;
+  if(!e||!e.id||e.status==='保存処理中'||quoteUi.busy||quoteUi.dirty){showToast('保存済みの下書きから発行してください。');return;}
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='見積書の正式発行確認'>"+
+    "<div class='modal-head'><h2>見積書を正式発行しますか？</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>発行後は内容を変更できません。見積番号を確定し、PDFとExcelを生成します。</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' onclick='quotePerformIssue()'>正式発行する</button></div></section>";
+}
+function quotePerformIssue(){
+  const e=quoteUi.editor;
+  if(!e||!e.id||e.status==='保存処理中'||quoteUi.busy||quoteUi.dirty)return;
+  closeModal();
+  quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.mode='detail';showToast('見積書 '+result.number+' を正式発行しました');
+    quoteUi.editor.status='発行済';quoteUi.editor.number=result.number;
+    loadQuoteWorkspace({force:true,silent:true});
+    quoteOpen(result.id);
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'正式発行に失敗しました');
+    loadQuoteWorkspace({force:true,silent:true});renderPageIfActive('quotes');
+  }).issueQuote(state.sessionToken,e.id,e.revision);
+}
+function quoteDownload(format){
+  if(quoteUi.busy||quoteUi.mode!=='detail'||!quoteUi.id)return;
+  quoteUi.busy=true;quoteUi.error='';renderPageIfActive('quotes');
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;
+    try{
+      const decoded=atob(data.base64),bytes=new Uint8Array(decoded.length);
+      for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([bytes],{type:data.mimeType}));
+      const a=document.createElement('a');a.href=url;a.download=data.name;
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      showToast(data.name+' をダウンロードしました');
+    }catch(e){quoteUi.error='ファイルの保存に失敗しました。もう一度お試しください。';}
+    renderPageIfActive('quotes');
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'ファイルを取得できませんでした');
+    renderPageIfActive('quotes');
+  }).getQuoteDocument(state.sessionToken,quoteUi.id,format);
+}
+function quoteList_(){
+  const rows=quoteUi.data&&quoteUi.data.quotes||[];
+  const keyword=String(quoteUi.search||'').trim().toLocaleLowerCase('ja-JP');
+  const filtered=rows.filter(x=>{
+    if(quoteUi.filter==='draft'&&!['下書き','保存処理中'].includes(x.status))return false;
+    if(quoteUi.filter==='issued'&&x.status!=='発行済')return false;
+    if(quoteUi.filter==='processing'&&!['発行処理中','出力失敗'].includes(x.status))return false;
+    return !keyword||[x.number,x.vendorName,x.subject,x.ownerName,x.status,x.id]
+      .join(' ').toLocaleLowerCase('ja-JP').includes(keyword);
+  });
+  return filtered;
+}
+function quoteSetFilter(filter){
+  if(!['all','draft','issued','processing'].includes(filter))return;
+  quoteUi.filter=filter;renderPageIfActive('quotes');
+}
+function quoteChangeSearch(value){
+  quoteUi.search=String(value||'').slice(0,150);
+  const el=document.getElementById('quoteListRecords');
+  const count=document.getElementById('quoteListCount');
+  if(el)el.innerHTML=quoteListRows_();
+  if(count)count.textContent=quoteList_().length+'件表示';
+}
+function quoteListRows_(){
+  const rows=quoteList_();
+  if(!rows.length)return "<div class='quote-empty'>該当する見積はありません。検索・状態を変更するか「新規見積」から作成できます。</div>";
+  return rows.map(q=>"<button type='button' class='quote-record' data-id='"+escapeHtml(q.id)+
+    "' onclick='quoteOpen(this.dataset.id)'><span><strong>"+escapeHtml(q.vendorName||'取引先未設定')+
+    "</strong><small>"+escapeHtml(q.number||'下書き・未採番')+" ／ "+escapeHtml(q.quoteDate)+
+    " ／ "+escapeHtml(q.ownerName)+"</small><small>"+escapeHtml(q.subject||'件名なし')+"</small></span>"+
+    "<span><span class='quote-status'>"+escapeHtml(q.status)+"</span><strong>"+
+    escapeHtml(financeYen(q.total))+"</strong></span></button>").join('');
+}
+function quoteStatusMetric_(label,value,description,icon,tone){
+  return "<div class='card v15-stat'><span class='v15-stat-symbol "+(tone||"")+"'>"+svg(icon)+"</span>"+
+    "<div class='v15-stat-content'><span class='v15-stat-title'>"+escapeHtml(label)+"</span>"+
+    "<strong class='v15-stat-value'>"+escapeHtml(String(value))+"</strong>"+
+    "<span class='v15-stat-caption'>"+escapeHtml(description)+"</span></div></div>";
+}
+function quoteRecentCard_(){
+  const rows=quoteUi.data&&quoteUi.data.quotes||[];
+  const issued=rows.filter(q=>q.status==='発行済').slice(0,5);
+  if(!issued.length)return "<div class='v15-empty'><strong>最近発行された見積はありません。</strong>正式に発行するとここへ表示されます。</div>";
+  return issued.map(q=>"<button type='button' class='office-activity-row' data-id='"+escapeHtml(q.id)+
+    "' onclick='quoteOpen(this.dataset.id)'>"+svg('i-doc')+
+    "<span><strong>"+escapeHtml(q.number||'番号未設定')+"</strong><small>"+escapeHtml(q.vendorName)+
+    " ／ "+escapeHtml(q.quoteDate)+"</small></span><strong>"+financeYen(q.total)+"</strong></button>").join('');
+}
+function documentEntryAction_(kind){
+  if(kind==='quote')return quoteNew();
+  navigate('documentHistory');
+  documentSetFilter('quote');
+}
+function quoteOverview_(){
+  const d=quoteUi.data,setup=d&&d.setupRequired,admin=d&&d.canConfigure;
+  const demoDrafts=(d&&d.quotes||[]).filter(x=>/^DEMO-QUOTE-/.test(String(x.id||''))&&x.status==='下書き');
+  const warning=setup?"<div class='doc-setup-note' role='alert'>見積書の保存先が未準備です。"+
+    (admin?" <button type='button' class='secondary-button' onclick='quoteSetupStorage_()'>バックアップして準備</button>":"管理者に連絡してください。")+"</div>":
+    d&&d.documentsSetupRequired?"<div class='doc-setup-note' role='status'>請求書・納品書・領収書の保存先を準備してください。"+
+      (admin?" <button type='button' class='secondary-button' onclick='quoteSetupStorage_()'>バックアップしてDB更新</button>":"管理者に更新を依頼してください。")+"</div>":"";
+  const cards=[
+    ['見積書','共通の入力フォームで見積を作成します。','i-doc','quote','quoteNew()','新しい見積を作る'],
+    ['請求書','発行済みの見積内容を引き継ぎます。','i-file','invoice',"navigate('documentHistory');documentSetFilter('quote')",'元の見積を選ぶ'],
+    ['納品書','見積明細から納品内容を引き継ぎます。','i-briefcase','delivery',"navigate('documentHistory');documentSetFilter('quote')",'元の見積を選ぶ'],
+    ['領収書','入金確認済みの見積から領収書を発行します。','i-file','receipt',"navigate('documentHistory');documentSetFilter('quote')",'元の見積を選ぶ']
+  ];
+  return "<div class='quote-layout doc-entry v15-workspace'>"+
+    "<header class='doc-page-header'><div><p class='v15-kicker'>FM WORKS / 書類作成</p><h1>書類を作成する</h1>"+
+    "<p>入力は1回。発行済みの見積を使って請求書・納品書・領収書を作成します。</p></div>"+
+    "<button type='button' class='secondary-button' onclick='navigate(\"documentHistory\")'>書類一覧・履歴を見る →</button></header>"+
+    (quoteUi.loading&&!d?"<div class='card quote-state' role='status'>書類情報を読み込んでいます…</div>":"")+
+    (quoteUi.error?"<div class='card quote-state' role='alert'>"+escapeHtml(quoteUi.error)+"</div>":"")+warning+
+    (demoDrafts.length?"<section class='card doc-demo-guide' aria-label='操作確認用デモデータ'>"+
+      "<div><strong>操作確認用のデモ見積が "+demoDrafts.length+" 件あります</strong>"+
+      "<p>架空のデータです。書類一覧で下書きを開き、編集・保存してから再読み込みで確認できます。</p></div>"+
+      "<button type='button' class='secondary-button' onclick='navigate("+
+      "\"documentHistory\""+
+      ");documentSetFilter("+ "\"quote\""+")'>デモ見積を開く →</button></section>":"")+
+    "<section class='card doc-entry-hero'><h2>何を作成しますか？</h2>"+
+    "<p>まずは見積書を作成します。請求書などを作る際は発行済みの見積を選ぶだけなので、明細を再入力する必要はありません。</p></section>"+
+    "<section class='doc-start-grid' aria-label='書類の作成方法'>"+
+    cards.map(([label,description,icon,kind,action,cta])=>"<button type='button' class='doc-start-card doc-start-"+kind+"' data-kind='"+kind+"' onclick='documentEntryAction_(this.dataset.kind)' "+
+      (!d||setup?'disabled':'')+">"+svg(icon)+"<strong>"+label+"</strong><span>"+description+"</span>"+
+      "<span class='doc-start-cta'>"+cta+" →</span></button>").join('')+"</section>"+
+    "<section class='card doc-entry-footer'><div><strong>取引先・ベンダーコード</strong><p>作成途中でもその場で登録できます。修正や一括管理は管理・設定から行います。</p></div>"+
+    (admin?"<button type='button' class='secondary-button' onclick='quoteQuickVendorDialog_()'>＋ 取引先を登録</button>":
+      "<small>取引先の追加は管理者に依頼してください。</small>")+"</section>"+
+    "<nav class='doc-workflow-note' aria-label='帳票発行の流れ'><span><b>1</b> 共通入力</span><span>→</span>"+
+    "<span><b>2</b> 見積発行</span><span>→</span><span><b>3</b> 請求・納品・領収へ変換</span><span>→</span>"+
+    "<span><b>4</b> 履歴へ保存</span></nav></div>";
+}
+function quoteAdminSetup_(){
+  const d=quoteUi.data;
+  return ["<section class='card quote-admin'><div class='v15-section-heading'><div class='v15-section-icon'>"+svg('i-doc')+"</div>"+
+    "<div><h2>取引先マスタ・見積番号</h2><p>管理者のみ操作できます。</p></div></div>",
+    "<div class='qb-vendor-quick-add'><h3>取引先を1社ずつ登録</h3><p>Excelが手元になくても登録できます。見積番号を重複させないため、既存発行番号の確認は別途必要です。</p>"+
+      "<div class='qb-vendor-add-fields'>"+
+      "<label>取引先名<input id='quoteQuickVendorName' placeholder='株式会社サンプル' maxlength='140'></label>"+
+      "<label>ベンダーコード<input id='quoteQuickVendorCode' placeholder='FI-0001' maxlength='7'></label>"+
+      "<label>インボイス登録番号<input id='quoteQuickVendorInvoice' placeholder='任意' maxlength='24'></label>"+
+      "<label>所在地<input id='quoteQuickVendorAddress' placeholder='任意' maxlength='220'></label></div>"+
+      "<button type='button' class='secondary-button' onclick='quoteAddSingleVendor_()'>＋ この取引先を登録</button></div>",
+    "<p>Excelの「ベンダーコード」A〜D列があれば、表をコピーしてまとめて登録することもできます（社名・ベンダーコード・インボイス番号・所在地）。</p>",
+    "<label>Excelからコピーした表<textarea id='quoteVendorPaste' rows='5' placeholder='社名　ベンダーコード　インボイス番号　所在地'></textarea></label>",
+    "<button type='button' class='secondary-button' onclick='quoteImportVendors()'>取引先を取り込む</button>",
+    "<p>既存発行済み見積と番号が重ならないよう、取引先ごとに過去の最大末尾番号を確認してください。例：FI-0001-0001 を発行済みなら「1」です。</p>",
+    "<div class='quote-sequence-grid'>",(d.vendors||[]).map(v=>
+      "<div><strong>"+escapeHtml(v.name)+"</strong><small>"+escapeHtml(v.code)+
+      ((d.sequencesReady||[]).includes(v.code)?' ／ 確認済':' ／ 未確認')+
+      "</small><label>過去の最大番号<input type='number' min='0' max='9998' value='' placeholder='例：1' data-seq='"+escapeHtml(v.code)+"'></label>"+
+      "<button type='button' class='secondary-button' data-code='"+escapeHtml(v.code)+
+      "' onclick='quoteConfirmSequence(this.dataset.code)'>採番を確認</button></div>").join(''),"</div></section>"].join('');
+}
+function quoteImportVendors(){
+  if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
+  const value=document.getElementById('quoteVendorPaste').value||'';
+  const lines=value.trim().split(/\r?\n/).map(x=>x.split('\t'));
+  const data=lines.filter(r=>r.length>=2&&/^[A-Z]{2}-\d{4}$/.test(String(r[1]||'').trim().toUpperCase()))
+    .map(r=>({name:r[0],code:r[1],invoice:r[2]||'',address:r[3]||'',industry:''}));
+  if(!data.length){showToast('ExcelのA〜D列を貼り付けてください');return;}
+  quoteUi.busy=true;
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;showToast(result.created+'件追加、'+result.updated+'件更新しました');
+    loadQuoteWorkspace({force:true});
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'取引先を登録できませんでした');renderPageIfActive('quotes');
+  }).importQuoteVendors(state.sessionToken,data);
+}
+function quoteConfirmSequence(code){
+  if(!quoteUi.data||!quoteUi.data.canConfigure||quoteUi.busy)return;
+  const input=[...document.querySelectorAll('[data-seq]')].find(x=>x.dataset.seq===code);
+  const raw=input&&input.value;
+  if(!/^\d{1,4}$/.test(String(raw||''))){showToast('過去の最大発行番号を入力してください');return;}
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card' role='dialog' aria-modal='true' aria-label='採番開始番号の確認'>"+
+    "<div class='modal-head'><h2>既存の最終番号を確認</h2>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<p>"+escapeHtml(code)+" の既存最大番号を "+escapeHtml(raw)+" として登録します。元Excelの発行済み番号を確認しましたか？</p>"+
+    "<div class='modal-actions'><button class='secondary-button' onclick='closeModal()'>戻る</button>"+
+    "<button class='primary-button' data-code='"+escapeHtml(code)+"' data-last='"+escapeHtml(raw)+
+    "' onclick='quoteCommitSequence(this.dataset.code,this.dataset.last)'>確認して保存</button></div></section>";
+}
+function quoteCommitSequence(code,raw){
+  if(quoteUi.busy)return;
+  closeModal();
+  quoteUi.busy=true;
+  const ui=quoteUi,identity=quoteIdentity_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;showToast('採番設定を保存しました');loadQuoteWorkspace({force:true});
+  }).withFailureHandler(error=>{
+    if(ui!==quoteUi||identity!==quoteIdentity_())return;
+    quoteUi.busy=false;quoteUi.error=cleanApiErrorMessage(error,'採番設定を保存できませんでした');renderPageIfActive('quotes');
+  }).configureQuoteSequence(state.sessionToken,code,Number(raw));
+}
+function quoteFormatAmount_(value){
+  const n=Number(String(value==null?'':value).replace(/,/g,''));
+  return Number.isFinite(n)?financeYen(Math.round(n)):'—';
+}
+function quotePreviewDocument_(e){
+  // Issued quotations are immutable records: never substitute a later change
+  // to the vendor master or reprice an old estimate from editable client data.
+  const status=String(e.status||'');
+  const persisted=['発行済','発行処理中','出力失敗'].includes(status);
+  const vendor=persisted?null:quoteVendor_();
+  const computed=quoteTotals_(e.lines||[]);
+  const storedValue=v=>Number(String(v==null?'':v).replace(/,/g,''));
+  const totals=persisted&&['subtotal','taxAmount','total'].every(k=>
+    e[k]!==''&&e[k]!=null&&Number.isFinite(storedValue(e[k])))?
+    {subtotal:storedValue(e.subtotal),tax:storedValue(e.taxAmount),total:storedValue(e.total)}:computed;
+  const vendorName=vendor?vendor.name:e.vendorName||'取引先を選択してください';
+  const date=String(e.quoteDate||'');
+  const formatDate=value=>{
+    const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match?(match[1]+'年'+Number(match[2])+'月'+Number(match[3])+'日'):String(value||'');
+  };
+  const rows=(e.lines||[]).filter(x=>String(x.description||'').trim()).map((line,i)=>{
+    const note=!!line.noteOnly;
+    const quantity=Number(line.quantity||0),price=Number(String(line.price||0).replace(/,/g,''));
+    const recalculated=Number.isFinite(quantity*price)?Math.round(quantity*price):0;
+    const amount=persisted&&line.amount!==''&&line.amount!=null&&Number.isFinite(storedValue(line.amount))?
+      storedValue(line.amount):recalculated;
+    return "<tr class='"+(note?'qb-paper-note-row':'')+"'><td>"+(i+1)+"</td>"+
+      "<td>"+escapeHtml(line.description||'')+"</td><td>"+(note?'':escapeHtml(line.quantity||''))+"</td>"+
+      "<td>"+(note?'':escapeHtml(line.unit||''))+"</td><td>"+(note?'':escapeHtml(quoteFormatAmount_(price)))+"</td>"+
+      "<td>"+(note?'':escapeHtml(quoteFormatAmount_(amount)))+"</td></tr>";
+  });
+  if(!rows.length)rows.push("<tr class='qb-paper-empty'><td>1</td><td>明細を入力すると、ここに反映されます。</td><td></td><td></td><td></td><td></td></tr>");
+  return ["<article class='qb-paper' aria-label='見積書の完成イメージ'>",
+    "<header class='qb-paper-title'><h2>見積書</h2><div class='qb-paper-title-rule'></div></header>",
+    "<div class='qb-paper-meta'><span>見積番号：",escapeHtml(e.number||'発行時に確定'),"</span><span>見積日：",escapeHtml(formatDate(date)),"</span></div>",
+    "<div class='qb-paper-parties'><div class='qb-paper-recipient'><strong>",escapeHtml(vendorName),"　御中</strong>",
+      "<span>",escapeHtml(vendor&&vendor.address||e.vendorAddress||''),"</span>",
+      "<small>下記のとおり、お見積もり申し上げます。</small></div>",
+    "<div class='qb-paper-issuer'><strong>Fusion Mind株式会社</strong><span>〒958-0854</span><span>新潟県村上市田端町14-7 きどビル1階</span>",
+      "<span>登録番号：T2110001038035</span><span>TEL：0254-62-7852</span><span>FAX：0254-62-7852</span><span>E-Mail：t-sakai@fusionmind.co.jp</span></div></div>",
+    "<p class='qb-paper-subject'>件名：",escapeHtml(e.subject||'（件名未入力）'),"</p>",
+    "<div class='qb-paper-condition'><span>納期：",escapeHtml(e.delivery||'ご相談'),"</span>",
+      "<span>支払条件：",escapeHtml(e.payment||'銀行振込'),"</span>",
+      "<span>有効期限：",escapeHtml(e.expires||'見積日から1か月'),"</span>",
+      "<span>担当者：",escapeHtml(e.contact||e.ownerName||''),"</span></div>",
+    "<div class='qb-paper-total'><span>お見積金額（税込）</span><strong>",escapeHtml(quoteFormatAmount_(totals.total)),"</strong></div>",
+    "<div class='qb-paper-table-wrap'><table><thead><tr><th>No.</th><th>品名・内容</th>",
+      "<th>数量</th><th>単位</th><th>単価</th><th>金額</th></tr></thead><tbody>",rows.join(''),"</tbody></table></div>",
+    "<div class='qb-paper-totals'><div><span>小計</span><strong>",escapeHtml(quoteFormatAmount_(totals.subtotal)),"</strong></div>",
+      "<div><span>消費税（10%）</span><strong>",escapeHtml(quoteFormatAmount_(totals.tax)),"</strong></div>",
+      "<div class='qb-paper-grand'><span>合計金額（税込）</span><strong>",escapeHtml(quoteFormatAmount_(totals.total)),"</strong></div></div>",
+    "<div class='qb-paper-bottom'><div><strong>備考</strong><p>",escapeHtml(e.note||'—'),"</p></div>",
+      "<div><strong>振込先</strong><p>",escapeHtml(e.bank||'お見積もり時にご案内します。'),"</p></div></div>",
+    "<footer class='qb-paper-footer'>",status==='発行済'?
+      '発行済みの見積情報です。正式なPDF・Excelは上部のボタンから取得できます。':
+      'このプレビューは入力内容の確認用です。正式なPDF・Excelは発行後に取得できます。',"</footer>",
+    "</article>"].join('');
+}
+function quoteRefreshPreview_(){
+  const e=quoteUi.editor;if(!e)return;
+  const preview=document.getElementById('quoteLivePreview');
+  if(preview)preview.innerHTML=quotePreviewDocument_(e);
+  const status=document.getElementById('quoteSaveStatus');
+  if(status)status.textContent=quoteUi.dirty?'● 未保存の変更あり':e.id?'✓ 保存済みの下書き':'● 新規作成中';
+  const target=document.getElementById('quotePreviewStatus');
+  if(target)target.textContent=quoteUi.dirty?'編集内容を反映しています':'現在の入力内容を表示中';
+  quoteUpdateIssueButton_();
+}
+function quoteOpenPreview_(){
+  const e=quoteUi.editor;if(!e)return;
+  ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div>"+
+    "<section class='modal-card qb-preview-modal' role='dialog' aria-modal='true' aria-label='見積書の拡大プレビュー'>"+
+    "<div class='modal-head'><div><h2>見積書プレビュー</h2><p>入力中の内容です。正式なPDFは発行後にダウンロードできます。</p></div>"+
+    "<button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+    "<div class='qb-preview-modal-body'>"+quotePreviewDocument_(e)+"</div>"+
+    "<div class='modal-actions'><span></span><button type='button' class='primary-button' onclick='closeModal()'>入力画面へ戻る</button></div></section>";
+}
+function quoteLineEditor_(row,i){
+  const note=!!row.noteOnly;
+  const quantity=Number(row.quantity||0),price=Number(String(row.price||0).replace(/,/g,''));
+  return "<div class='quote-line qb-line' data-index='"+i+"'>"+
+    "<span class='qb-line-no' aria-label='行番号'>"+(i+1)+"</span>"+
+    "<label class='qb-cell qb-description'><span class='qb-visually-hidden'>"+(i+1)+"行目の品名・内容</span>"+
+      "<input type='text' maxlength='240' aria-label='"+(i+1)+"行目の品名・内容' placeholder='商品・サービス名を入力' value='"+
+      quoteFormValue_(row.description)+"' oninput='quoteUpdateLine("+i+",\"description\",this.value)'></label>"+
+    "<label class='qb-cell'><span class='qb-visually-hidden'>数量</span><input type='number' step='0.001' min='0.001' max='100000' "+
+      "aria-label='"+(i+1)+"行目の数量' value='"+quoteFormValue_(row.quantity)+"' oninput='quoteUpdateLine("+i+",\"quantity\",this.value)'"+
+      (note?' disabled':'')+"></label>"+
+    "<label class='qb-cell'><span class='qb-visually-hidden'>単位</span><input maxlength='20' aria-label='"+(i+1)+"行目の単位' "+
+      "value='"+quoteFormValue_(row.unit)+"' oninput='quoteUpdateLine("+i+",\"unit\",this.value)'"+(note?' disabled':'')+"></label>"+
+    "<label class='qb-cell qb-price'><span class='qb-visually-hidden'>単価</span><input type='number' step='1' min='-9999999999' "+
+      "max='9999999999' aria-label='"+(i+1)+"行目の単価' value='"+quoteFormValue_(row.price)+
+      "' oninput='quoteUpdateLine("+i+",\"price\",this.value)'"+(note?' disabled':'')+"></label>"+
+    "<strong class='qb-line-amount' id='quoteLineTotal"+i+"'>"+(note?'—':escapeHtml(quoteFormatAmount_(quantity*price)))+"</strong>"+
+    "<div class='qb-line-actions'>"+
+      "<label class='qb-note-toggle' title='金額計算の対象外として注記を表示'><input type='checkbox' "+
+      (note?'checked ':'')+"onchange='quoteUpdateLine("+i+",\"noteOnly\",this.checked);renderPageIfActive(\"quotes\")'>注記</label>"+
+      "<button type='button' title='この行を複製' aria-label='"+(i+1)+"行目を複製' onclick='quoteDuplicateLine("+i+")' "+
+      (quoteUi.editor.lines.length>=21?'disabled':'')+">⧉</button>"+
+      "<button type='button' title='上へ移動' aria-label='"+(i+1)+"行目を上へ移動' onclick='quoteMoveLine("+i+",-1)' "+(i===0?'disabled':'')+">↑</button>"+
+      "<button type='button' title='下へ移動' aria-label='"+(i+1)+"行目を下へ移動' onclick='quoteMoveLine("+i+",1)' "+
+      (i===quoteUi.editor.lines.length-1?'disabled':'')+">↓</button>"+
+      "<button type='button' class='qb-line-remove' title='行を削除' aria-label='"+(i+1)+"行目を削除' onclick='quoteRemoveLine("+i+")' "+
+      (quoteUi.editor.lines.length<=1?'disabled':'')+">×</button></div></div>";
+}
+function quoteEditor_(){
+  const e=quoteUi.editor||quoteEmptyEditor_(),vendor=quoteVendor_(),saved=!!e.id;
+  const allowed=!!(quoteUi.data&&quoteUi.data.sequencesReady||[]).includes(e.vendorCode);
+  const totals=quoteTotals_(e.lines||[]);
+  const fields=[
+    ['quoteDate','見積日','date'],['subject','件名','text'],
+    ['contact','担当者','text']
+  ];
+  const inputField=([key,label,type])=>
+    "<label class='qb-field qb-field-"+key+"'><span>"+escapeHtml(label)+"</span>"+
+      "<input type='"+type+"' name='"+key+"' value='"+quoteFormValue_(e[key])+"' "+
+      "oninput='quoteUpdateField(this.name,this.value)' maxlength='200'></label>";
+  return ["<div class='quote-layout v15-workspace v15-quote-editor quote-builder"+(quoteUi.previewVisible?' business-preview-open':'')+"'>",
+    "<div class='qb-header quote-toolbar'><div><button type='button' class='quote-back' onclick='quoteBack()'>← 書類作成へ戻る</button>",
+      "<p class='v15-kicker'>FM WORKS / 書類作成 / 共通入力</p><h1>",saved?'見積書を編集':'見積書の新規作成',"</h1>",
+      "<p class='qb-header-description'>必要な内容を1回だけ入力します。見積書の発行後は同じ明細から請求書・納品書・領収書を作成できます。</p>",
+    "</div><div class='qb-header-actions'><span id='quoteSaveStatus' class='qb-save-status'>",
+      e.status==='保存処理中'?'● 保存が未完了':quoteUi.dirty?'● 未保存の変更あり':saved?'✓ 保存済みの下書き':'● 新規作成中',"</span>",
+      "<button type='button' class='secondary-button' onclick='quoteTogglePreview_()' aria-pressed='"+!!quoteUi.previewVisible+"'>"+(quoteUi.previewVisible?'プレビューを閉じる':'プレビューを表示')+"</button>",
+      "<button type='button' class='secondary-button' onclick='quoteSaveDraft()' ",(quoteUi.busy?'disabled':''),">",
+      quoteUi.busy?'処理中…':'下書き保存',"</button>",
+      "<button type='button' class='primary-button' id='quoteIssueButton' onclick='quoteIssue()' ",
+      (!saved||e.status==='保存処理中'||quoteUi.dirty||quoteUi.busy||!allowed?'disabled':''),">正式発行</button></div></div>",
+    quoteUi.error?"<div role='alert' class='card quote-state'>"+escapeHtml(quoteUi.error)+"</div>":"",
+    e.status==='保存処理中'?"<div role='alert' class='card quote-state'>前回の保存が完了していません。明細と金額を確認し、下書きを保存し直してください。</div>":"",
+    "<div class='qb-layout'><div class='qb-edit-column'>",
+    "<section class='card qb-edit-card' aria-label='見積基本情報'>",
+      "<div class='qb-section-title'><span class='qb-section-index'>01</span><div><h2>基本情報</h2>",
+      "<p>取引先、件名、見積条件を設定します。</p></div></div>",
+      "<div class='qb-info-grid'>",
+      "<label class='qb-field business-vendor-search'><span>取引先を検索</span><input type='search' id='quoteVendorSearch' placeholder='会社名・コードで候補を絞る' oninput='quoteFilterVendors_(this.value)' autocomplete='off'></label>",
+      "<div class='doc-inline-vendor'><label class='qb-field qb-field-vendor'><span>取引先 <em>必須</em></span><select id='quoteVendorSelect' aria-label='取引先' onchange='quoteUpdateField(\"vendorCode\",this.value)'>",
+      "<option value=''>取引先を選択してください</option>",
+      (quoteUi.data&&quoteUi.data.vendors||[]).map(x=>"<option value='"+escapeHtml(x.code)+"'"+
+        (x.code===e.vendorCode?' selected':'')+">"+escapeHtml(x.name)+"（"+escapeHtml(x.code)+"）</option>").join(''),
+      "</select></label><button type='button' class='secondary-button' onclick='quoteQuickVendorDialog_()'>＋ 取引先を登録</button></div>",
+      "<div class='qb-field qb-number-field'><span>見積番号</span><strong>",escapeHtml(e.number||'正式発行時に自動採番'),"</strong></div>",
+      fields.map(inputField).join(''),"</div>",
+      "<details class='business-optional qb-conditions' data-form-section='quote-conditions'><summary>納期・支払条件・有効期限・振込先を変更</summary><div class='qb-info-grid'>",
+      [['delivery','納期','text'],['payment','支払条件','text'],['expires','有効期限','text'],['bank','振込先','text']].map(inputField).join(''),"</div></details>",
+      "<p class='quote-vendor-preview' id='quoteVendorPreview'>",vendor?escapeHtml('取引先コード：'+vendor.code+' ／ '+vendor.name+
+      (vendor.invoice?' ／ インボイス番号：'+vendor.invoice:'')):'取引先を選択してください。',"</p>",
+    "</section>",
+    "<section class='card qb-edit-card qb-lines-card' aria-label='見積明細'>",
+      "<div class='qb-section-title qb-section-title-actions'><span class='qb-section-index'>02</span>",
+      "<div><h2>見積明細</h2><p>数量×単価を自動計算。最大21行、値引きはマイナス単価で入力できます。</p></div>",
+      "<button type='button' class='secondary-button' onclick='quotePasteDialog_()'>Excelから貼り付け</button>",
+      "<button type='button' class='secondary-button' onclick='quoteAddLine()' ",
+      ((e.lines||[]).length>=21?'disabled':''),">＋ 行を追加</button></div>",
+      "<div class='qb-grid-scroll' role='region' aria-label='見積明細の編集表' tabindex='0'>",
+      "<div class='qb-grid-head'><span>No.</span><span>品名・内容</span><span>数量</span><span>単位</span>",
+      "<span>単価（円）</span><span>金額（円）</span><span>操作</span></div>",
+      "<div class='quote-lines'>",(e.lines||[]).map(quoteLineEditor_).join(''),"</div></div>",
+      "<div class='qb-lines-footer'><small>",(e.lines||[]).length," / 21行</small>",
+      "<button type='button' class='qb-add-row' onclick='quoteAddLine()' ",
+      ((e.lines||[]).length>=21?'disabled':''),">＋ 明細を追加する</button></div>",
+    "</section>",
+    "<section class='card qb-edit-card'><div class='qb-section-title'><span class='qb-section-index'>03</span>",
+    "<div><h2>備考・振込先</h2><p>見積書に記載する補足事項を入力します。</p></div></div>",
+      "<label class='qb-field qb-notes'><span>備考</span><textarea maxlength='850' rows='3' "+
+      "oninput='quoteUpdateField(\"note\",this.value)'>"+quoteFormValue_(e.note)+"</textarea></label>",
+    "</section>",
+    "<section class='card qb-mobile-total' aria-label='見積金額'>",
+      "<div><span>小計</span><strong id='quoteSubtotal'>",escapeHtml(quoteFormatAmount_(totals.subtotal)),"</strong></div>",
+      "<div><span>消費税（10%）</span><strong id='quoteTax'>",escapeHtml(quoteFormatAmount_(totals.tax)),"</strong></div>",
+      "<div class='qb-mobile-grand'><span>合計（税込）</span><strong id='quoteTotal'>",escapeHtml(quoteFormatAmount_(totals.total)),"</strong></div></section>",
+    "<div class='qb-footer-actions'><button type='button' class='secondary-button' onclick='quoteSaveDraft()' ",
+    (quoteUi.busy?'disabled':''),">下書きを保存</button>",
+    "<button type='button' class='primary-button' onclick='quoteOpenPreview_()'>帳票を拡大して確認</button></div>",
+    !allowed&&e.vendorCode?"<p class='quote-warning' role='status'>この取引先は採番開始番号が未確認です。保存はできますが、正式発行には管理者の採番設定が必要です。</p>":"",
+    "</div><aside class='qb-preview-column' aria-label='見積書のリアルタイムプレビュー'>",
+    "<section class='card qb-preview-card'><div class='qb-preview-heading'><div><h2>見積書プレビュー</h2>",
+      "<p id='quotePreviewStatus'>現在の入力内容を表示中</p></div>",
+      "<button type='button' class='secondary-button qb-preview-open' onclick='quoteOpenPreview_()'>拡大表示 ↗</button></div>",
+    "<div class='qb-preview-surface' id='quoteLivePreview'>",quotePreviewDocument_(e),"</div>",
+    "<div class='qb-preview-totals' aria-label='金額の確認'>",
+      "<div><span>小計</span><strong id='quoteSideSubtotal'>",escapeHtml(quoteFormatAmount_(totals.subtotal)),"</strong></div>",
+      "<div><span>消費税（10%）</span><strong id='quoteSideTax'>",escapeHtml(quoteFormatAmount_(totals.tax)),"</strong></div>",
+      "<div class='qb-preview-grand'><span>合計（税込）</span><strong id='quoteSideTotal'>",escapeHtml(quoteFormatAmount_(totals.total)),"</strong></div></div>",
+      "<p class='qb-preview-help'>出力イメージを確認できます。正式なPDF・Excelファイルは「正式発行」の完了後に保存できます。</p>",
+    "</section></aside></div></div>"].join('');
+}
+function quoteDetail_(){
+  const q=quoteUi.details;
+  if(!q)return "<div class='card quote-state'>見積の詳細を読み込み中です。</div>";
+  const e=q.header,issued=e.status==='発行済',failed=e.status==='出力失敗';
+  const running=e.status==='発行処理中';
+  return ["<div class='quote-layout quote-detail'><button type='button' class='quote-back' onclick='quoteBack()'>← 書類作成へ戻る</button>",
+    "<div class='quote-toolbar'><div><span class='eyebrow'>",issued?'ISSUED / 正式見積書':'ISSUING / 発行の確認',
+    "</span><h1>",escapeHtml(e.number||'番号未確定'),"</h1><p>"+escapeHtml(e.vendorName||'')+" ／ "+
+      escapeHtml(e.quoteDate)+" ／ "+escapeHtml(e.ownerName)+" ／ "+escapeHtml(e.status)+"</p></div>",
+    issued?"<div class='quote-detail-actions'><button type='button' class='primary-button' onclick='quoteDownload(\"pdf\")' "+
+      (quoteUi.busy?'disabled':'')+">PDFを保存</button>"+
+      "<button type='button' class='secondary-button' onclick='quoteDownload(\"xlsx\")' "+
+      (quoteUi.busy?'disabled':'')+">Excelを保存</button></div>":"",
+    "</div>",
+    failed?"<div class='card quote-state' role='alert'><strong>帳票ファイルの出力が完了していません。</strong>"+
+      "<p>見積番号は保持されています。内容を変更せず、同じ番号でPDF・Excel出力を再試行できます。</p>"+
+      "<button type='button' class='primary-button' onclick='quoteIssue()'>同じ番号で出力を再試行</button></div>":"",
+    running?"<div class='card quote-state' role='status'><strong>発行処理中です。</strong>"+
+      "<p>通常は数十秒で完了します。時間がかかる場合は一覧を更新してください。"+
+      "15分を超えて処理中のままなら、同じ番号で再試行できます。</p>"+
+      "<button type='button' class='secondary-button' onclick='quoteIssue()'>処理状態を確認・再試行</button></div>":"",
+    issued?"<section class='card doc-conversion-panel'><h2>この見積から関連書類を作成</h2>"+
+      "<p>取引先と明細を引き継ぎ、日付だけ追加確認します。発行後は書類一覧・履歴に保存されます。</p>"+
+      "<div class='doc-conversion-actions'>"+
+      [['invoice','請求書を作成'],['delivery','納品書を作成'],['receipt','領収書を作成']].map(([kind,label])=>
+        "<button type='button' class='secondary-button' data-kind='"+kind+"' data-id='"+escapeHtml(e.id)+
+        "' onclick='documentCreateFromQuote(this.dataset.kind,this.dataset.id)'>"+label+"</button>").join('')+
+      "</div></section>":"",
+    quoteUi.error?"<p class='quote-warning' role='alert'>"+escapeHtml(quoteUi.error)+"</p>":"",
+    "<section class='card quote-preview qb-issued-preview' aria-label='見積書の内容確認'>",
+    "<div class='qb-issued-preview-heading'><h2>",issued?'発行済みの見積書':'発行内容の確認',"</h2>"+
+    "<p>入力時と同じ帳票レイアウトで内容を確認できます。正式ファイルは上部のボタンから取得してください。</p></div>",
+    "<div class='qb-issued-surface'>",
+    quotePreviewDocument_(Object.assign({},e,{lines:q.lines||[]})),
+    "</div></section></div>"].join('');
+}
+function quotePage(){
+  if(!state.data||!state.sessionToken)return pageHead('見積書','ログインしてください。');
+  if(quoteUi.mode==='edit'&&quoteUi.editor)return quoteEditor_();
+  if(quoteUi.mode==='detail')return quoteDetail_();
+  return quoteOverview_();
+}
+</script>
+<script>
+/* Related documents: conversion from a frozen quote; archive is its own page. */
+let docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',requestKey:'',requestSeq:0,cacheIdentity:'',detailCache:new Map()};
+function resetDocumentUi(){
+ docUi={query:'',filter:'all',selectedId:'',selected:null,loading:false,busy:false,error:'',
+   requestKey:'',requestSeq:0,cacheIdentity:'',detailCache:new Map()};
+}
+const DOC_LABELS={quote:'見積書',invoice:'請求書',delivery:'納品書',receipt:'領収書'};
+function documentRowsClient_(){
+ const data=quoteUi.data||{},q=(data.quotes||[]).map(row=>({id:row.id,kind:'quote',number:row.number||'下書き',vendorName:row.vendorName||'',subject:row.subject||'',status:row.status,date:row.quoteDate,total:row.total,updatedAt:row.updatedAt,ownerName:row.ownerName,quoteId:row.id}));
+ const docs=(data.relatedDocs||[]).map(row=>({id:row.id,kind:row.kind,number:row.number,vendorName:row.vendorName||'',subject:row.subject||'',status:row.status,date:row.documentDate,total:row.total,updatedAt:row.updatedAt,ownerName:row.ownerName,quoteId:row.quoteId}));
+ const filter=docUi.filter,key=docUi.query.trim().toLocaleLowerCase('ja-JP');
+ return q.concat(docs).filter(row=>(filter==='all'||row.kind===filter)&&(!key||[row.number,row.subject,row.vendorName,row.ownerName,row.status].join(' ').toLocaleLowerCase('ja-JP').includes(key))).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+function documentSetFilter(value){docUi.filter=Object.prototype.hasOwnProperty.call(DOC_LABELS,value)?value:'all';renderPageIfActive('documentHistory');}
+function documentSetQuery(value){docUi.query=String(value||'').slice(0,120);renderPageIfActive('documentHistory');const input=document.getElementById('docHistorySearch');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}}
+function documentOpenRecord(id){
+ if(docUi.busy||!state.sessionToken)return;
+ const ui=docUi,key=String(id),identity=quoteIdentity_();
+ if(docUi.cacheIdentity!==identity){
+  docUi.cacheIdentity=identity;docUi.detailCache=new Map();
+  docUi.selected=null;docUi.selectedId='';docUi.loading=false;
+ }
+ // An in-flight selection of the same document must not create another RPC.
+ if(docUi.loading&&docUi.selectedId===key)return;
+ const rows=quoteUi.data&&quoteUi.data.relatedDocs||[];
+ const current=rows.find(row=>String(row.id)===key);
+ const revision=String(current&&current.updatedAt||'');
+ docUi.selectedId=key;docUi.error='';
+ const seq=++docUi.requestSeq,entry=docUi.detailCache.get(key);
+ if(entry&&revision&&entry.revision===revision){
+  docUi.detailCache.delete(key);docUi.detailCache.set(key,entry);
+  docUi.loading=false;docUi.selected=entry.details;docUi.selectedRevision=revision;
+  renderPageIfActive('documentHistory');
+  return;
+ }
+ // A new selection must never display the previously selected document.
+ docUi.selected=null;docUi.loading=true;renderPageIfActive('documentHistory');
+ const isCurrent=()=>ui===docUi&&identity===quoteIdentity_()&&seq===docUi.requestSeq&&docUi.selectedId===key;
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+  if(!isCurrent())return;
+  docUi.loading=false;
+  if(!result||!result.header||String(result.header.id)!==key){
+   docUi.error='書類の詳細を確認できませんでした。更新して再試行してください。';
+   renderPageIfActive('documentHistory');return;
+  }
+  const latest=(quoteUi.data&&quoteUi.data.relatedDocs||[]).find(row=>String(row.id)===key);
+  if(latest&&String(latest.updatedAt||'')!==revision){documentOpenRecord(key);return;}
+  docUi.selected=result;docUi.selectedRevision=revision;
+  if(revision&&latest&&String(latest.updatedAt||'')===revision){
+   docUi.detailCache.delete(key);
+   docUi.detailCache.set(key,{revision,details:result});
+   if(docUi.detailCache.size>12)docUi.detailCache.delete(docUi.detailCache.keys().next().value);
+  }
+  renderPageIfActive('documentHistory');
+ }).withFailureHandler(error=>{
+  if(!isCurrent())return;
+  docUi.loading=false;docUi.selected=null;
+  docUi.error=cleanApiErrorMessage(error,'書類を読み込めませんでした');
+  renderPageIfActive('documentHistory');
+ }).getRelatedDocument(state.sessionToken,key);
+}
+function documentReconcileList_(){
+ const ui=docUi;if(!ui.selected||ui.loading)return;
+ const latest=(quoteUi.data&&quoteUi.data.relatedDocs||[]).find(row=>String(row.id)===ui.selectedId);
+ if(latest&&String(latest.updatedAt||'')!==ui.selectedRevision){
+  ui.detailCache.delete(ui.selectedId);documentOpenRecord(ui.selectedId);
+ }
+}
+function documentPreviewHtml_(result){if(!result||!result.header)return '';const h=result.header,label=DOC_LABELS[h.kind]||'書類';let html=quotePreviewDocument_(Object.assign({},h,{quoteDate:h.documentDate,lines:result.lines}));html=html.replace('<h2>見積書</h2>','<h2>'+label+'</h2>');html=html.replace('見積番号：','書類番号：').replace('見積日：','発行日：');html=html.replace('お見積金額（税込）',h.kind==='invoice'?'ご請求金額（税込）':h.kind==='receipt'?'領収金額（税込）':'納品金額（税込）');const extra=h.kind==='receipt'?'入金確認日：'+escapeHtml(h.paidDate||''):h.kind==='invoice'?'お支払期限：'+escapeHtml(h.dueDate||''):'納品日：'+escapeHtml(h.dueDate||'');html=html.replace("<div class='qb-paper-condition'>","<div class='qb-paper-condition'><span>"+extra+"</span>");return html;}
+function documentSaveFile_(file){const decoded=atob(file.base64),bytes=new Uint8Array(decoded.length);for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);const url=URL.createObjectURL(new Blob([bytes],{type:file.mimeType})),a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+function documentDownload(id,format){if(docUi.busy||docUi.loading)return;docUi.busy=true;const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(file=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;try{documentSaveFile_(file);showToast(file.name+' を保存しました');}catch(_){docUi.error='保存に失敗しました。再試行してください。';}renderPageIfActive('documentHistory');}).withFailureHandler(err=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(err,'ファイルを取得できませんでした');renderPageIfActive('documentHistory');}).getRelatedDocumentFile(state.sessionToken,String(id),format);}
+function documentRetry(id){if(docUi.busy)return;docUi.busy=true;docUi.error='';const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' の書類を発行しました');docUi.detailCache.delete(String(id));loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(id);}).withFailureHandler(error=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'再発行に失敗しました');renderPageIfActive('documentHistory');}).retryRelatedDocument(state.sessionToken,String(id));}
+function documentCreateFromQuote(kind,quoteId){
+ if(docUi.busy)return;const type=DOC_LABELS[kind];if(!type||kind==='quote')return;
+ const data=quoteUi.data||{};if(data.documentsSetupRequired){showToast('管理者が関連書類用DBのバックアップ付き更新を行ってください。');return;}
+ const quote=(data.quotes||[]).find(q=>String(q.id)===String(quoteId))||quoteUi.details&&quoteUi.details.header;
+ if(!quote||quote.status!=='発行済'){showToast('発行済みの見積から作成してください。');return;}
+ const prior=(data.relatedDocs||[]).find(d=>d.quoteId===quoteId&&d.kind===kind);
+ if(prior){showToast(type+'はすでに存在します。履歴から開いてください。');navigate('documentHistory');documentSetFilter(kind);return;}
+ const today=state.data&&state.data.today||new Date().toISOString().slice(0,10);
+ docUi.requestKey=quoteNewKey_();
+ const field=kind==='receipt'?'入金日':kind==='invoice'?'支払期限':'納品日';
+ const form="<label class='doc-modal-field'>発行日<input id='docIssueDate' type='date' required value='"+escapeHtml(today)+"'></label>"+
+   "<label class='doc-modal-field'>"+field+"<input id='docDueDate' type='date' required value='"+escapeHtml(today)+"'></label>"+
+   "<label class='doc-modal-field doc-modal-full'>備考（必要な場合のみ）<textarea id='docIssueNote' maxlength='850' rows='2'>"+escapeHtml(quote.note||'')+"</textarea></label>";
+ const paid=kind==='receipt'?"<label class='doc-payment-confirm'><input id='docPaidConfirmed' type='checkbox'><span>入金を確認しました。全額受領したことを確認して領収書を発行します。</span></label>":'';
+ ensureModal().innerHTML="<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card doc-modal' role='dialog' aria-modal='true' aria-label='"+type+"の発行確認'>"+
+   "<div class='modal-head'><div><h2>"+type+"を作成</h2><p>見積の内容を引き継ぎます。明細の再入力は不要です。</p></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div>"+
+   "<div class='doc-modal-summary'><strong>"+escapeHtml(quote.vendorName||'')+"</strong><span>"+escapeHtml(quote.subject||'')+"</span><b>"+escapeHtml(financeYen(quote.total))+"</b><small>元見積："+escapeHtml(quote.number||'')+"</small></div>"+
+   "<div class='doc-modal-fields'>"+form+"</div>"+paid+
+   "<p class='doc-modal-note'>発行すると独立した番号でPDFとExcelを保存します。発行後は元見積を変更しません。</p>"+
+   "<div class='modal-actions'><button type='button' class='secondary-button' onclick='closeModal()'>キャンセル</button><button type='button' class='primary-button' data-kind='"+kind+"' data-id='"+escapeHtml(quoteId)+"' onclick='documentConfirmIssue(this.dataset.kind,this.dataset.id)'>発行内容を確定</button></div></section>";
+}
+function documentConfirmIssue(kind,quoteId){if(docUi.busy)return;const date=document.getElementById('docIssueDate'),due=document.getElementById('docDueDate'),note=document.getElementById('docIssueNote'),paid=document.getElementById('docPaidConfirmed');if(!date||!date.value||!due||!due.value){showToast('発行日と必要な日付を入力してください。');return;}if(kind==='receipt'&&!(paid&&paid.checked)){showToast('実際の入金確認が必要です。');return;}const payload={requestKey:docUi.requestKey,documentDate:date.value,dueDate:kind==='receipt'?'':due.value,paidDate:kind==='receipt'?due.value:'',paidConfirmed:!!(paid&&paid.checked),note:note&&note.value||''};docUi.busy=true;closeModal();showToast('帳票ファイルを生成しています…');const ui=docUi,identity=quoteIdentity_();(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;showToast(result.number+' を正式発行しました');docUi.filter='all';navigate('documentHistory');loadQuoteWorkspace({force:true,silent:true});documentOpenRecord(result.id);}).withFailureHandler(error=>{if(ui!==docUi||identity!==quoteIdentity_())return;docUi.busy=false;docUi.error=cleanApiErrorMessage(error,'発行できませんでした');renderPageIfActive('documentHistory');showToast(docUi.error);}).createRelatedDocument(state.sessionToken,String(quoteId),kind,payload);}
+function documentHistoryPage(){
+ const data=quoteUi.data,rows=documentRowsClient_(),selected=state.sessionToken&&docUi.cacheIdentity===quoteIdentity_()&&docUi.selected&&docUi.selected.header&&docUi.selected.header.id===docUi.selectedId?docUi.selected:null;
+ const filters=[['all','すべて'],['quote','見積書'],['invoice','請求書'],['delivery','納品書'],['receipt','領収書']];
+ const list=rows.length?rows.map(row=>"<button type='button' class='doc-history-row "+(row.id===docUi.selectedId?'selected':'')+"' data-id='"+escapeHtml(row.id)+"' data-kind='"+escapeHtml(row.kind)+"' onclick='this.dataset.kind===\"quote\"?documentOpenQuote(this.dataset.id):documentOpenRecord(this.dataset.id)'>"+
+   "<span class='doc-kind doc-kind-"+row.kind+"'>"+DOC_LABELS[row.kind]+"</span><span class='doc-row-primary'>"+
+   (/^DEMO-QUOTE-/.test(String(row.id||''))?"<span class='doc-demo-tag'>DEMO</span>":"")+"<strong>"+escapeHtml(row.vendorName||'取引先未設定')+"</strong><small>"+escapeHtml(row.number||'未採番')+" ・ "+escapeHtml(row.subject||'件名なし')+"</small></span><span class='doc-row-side'><b>"+escapeHtml(financeYen(row.total))+"</b><small>"+escapeHtml(row.date||'')+" ・ "+escapeHtml(row.status||'')+"</small></span></button>").join(''):
+   "<div class='doc-empty'><strong>該当する書類はありません。</strong><p>新しい見積書を作成するか、検索条件を変更してください。</p></div>";
+ const details=docUi.loading?"<div class='doc-empty'>書類の詳細を読み込んでいます…</div>":selected?"<div class='doc-preview-head'><h2>"+escapeHtml(DOC_LABELS[selected.header.kind]||'書類')+"の確認</h2><span>"+escapeHtml(selected.header.number)+"</span></div>"+
+   "<div class='doc-preview-paper'>"+documentPreviewHtml_(selected)+"</div><div class='doc-actions'>"+
+   (selected.header.status==='発行済'?"<button type='button' class='primary-button' onclick='documentDownload(\""+escapeHtml(selected.header.id)+"\",\"pdf\")'>PDFを保存</button><button type='button' class='secondary-button' onclick='documentDownload(\""+escapeHtml(selected.header.id)+"\",\"xlsx\")'>Excelを保存</button>":
+     selected.header.status==='出力失敗'?"<button type='button' class='primary-button' onclick='documentRetry(\""+escapeHtml(selected.header.id)+"\")'>同じ番号で再試行</button>":"<p>正式発行中です。しばらくして更新してください。</p>")+"</div>":
+   "<div class='doc-empty'><span class='doc-empty-icon'>▤</span><strong>書類を選択してください</strong><p>左側から書類を選ぶと詳細とダウンロードが表示されます。</p></div>";
+ return "<main class='v15-workspace doc-history-page'><header class='doc-page-header'><div><p class='v15-kicker'>FM WORKS / 書類一覧</p><h1>書類一覧・履歴</h1><p>見積・請求・納品・領収をまとめて検索できます。</p></div><button type='button' class='primary-button' onclick='navigate(\"quotes\")'>＋ 新しい見積書</button></header>"+
+   (docUi.error?"<div class='card quote-state' role='alert'>"+escapeHtml(docUi.error)+"</div>":'')+
+   (!data?"<div class='card quote-state' role='status'>書類一覧を読み込んでいます…</div>":'')+
+   (data&&data.documentsSetupRequired?"<div class='doc-setup-note' role='status'>請求書・納品書・領収書の保存先はまだ準備されていません。管理者が「管理・設定」からDB更新を実施してください。既存の見積書は引き続き参照できます。</div>":'')+
+   "<div class='card doc-history-card'><div class='doc-history-toolbar'><label class='doc-history-search'>検索<input id='docHistorySearch' type='search' placeholder='取引先・書類番号・件名で検索' value='"+escapeHtml(docUi.query)+"' oninput='documentSetQuery(this.value)'></label><div class='doc-history-tabs' aria-label='書類の種類'>"+filters.map(([kind,label])=>"<button type='button' class='"+(docUi.filter===kind?'active':'')+"' onclick='documentSetFilter(\""+kind+"\")'>"+label+"</button>").join('')+"</div><button type='button' class='secondary-button' onclick='loadQuoteWorkspace({force:true})'>更新</button></div>"+
+   "<div class='doc-history-layout'><section class='doc-list-pane' aria-label='書類の検索結果'><div class='doc-result-count'>"+rows.length+"件表示</div>"+list+"</section><aside class='doc-detail-pane' aria-label='書類プレビュー'>"+details+"</aside></div></div></main>";
+}
+</script><script>
+/* FM WORKS - Company document library: folder tree, searchable list and preview.
+ * Lazy metadata/body reads, session isolation and mobile single-panel navigation.
+ */
+let companyDocsUi={
+  data:null,identity:'',loading:false,loadedAt:0,reloadRequested:false,busy:false,error:'',
+  query:'',folderId:'all',category:'all',status:'all',sort:'newest',
+  remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
+  expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
+  selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
+  editing:false,draft:null,key:'',dirty:false,mobileStep:'folders',limit:60
+};
+let companyDocsSearchTimer=null;
+function companyDocsIdentity_(){
+  return String(state.sessionToken||'')+'|'+String(state.data&&state.data.user&&state.data.user.employeeId||'');
+}
+function resetCompanyDocsUi(){
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  companyDocsSearchTimer=null;
+  companyDocsUi={
+    data:null,identity:'',loading:false,loadedAt:0,reloadRequested:false,busy:false,error:'',
+    query:'',folderId:'all',category:'all',status:'all',sort:'newest',
+    remoteQuery:'',remoteIds:null,searching:false,searchError:'',searchSerial:0,
+    expanded:{hr:true,general:true,finance:true,safety:false,information:true,other:false},
+    selectedId:'',detail:null,details:{},loadingDetail:false,detailSerial:0,
+    editing:false,draft:null,key:'',dirty:false,mobileStep:'folders',limit:60
+  };
+}
+function companyDocsRender_(){if(state.page==='companyDocs')renderPageIfActive('companyDocs');}
+function companyDocsSafeAttr_(v){return escapeHtml(String(v==null?'':v));}
+// Escape the entire JS string argument before placing it in an HTML event attribute.
+// This also neutralizes pre-encoded entities in Sheet-sourced document IDs.
+function companyDocsInlineId_(id){return escapeHtml(JSON.stringify(String(id==null?'':id)));}
+function companyDocsData_(){return companyDocsUi.data||{items:[],folders:[],categories:['就業規則','社内規程','マニュアル','その他']};}
+function companyDocsFolder_(id){return (companyDocsData_().folders||[]).find(f=>f.id===id)||null;}
+function companyDocsFolderName_(id){
+  if(id==='all')return 'すべての文書';
+  const f=companyDocsFolder_(id);
+  return f?f.name:'その他の文書';
+}
+function companyDocsFolderParent_(id){
+  const f=companyDocsFolder_(id);
+  return f&&f.parentId?companyDocsFolder_(f.parentId):null;
+}
+function companyDocsFolderCount_(folderId){
+  const items=companyDocsData_().items||[];
+  if(folderId==='all')return items.length;
+  return items.filter(d=>d.folderId===folderId||d.folderId.indexOf(folderId+'/')===0).length;
+}
+function companyDocsCanManage_(){return !!(companyDocsUi.data&&companyDocsUi.data.canManage);}
+function loadCompanyDocs(force=false){
+  if(!state.sessionToken||!state.data)return;
+  const identity=companyDocsIdentity_();
+  let ui=companyDocsUi;
+  if(ui.identity&&ui.identity!==identity){resetCompanyDocsUi();ui=companyDocsUi;}
+  if(ui.loading){if(force)ui.reloadRequested=true;return;}
+  if(!force&&ui.data&&ui.identity===identity&&Date.now()-ui.loadedAt<300000)return;
+  ui.identity=identity;ui.loading=true;ui.error='';
+  if(!ui.data)companyDocsRender_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.data=result;ui.loading=false;ui.loadedAt=Date.now();ui.error='';
+    if(ui.selectedId){
+      const item=(result.items||[]).find(x=>x.id===ui.selectedId);
+      if(!item){ui.selectedId='';ui.detail=null;ui.loadingDetail=false;ui.detailSerial++;}
+      else if(ui.detail&&ui.detail.revision!==item.revision){
+        ui.detail=null;delete ui.details[item.id];
+        ui.loadingDetail=false;
+        ui.detailSerial++;
+      }
+    }
+    const again=ui.reloadRequested;ui.reloadRequested=false;
+    if(again){loadCompanyDocs(true);return;}
+    companyDocsRender_();
+    if(ui.selectedId&&!ui.detail&&!ui.loadingDetail&&!ui.editing)companyDocsSelect(ui.selectedId,false);
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.loading=false;ui.error=cleanApiErrorMessage(err,'社内文書の一覧を取得できませんでした。');
+    companyDocsRender_();
+  }).getCompanyDocuments(state.sessionToken);
+}
+function companyDocsSwitchStep_(step){
+  if(companyDocsUi.busy)return;
+  if(companyDocsUi.editing&&step!=='detail')return;
+  companyDocsUi.mobileStep=step;companyDocsRender_();
+}
+function companyDocsSelectFolder(id){
+  if(companyDocsUi.editing||companyDocsUi.busy)return;
+  if(id!=='all'&&!companyDocsFolder_(id))return;
+  companyDocsUi.folderId=id;
+  companyDocsUi.limit=60;
+  companyDocsUi.mobileStep='list';
+  companyDocsUi.selectedId='';
+  companyDocsUi.detail=null;
+  companyDocsUi.loadingDetail=false;
+  companyDocsUi.detailSerial++;
+  companyDocsRender_();
+}
+function companyDocsToggleFolder(id){
+  const ui=companyDocsUi;
+  ui.expanded[id]=!ui.expanded[id];
+  companyDocsRender_();
+}
+function companyDocsSelect(id,mobile=true){
+  const ui=companyDocsUi;
+  if(ui.editing||ui.busy)return;
+  const item=(companyDocsData_().items||[]).find(x=>x.id===id);
+  if(!item)return;
+  ui.selectedId=id;
+  if(mobile)ui.mobileStep='detail';
+  if(ui.detail&&ui.detail.id===id&&ui.detail.revision===item.revision){companyDocsRender_();return;}
+  const cached=ui.details[id];
+  if(cached&&cached.revision===item.revision){
+    ui.detail=cached;ui.loadingDetail=false;companyDocsRender_();return;
+  }
+  ui.detail=null;ui.loadingDetail=true;ui.detailSerial++;
+  const serial=ui.detailSerial,identity=companyDocsIdentity_();
+  companyDocsRender_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi||
+       serial!==ui.detailSerial||ui.selectedId!==id)return;
+    ui.loadingDetail=false;ui.detail=result.document;ui.details[id]=result.document;companyDocsRender_();
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi||serial!==ui.detailSerial)return;
+    ui.loadingDetail=false;ui.error=cleanApiErrorMessage(err,'本文を開けませんでした。');
+    companyDocsRender_();
+  }).getCompanyDocument(state.sessionToken,id);
+}
+function companyDocsDropHiddenSelection_(){
+  const ui=companyDocsUi;
+  if(!ui.selectedId||ui.editing)return false;
+  if(companyDocsVisibleItems_().some(item=>item.id===ui.selectedId))return false;
+  ui.selectedId='';ui.detail=null;ui.loadingDetail=false;ui.detailSerial++;
+  return true;
+}
+function companyDocsSetQuery(value){
+  const ui=companyDocsUi,query=String(value||'').slice(0,80);
+  ui.query=query;ui.limit=60;ui.remoteQuery='';ui.remoteIds=null;ui.searchError='';
+  ui.searchSerial++;
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  companyDocsSearchTimer=null;
+  const term=query.trim();
+  // The primary search is global, even when invoked inside a selected folder.
+  const globalReset=!!term&&ui.folderId!=='all';
+  if(globalReset)ui.folderId='all';
+  ui.searching=term.length>=2;
+  const clearedSelection=companyDocsDropHiddenSelection_();
+  const onMobile=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&
+    window.matchMedia('(max-width: 760px)').matches;
+  const mobileSwitch=onMobile&&!!term&&ui.mobileStep==='folders';
+  if(mobileSwitch)ui.mobileStep='list';
+  if(mobileSwitch||globalReset||clearedSelection){
+    companyDocsRender_();
+    const input=document.getElementById('companyDocsSearch');
+    if(input){
+      input.focus();
+      if(typeof input.setSelectionRange==='function')input.setSelectionRange(query.length,query.length);
+    }
+  }
+  companyDocsPaintList_();
+  if(term.length<2)return;
+  const serial=ui.searchSerial,identity=companyDocsIdentity_();
+  companyDocsSearchTimer=setTimeout(()=>{
+    if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+      if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+      ui.remoteQuery=term;ui.remoteIds=new Set(result.matchedIds||[]);
+      ui.searching=false;ui.searchError=result.truncated?'本文の検索結果は先頭250件まで表示しています。':'';
+      companyDocsPaintList_();
+    }).withFailureHandler(err=>{
+      if(ui!==companyDocsUi||serial!==ui.searchSerial||identity!==companyDocsIdentity_())return;
+      ui.searching=false;ui.searchError='本文検索を完了できませんでした。文書名・概要の検索は利用できます。';
+      companyDocsPaintList_();
+    }).searchCompanyDocumentBodies(state.sessionToken,term);
+  },320);
+}
+function companyDocsSetCategory(value){
+  companyDocsUi.category=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
+function companyDocsSetStatus(value){
+  companyDocsUi.status=value;companyDocsUi.limit=60;
+  companyDocsDropHiddenSelection_();companyDocsRender_();
+}
+function companyDocsSetSort(value){companyDocsUi.sort=value;companyDocsRender_();}
+function companyDocsMore(){companyDocsUi.limit+=60;companyDocsRender_();}
+function companyDocsClearFilters(){
+  const ui=companyDocsUi;
+  if(companyDocsSearchTimer)clearTimeout(companyDocsSearchTimer);
+  ui.query='';ui.category='all';ui.status='all';ui.folderId='all';
+  ui.remoteIds=null;ui.remoteQuery='';ui.searching=false;ui.searchError='';ui.searchSerial++;
+  ui.limit=60;companyDocsRender_();
+}
+function companyDocsVisibleItems_(){
+  const ui=companyDocsUi,raw=companyDocsData_().items||[];
+  const query=ui.query.trim().toLocaleLowerCase('ja-JP'),terms=query.split(/\s+/).filter(Boolean);
+  const remote=ui.remoteQuery===ui.query.trim()?ui.remoteIds:null;
+  const list=raw.filter(d=>{
+    if(ui.folderId!=='all'&&d.folderId!==ui.folderId&&d.folderId.indexOf(ui.folderId+'/')!==0)return false;
+    if(ui.category!=='all'&&d.category!==ui.category)return false;
+    if(ui.status!=='all'&&d.status!==ui.status)return false;
+    if(!terms.length)return true;
+    const text=[d.title,d.summary,d.category,d.folderId,companyDocsFolderName_(d.folderId)]
+      .concat(d.tags||[]).join(' ').toLocaleLowerCase('ja-JP');
+    return terms.every(t=>text.includes(t))||!!(remote&&remote.has(d.id));
+  });
+  if(ui.sort==='name')list.sort((a,b)=>a.title.localeCompare(b.title,'ja'));
+  else if(ui.sort==='oldest')list.sort((a,b)=>a.updatedAt.localeCompare(b.updatedAt));
+  else list.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id));
+  return list;
+}
+function companyDocsStatusBadge_(status){
+  return '<span class="company-doc-status '+(status==='公開'?'is-published':'is-draft')+'">'+
+    escapeHtml(status)+'</span>';
+}
+function companyDocsFolderTree_(){
+  const ui=companyDocsUi,data=companyDocsData_();
+  let html='<button type="button" class="company-doc-tree-all '+(ui.folderId==='all'?'is-active':'')+
+    '" onclick="companyDocsSelectFolder(\'all\')"><span class="company-doc-tree-all-icon">▤</span><span>すべての文書</span><small>'+
+    companyDocsFolderCount_('all')+'</small></button>';
+  (data.folders||[]).filter(f=>!f.parentId).forEach(root=>{
+    const children=(data.folders||[]).filter(f=>f.parentId===root.id);
+    const opened=!!ui.expanded[root.id],active=ui.folderId===root.id;
+    html+='<div class="company-doc-tree-group" data-root="'+companyDocsSafeAttr_(root.id)+'">'+
+      '<div class="company-doc-tree-root">'+
+      '<button type="button" class="company-doc-tree-toggle" aria-label="'+escapeHtml(root.name)+'を'+(opened?'閉じる':'開く')+
+      '" aria-expanded="'+opened+'" onclick="companyDocsToggleFolder(\''+root.id+'\')">'+(opened?'⌄':'›')+'</button>'+
+      '<button type="button" class="company-doc-tree-root-name '+(active?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+root.id+'\')"><span class="company-doc-folder-icon">▣</span>'+
+      '<span>'+escapeHtml(root.name)+'</span><small>'+companyDocsFolderCount_(root.id)+'</small></button></div>';
+    if(opened)html+='<div class="company-doc-tree-children">'+children.map(f=>
+      '<button type="button" class="company-doc-tree-leaf '+(ui.folderId===f.id?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+f.id+'\')"><span>⌞</span><span>'+escapeHtml(f.name)+'</span>'+
+      '<small>'+companyDocsFolderCount_(f.id)+'</small></button>').join('')+'</div>';
+    html+='</div>';
+  });
+  return html;
+}
+function companyDocsQuickFolders_(){
+  const data=companyDocsData_();
+  return '<div class="company-doc-quick-folders" aria-label="分野から探す">'+
+    (data.folders||[]).filter(f=>!f.parentId).map(f=>
+      '<button type="button" class="company-doc-quick-folder '+(companyDocsUi.folderId===f.id?'is-active':'')+
+      '" onclick="companyDocsSelectFolder(\''+f.id+'\')"><span class="company-doc-quick-dot"></span><strong>'+
+      escapeHtml(f.name)+'</strong><small>'+companyDocsFolderCount_(f.id)+'件</small></button>').join('')+
+    '</div>';
+}
+function companyDocsListRows_(){
+  const ui=companyDocsUi,filtered=companyDocsVisibleItems_(),visible=filtered.slice(0,ui.limit);
+  if(!filtered.length)return '<div class="company-doc-empty"><span class="company-doc-empty-icon">⌕</span>'+
+    '<strong>該当する文書がありません</strong><p>フォルダや検索条件を変えてください。</p>'+
+    '<button class="secondary-button compact" type="button" onclick="companyDocsClearFilters()">条件を解除</button></div>';
+  let html=visible.map(d=>{
+    const selected=d.id===ui.selectedId,folder=companyDocsFolderName_(d.folderId);
+    return '<button type="button" class="company-doc-row '+(selected?'is-selected':'')+
+      '" onclick="companyDocsSelect('+companyDocsInlineId_(d.id)+')">'+
+      '<span class="company-doc-row-icon" aria-hidden="true">▤</span>'+
+      '<span class="company-doc-row-main"><strong>'+escapeHtml(d.title)+'</strong>'+
+      '<span class="company-doc-row-desc">'+escapeHtml(d.summary||folder)+'</span>'+
+      '<span class="company-doc-row-meta">'+escapeHtml(folder)+' <span aria-hidden="true">·</span> '+
+      escapeHtml(d.category)+' <span aria-hidden="true">·</span> 第'+d.revision+'版</span></span>'+
+      '<span class="company-doc-row-right">'+companyDocsStatusBadge_(d.status)+
+      '<small>'+escapeHtml(String(d.updatedAt||'').slice(0,10))+'</small></span>'+
+      '<span class="company-doc-row-chevron" aria-hidden="true">›</span></button>';
+  }).join('');
+  if(visible.length<filtered.length)html+='<button type="button" class="company-doc-more secondary-button" onclick="companyDocsMore()">さらに'+
+    Math.min(60,filtered.length-visible.length)+'件を表示</button>';
+  return html;
+}
+function companyDocsPaintList_(){
+  const list=document.getElementById('companyDocsListRows');
+  if(list)list.innerHTML=companyDocsListRows_();
+  const count=document.getElementById('companyDocsListCount');
+  if(count)count.textContent=companyDocsVisibleItems_().length+'件';
+  const status=document.getElementById('companyDocsSearchStatus');
+  if(status)status.textContent=companyDocsUi.searching?'本文を検索中…':companyDocsUi.searchError||'';
+}
+function companyDocsBreadcrumb_(){
+  const parent=companyDocsFolderParent_(companyDocsUi.folderId),name=companyDocsFolderName_(companyDocsUi.folderId);
+  return '<nav class="company-doc-crumb" aria-label="現在のフォルダ">'+
+    '<button type="button" onclick="companyDocsSelectFolder(\'all\')">社内文書</button>'+
+    (parent?' <span>›</span><button type="button" onclick="companyDocsSelectFolder(\''+parent.id+'\')">'+escapeHtml(parent.name)+'</button>':'')+
+    ' <span>›</span><strong>'+escapeHtml(name)+'</strong></nav>';
+}
+function companyDocsBeginNew(){
+  if(!companyDocsCanManage_()||companyDocsUi.busy)return;
+  const ui=companyDocsUi,folder=companyDocsFolder_(ui.folderId);
+  const folderId=folder&&folder.parentId?folder.id:
+    folder?((companyDocsData_().folders||[]).find(f=>f.parentId===folder.id)||{}).id||'other/general':'other/general';
+  ui.draft={id:'',revision:0,title:'',category:'社内規程',folderId,
+    tags:[],summary:'',body:'',url:'',effectiveOn:'',status:'下書き'};
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.dirty=false;ui.mobileStep='detail';ui.error='';
+  companyDocsRender_();
+}
+function companyDocsKeyClient_(){
+  return 'CD-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,17);
+}
+function companyDocsStartEdit(id){
+  const ui=companyDocsUi,d=ui.detail;
+  if(!companyDocsCanManage_()||!d||d.id!==id||ui.busy)return;
+  ui.draft={id:d.id,revision:d.revision,title:d.title,category:d.category,
+    folderId:d.folderId||'other/general',tags:(d.tags||[]).slice(),
+    summary:d.summary||'',body:d.body||'',url:d.url||'',
+    effectiveOn:d.effectiveOn||'',status:d.status||'下書き'};
+  ui.key=companyDocsKeyClient_();ui.editing=true;ui.dirty=false;ui.mobileStep='detail';ui.error='';
+  companyDocsRender_();
+}
+function companyDocsFinishCancelEdit_(){
+  const ui=companyDocsUi;
+  ui.editing=false;ui.draft=null;ui.key='';ui.dirty=false;ui.error='';
+  if(ui.selectedId&&!ui.detail)companyDocsSelect(ui.selectedId,false);
+  else companyDocsRender_();
+}
+function companyDocsConfirmCancelEdit_(){
+  closeModal();companyDocsFinishCancelEdit_();
+}
+function companyDocsCancelEdit(){
+  const ui=companyDocsUi;
+  if(ui.busy)return;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="編集の取り消し">'+
+    '<div class="modal-head"><h2>変更内容を破棄しますか？</h2></div>'+
+    '<p>保存していない変更は元に戻せません。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsConfirmCancelEdit_()">破棄する</button></div></section>';
+}
+function companyDocsDraftField(key,value){
+  const ui=companyDocsUi;
+  if(!ui.draft)return;
+  const next=key==='tags'?String(value).split(/[,、，]/).map(x=>x.trim()).filter(Boolean):value;
+  if(JSON.stringify(ui.draft[key])!==JSON.stringify(next)){
+    ui.dirty=true;
+    const notice=document.getElementById('companyDocsUnsaved');
+    if(notice)notice.hidden=false;
+  }
+  ui.draft[key]=next;
+}
+function companyDocsConfirmLeave_(targetPage){
+  const ui=companyDocsUi;
+  if(ui.busy)return false;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の変更">'+
+    '<div class="modal-head"><h2>未保存の変更があります</h2></div>'+
+    '<p>社内文書の編集内容を保存していません。ページを移動すると変更内容を破棄します。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsLeaveNow_('+escapeHtml(JSON.stringify(targetPage))+')">移動する</button></div></section>';
+  return false;
+}
+function companyDocsLeaveNow_(targetPage){
+  closeModal();
+  companyDocsFinishCancelEdit_();
+  navigate(targetPage);
+}
+function companyDocsConfirmLogout_(){
+  const ui=companyDocsUi;
+  if(ui.busy)return false;
+  if(!ui.editing)return true;
+  if(!ui.dirty){companyDocsFinishCancelEdit_();return true;}
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="未保存の社内文書">'+
+    '<div class="modal-head"><h2>社内文書の変更が未保存です</h2></div>'+
+    '<p>ログアウトすると、未保存の変更が失われます。</p>'+
+    '<div class="modal-actions"><button type="button" class="secondary-button" onclick="closeModal()">編集を続ける</button>'+
+    '<button type="button" class="primary-button" onclick="companyDocsLogoutNow_()">破棄してログアウト</button></div></section>';
+  return false;
+}
+function companyDocsLogoutNow_(){
+  closeModal();
+  companyDocsFinishCancelEdit_();
+  performLogout();
+}
+function companyDocsBeforeUnload_(event){
+  if(companyDocsUi.editing&&companyDocsUi.dirty){
+    event.preventDefault();event.returnValue='';
+  }
+}
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){
+  window.addEventListener('beforeunload',companyDocsBeforeUnload_);
+}
+function companyDocsSave(){
+  const ui=companyDocsUi,d=ui.draft;
+  if(!d||ui.busy||!companyDocsCanManage_())return;
+  if(!String(d.title||'').trim()){showToast('文書名を入力してください');return;}
+  if(!d.folderId||!companyDocsFolder_(d.folderId)||!companyDocsFolder_(d.folderId).parentId){
+    showToast('保存先の業務フォルダを選択してください');return;
+  }
+  const identity=companyDocsIdentity_();
+  ui.busy=true;companyDocsRender_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.editing=false;ui.draft=null;ui.key='';ui.dirty=false;
+    ui.selectedId=result.document.id;ui.detail=result.document;
+    ui.details[result.document.id]=result.document;ui.mobileStep='detail';
+    ui.folderId=result.document.folderId;
+    showToast('社内文書を保存しました');
+    loadCompanyDocs(true);companyDocsRender_();
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.error=cleanApiErrorMessage(err,'文書を保存できませんでした。');
+    companyDocsRender_();
+  }).saveCompanyDocument(state.sessionToken,Object.assign({},d,{requestKey:ui.key}));
+}
+function companyDocsDelete(){
+  const ui=companyDocsUi,d=ui.detail;
+  if(!d||!companyDocsCanManage_()||ui.busy)return;
+  const modal=ensureModal();
+  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
+    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="文書を削除">'+
+    '<div class="modal-head"><h2>社内文書を削除しますか？</h2></div><p>「'+escapeHtml(d.title)+
+    '」を一覧から非表示にします。監査ログには操作が残ります。</p>'+
+    '<div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button>'+
+    '<button class="primary-button" onclick="companyDocsConfirmDelete()">削除する</button></div></section>';
+}
+function companyDocsConfirmDelete(){
+  const ui=companyDocsUi,d=ui.detail;
+  if(!d||!companyDocsCanManage_()||ui.busy)return;
+  const identity=companyDocsIdentity_();
+  closeModal();ui.busy=true;companyDocsRender_();
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;delete ui.details[d.id];ui.detail=null;ui.selectedId='';ui.detailSerial++;
+    ui.mobileStep='list';showToast('社内文書を削除しました');loadCompanyDocs(true);
+  }).withFailureHandler(err=>{
+    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
+    ui.busy=false;ui.error=cleanApiErrorMessage(err,'削除できませんでした。');companyDocsRender_();
+  }).deleteCompanyDocument(state.sessionToken,d.id,d.revision);
+}
+function companyDocsEditor_(){
+  const ui=companyDocsUi,d=ui.draft||{},data=companyDocsData_();
+  const folders=(data.folders||[]).filter(f=>f.parentId);
+  return '<form class="company-doc-editor" onsubmit="event.preventDefault();companyDocsSave()">'+
+    '<div class="company-doc-detail-heading"><div><span class="company-doc-eyebrow">DOCUMENT EDITOR</span>'+
+    '<h2>'+(d.id?'社内文書の編集':'社内文書の新規登録')+'</h2></div></div>'+
+    (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p>':'')+
+    '<p id="companyDocsUnsaved" class="company-doc-unsaved" '+(ui.dirty?'':'hidden')+'>未保存の変更があります</p>'+
+    '<label>文書名 <span class="company-doc-required">必須</span><input required maxlength="120" value="'+companyDocsSafeAttr_(d.title)+
+      '" oninput="companyDocsDraftField(\'title\',this.value)" placeholder="例：備品貸出マニュアル"></label>'+
+    '<div class="company-doc-form-pair"><label>業務フォルダ <span class="company-doc-required">必須</span><select required onchange="companyDocsDraftField(\'folderId\',this.value)">'+
+      folders.map(f=>'<option value="'+f.id+'" '+(d.folderId===f.id?'selected':'')+'>'+
+        escapeHtml((companyDocsFolder_(f.parentId)||{}).name+' ／ '+f.name)+'</option>').join('')+'</select></label>'+
+    '<label>文書の種類<select onchange="companyDocsDraftField(\'category\',this.value)">'+
+      (data.categories||[]).map(c=>'<option value="'+c+'" '+(d.category===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('')+'</select></label></div>'+
+    '<div class="company-doc-form-pair"><label>公開状態<select onchange="companyDocsDraftField(\'status\',this.value)">'+
+      ['下書き','公開'].map(s=>'<option '+(d.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></label>'+
+    '<label>施行日<input type="date" value="'+companyDocsSafeAttr_(d.effectiveOn)+'" onchange="companyDocsDraftField(\'effectiveOn\',this.value)"></label></div>'+
+    '<label>検索タグ（カンマ区切り・最大8個）<input maxlength="320" value="'+companyDocsSafeAttr_((d.tags||[]).join(', '))+
+      '" oninput="companyDocsDraftField(\'tags\',this.value)" placeholder="例：備品, 貸出, 総務"></label>'+
+    '<label>概要<textarea rows="3" maxlength="300" oninput="companyDocsDraftField(\'summary\',this.value)">'+
+      escapeHtml(d.summary||'')+'</textarea></label>'+
+    '<label>本文<textarea rows="12" maxlength="20000" oninput="companyDocsDraftField(\'body\',this.value)">'+
+      escapeHtml(d.body||'')+'</textarea></label>'+
+    '<label>参照リンク（HTTPS）<input type="url" maxlength="2000" value="'+companyDocsSafeAttr_(d.url)+
+      '" oninput="companyDocsDraftField(\'url\',this.value)" placeholder="https://..."></label>'+
+    '<div class="company-doc-editor-note">文書本文はテキスト形式です。PDF・Word添付は今後の機能拡張対象です。</div>'+
+    '<div class="company-doc-form-actions"><button type="button" class="secondary-button" onclick="companyDocsCancelEdit()" '+
+      (ui.busy?'disabled':'')+'>キャンセル</button><button type="submit" class="primary-button" '+(ui.busy?'disabled':'')+'>'+
+      (ui.busy?'保存中…':'変更を保存')+'</button></div></form>';
+}
+function companyDocsDetail_(){
+  const ui=companyDocsUi;
+  if(ui.editing)return companyDocsEditor_();
+  if(ui.loadingDetail)return '<div class="company-doc-detail-loading"><div class="loading-card"></div><p>文書を読み込んでいます…</p></div>';
+  if(!ui.detail)return '<div class="company-doc-no-selection"><span class="company-doc-no-selection-icon">▤</span>'+
+    '<h2>文書を選ぶと、ここに内容が表示されます</h2><p>中央の一覧から文書を選択してください。<br>別画面に移動せず内容を確認できます。</p></div>';
+  const d=ui.detail,folder=companyDocsFolderName_(d.folderId),parent=companyDocsFolderParent_(d.folderId);
+  // Never turn a manually edited spreadsheet URL into an executable link.
+  const safeUrl=/^https:\/\/[A-Za-z0-9.-]+(?::443)?(?:[/?#][^\s]*)?$/i.test(String(d.url||''))?String(d.url):'';
+  return '<article class="company-doc-article"><div class="company-doc-detail-heading">'+
+    '<div><span class="company-doc-eyebrow">DOCUMENT PREVIEW</span><h2>'+escapeHtml(d.title)+'</h2></div>'+
+    companyDocsStatusBadge_(d.status)+'</div>'+
+    '<div class="company-doc-detail-path">'+escapeHtml(parent?parent.name+' ／ ':'')+escapeHtml(folder)+'</div>'+
+    '<dl class="company-doc-info">'+
+    '<div><dt>文書の種類</dt><dd>'+escapeHtml(d.category)+'</dd></div>'+
+    '<div><dt>改訂番号</dt><dd>第'+d.revision+'版</dd></div>'+
+    '<div><dt>施行日</dt><dd>'+escapeHtml(d.effectiveOn||'未設定')+'</dd></div>'+
+    '<div><dt>最終更新</dt><dd>'+escapeHtml(d.updatedAt||'—')+'</dd></div></dl>'+
+    ((d.tags||[]).length?'<div class="company-doc-tags">'+d.tags.map(t=>
+      '<span class="company-doc-tag">#'+escapeHtml(t)+'</span>').join('')+'</div>':'')+
+    (d.summary?'<p class="company-doc-summary">'+escapeHtml(d.summary)+'</p>':'')+
+    (d.body?'<div class="company-doc-body">'+escapeHtml(d.body)+'</div>':
+      '<div class="company-doc-no-body">本文は登録されていません。</div>')+
+    (safeUrl?'<p class="company-doc-link"><a target="_blank" rel="noopener noreferrer" href="'+companyDocsSafeAttr_(safeUrl)+
+      '">参照リンクを開く ↗</a></p>':'')+
+    (companyDocsCanManage_()?'<div class="company-doc-article-actions">'+
+      '<button type="button" class="primary-button compact" onclick="companyDocsStartEdit('+companyDocsInlineId_(d.id)+
+      ')">編集する</button><button type="button" class="secondary-button compact" onclick="companyDocsDelete()" '+(ui.busy?'disabled':'')+'>削除</button></div>':'')+
+    '</article>';
+}
+function companyDocsPage(){
+  const ui=companyDocsUi,data=ui.data;
+  const canManage=!!(data&&data.canManage),count=(data&&data.items||[]).length;
+  const published=(data&&data.items||[]).filter(d=>d.status==='公開').length;
+  const hero='<header class="company-doc-hero"><div class="company-doc-hero-copy"><span class="company-doc-eyebrow">COMPANY LIBRARY</span>'+
+    '<h1>社内文書</h1><p>就業規則・社内規程・マニュアルを業務分野から探せます。</p></div>'+
+    '<div class="company-doc-hero-actions">'+
+    '<span class="company-doc-count-chip">全'+count+'件 <span>／ 公開 '+published+'件</span></span>'+
+    (canManage?'<button class="primary-button company-doc-create" type="button" onclick="companyDocsBeginNew()">＋ 文書登録</button>':'')+
+    '</div></header>';
+  if(!data){
+    return '<section class="v15-workspace company-doc-workspace" data-step="'+ui.mobileStep+'">'+hero+
+      '<div class="company-doc-loading card">'+
+      (ui.error?'<p class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</p><button type="button" class="secondary-button" onclick="loadCompanyDocs(true)">再読込</button>':
+      '<div class="loading-card"></div><p>文書一覧を読み込んでいます…</p>')+'</div></section>';
+  }
+  if(data.setupRequired){
+    return '<section class="v15-workspace company-doc-workspace">'+hero+'<div class="card company-doc-empty-setup">'+
+      '<h2>社内文書の保存先が未準備です</h2><p>Sites SQLの構成を管理者が確認してください。データは初期化しません。</p>'+'</div></section>';
+  }
+  const upgrade=data.needsUpgrade?'<div class="company-doc-upgrade"><span>SQL列構成の更新が必要です。管理者へ連絡してください。データは初期化されません。</span></div>':'';
+  const options=(data.categories||[]).map(c=>'<option value="'+c+'" '+(ui.category===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('');
+  const toolbar='<div class="company-doc-toolbar"><label class="company-doc-search">'+
+    '<span aria-hidden="true">⌕</span><input id="companyDocsSearch" type="search" autocomplete="off" aria-label="社内文書を検索"'+
+    ' placeholder="文書名・タグ・本文を検索" maxlength="80" value="'+companyDocsSafeAttr_(ui.query)+
+    '" oninput="companyDocsSetQuery(this.value)"></label>'+
+    '<label class="company-doc-filter"><span>種類</span><select aria-label="文書の種類" onchange="companyDocsSetCategory(this.value)">'+
+    '<option value="all">すべて</option>'+options+'</select></label>'+
+    '<label class="company-doc-filter"><span>状態</span><select aria-label="公開状態" onchange="companyDocsSetStatus(this.value)">'+
+    '<option value="all">すべて</option><option value="公開" '+(ui.status==='公開'?'selected':'')+'>公開</option>'+
+    (canManage?'<option value="下書き" '+(ui.status==='下書き'?'selected':'')+'>下書き</option>':'')+'</select></label>'+
+    '<button type="button" class="company-doc-refresh secondary-button compact" onclick="loadCompanyDocs(true)" '+
+    (ui.loading?'disabled':'')+' aria-label="一覧を更新">↻ <span>更新</span></button></div>';
+  const categories=companyDocsQuickFolders_();
+  const stepBackFolders='<button type="button" class="company-doc-mobile-back" onclick="companyDocsSwitchStep_(\'folders\')">‹ 分野を選び直す</button>';
+  const stepBackList='<button type="button" class="company-doc-mobile-back" onclick="companyDocsSwitchStep_(\'list\')">‹ 文書一覧へ</button>';
+  const folderPanel='<aside class="company-doc-tree-pane card" aria-label="業務フォルダ">'+
+    '<div class="company-doc-pane-head"><h2>業務フォルダ</h2><small>分野から探す</small></div>'+
+    '<nav class="company-doc-tree" aria-label="社内文書の業務分類">'+companyDocsFolderTree_()+'</nav></aside>';
+  const listPanel='<section class="company-doc-list-pane card" aria-label="文書一覧">'+stepBackFolders+
+    companyDocsBreadcrumb_()+
+    '<div class="company-doc-pane-head company-doc-list-heading"><h2>文書一覧</h2>'+
+    '<div class="company-doc-list-tools"><small id="companyDocsListCount">'+companyDocsVisibleItems_().length+'件</small>'+
+    '<select aria-label="並び替え" onchange="companyDocsSetSort(this.value)">'+
+    '<option value="newest" '+(ui.sort==='newest'?'selected':'')+'>更新が新しい順</option>'+
+    '<option value="oldest" '+(ui.sort==='oldest'?'selected':'')+'>更新が古い順</option>'+
+    '<option value="name" '+(ui.sort==='name'?'selected':'')+'>文書名順</option></select></div></div>'+
+    '<p id="companyDocsSearchStatus" class="company-doc-search-note" role="status">'+
+    (ui.searching?'本文を検索中…':escapeHtml(ui.searchError||''))+'</p>'+
+    '<div id="companyDocsListRows" class="company-doc-list">'+companyDocsListRows_()+'</div></section>';
+  const detailPanel='<section class="company-doc-detail-pane card" aria-label="文書プレビュー">'+stepBackList+
+    companyDocsDetail_()+'</section>';
+  return '<section class="v15-workspace company-doc-workspace" data-step="'+companyDocsSafeAttr_(ui.mobileStep)+'">'+
+    hero+upgrade+toolbar+categories+
+    (ui.error?'<div class="company-doc-error" role="alert">'+escapeHtml(ui.error)+'</div>':'')+
+    '<div class="company-doc-layout">'+folderPanel+listPanel+detailPanel+'</div></section>';
+}
+</script>

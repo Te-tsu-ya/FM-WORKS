@@ -63,3 +63,63 @@ test('admin documentation serves the canonical current files and denies ordinary
   assert.throws(()=>ordinary.invoke('getSystemDocument',['USER','requirements']),/管理者/);
  }finally{f.db.close();}
 });
+
+test('legacy GAS HTML service is absent from the current Sites engine source',()=>{
+ const source=fs.readFileSync('src/domain/core.js','utf8');
+ assert.doesNotMatch(source,/\bHtmlService\b/);
+ assert.doesNotMatch(source,/\bfunction doGet\s*\(/);
+ assert.doesNotMatch(source,/\bfunction include_\s*\(/);
+});
+
+test('Sites maintenance uses SQL tables and never claims unverified backup',async()=>{
+ const f=await fixture();
+ try{
+  const info=f.engine.invoke('getSystemStatus',['TOKEN']);
+  assert.equal(info.dbName,'Sites SQL / D1');
+  assert.equal(info.backupVerified,false);
+  assert.equal(info.readiness.ready,false);
+  assert.ok(info.sheets['社員マスタ']>=5);
+  assert.ok(Array.isArray(f.engine.invoke('getAuditLogs',['TOKEN',20])));
+  const ordinary=createEngine(createServices(f.repository),{employeeId:'FM0003'},'USER');
+  assert.throws(()=>ordinary.invoke('getSystemStatus',['USER']),/管理者/);
+ }finally{f.db.close();}
+});
+
+test('company document schema upgrades are not performed through old GAS backups',()=>{
+ const source=fs.readFileSync('src/domain/documents.js','utf8');
+ const html=fs.readFileSync('src/ui/documents.html','utf8');
+ assert.doesNotMatch(source,/\bcreateDatabaseBackup_\b/);
+ assert.doesNotMatch(source,/\binitializeCompanyDocuments\b/);
+ assert.doesNotMatch(html,/\bcompanyDocsConfirmInitialize\b/);
+ assert.doesNotMatch(html,/\bcompanyDocsInitialize\b/);
+});
+
+test('Sites UI source no longer uses GAS transport substitutions',()=>{
+ for(const dir of ['src/ui']){
+  for(const file of fs.readdirSync(dir).filter(name=>name.endsWith('.html'))){
+   const source=fs.readFileSync(dir+'/'+file,'utf8');
+   assert.doesNotMatch(source,/google\.script\.run/,file);
+   assert.doesNotMatch(source,/global\.google&&global\.google/,file);
+  }
+ }
+ const build=fs.readFileSync('scripts/prepare-app.mjs','utf8');
+ assert.doesNotMatch(build,/replaceAll\('google\.script\.run'/);
+});
+
+test('small shared UI/document helpers are folded into active modules',()=>{
+ const main=fs.readFileSync('src/domain/core.js','utf8');
+ const bankStyles=fs.readFileSync('src/ui/styles.html','utf8');
+ const index=fs.readFileSync('src/ui/Index.html','utf8');
+ assert.match(main,/function getSystemDocument\(/);
+ assert.match(bankStyles,/\.cfb-paste-panel/);
+ assert.doesNotMatch(index,/StylesCashFlowPaste/);
+});
+
+test('Sites HTML uses build-only include markers, not GAS scriptlets',()=>{
+ const index=fs.readFileSync('src/ui/Index.html','utf8');
+ const matches=[...index.matchAll(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g)];
+ assert.ok(matches.length>10);
+ assert.doesNotMatch(index,/<\?/);
+ const shell=fs.readFileSync('src/generated/shell.mjs','utf8');
+ assert.doesNotMatch(shell,/FM_INCLUDE:/);
+});
