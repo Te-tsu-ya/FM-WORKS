@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {createRequire} from 'node:module';
 import {TestD1} from './sql-fixture.mjs';
 import {SqlRepository} from '../src/server/sql-repository.mjs';
 import {definitions,seed} from '../src/generated/schema-meta.mjs';
@@ -122,4 +123,36 @@ test('Sites HTML uses build-only include markers, not GAS scriptlets',()=>{
  assert.doesNotMatch(index,/<\?/);
  const shell=fs.readFileSync('src/generated/shell.mjs','utf8');
  assert.doesNotMatch(shell,/FM_INCLUDE:/);
+});
+
+test('page, login and document content remain reachable when viewport height is insufficient',()=>{
+ const require=createRequire(import.meta.url);
+ const postcss=createRequire(require.resolve('next/package.json'))('postcss');
+ const source=fs.readFileSync('src/ui/styles.html','utf8');
+ const ast=postcss.parse([...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n'));
+ // Evaluate the final unconditional declarations, including !important priority.
+ const computed=selector=>{
+  const result={};
+  ast.walkRules(rule=>{
+   if(rule.parent.type!=='root'||!rule.selectors.includes(selector))return;
+   for(const d of rule.nodes.filter(n=>n.type==='decl')){
+    if(result[d.prop]?.important&&!d.important)continue;
+    result[d.prop]={value:d.value,important:d.important};
+   }
+  });
+  return Object.fromEntries(Object.entries(result).map(([key,d])=>[key,d.value]));
+ };
+ assert.equal(computed('#content').height,'auto');
+ assert.equal(computed('#content').overflow,'visible');
+ assert.equal(computed('.login-mode')['overflow-y'],'auto');
+ assert.notEqual(computed('.login-mode').overflow,'hidden');
+ for(const selector of ['.login-shell','.login-stage','.login-panel','.document-shell','.document-reader','.settings-panel','.attendance-dashboard','.worklog-dashboard']){
+  assert.equal(computed(selector).height,'auto',selector);
+ }
+ assert.equal(computed('.attendance-mini-grid')['grid-auto-rows'],'minmax(38px,auto)');
+ assert.equal(computed('.modal-card')['overflow-y'],'auto');
+ assert.equal(computed('.table-wrap').overflow,'auto');
+ ast.walkRules(rule=>assert.doesNotMatch(rule.selector,/one-screen/,'viewport-height fitting must not return'));
+ const shell=fs.readFileSync('src/ui/shell.html','utf8');
+ assert.doesNotMatch(shell,/classList\.(?:add|toggle)\([^\n]*one-screen/);
 });
