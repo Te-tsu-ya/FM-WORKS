@@ -107,3 +107,5 @@ GAS専用HTML入口、Google Driveバックアップ、時間トリガーによ�
 UIは`FMApi.run`経由で同一オリジンのSites APIへ接続し、GAS式`google.script.run`をビルド時に文字置換する処理は使用しない。
 
 管理文書の小規模な読み取り関数は`core/Maintenance.js`に、資金取引貼付け用CSSは`styles/StylesCashFlowBankGrid.html`に統合し、不要な単独ファイルを削除した。
+
+HTMLの部品読み込みはビルド専用コメント `<!-- FM_INCLUDE:... -->` で指定し、生成時に実ファイルへ展開する。GASのHTMLテンプレート記法は使わない。

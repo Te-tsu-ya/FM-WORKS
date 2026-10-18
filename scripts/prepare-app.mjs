@@ -116,7 +116,8 @@ const engine='export const appVersion = '+JSON.stringify(appVersion)+';\nexport 
 fs.writeFileSync('src/generated/engine.mjs',engine);
 
 const index=fs.readFileSync('src/ui/Index.html','utf8');
-let html=index.replace(/<\?!= include_\('([A-Za-z0-9_/-]+)'\); \?>/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8')).replace(/<\?= appName \?>/g,'FM WORKS').replace(/<\?= appVersion \?>/g,appVersion);
+let html=index.replace(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8'));
+if(html.includes('<!-- FM_INCLUDE:'))throw new Error('Unresolved FM WORKS HTML include');
 const bridge=fs.readFileSync('src/browser/bridge.js','utf8');
 const overrides=fs.readFileSync('src/browser/overrides.js','utf8').replaceAll('__APP_VERSION__',appVersion);
 html=html.replace('<head>','<head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script>'+bridge+'</script>');

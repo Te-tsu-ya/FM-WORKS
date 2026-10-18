@@ -114,3 +114,12 @@ test('small shared UI/document helpers are folded into active modules',()=>{
  assert.match(bankStyles,/\.cfb-paste-panel/);
  assert.doesNotMatch(index,/StylesCashFlowPaste/);
 });
+
+test('Sites HTML uses build-only include markers, not GAS scriptlets',()=>{
+ const index=fs.readFileSync('src/ui/Index.html','utf8');
+ const matches=[...index.matchAll(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g)];
+ assert.ok(matches.length>35);
+ assert.doesNotMatch(index,/<\?/);
+ const shell=fs.readFileSync('src/generated/shell.mjs','utf8');
+ assert.doesNotMatch(shell,/FM_INCLUDE:/);
+});
