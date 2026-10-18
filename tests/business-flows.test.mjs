@@ -65,7 +65,7 @@ test('admin documentation serves the canonical current files and denies ordinary
 });
 
 test('legacy GAS HTML service is absent from the current Sites engine source',()=>{
- const source=fs.readFileSync('src/domain/core/Code.js','utf8');
+ const source=fs.readFileSync('src/domain/core.js','utf8');
  assert.doesNotMatch(source,/\bHtmlService\b/);
  assert.doesNotMatch(source,/\bfunction doGet\s*\(/);
  assert.doesNotMatch(source,/\bfunction include_\s*\(/);
@@ -86,8 +86,8 @@ test('Sites maintenance uses SQL tables and never claims unverified backup',asyn
 });
 
 test('company document schema upgrades are not performed through old GAS backups',()=>{
- const source=fs.readFileSync('src/domain/office/CompanyDocs.js','utf8');
- const html=fs.readFileSync('src/ui/modules/AppCompanyDocs.html','utf8');
+ const source=fs.readFileSync('src/domain/documents.js','utf8');
+ const html=fs.readFileSync('src/ui/documents.html','utf8');
  assert.doesNotMatch(source,/\bcreateDatabaseBackup_\b/);
  assert.doesNotMatch(source,/\binitializeCompanyDocuments\b/);
  assert.doesNotMatch(html,/\bcompanyDocsConfirmInitialize\b/);
@@ -95,7 +95,7 @@ test('company document schema upgrades are not performed through old GAS backups
 });
 
 test('Sites UI source no longer uses GAS transport substitutions',()=>{
- for(const dir of ['src/ui/modules','src/ui/components']){
+ for(const dir of ['src/ui']){
   for(const file of fs.readdirSync(dir).filter(name=>name.endsWith('.html'))){
    const source=fs.readFileSync(dir+'/'+file,'utf8');
    assert.doesNotMatch(source,/google\.script\.run/,file);
@@ -107,8 +107,8 @@ test('Sites UI source no longer uses GAS transport substitutions',()=>{
 });
 
 test('small shared UI/document helpers are folded into active modules',()=>{
- const main=fs.readFileSync('src/domain/core/Maintenance.js','utf8');
- const bankStyles=fs.readFileSync('src/ui/styles/StylesCashFlowBankGrid.html','utf8');
+ const main=fs.readFileSync('src/domain/core.js','utf8');
+ const bankStyles=fs.readFileSync('src/ui/styles.html','utf8');
  const index=fs.readFileSync('src/ui/Index.html','utf8');
  assert.match(main,/function getSystemDocument\(/);
  assert.match(bankStyles,/\.cfb-paste-panel/);
@@ -118,7 +118,7 @@ test('small shared UI/document helpers are folded into active modules',()=>{
 test('Sites HTML uses build-only include markers, not GAS scriptlets',()=>{
  const index=fs.readFileSync('src/ui/Index.html','utf8');
  const matches=[...index.matchAll(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g)];
- assert.ok(matches.length>35);
+ assert.ok(matches.length>10);
  assert.doesNotMatch(index,/<\?/);
  const shell=fs.readFileSync('src/generated/shell.mjs','utf8');
  assert.doesNotMatch(shell,/FM_INCLUDE:/);

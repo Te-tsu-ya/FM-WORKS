@@ -1,13 +1,11 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 import {createDemoRuntime,MemorySheet} from './seed-builder.mjs';
 
 const {version:appVersion}=JSON.parse(fs.readFileSync('package.json','utf8'));
 fs.mkdirSync('src/generated',{recursive:true});
 const runtime=createDemoRuntime();
-const runtimeVersion=vm.runInContext('APP.version',runtime.context);
-if(runtimeVersion!==appVersion)throw new Error(`Version mismatch: package.json=${appVersion}, src/domain/core/Code.js=${runtimeVersion}`);
+if(vm.runInContext("APP.version",runtime.context)!==appVersion)throw Error("Package and engine versions differ");
 runtime.sheets.set('社内文書',new MemorySheet('社内文書',vm.runInContext('COMPANY_DOC_HEADERS',runtime.context)));
 const meta=vm.runInContext('({specs:DB_SCHEMA_SPECS,db:DB.sheets,finance:FINANCE_MODELS,bank:CFP,analysis:CFA,quote:QUOTE_MODEL,somu:SOMU_MODELS,hub:PROJECT_HUB_MODELS})',runtime.context);
 const tableNames={
@@ -97,12 +95,10 @@ schema+="export const siteSessions=sqliteTable('site_sessions',{tokenHash:text('
 for(const [i,s] of specs.entries())schema+='export const domain'+i+' = sqliteTable('+JSON.stringify(s.table)+',{rowNo:integer("row_no").primaryKey(),'+s.columns.map((col,j)=>'c'+j+':text('+JSON.stringify(col)+')').join(',')+'});\n';
 fs.writeFileSync('db/schema.ts',schema);
 
-const domainPaths=fs.readdirSync('src/domain',{recursive:true}).filter(n=>n.endsWith('.js'))
- .sort((a,b)=>{const left=path.basename(a),right=path.basename(b);return left<right?-1:left>right?1:0;});
-const sources=domainPaths.map(n=>fs.readFileSync(path.join('src/domain',n),'utf8')).join('\n');
+const sources=fs.readdirSync('src/domain').filter(n=>n.endsWith('.js')).sort().map(n=>fs.readFileSync('src/domain/'+n,'utf8')).join('\n');
 const publicNames=[...sources.matchAll(/^function ([A-Za-z]\w*)\(/gm)].map(m=>m[1]).filter(n=>!n.endsWith('_'));
 const blocked=/install|Job|Pin|Prototype|Backup|Trigger|initialize|migrate|export|Export|Attachment|issueQuote|retryQuote|getQuoteFile|createRelatedDocument|retryRelatedDocument|getRelatedDocumentFile|importJapan|importHolidays/;
-const allowed=publicNames.filter(n=>!blocked.test(n)&&!['login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
+const allowed=publicNames.filter(n=>!blocked.test(n)&&!['doGet','login','logout','resumeSession','getPublicAuthConfig','requestPinHelp'].includes(n));
 const generatedDocs={requirements:{title:'FM WORKS 要件定義書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/REQUIREMENTS.md','utf8')},technical:{title:'FM WORKS 技術設計書',version:appVersion,updatedAt:'2026-10-18',markdown:fs.readFileSync('docs/TECHNICAL_DESIGN.md','utf8')}};
 const engine='export const appVersion = '+JSON.stringify(appVersion)+';\nexport const apiMethods = '+JSON.stringify(allowed)+';\nexport function createEngine(services,actor,sessionToken){\nconst {Utilities,CacheService,PropertiesService,SpreadsheetApp,DriveApp,UrlFetchApp,LockService,Session,ScriptApp}=services;\n'+sources+'\nconst GENERATED_DOCS='+JSON.stringify(generatedDocs)+';\n'+`
  getDb_=services.getDb;getDatabaseSpreadsheetId_=()=> 'SITES_SQL_ONLY';getRuntimeEnvironment_=()=> 'DEVELOPMENT';
@@ -117,7 +113,7 @@ fs.writeFileSync('src/generated/engine.mjs',engine);
 
 const index=fs.readFileSync('src/ui/Index.html','utf8');
 let html=index.replace(/<!-- FM_INCLUDE:([A-Za-z0-9_/-]+) -->/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8'));
-if(html.includes('<!-- FM_INCLUDE:'))throw new Error('Unresolved FM WORKS HTML include');
+if(html.includes('<!-- FM_INCLUDE:'))throw Error('Unresolved HTML include');
 const bridge=fs.readFileSync('src/browser/bridge.js','utf8');
 const overrides=fs.readFileSync('src/browser/overrides.js','utf8').replaceAll('__APP_VERSION__',appVersion);
 html=html.replace('<head>','<head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script>'+bridge+'</script>');

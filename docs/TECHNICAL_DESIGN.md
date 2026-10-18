@@ -1,6 +1,6 @@
 # FM WORKS 技術設計書
 
-対象：v0.0.0（Sites開発初版） / 更新：2026-10-18
+対象：v0.0.0 / 更新：2026-10-18
 
 ## 1. 実行構成
 
@@ -10,17 +10,19 @@
 | 層 | 実装 | 責任 |
 |---|---|---|
 | HTTP入口 | `app/route.ts`、`app/api/rpc/[method]/route.ts` | HTML応答、D1 bindingの受渡し |
-| UI | `src/ui/Index.html`、`src/ui/{modules,styles,components}/*.html` | 画面・スタイル・操作・ローディング |
+| UI | `src/ui/*.html` | 画面・スタイル・操作・ローディング |
 | ブラウザー連携 | `src/browser/bridge.js`、`overrides.js` | 同一オリジン通信、開発用担当者選択、Sites設定 |
 | API | `src/server/api.mjs` | 入力形式、Origin、セッション、業務実行、SQL確定 |
-| 業務 | `src/domain/{core,people,time,projects,finance,office}/*.js` | 勤怠・申請・月次・見積・経理等の検証と権限 |
+| 業務 | `src/domain/*.js` | 勤怠・申請・月次・見積・経理等の検証と権限 |
 | SQL | `src/server/sql-repository.mjs` | 初期投入、読取、変更検出、改訂競合、原子的保存 |
 | 実行補助 | `src/server/table-adapter.mjs`、`runtime-services.mjs` | 要求内の表、時刻・ハッシュ・キャッシュ、Google接続拒否 |
 | DB定義 | `db/schema.ts`、`db/table-mapping.json` | SQL列と業務名・列の対応 |
 | マイグレーション | `drizzle/` | 適用順とスキーマ履歴。Sites標準ビルドが成果物へ収録 |
 | 生成 | `scripts/prepare-app.mjs`、`seed-builder.mjs` | 業務関数・HTML・文書・初期データの組立て |
 
-`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。業務ファイルは保存フォルダーに関係なくファイル名順で読み込み、従来の実行順を維持する。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
+`src/domain/`は現行の業務ソースでありGAS配布物ではない。表形式の関数名やサービス互換名は内部互換性のため残る。公開APIと現行業務から参照されないGAS認証・帳票生成・バックアップ・移行処理は削除し、未対応APIは引き続き501で拒否する。`.js`をビルド時に組み立て、Workerへ関数として含める。WorkerでevalやNode VMを実行しない。Node VMはダミーデータを作るビルド時だけ使用する。
+
+業務はcore・people・attendance・projects・quotes・documents・finance・cashflow・cashflow-analysis・office・notificationsの11単位。UIは機能別の12ファイルへ統合し、組込み順を維持する。小さな改修ごとの追加ファイルを作らず、該当領域を編集する。
 
 ## 2. 生成と正本
 
@@ -29,7 +31,8 @@
 | `src/ui/`, `src/domain/`, `src/browser/`, `src/server/` | 編集するソース |
 | `docs/REQUIREMENTS.md`, `TECHNICAL_DESIGN.md`, `RULES.md` | 仕様・ルール。別の進捗文書を作らない |
 | `db/seeds/fixtures.json`＋生成スクリプト | 架空レコードの編集元 |
-| `db/schema.ts`, `db/table-mapping.json` | 現行列定義を生成してGit管理。マイグレーションと整合させる |
+| `db/schema.ts` | 現行列定義を生成してGit管理。マイグレーションと整合させる |
+| `db/table-mapping.json` | 業務名とSQL列の確認用投影。自動生成・Git対象外 |
 | `src/generated/` | engine、shell、schema-meta、API契約。自動生成・Git対象外 |
 | `db/seeds/workspace.json` | 初期データの確認用投影。自動生成・Git対象外 |
 | `dist/`とツール実行状態 | ビルド成果物・一時状態。Git対象外 |
@@ -64,7 +67,7 @@
 
 `POST /api/rpc/:method`へ`{"args":[...]}`をJSONで送る。応答は`{"result":...}`、失敗は`{"error":"理由"}`。`FMApi.run`が成功・失敗コールバックへ渡す。同一Sitesへcookieを同送する。
 
-業務公開メソッドは生成した`src/generated/api-contract.json`に列挙し、実行前には生成済み`apiMethods`の一覧と照合する。末尾`_`の内部関数は公開しない。ログイン・ログアウト・復帰・公開ログイン設定はAPI側で扱う。Google依存の発行・添付・バックアップ等は拒否する。外部サービスへ到達した場合も実行補助層が拒否する。
+業務公開メソッドは生成した`src/generated/api-contract.json`に列挙し、実行前に生成済み`apiMethods`と照合する。末尾`_`の内部関数は公開しない。ログイン・ログアウト・復帰・公開ログイン設定はAPI側で扱う。Google依存の発行・添付・バックアップ等は拒否する。外部サービスへ到達した場合も実行補助層が拒否する。
 
 | HTTP | 現行APIでの意味 |
 |---|---|
@@ -84,7 +87,7 @@ Sitesの入場制限を第一の境界とする。アプリ内で乱数トーク
 
 ブラウザー側はRPC引数用の同じトークンをlocalStorageまたはsessionStorageへ保持するため、HttpOnly cookieだけの認証ではない。テーマ・文字サイズ・選択担当者もブラウザーへ保持する。業務レコードは保持しない。
 
-認証済み訪問者IDが渡された場合はセッションと関連付ける。所有者限定Siteのサービスアクセスは訪問者IDを持たないため開発用共有境界とする。APIはcookie・送信トークン・期限を全表読み込み前に検証し、対象外・未対応メソッドとログアウトは全表を読み込まずに処理する。認証済み処理は現在の社員状態と業務権限を確認する。単一の`H`・`m`書式を含む時刻変換はAsia/Tokyoに従う。
+認証済み訪問者IDが渡された場合はセッションと関連付ける。所有者限定Siteのサービスアクセスは訪問者IDを持たないため開発用共有境界とする。APIは全表取得前にcookie・送信トークン・期限を確認し、社員状態・業務権限は業務実行前に検証する。ログアウトはセッション表だけを更新する。
 
 架空担当者選択は本人認証ではない。公開範囲拡大や実データ利用前に、本人紐付け・トークン保持・失効・監査を見直す。
 
@@ -97,11 +100,3 @@ Sitesの入場制限を第一の境界とする。アプリ内で乱数トーク
 Sitesビルド用の`build/sites-vite-plugin.ts`とライセンス、Worker入口、実行プロファイル・インストール補助を残す。未使用のUI集・外部コネクターのサンプルは含めない。ライブラリ削除後はlockfileとインストールの整合を確認する。
 
 同じSite IDへ更新し、認証情報はメモリーとstdinだけで扱う。GitHub Actions等は使用しない。ブラウザーQAが利用できなければ未実施と明記しHTTP確認と区別する。未対応事項は[要件定義書](REQUIREMENTS.md)へ集約する。
-
-## 8. Sites専用の実装境界
-
-- UI通信は`FMApi.run`、HTML部品の組込みは`<!-- FM_INCLUDE:... -->`で統一する。
-- 管理画面はSQLの状態、業務の監査記録、労務設定を扱う。Drive複製やApps Scriptトリガーを実行しない。
-- バックアップ・復元、ファイル発行、自動ジョブはSites方式の実装と検証が終わるまで未対応と表示する。
-- 管理文書の参照は`core/Maintenance.js`、資金明細の貼付けスタイルは`styles/StylesCashFlowBankGrid.html`に置く。
-- アプリ表示版`0.0.0`とD1スキーマ番号は別。業務履歴・監査ログ・適用済みSQL変更履歴を維持する。
