@@ -1,0 +1,594 @@
+<script>
+const NAV = [['home','ホーム','i-home'],['attendance','勤怠','i-clock'],['worklog','工数','i-chart'],['projects','プロジェクト','i-briefcase'],['schedule','予定表','i-calendar'],['requests','申請・報告','i-file'],['quotes','書類作成','i-doc'],['documentHistory','書類一覧・履歴','i-file'],['companyDocs','社内文書','i-doc'],['finance','経理','i-trend'],['office','総務','i-briefcase'],['admin','管理・設定','i-gear']];
+const NAV_GROUPS=[
+  {label:'日常業務',ids:['home','attendance','worklog','projects','schedule']},
+  {label:'申請・帳票',ids:['requests','quotes','documentHistory','companyDocs']},
+  {label:'管理業務',ids:['finance','office']},
+  {label:'システム管理',ids:['admin']}
+];
+const MOBILE_NAV = ['home','attendance','worklog','schedule','requests'];
+const CATEGORY_COLORS={予定:'#1478ff',仮予定:'#f3a11b',業務:'#7b61ff',出張:'#00a58a',休暇:'#ef4d5b',社内:'#64748b'};
+let state={page:'home',data:null,publicConfig:null,sessionToken:null,workLocation:'出社',busy:false,homeOverview:{loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''},attendancePreview:{data:null,key:'',at:0,loading:false,error:''},authAdmin:null,maintenance:{status:null,audit:[],loading:false},worklog:{date:null,loadedDate:null,renderedDate:null,items:[],totalMinutes:0,loading:false,error:''},requests:{own:[],team:[],context:null,loading:false,refreshing:false,error:'',loadedKey:'',historyFilter:'ALL',historyQuery:'',historyLimit:10,approvalLimit:4,submitting:false},monthly:{yearMonth:null,employeeId:null,data:null,loadedKey:'',error:'',view:'calendar',loading:false},adminTab:'people',officeUi:{selected:'overview',recordId:'',query:'',status:'all'},adminUi:{selectedEmployeeId:'',detailTab:'basic',search:'',role:'ALL',status:'ALL',menuOpen:false,wizard:false,wizardStep:1,saving:false},documents:{requirements:null,technical:null,loading:null},schedule:{date:null,selectedDate:null,selectedEventId:null,mobileDetailOpen:false,loadedKey:'',loadedIdentity:'',refreshing:false,highlightEmployeeId:'ALL',rawEvents:[],error:'',view:'month',employeeId:'ALL',category:'ALL',events:[],companyDays:[],employees:[],loading:false},company:{year:null,availableYears:[],nextCreatableYear:null,days:[],workdays:0,daysOff:0,adjustedWorkdays:0,companyHolidays:0,loading:false}};
+const PAGE_CACHE_TTL={homeOverview:45000,worklog:300000,schedule:300000,company:300000,requests:300000,monthly:300000,authAdminPeople:120000,authAdminAuth:60000,authAdminProjects:300000,maintenance:60000,documents:600000};
+const pageCache={};
+const pendingLoads=new Set();
+let liveAttendanceTimer=null;
+let globalKeysBound=false;
+let modalReturnFocus=null;
+let routePrefetchTimer=null;
+function cacheHas(name,key){const e=pageCache[name];return !!(e&&e.key===String(key))}
+function cacheFresh(name,key){const e=pageCache[name];return !!(e&&e.key===String(key)&&(Date.now()-e.at)<(PAGE_CACHE_TTL[name]||60000))}
+function markPageCache(name,key){pageCache[name]={key:String(key),at:Date.now()}}
+function invalidatePageCache(...names){names.forEach(name=>{if(name==='authAdmin'){delete pageCache.authAdminPeople;delete pageCache.authAdminAuth;delete pageCache.authAdminProjects;}else delete pageCache[name]});if(names.includes('worklog')&&typeof invalidateWorklogWindowCache==='function')invalidateWorklogWindowCache();if(names.includes('schedule')&&typeof invalidateScheduleWindowCache==='function')invalidateScheduleWindowCache();if(names.includes('monthly')&&typeof invalidateMonthlyResultCache==='function')invalidateMonthlyResultCache()}
+// Invalidate dependent read views before the confirmed write callback applies its result.
+// No business records or credentials are put in persistent browser storage.
+function invalidateBusinessViewsAfterWrite(method,result){
+  if(result&&result.ok===false)return;
+  if(method==='saveFinanceReceiptsBulk'&&typeof financeUi!=='undefined'){
+    financeUi.at=0;financeUi.revOverview++;financeUi.refreshNeeded=true;
+  }
+  if(/^(saveQuoteDraft|issueQuote|importQuoteVendors|configureQuoteSequence|createRelatedDocument|retryRelatedDocument)$/.test(method)&&typeof quoteUi!=='undefined'){
+    quoteUi.at=0;if(quoteUi.loading)quoteUi.refreshNeeded=true;
+  }
+  if(/^(submitFinanceExpense|submitFinanceTravel|saveFinanceReceipt|resubmitFinanceRequest|reviewFinanceRequest|settleFinanceRequest)$/.test(method)&&typeof financeUi!=='undefined'){
+    financeUi.at=0;financeUi.mineAt=0;financeUi.revOverview++;financeUi.revMine++;
+    if(financeUi.loading)financeUi.refreshNeeded=true;if(financeUi.ownLoading)financeUi.ownRefreshNeeded=true;
+    financeUi.insights=null;
+    financeUi.insightSerial=(financeUi.insightSerial||0)+1;financeUi.insightLoading=false;
+  }
+  if(/^(saveSomu|createSomu|returnSomu|advanceSomu|resubmitSomu)/.test(method)){
+    if(typeof somuUi!=='undefined')somuUi.loadedAt=0;
+    if(typeof somuGrowth!=='undefined')somuGrowth.loadedAt=0;
+  }
+  if(/^(recordPunch|saveWorklog|deleteWorklog|createRequest|submitRequest|approveRequest|cancelRequest|decideApprovedCancellation|saveEmployee|updateEmployee|adjustLeaveBalance)/.test(method)){
+    invalidatePageCache('homeOverview');
+    if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
+  }
+  if(/^(saveWorklog|deleteWorklog|saveProject|saveProjectHubRecord|saveProjectDependencies|uploadProjectAttachment|deleteProjectAttachment|saveProjectBudget|saveProjectCost|deleteProjectCost|saveQuoteDraft|issueQuote|migrateDatabaseToCurrent)$/.test(method)&&typeof projectHubInvalidate_==='function')projectHubInvalidate_();
+  if(/^(saveProject|saveProjectHubRecord|saveProjectDependencies)$/.test(method)&&typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();
+  if(method==='migrateDatabaseToCurrent'){
+    Object.keys(pageCache).forEach(key=>delete pageCache[key]);
+    if(typeof quoteUi!=='undefined')quoteUi.at=0;
+    if(typeof financeUi!=='undefined'){financeUi.at=0;financeUi.mineAt=0;}
+    if(typeof somuUi!=='undefined')somuUi.loadedAt=0;
+    if(typeof somuGrowth!=='undefined')somuGrowth.loadedAt=0;
+    if(typeof resetCashFlowUi==='function')resetCashFlowUi();
+    if(typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();
+  }
+}
+function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
+function endPageLoad(ticket){if(ticket)pendingLoads.delete(ticket)}
+function renderPageIfActive(page){if(state.page===page)renderPage()}
+function worklogCacheKey(){return state.worklog.date||state.data&&state.data.today||''}
+function scheduleCacheKey(){if(!state.schedule.date)return '';const r=monthGridRange(state.schedule.date);return r.start+'|'+r.end}
+function companyCacheKey(){return String(state.company.year||state.data&&parseIso(state.data.today).getFullYear()||'')}
+function monthlyCacheKey(){return [state.monthly.yearMonth||state.data&&state.data.today.slice(0,7)||'',state.monthly.employeeId||state.data&&state.data.user.employeeId||''].join('|')}
+function scheduleIdleTask(fn,delay){setTimeout(()=>{if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout:1200});else fn()},delay)}
+function scheduleBackgroundTask(fn,delay,attempt=0){
+  scheduleIdleTask(()=>{
+    if((state.busy||pendingLoads.size>0||document.hidden)&&attempt<4){
+      scheduleBackgroundTask(fn,700,attempt+1);
+      return;
+    }
+    if(!state.busy&&pendingLoads.size===0&&!document.hidden)fn();
+  },delay);
+}
+function prefetchRouteOnIntent(page){
+  if(!state.data||!state.sessionToken||state.busy||pendingLoads.size>0)return;
+  // A hover must not preempt the active route with a costly multi-ledger RPC.
+  // Only small, bounded calendar/worklog windows are eligible for prefetch.
+  if(page==='schedule')loadSchedule({silent:true});
+  else if(page==='worklog')loadWorklogs({silent:true});
+}
+function queueRoutePrefetch(page){
+  clearTimeout(routePrefetchTimer);
+  if(!['schedule','worklog'].includes(page))return;
+  // Long dwell avoids a GAS launch during a quick menu pointer crossing.
+  routePrefetchTimer=setTimeout(()=>prefetchRouteOnIntent(page),450);
+}
+function startMenuPrefetch(){
+  // Eager multi-page prefetch is intentionally disabled. User intent gets priority over background GAS calls.
+}
+
+function getTheme(){return document.documentElement.dataset.theme==='dark'?'dark':'light'}
+function updateThemeButton(){
+  const b=document.getElementById('themeToggleButton');if(!b)return;
+  const dark=getTheme()==='dark';
+  b.setAttribute('aria-label',dark?'ライトモードに切り替え':'ダークモードに切り替え');
+  b.title=dark?'ライトモード':'ダークモード';
+}
+function setTheme(theme,animate=true){
+  const next=theme==='dark'?'dark':'light';
+  const apply=()=>{document.documentElement.dataset.theme=next;document.documentElement.style.colorScheme=next;localStorage.setItem('fmworks.theme',next);updateThemeButton()};
+  if(animate&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.documentElement.classList.remove('theme-to-light','theme-to-dark');
+    document.documentElement.classList.add(next==='dark'?'theme-to-dark':'theme-to-light','theme-changing');
+    if(document.startViewTransition)document.startViewTransition(apply);else apply();
+    setTimeout(()=>document.documentElement.classList.remove('theme-changing','theme-to-light','theme-to-dark'),720);
+  }else apply();
+}
+function toggleTheme(){setTheme(getTheme()==='dark'?'light':'dark',true)}
+function initTheme(){
+  const saved=localStorage.getItem('fmworks.theme');
+  const system=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  setTheme(saved||system,false);updateThemeButton();initFontSize();
+}
+
+function getFontSizeMode(){return document.documentElement.dataset.fontSize==='large'?'large':'standard'}
+
+function updateFontSizeButton(){
+  const b=document.getElementById('fontSizeToggleButton');if(!b)return;
+  const large=getFontSizeMode()==='large';
+  b.textContent=large?'A−':'A＋';
+  b.setAttribute('aria-label',large?'文字サイズを標準に戻す':'文字サイズを大きくする');
+  b.title=large?'文字サイズ：大きめ（クリックで標準）':'文字サイズ：標準（クリックで大きめ）';
+  b.setAttribute('aria-pressed',large?'true':'false');
+}
+
+function setFontSizeMode(mode){
+  const next=mode==='large'?'large':'standard';
+  document.documentElement.dataset.fontSize=next;
+  localStorage.setItem('fmworks.fontSize',next);
+  updateFontSizeButton();
+}
+
+function toggleFontSize(){setFontSizeMode(getFontSizeMode()==='large'?'standard':'large')}
+
+function initFontSize(){
+  const saved=localStorage.getItem('fmworks.fontSize');
+  setFontSizeMode(saved==='large'?'large':'standard');
+  const b=document.getElementById('fontSizeToggleButton');if(b)b.onclick=toggleFontSize;
+}
+
+function svg(id){return `<svg aria-hidden='true'><use href='#${id}'/></svg>`}
+function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
+function card(title,body,cls=''){return `<section class='card ${cls}'><h3>${title}</h3>${body}</section>`}
+function metric(label,value,iconTone=''){return `<section class='card metric'><div><small class='muted'>${label}</small><div><strong>${value}</strong></div></div><div class='metric-icon ${iconTone}'>●</div></section>`}
+function list(items){return `<div class='list'>${items.map(i=>`<div class='list-item'><span class='status-dot' style='background:${i.color||'var(--blue)'}'></span><div><strong>${i.title}</strong><div class='muted' style='font-size:12px;margin-top:3px'>${i.sub||''}</div></div>${i.right||''}</div>`).join('')}</div>`}
+function pageHead(title,desc,action=''){return `<div class='page-head'><div><div class='eyebrow'>FM WORKS</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2400)}
+function pad(n){return String(n).padStart(2,'0')}
+function parseIso(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
+function iso(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+function addDays(s,n){const d=parseIso(s);d.setDate(d.getDate()+n);return iso(d)}
+function addMonths(s,n){const d=parseIso(s);d.setDate(1);d.setMonth(d.getMonth()+n);return iso(d)}
+function startOfWeek(s){const d=parseIso(s);d.setDate(d.getDate()-d.getDay());return iso(d)}
+function endOfWeek(s){return addDays(startOfWeek(s),6)}
+function monthGridRange(s){const d=parseIso(s);const first=new Date(d.getFullYear(),d.getMonth(),1);const last=new Date(d.getFullYear(),d.getMonth()+1,0);first.setDate(first.getDate()-first.getDay());last.setDate(last.getDate()+(6-last.getDay()));return {start:iso(first),end:iso(last)}}
+function fmtDate(s){const d=parseIso(s);return `${d.getMonth()+1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`}
+function fmtMonth(s){const d=parseIso(s);return `${d.getFullYear()}年 ${d.getMonth()+1}月`}
+function isToday(s){return state.data&&s===state.data.today}
+function categoryColor(c){return CATEGORY_COLORS[c]||'#64748b'}
+const PERSON_COLORS=[
+  {line:'#2563eb',bg:'#eff6ff',text:'#1d4ed8'},
+  {line:'#7c3aed',bg:'#f5f3ff',text:'#6d28d9'},
+  {line:'#059669',bg:'#ecfdf5',text:'#047857'},
+  {line:'#db2777',bg:'#fdf2f8',text:'#be185d'},
+  {line:'#d97706',bg:'#fffbeb',text:'#b45309'},
+  {line:'#0891b2',bg:'#ecfeff',text:'#0e7490'},
+  {line:'#4f46e5',bg:'#eef2ff',text:'#4338ca'},
+  {line:'#dc2626',bg:'#fef2f2',text:'#b91c1c'}
+];
+function personColor(key){
+  const s=String(key||'unknown');let hash=0;
+  for(let i=0;i<s.length;i++)hash=((hash<<5)-hash+s.charCodeAt(i))|0;
+  return PERSON_COLORS[Math.abs(hash)%PERSON_COLORS.length];
+}
+function shortPersonName(name){return String(name||'').trim().replace(/さん$/,'').split(/\s+/).filter(Boolean)[0]||'未設定'}
+function eventPeople(e){
+  const employees=state.schedule.employees.length?state.schedule.employees:(state.data&&state.data.employees||[]);
+  const byId=Object.fromEntries(employees.map(x=>[x.employeeId,x]));
+  const ids=e.employeeIds||[],names=e.employeeNames||[];
+  if(ids.length)return ids.map((id,i)=>({id,name:(byId[id]&&byId[id].name)||names[i]||id}));
+  return names.map((name,i)=>({id:'name:'+name+':'+i,name}));
+}
+function eventPeopleLabel(e){
+  const people=eventPeople(e);if(!people.length)return '参加者未設定';
+  const labels=people.slice(0,2).map(p=>shortPersonName(p.name));
+  return labels.join('・')+(people.length>2?' +'+(people.length-2):'');
+}
+function eventPersonAvatar(e){
+  const people=eventPeople(e);const p=people[0]||{id:'unknown',name:'?'},color=personColor(p.id);
+  return `<span class='person-avatar' style='--person-bg:${color.bg};--person-text:${color.text}' aria-hidden='true'>${escapeHtml(shortPersonName(p.name).slice(0,1))}</span>`;
+}
+
+function schedulePeopleLegend(){
+  const s=state.schedule,employees=s.employees.length?s.employees:(state.data&&state.data.employees||[]);
+  const visible=s.employeeId==='ALL'?employees:employees.filter(e=>e.employeeId===s.employeeId);
+  if(!visible.length)return '';
+  const highlighted=visible.find(e=>e.employeeId===s.highlightEmployeeId);
+  return `<div class='people-legend schedule-interactive-legend' role='group' aria-label='社員の予定を強調'>
+    <span class='people-legend-label'>社員を強調</span>
+    ${visible.map(e=>{
+      const color=personColor(e.employeeId),selected=s.highlightEmployeeId===e.employeeId;
+      return `<button type='button' class='person-chip schedule-person-button ${selected?'is-emphasized':''}'
+        style='--person-color:${color.line};--person-bg:${color.bg};--person-text:${color.text}'
+        data-employee-id='${escapeHtml(e.employeeId)}' aria-pressed='${selected}'
+        title='${escapeHtml(shortPersonName(e.name))}の予定を強調・もう一度クリックで解除'
+        onclick='toggleScheduleEmployeeHighlight(this.dataset.employeeId)'><i></i><b>${escapeHtml(shortPersonName(e.name))}</b></button>`;
+    }).join('')}
+    <span id='scheduleHighlightStatus' class='schedule-highlight-hint' aria-live='polite'>${highlighted?escapeHtml(shortPersonName(highlighted.name))+'さんの予定を強調中':'名前をクリックすると予定を強調します'}</span>
+    <button type='button' id='scheduleHighlightReset' class='schedule-highlight-reset' ${highlighted?'':'hidden'} onclick="toggleScheduleEmployeeHighlight('ALL')">解除</button>
+  </div>`;
+}
+function roleLabel(role){return ({ADMIN:'管理者',MANAGER:'マネージャー',CALENDAR_EDITOR:'会社カレンダー編集者',USER:'社員'})[role]||role||'社員'}
+function clientInfo(){return [navigator.platform||'',navigator.userAgent||''].join(' | ').slice(0,240)}
+function sessionErrorMessage(err){return String(err&&err.message||err||'')}
+function cleanApiErrorMessage(err,fallback){
+  let msg=sessionErrorMessage(err).trim();
+  msg=msg.replace(/^(Exception|Error):\s*/,'').trim();
+  return msg||fallback||'処理に失敗しました。';
+}
+function handleApiError(err,fallback){
+  const raw=sessionErrorMessage(err);
+  if(raw.includes('AUTH_REQUIRED')||raw.includes('SESSION_EXPIRED')){
+    clearLocalSession();
+    showLogin('セッションの有効期限が切れました。もう一度ログインしてください。');
+    return true;
+  }
+  showToast(cleanApiErrorMessage(err,fallback));
+  return false;
+}
+function setSessionToken(token,persistent=false){
+  state.sessionToken=token||null;
+  sessionStorage.removeItem('fmworks.session');
+  localStorage.removeItem('fmworks.session');
+  if(token){
+    (persistent?localStorage:sessionStorage).setItem('fmworks.session',token);
+  }
+}
+function getStoredSessionToken(){return localStorage.getItem('fmworks.session')||sessionStorage.getItem('fmworks.session')||null}
+function clearLocalSession(){Object.keys(pageCache).forEach(key=>delete pageCache[key]);pendingLoads.clear();clearTimeout(routePrefetchTimer);if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.reset();if(typeof resetGlobalSearch_==='function')resetGlobalSearch_();state.busy=false;if(typeof somuReset==='function')somuReset();if(typeof resetFinanceUi==='function')resetFinanceUi();if(typeof resetQuoteUi==='function')resetQuoteUi();if(typeof resetCompanyDocsUi==='function')resetCompanyDocsUi();if(typeof resetProjectHubUi==='function')resetProjectHubUi();setSessionToken(null);stopLiveAttendanceTicker();clearWorklogQuickDrafts();invalidateWorklogWindowCache();if(typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();invalidateScheduleWindowCache();worklogActiveRequest=null;invalidateMonthlyResultCache();delete pageCache.requests;state.requests=createEmptyRequestsState();state.data=null;state.authAdmin=null;state.adminUi=createAdminUiState();state.adminTab='people';invalidatePageCache('authAdmin');state.homeOverview={loading:false,loaded:false,reloadRequested:false,callbacks:[],error:''}}
+function svgLogo(cls=''){return `<svg class="fm-logo ${cls}" viewBox="0 0 588 587" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 459 320 L 435 346 L 486 394 L 510 370 L 461 320 Z M 130 318 L 79 370 L 170 460 L 170 358 Z M 406 211 L 214 211 L 214 508 L 291 586 L 452 425 L 404 378 L 279 503 L 277 501 L 277 387 L 279 385 L 334 385 L 399 320 L 280 320 L 278 318 L 277 303 L 278 275 L 280 273 L 406 273 Z M 457 163 L 457 255 L 542 339 L 587 294 L 587 292 Z M 370 112 L 363 116 L 352 130 L 349 144 L 351 156 L 358 168 L 373 178 L 390 179 L 400 176 L 411 167 L 416 158 L 418 151 L 418 138 L 416 131 L 411 123 L 399 113 L 390 110 L 377 110 Z M 364 5 L 413 52 L 504 51 L 506 53 L 507 147 L 554 194 L 554 5 Z M 293 0 L 0 293 L 45 338 L 291 93 L 312 112 L 359 66 Z"/></svg>`}
+
+
+function selectWorkLocation(location){
+  if(!['出社','在宅','外出'].includes(location)||state.busy)return;
+  const attendance=state.data&&state.data.attendance;
+  const current=state.workLocation||(attendance&&attendance.workLocation)||'出社';
+  if(current===location)return;
+  if(attendance&&['working','break'].includes(attendance.state)){
+    changeWorkLocation(location);
+    return;
+  }
+  if(attendance&&attendance.state==='finished'){
+    showToast('退勤後は勤務場所を変更できません');
+    return;
+  }
+  state.workLocation=location;
+  renderPage();
+}
+
+function changeWorkLocation(location){
+  if(state.busy||!state.data||!['出社','在宅','外出'].includes(location))return;
+  const current=state.workLocation||state.data.attendance&&state.data.attendance.workLocation||'出社';
+  if(current===location)return;
+  state.busy=true;
+  showToast(`勤務場所を${location}へ変更しています...`);
+  const operationToken=state.sessionToken;
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+    if(operationToken!==state.sessionToken||!state.data)return;
+    if(data&&data.attendance){
+      state.data.attendance=data.attendance;
+      state.workLocation=data.attendance.workLocation||location;
+    }else state.workLocation=location;
+    if(data&&data.serverTime)state.data.serverTime=data.serverTime;
+    state.busy=false;
+    invalidatePageCache('monthly');
+    if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
+    renderPage();
+    showToast(`勤務場所を${current} → ${location}に変更しました`);
+    if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview({force:true}),700);
+  }).withFailureHandler(err=>{
+    if(operationToken!==state.sessionToken||!state.data)return;
+    state.busy=false;
+    if(!handleApiError(err,'勤務場所の変更に失敗しました'))renderPage();
+  }).recordWorkLocationChange(state.sessionToken,location);
+}
+
+// Business drafts remain memory-only; warn before a reload or confirmed logout.
+function applicationWritePending_(){
+  return !!(state.busy||
+    (typeof quoteUi!=='undefined'&&quoteUi.busy)||
+    (typeof financeUi!=='undefined'&&financeUi.busy)||
+    (typeof financeBulkUi!=='undefined'&&(financeBulkUi.busy||financeBulkUi.uncertain||financeBulkUi.locked&&!financeBulkUi.complete))||
+    (typeof somuUi!=='undefined'&&somuUi.busy)||
+    (typeof somuGrowth!=='undefined'&&somuGrowth.busy)||
+    (typeof projectHubUi!=='undefined'&&projectHubUi.busy)||
+    (typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)||
+    (typeof cashFlowUi!=='undefined'&&(cashFlowUi.busy||cashFlowUi.uncertain))||
+    (typeof cfaUi!=='undefined'&&(cfaUi.busy||cfaUi.exporting))||
+    (typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing||cfbUi.importPending))||
+    (typeof cflUi!=='undefined'&&(cflUi.busy||cflUi.uncertain)));
+}
+function applicationUnsavedItems_(){
+  const items=[];
+  if(typeof rememberWorklogQuickDraft==='function')rememberWorklogQuickDraft();
+  if(typeof financeRememberEntry_==='function')financeRememberEntry_();
+  if(typeof projectHubRememberDraft_==='function')projectHubRememberDraft_();
+  if(typeof quoteUi!=='undefined'&&quoteUi.dirty)items.push('見積');
+  if(typeof financeActiveForm!=='undefined'&&financeActiveForm&&financeActiveForm.changed)items.push('経費・出張申請');
+  if(typeof financeBulkUi!=='undefined'&&!financeBulkUi.complete&&
+     (String(financeBulkUi.raw||'').trim()||financeBulkUi.rows.some(r=>typeof financeGridHasRecord_==='function'&&financeGridHasRecord_(r))))items.push('経費台帳');
+  if(typeof projectHubUi!=='undefined'&&projectHubUi.editor&&projectHubUi.editor.changed)items.push('プロジェクト');
+  if(typeof cashFlowUi!=='undefined'&&cashFlowUi.dirty)items.push('年間資金繰り');
+  if(typeof cfaUi!=='undefined'&&(cfaUi.editor||cfaUi.ruleDraft||cfaUi.scenarioDraft))items.push('資金繰りの分類・シミュレーション');
+  if(typeof cfbUi!=='undefined'&&(cfbUi.accountForm||cfbUi.planForm))items.push('金融機関・入出金予定');
+  if(typeof cflDirty_==='function'&&cflDirty_())items.push('金融機関別台帳');
+  if(typeof cfbUi!=='undefined'&&cfbUi.preview&&cfbUi.preview.length)items.push('銀行明細の取込');
+  if(typeof worklogQuickDrafts!=='undefined'&&Array.from(worklogQuickDrafts.values()).some(d=>String(d.wlQuickProject||d.wlQuickDescription||'').trim()))items.push('工数');
+  return items;
+}
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('beforeunload',event=>{
+  if(state.sessionToken&&(applicationWritePending_()||applicationUnsavedItems_().length)){
+    event.preventDefault();event.returnValue='';
+  }
+});
+
+function performPunch(action){
+  if(state.busy)return;
+  state.busy=true;showToast(`${action}を登録しています...`);
+  const operationToken=state.sessionToken;
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+    if(operationToken!==state.sessionToken||!state.data)return;
+    if(data&&data.attendance){
+      state.data.attendance=data.attendance;
+      state.workLocation=data.attendance.workLocation||state.workLocation;
+    }
+    if(data&&data.serverTime)state.data.serverTime=data.serverTime;
+    state.busy=false;
+    invalidatePageCache('worklog','monthly');
+    if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
+    renderPage();
+    showToast(`${action}をGoogle Sheetsへ保存しました`);
+    scheduleBackgroundTask(()=>loadHomeOverview({force:true,silent:true}),1200);
+    if(state.page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview({force:true}),900);
+  }).withFailureHandler(err=>{
+    if(operationToken!==state.sessionToken||!state.data)return;
+    state.busy=false;
+    if(!handleApiError(err,'打刻の登録に失敗しました'))renderPage();
+  }).recordPunch(state.sessionToken,action,state.workLocation);
+}
+function liveWorkedMinutes(attendance){
+  const a=attendance||{};
+  let minutes=Math.max(0,Number(a.workedMinutes||0));
+  if(a.state!=='working')return minutes;
+  const anchor=Date.parse(state.data&&state.data.serverTime||'');
+  if(!Number.isFinite(anchor))return minutes;
+  return minutes+Math.max(0,Math.floor((Date.now()-anchor)/60000));
+}
+function liveWorkedText(attendance){return formatMinutesClient(liveWorkedMinutes(attendance))}
+function stopLiveAttendanceTicker(){
+  if(liveAttendanceTimer){clearInterval(liveAttendanceTimer);liveAttendanceTimer=null;}
+}
+function updateLiveWorkedNodes(){
+  if(!state.data||!state.data.attendance)return;
+  const text=liveWorkedText(state.data.attendance);
+  document.querySelectorAll('[data-live-worked]').forEach(el=>{el.textContent=text});
+}
+function startLiveAttendanceTicker(){
+  stopLiveAttendanceTicker();
+  liveAttendanceTimer=setInterval(()=>{
+    if(!state.data||document.hidden)return;
+    const a=state.data.attendance;
+    if(a&&a.state==='working'&&(state.page==='home'||state.page==='attendance'))updateLiveWorkedNodes();
+  },30000);
+}
+
+function workLocationSelector(){return `<div class='section-gap'><small class='muted'>勤務場所</small><div class='button-row' style='margin-top:8px'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'primary-button':'secondary-button'}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`}
+function punchButtons(a){if(a.state==='off')return `<button class='primary-button' onclick="performPunch('出勤')">出勤する</button>`;if(a.state==='working')return `<button class='secondary-button' onclick="performPunch('休憩開始')">休憩する</button><button class='primary-button' onclick="performPunch('退勤')">退勤する</button>`;if(a.state==='break')return `<button class='primary-button' onclick="performPunch('休憩終了')">休憩終了</button>`;return `<button class='secondary-button' disabled>本日の勤務は終了しました</button>`}
+
+function primaryNavIdForPage(page){
+  if(page==='monthly')return 'attendance';
+  if(page==='companyCalendar')return 'schedule';
+  if(page==='people')return 'admin';
+  if(page==='financeEntry')return 'requests';
+  return page;
+}
+function visibleNav(){
+  const p=state.data&&state.data.permissions||{};
+  return NAV.filter(([id])=>id==='admin'?!!p.adminConsole:id==='office'?!!p.officeWorkspace:id==='finance'?!!p.financeWorkspace:true);
+}
+function renderNav(){
+  const nav=visibleNav(),activeId=primaryNavIdForPage(state.page);
+  const byId=new Map(nav.map(item=>[item[0],item]));
+  document.getElementById('desktopNav').innerHTML=NAV_GROUPS.map(group=>{
+    const links=group.ids.map(id=>byId.get(id)).filter(Boolean);
+    if(!links.length)return '';
+    return `<div class='nav-section'><span class='nav-section-label'>${escapeHtml(group.label)}</span>
+      ${links.map(([id,label,icon])=>`<button type='button' class='nav-button ${activeId===id?'active':''}' data-route='${id}'
+        aria-current='${activeId===id?'page':'false'}'>${svg(icon)}<span>${escapeHtml(label)}</span></button>`).join('')}</div>`;
+  }).join('');
+  const allowedIds=new Set(nav.map(x=>x[0]));
+  const mobileIds=MOBILE_NAV.filter(id=>allowedIds.has(id));
+  const mobile=document.getElementById('mobileNav');
+  mobile.innerHTML=mobileIds.map(id=>{const n=NAV.find(x=>x[0]===id);return `<button class='mobile-tab ${activeId===id?'active':''}' data-route='${id}'>${svg(n[2])}<span>${n[1]}</span></button>`}).join('');
+  mobile.style.gridTemplateColumns=`repeat(${Math.max(1,mobileIds.length)},1fr)`;
+  document.querySelectorAll('[data-route]').forEach(b=>{
+    b.onclick=()=>navigate(b.dataset.route);
+    b.onpointerenter=()=>queueRoutePrefetch(b.dataset.route);
+    b.onfocus=()=>queueRoutePrefetch(b.dataset.route);
+    b.onpointerleave=()=>clearTimeout(routePrefetchTimer);
+  });
+}
+function workspaceTabs(items,activeId,label){
+  return `<nav class='workspace-tabs' aria-label='${escapeHtml(label||'表示切替')}'>${items.map(item=>`<button type='button' class='${item[0]===activeId?'active':''}' onclick="navigate('${item[0]}')">${escapeHtml(item[1])}</button>`).join('')}</nav>`;
+}
+function attendanceWorkspaceTabs(activeId){
+  return `<nav class='workspace-tabs attendance-workspace-tabs' aria-label='勤怠の表示切替'>
+    <button type='button' class='${activeId==='attendance'?'active':''}' onclick="navigate('attendance')">${svg('i-clock')}<span>本日</span></button>
+    <button type='button' class='${activeId==='monthly'?'active':''}' onclick="openAttendanceMonthly('calendar')">${svg('i-calendar')}<span>月間</span></button>
+    <button type='button' class='${activeId==='history'?'active':''}' onclick="openAttendanceMonthly('list')">${svg('i-chart')}<span>履歴</span></button>
+  </nav>`;
+}
+
+function scheduleWorkspaceTabs(activeId){
+  return workspaceTabs([['schedule','予定'],['companyCalendar','会社カレンダー']],activeId,'予定表の表示切替');
+}
+// One route-loading contract for login, navigation and resume.
+function loadPageData_(page,options={}){
+  if(!state.data||!state.sessionToken)return;
+  // Returning to cashflow must not download unrelated expense/travel ledgers.
+  if(page==='finance'&&typeof cashFlowUi!=='undefined'&&cashFlowUi.open){
+    if(typeof cashFlowLoad_==='function')cashFlowLoad_();
+    if(typeof cfbLoad_==='function'&&cfbUi.active!==false)cfbLoad_(false);
+    return;
+  }
+  if(page==='home')loadHomeOverview({silent:!!options.silent});
+  if(page==='schedule')loadSchedule({silent:true});
+  if(page==='companyCalendar')loadCompanyCalendar();
+  if(page==='worklog')loadWorklogs({silent:true});
+  if(page==='projects'&&typeof loadProjectHub==='function')loadProjectHub();
+  if(page==='requests'){
+    const warm=typeof requestsDataReady==='function'&&requestsDataReady()&&
+      cacheFresh('requests',requestsIdentity());
+    loadRequests();
+    // Never compete with the primary leave/approval RPC on a cold route.
+    if(warm&&typeof queueRequestFinanceHistory_==='function')queueRequestFinanceHistory_();
+  }
+  if(page==='quotes'||page==='documentHistory')loadQuoteWorkspace({silent:true});
+  if(page==='finance')loadFinanceOverview();
+  if(page==='office'&&typeof somuLoad==='function')somuLoad(false);
+  if(page==='companyDocs')loadCompanyDocs();
+
+  if(page==='attendance')scheduleBackgroundTask(()=>loadAttendancePreview(),180);
+  if(page==='monthly')loadMonthly();
+  if(page==='people'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole)loadAuthAdmin({scope:'people'});
+  if(page==='admin'&&state.data&&state.data.permissions&&state.data.permissions.adminConsole){
+    if(state.adminTab==='auth')loadAuthAdmin({scope:'auth'});
+    if(state.adminTab==='projects')loadAuthAdmin({scope:'projects'});
+    if(state.adminTab==='operation')loadMaintenance();
+    if(state.adminTab==='quotes')loadQuoteWorkspace({silent:true});
+    if(state.adminTab==='requirements')loadSystemDocument('requirements');
+    if(state.adminTab==='technical')loadSystemDocument('technical');
+  }
+}
+function navigate(page){
+  if(state.page==='finance'&&page!==state.page&&typeof cflCanLeave_==='function'&&!cflCanLeave_())return;
+  if(page!==state.page&&((typeof quoteUi!=='undefined'&&quoteUi.busy)||
+     (typeof financeUi!=='undefined'&&financeUi.busy)||
+     (typeof somuUi!=='undefined'&&somuUi.busy)||
+     (typeof projectHubUi!=='undefined'&&projectHubUi.busy)||
+     (typeof projectAdvancedUi!=='undefined'&&projectAdvancedUi.busy)||
+     (typeof cashFlowUi!=='undefined'&&cashFlowUi.busy)||
+     (typeof cfbUi!=='undefined'&&(cfbUi.busy||cfbUi.importing)))){showToast('保存処理が終わるまでお待ちください');return;}
+  if(state.page==='projects'&&typeof projectHubRememberDraft_==='function')projectHubRememberDraft_();
+  if(state.page==='financeEntry'&&typeof financeRememberEntry_==='function')financeRememberEntry_();
+  // Do not silently discard an unsaved company document when switching modules.
+  if(state.page==='companyDocs'&&page!=='companyDocs'&&
+     typeof companyDocsConfirmLeave_==='function'&&!companyDocsConfirmLeave_(page))return;
+  closeMobileDrawer();
+  clearTimeout(routePrefetchTimer);
+  if((page==='admin'||page==='people')&&!(state.data&&state.data.permissions&&state.data.permissions.adminConsole)){page='home'}
+  if(page==='office'&&!(state.data&&state.data.permissions&&state.data.permissions.officeWorkspace)){page='home'}
+  if(page==='finance'&&!(state.data&&state.data.permissions&&state.data.permissions.financeWorkspace)){page='home'}
+  if(page==='financeEntry'&&!financeActiveForm){page='requests';}
+  if(page==='admin'&&state.adminTab==='people')page='people';
+  if(page!=='schedule')state.schedule.mobileDetailOpen=false;
+  state.page=page;if(typeof FMRotaryActivity!=='undefined')FMRotaryActivity.route(page);history.replaceState(null,'',`#${page}`);renderNav();renderPage();window.scrollTo({top:0,behavior:'auto'});
+  const content=document.getElementById('content');if(content)content.focus({preventScroll:true});
+  loadPageData_(page,{silent:true});
+}
+function syncGlobalActionBanner(){
+  const slot=document.getElementById('globalActionBannerSlot');
+  if(slot)slot.innerHTML=globalActionBanners();
+}
+function flushHomeOverviewCallbacks_(payload){
+  const callbacks=state.homeOverview.callbacks.splice(0);
+  callbacks.forEach(fn=>{try{fn(payload)}catch(_){}});
+}
+function loadHomeOverview(options={}){
+  if(!state.sessionToken||!state.data)return;
+  const requestSession=state.sessionToken,requestData=state.data;
+  const key=[requestSession,requestData.today,requestData.user&&requestData.user.employeeId||''].join('|');
+  if(typeof options.onDone==='function')state.homeOverview.callbacks.push(options.onDone);
+  if(!options.force&&cacheFresh('homeOverview',key)){
+    flushHomeOverviewCallbacks_(state.data);
+    return;
+  }
+  const ticket=beginPageLoad('homeOverview',key);
+  if(!ticket){
+    if(options.force)state.homeOverview.reloadRequested=true;
+    return;
+  }
+  state.homeOverview.loading=true;
+  state.homeOverview.error='';
+  if(!options.silent&&state.page==='home')renderPageIfActive('home');
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+    endPageLoad(ticket);
+    if(requestSession!==state.sessionToken||requestData!==state.data)return;
+    const rerun=state.homeOverview.reloadRequested;
+    state.homeOverview.reloadRequested=false;
+    state.homeOverview.loading=false;
+    if(rerun){
+      loadHomeOverview({force:true,silent:true});
+      return;
+    }
+    state.homeOverview.loaded=true;
+    state.homeOverview.error='';
+    if(data){
+      if(Object.prototype.hasOwnProperty.call(data,'monthlyReview'))state.data.monthlyReview=data.monthlyReview||null;
+      state.data.month=data.month||null;
+      state.data.tasks=Array.isArray(data.tasks)?data.tasks:[];
+      state.data.overviewReady=true;
+    }
+    markPageCache('homeOverview',key);
+    syncGlobalActionBanner();
+    if(state.page==='home')renderPageIfActive('home');
+    flushHomeOverviewCallbacks_(data);
+  }).withFailureHandler(err=>{
+    endPageLoad(ticket);
+    if(requestSession!==state.sessionToken||requestData!==state.data)return;
+    state.homeOverview.loading=false;
+    state.homeOverview.reloadRequested=false;
+    state.homeOverview.error='集計を読み込めませんでした。再読込してください。';
+    flushHomeOverviewCallbacks_(null);
+    handleApiError(err,'ホーム集計を読み込めませんでした');
+    if(state.page==='home')renderPageIfActive('home');
+  }).getHomeOverview(state.sessionToken);
+}
+
+function globalActionBanners(){
+  const r=state.data&&state.data.monthlyReview;
+  if(!r||!r.needsAttention)return '';
+  const danger=r.urgency==='danger';
+  const backlog=!!r.isBacklog;
+  const count=Number(r.pendingCount||1);
+  const countText=count>1?' 未確認・再確認が必要な月が'+count+'か月あります。':'';
+  return `<section class='global-caution ${danger?'danger':'warning'}' role='status'>
+    <div class='caution-icon'>!</div>
+    <div><strong>${escapeHtml(r.targetMonth)}の勤怠確認が${r.stale?'再度必要です':backlog?'残っています':'未完了です'}</strong><p>${escapeHtml(r.message+countText)} 確認完了まで表示されます。</p></div>
+    <button class='primary-button compact' onclick='openPreviousMonthReview()'>${backlog?escapeHtml(r.targetMonth)+'を確認':'先月の勤怠を確認'}</button>
+  </section>`;
+}
+function openPreviousMonthReview(){
+  const r=state.data&&state.data.monthlyReview;if(!r)return;
+  state.monthly.yearMonth=r.targetMonth;
+  state.monthly.employeeId=state.data.user.employeeId;
+  state.monthly.view='calendar';
+  navigate('monthly');
+  loadMonthly({force:true});
+}
+
+function homeOverviewLoading(){
+  return `<div class='home-overview-loading' role='status' aria-label='集計を読み込み中'>
+    <span class='home-loading-line wide'></span>
+    <span class='home-loading-line'></span>
+    <span class='home-loading-line short'></span>
+  </div>`;
+}
+function homeOverviewError(){
+  return `<div class='home-overview-error' role='alert'>
+    <div><strong>集計を読み込めませんでした</strong><small>${escapeHtml(state.homeOverview.error||'通信状態を確認して再度お試しください。')}</small></div>
+    <button class='secondary-button compact' onclick="loadHomeOverview({force:true})">再読込</button>
+  </div>`;
+}
+function homeWorkLocationSelector(){
+  return `<div class='home-location'><span>勤務場所</span><div class='home-location-options'>${['出社','在宅','外出'].map(x=>`<button class='${state.workLocation===x?'active':''}' onclick="selectWorkLocation('${x}')">${x}</button>`).join('')}</div></div>`;
+}
+function homePunchHistory(a){
+  if(!a.history||!a.history.length)return `<div class='home-empty-mini'>本日の打刻はまだありません。</div>`;
+  return `<div class='home-punch-history'>${a.history.slice(0,5).map(x=>`<div><span class='status-dot' style='background:${x.action==='退勤'?'#8090a8':x.action.includes('休憩')?'#f3a11b':'#1478ff'}'></span><strong>${escapeHtml(x.time)} ${escapeHtml(x.action)}</strong><small>${escapeHtml(x.workLocation||'')}</small></div>`).join('')}</div>`;
+}
+</script>
+
