@@ -117,7 +117,6 @@ fs.writeFileSync('src/generated/engine.mjs',engine);
 
 const index=fs.readFileSync('src/ui/Index.html','utf8');
 let html=index.replace(/<\?!= include_\('([A-Za-z0-9_/-]+)'\); \?>/g,(_,n)=>fs.readFileSync('src/ui/'+n+'.html','utf8')).replace(/<\?= appName \?>/g,'FM WORKS').replace(/<\?= appVersion \?>/g,appVersion);
-html=html.replaceAll('google.script.run','FMApi.run').replaceAll('window.google.script.run','window.FMApi.run').replaceAll('global.google&&global.google.script&&global.FMApi.run','global.FMApi&&global.FMApi.run');
 const bridge=fs.readFileSync('src/browser/bridge.js','utf8');
 const overrides=fs.readFileSync('src/browser/overrides.js','utf8').replaceAll('__APP_VERSION__',appVersion);
 html=html.replace('<head>','<head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script>'+bridge+'</script>');

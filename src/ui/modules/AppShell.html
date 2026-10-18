@@ -233,7 +233,7 @@ function mountAuthenticatedApp(data,mustChangePin){
 }
 
 function loadAuthenticatedApp(mustChangePin,initialData){
-  // GAS RPCs are asynchronous. After logout or a second login, an older
+  // RPC responses are asynchronous. After logout or a second login, an older
   // response must never remount a previous employee's private workspace.
   const requestToken=state.sessionToken;
   if(!requestToken)return;

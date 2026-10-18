@@ -185,7 +185,7 @@ return activity;
 }
 /* Chain-compatible proxy for FMApi.run. It only wraps callbacks and
  * dispatch; method arguments, user objects, and API results remain unchanged.
- * Existing code/tests can fall back to native FMApi.run if absent.
+ * The direct Sites API transport is available without this wrapper.
  */
 function FMRotaryRPC(){
 const raw=global.FMApi&&global.FMApi.run;
@@ -232,7 +232,7 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
      if(ended)return; // Never apply responses arriving after the timeout.
      if(key&&sharedReads.get(key)===entry)sharedReads.delete(key);
      if(callbackGeneration!==rpcCallbackGeneration){finish(null);return;}
-     record(failed?values[0]||new Error('GAS request failed'):null);
+     record(failed?values[0]||new Error('RPC request failed'):null);
      let thrown;
      try{
        if(failed&&/AUTH_REQUIRED|SESSION_EXPIRED/.test(String(values[0]&&values[0].message||values[0]))&&typeof global.handleApiError==='function')global.handleApiError(values[0]);
@@ -247,13 +247,13 @@ proxy=new Proxy(Object.create(null),{get(_target,prop){
            if(target.hasUserObject)handler(value,target.userObject);else handler(value);
          }catch(error){if(!thrown)thrown=error;}
        }
-     }finally{finish(failed?values[0]||new Error('GAS request failed'):null);}
+     }finally{finish(failed?values[0]||new Error('RPC request failed'):null);}
      if(thrown)throw thrown;
    };
    try{
      const runner=raw.withSuccessHandler((...values)=>deliver(false,values))
        .withFailureHandler((...values)=>deliver(true,values));
-     if(typeof runner[prop]!=='function')throw Error('Unknown GAS method: '+prop);
+     if(typeof runner[prop]!=='function')throw Error('Unknown RPC method: '+prop);
      // Do not add a client timeout to financial/attendance writes:
      // the server may commit even when its response is lost.
      if(read&&typeof global.setTimeout==='function'){

@@ -93,3 +93,15 @@ test('company document schema upgrades are not performed through old GAS backups
  assert.doesNotMatch(html,/\bcompanyDocsConfirmInitialize\b/);
  assert.doesNotMatch(html,/\bcompanyDocsInitialize\b/);
 });
+
+test('Sites UI source no longer uses GAS transport substitutions',()=>{
+ for(const dir of ['src/ui/modules','src/ui/components']){
+  for(const file of fs.readdirSync(dir).filter(name=>name.endsWith('.html'))){
+   const source=fs.readFileSync(dir+'/'+file,'utf8');
+   assert.doesNotMatch(source,/google\.script\.run/,file);
+   assert.doesNotMatch(source,/global\.google&&global\.google/,file);
+  }
+ }
+ const build=fs.readFileSync('scripts/prepare-app.mjs','utf8');
+ assert.doesNotMatch(build,/replaceAll\('google\.script\.run'/);
+});

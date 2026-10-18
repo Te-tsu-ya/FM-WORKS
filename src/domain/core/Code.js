@@ -92,7 +92,7 @@ function buildInitialDataForEmployee_(employee) {
   return data;
 }
 
-// Limit employee-directory fields crossing the GAS HTML-service boundary.
+// Limit employee-directory fields crossing the authenticated browser API boundary.
 // The full source directory is retained on the server for permission checks.
 // Managers need a managerId only for their own direct-report monthly selector.
 function employeeDirectoryForViewer_(employees,viewer) {
