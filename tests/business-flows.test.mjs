@@ -70,3 +70,17 @@ test('legacy GAS HTML service is absent from the current Sites engine source',()
  assert.doesNotMatch(source,/\bfunction doGet\s*\(/);
  assert.doesNotMatch(source,/\bfunction include_\s*\(/);
 });
+
+test('Sites maintenance uses SQL tables and never claims unverified backup',async()=>{
+ const f=await fixture();
+ try{
+  const info=f.engine.invoke('getSystemStatus',['TOKEN']);
+  assert.equal(info.dbName,'Sites SQL / D1');
+  assert.equal(info.backupVerified,false);
+  assert.equal(info.readiness.ready,false);
+  assert.ok(info.sheets['社員マスタ']>=5);
+  assert.ok(Array.isArray(f.engine.invoke('getAuditLogs',['TOKEN',20])));
+  const ordinary=createEngine(createServices(f.repository),{employeeId:'FM0003'},'USER');
+  assert.throws(()=>ordinary.invoke('getSystemStatus',['USER']),/管理者/);
+ }finally{f.db.close();}
+});

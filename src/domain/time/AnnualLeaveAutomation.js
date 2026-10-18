@@ -161,19 +161,3 @@ function maybeReconcileLeave_(employeeId,asOf,verifiedEmployee){
   }
   return withScriptLock_(()=>reconcileLeaveUnlocked_(getEmployee_(employeeId),today));
 }
-function annualLeaveDailyJob_(){
-  const today=Utilities.formatDate(new Date(),DB.timeZone,'yyyy-MM-dd');
-  getEmployees_().forEach(e=>{
-    try{maybeReconcileLeave_(e.employeeId,today);}
-    catch(err){console.error('年休付与チェック失敗 '+e.employeeId+': '+String(err));}
-  });
-}
-function installAnnualLeaveDailyJob(sessionToken){
-  const admin=requireAdminSession_(sessionToken).employee;
-  const exists=ScriptApp.getProjectTriggers().some(t=>t.getHandlerFunction()==='annualLeaveDailyJob_');
-  if(!exists)ScriptApp.newTrigger('annualLeaveDailyJob_').timeBased().everyDays(1).atHour(5).create();
-  appendAudit_({employeeId:admin.employeeId,employeeName:admin.name,
-    operation:'年休自動処理を設定',target:'設定',targetId:'annualLeaveDailyJob_',
-    before:exists?'有効':'未設定',after:'有効',source:'WEB',result:'SUCCESS',note:'毎日午前5時頃'});
-  return {ok:true,enabled:true};
-}

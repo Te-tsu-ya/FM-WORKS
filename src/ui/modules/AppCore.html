@@ -44,17 +44,8 @@ function invalidateBusinessViewsAfterWrite(method,result){
     invalidatePageCache('homeOverview');
     if(typeof invalidateAttendancePreview==='function')invalidateAttendancePreview();
   }
-  if(/^(saveWorklog|deleteWorklog|saveProject|saveProjectHubRecord|saveProjectDependencies|uploadProjectAttachment|deleteProjectAttachment|saveProjectBudget|saveProjectCost|deleteProjectCost|saveQuoteDraft|issueQuote|migrateDatabaseToCurrent)$/.test(method)&&typeof projectHubInvalidate_==='function')projectHubInvalidate_();
+  if(/^(saveWorklog|deleteWorklog|saveProject|saveProjectHubRecord|saveProjectDependencies|uploadProjectAttachment|deleteProjectAttachment|saveProjectBudget|saveProjectCost|deleteProjectCost|saveQuoteDraft|issueQuote)$/.test(method)&&typeof projectHubInvalidate_==='function')projectHubInvalidate_();
   if(/^(saveProject|saveProjectHubRecord|saveProjectDependencies)$/.test(method)&&typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();
-  if(method==='migrateDatabaseToCurrent'){
-    Object.keys(pageCache).forEach(key=>delete pageCache[key]);
-    if(typeof quoteUi!=='undefined')quoteUi.at=0;
-    if(typeof financeUi!=='undefined'){financeUi.at=0;financeUi.mineAt=0;}
-    if(typeof somuUi!=='undefined')somuUi.loadedAt=0;
-    if(typeof somuGrowth!=='undefined')somuGrowth.loadedAt=0;
-    if(typeof resetCashFlowUi==='function')resetCashFlowUi();
-    if(typeof invalidateWorklogCatalog_==='function')invalidateWorklogCatalog_();
-  }
 }
 function beginPageLoad(name,key){const ticket=name+':'+String(key);if(pendingLoads.has(ticket))return null;pendingLoads.add(ticket);return ticket}
 function endPageLoad(ticket){if(ticket)pendingLoads.delete(ticket)}

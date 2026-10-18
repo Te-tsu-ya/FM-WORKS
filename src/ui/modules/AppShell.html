@@ -229,13 +229,6 @@ function mountAuthenticatedApp(data,mustChangePin){
   loadPageData_(state.page);
 
   scheduleBackgroundTask(()=>loadNotifications(),2400);
-  if(data.permissions&&data.permissions.adminConsole&&state.page==='admin'&&state.adminTab==='operation'){
-    scheduleBackgroundTask(()=>{
-      (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
-        if(result&&!result.skipped&&state.page==='admin'&&state.adminTab==='operation')loadMaintenance({force:true,silent:true});
-      }).withFailureHandler(()=>{}).ensureDailyBackup(state.sessionToken);
-    },6000);
-  }
   if(mustChangePin)setTimeout(()=>openChangePinModal(true),0);
 }
 
