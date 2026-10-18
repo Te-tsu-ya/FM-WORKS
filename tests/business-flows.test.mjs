@@ -84,3 +84,12 @@ test('Sites maintenance uses SQL tables and never claims unverified backup',asyn
   assert.throws(()=>ordinary.invoke('getSystemStatus',['USER']),/管理者/);
  }finally{f.db.close();}
 });
+
+test('company document schema upgrades are not performed through old GAS backups',()=>{
+ const source=fs.readFileSync('src/domain/office/CompanyDocs.js','utf8');
+ const html=fs.readFileSync('src/ui/modules/AppCompanyDocs.html','utf8');
+ assert.doesNotMatch(source,/\bcreateDatabaseBackup_\b/);
+ assert.doesNotMatch(source,/\binitializeCompanyDocuments\b/);
+ assert.doesNotMatch(html,/\bcompanyDocsConfirmInitialize\b/);
+ assert.doesNotMatch(html,/\bcompanyDocsInitialize\b/);
+});

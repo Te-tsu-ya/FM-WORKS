@@ -431,30 +431,6 @@ function companyDocsConfirmDelete(){
     ui.busy=false;ui.error=cleanApiErrorMessage(err,'削除できませんでした。');companyDocsRender_();
   }).deleteCompanyDocument(state.sessionToken,d.id,d.revision);
 }
-function companyDocsInitialize(){
-  const ui=companyDocsUi;
-  if(!ui.data||!ui.data.canInitialize||ui.busy)return;
-  const modal=ensureModal();
-  modal.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div>'+
-    '<section class="modal-card small" role="dialog" aria-modal="true" aria-label="社内文書のDB更新">'+
-    '<div class="modal-head"><h2>社内文書のDBを準備します</h2></div>'+
-    '<p>バックアップを作成した後、保存用シートまたは分類用の列を追加します。既存の文書は削除しません。</p>'+
-    '<div class="modal-actions"><button class="secondary-button" onclick="closeModal()">キャンセル</button>'+
-    '<button class="primary-button" onclick="companyDocsConfirmInitialize()">バックアップして更新</button></div></section>';
-}
-function companyDocsConfirmInitialize(){
-  const ui=companyDocsUi;
-  if(!ui.data||!ui.data.canInitialize||ui.busy)return;
-  const identity=companyDocsIdentity_();
-  closeModal();ui.busy=true;companyDocsRender_();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
-    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
-    ui.busy=false;showToast('保存先を準備しました');loadCompanyDocs(true);
-  }).withFailureHandler(err=>{
-    if(identity!==companyDocsIdentity_()||ui!==companyDocsUi)return;
-    ui.busy=false;ui.error=cleanApiErrorMessage(err,'DB更新に失敗しました。');companyDocsRender_();
-  }).initializeCompanyDocuments(state.sessionToken);
-}
 function companyDocsEditor_(){
   const ui=companyDocsUi,d=ui.draft||{},data=companyDocsData_();
   const folders=(data.folders||[]).filter(f=>f.parentId);
@@ -534,13 +510,9 @@ function companyDocsPage(){
   }
   if(data.setupRequired){
     return '<section class="v15-workspace company-doc-workspace">'+hero+'<div class="card company-doc-empty-setup">'+
-      '<h2>社内文書の保存先が未準備です</h2><p>既存の勤怠や経理データを変更せず専用シートを作成します。</p>'+
-      (data.canInitialize?'<button type="button" class="primary-button" onclick="companyDocsInitialize()">バックアップして準備</button>':
-      '<p>管理者による初期設定後に利用できます。</p>')+'</div></section>';
+      '<h2>社内文書の保存先が未準備です</h2><p>Sites SQLの構成を管理者が確認してください。データは初期化しません。</p>'+'</div></section>';
   }
-  const upgrade=data.needsUpgrade?'<div class="company-doc-upgrade"><span>分類列の更新が必要です。</span>'+
-    (data.canInitialize?'<button class="secondary-button compact" onclick="companyDocsInitialize()">バックアップしてDB更新</button>':
-    '<span>管理者へ連絡してください。</span>')+'</div>':'';
+  const upgrade=data.needsUpgrade?'<div class="company-doc-upgrade"><span>SQL列構成の更新が必要です。管理者へ連絡してください。データは初期化されません。</span></div>':'';
   const options=(data.categories||[]).map(c=>'<option value="'+c+'" '+(ui.category===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('');
   const toolbar='<div class="company-doc-toolbar"><label class="company-doc-search">'+
     '<span aria-hidden="true">⌕</span><input id="companyDocsSearch" type="search" autocomplete="off" aria-label="社内文書を検索"'+

@@ -53,7 +53,7 @@ function companyDocsSheet_(optional){
   const sheet=getDb_().getSheetByName(COMPANY_DOC_SHEET);
   if(!sheet){
     if(optional)return null;
-    throw new Error('社内文書の保存先が未準備です。管理者はバックアップ後に初期化してください。');
+    throw new Error('社内文書の保存先が未準備です。Sites SQLのスキーマを確認してください。');
   }
   const found=sheet.getRange(1,1,1,COMPANY_DOC_BASE_HEADERS.length).getDisplayValues()[0];
   if(schemaHeaderIssues_(found,COMPANY_DOC_BASE_HEADERS).length)
@@ -153,7 +153,7 @@ function getCompanyDocuments(sessionToken){
   const employee=requireSession_(sessionToken).employee;
   const canManage=companyDocsManager_(employee);
   const sheet=companyDocsSheet_(true);
-  const base={ok:true,canManage,canInitialize:String(employee.role||'').toUpperCase()==='ADMIN',
+  const base={ok:true,canManage,canInitialize:false,
     folders:COMPANY_DOC_FOLDERS,categories:COMPANY_DOC_CATEGORIES,items:[]};
   if(!sheet)return Object.assign(base,{setupRequired:true,needsUpgrade:false});
   const needsUpgrade=!companyDocsIndexReady_(sheet);
@@ -226,21 +226,6 @@ function searchCompanyDocumentBodies(sessionToken,keyword){
       return {ok:true,matchedIds:matchedIds.slice(0,250),truncated:true};
   }
   return {ok:true,matchedIds,truncated:false};
-}
-function initializeCompanyDocuments(sessionToken){
-  const employee=requireAdminSession_(sessionToken).employee;
-  return withScriptLock_(function(){
-    const existing=companyDocsSheet_(true);
-    if(existing&&companyDocsIndexReady_(existing))return {ok:true,changed:false};
-    // No data can be reset, and schema widening requires a successful backup.
-    const backup=createDatabaseBackup_(employee);
-    ensureSchemaSheet_(getDb_(),COMPANY_DOC_SHEET,COMPANY_DOC_HEADERS);
-    appendAudit_({employeeId:employee.employeeId,employeeName:employee.name,
-      operation:existing?'社内文書分類列追加':'社内文書保存先準備',
-      target:COMPANY_DOC_SHEET,targetId:'',before:'',after:'保存先を準備',
-      source:'WEB',result:'SUCCESS',note:backup&&backup.name||''});
-    return {ok:true,changed:true,upgraded:!!existing};
-  },30000);
 }
 function saveCompanyDocument(sessionToken,payload){
   const employee=requireSession_(sessionToken).employee;
