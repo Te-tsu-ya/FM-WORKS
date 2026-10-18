@@ -1,6 +1,6 @@
 {
   "name": "fm-works-sites",
-  "version": "0.26.3",
+  "version": "0.26.4",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
