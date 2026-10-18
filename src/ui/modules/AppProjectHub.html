@@ -32,7 +32,7 @@ function loadProjectHub(options={}){
  if(!options.force&&projectHubUi.data&&Date.now()-projectHubUi.at<300000){if(projectHubUi.selected&&(projectHubUi.view==='detail'||projectHubUi.editor))projectHubLoadDetail_(projectHubUi.selected);return;}
  if(options.force){projectHubUi.serial++;projectHubUi.details.clear();projectHubUi.pending.clear();}
  const ui=projectHubUi,identity=projectHubIdentity_(),serial=ui.serial,started=Date.now();ui.loading=true;ui.error='';
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.loading=false;
   if(serial!==ui.serial||ui.refreshNeeded){ui.refreshNeeded=false;loadProjectHub({force:true});return;}
   projectHubTimingRecord_('案件一覧',started,!!data&&Array.isArray(data.projects));
@@ -59,7 +59,7 @@ function projectHubLoadDetail_(id,force=false){
   if(!active())return;ui.pending.delete(id);projectHubTimingRecord_('案件詳細',started,false);
   if(ui.selected===id){ui.error=cleanApiErrorMessage(error,'案件の詳細を読み込めませんでした。');renderPageIfActive('projects');}
  };
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
   if(!active())return;
   if(!data||!data.project||data.project.projectId!==String(id)||!data.metrics||
     !['tasks','resources','updates','worklogs'].every(key=>Array.isArray(data[key])))return fail(new Error('案件の詳細の形式を確認できませんでした。再試行してください。'));
@@ -424,7 +424,7 @@ function projectHubSave_(overrides={}){
  const ui=projectHubUi,e=ui.editor;if(ui.busy||!e)return;projectHubRememberDraft_();const pending=overrides.status==='非表示'?overrides:(e.pendingOverrides||{});e.pendingOverrides=pending;ui.busy=true;const identity=projectHubIdentity_();
  const started=Date.now();
  document.querySelectorAll('#projectHubForm input,#projectHubForm textarea,#projectHubForm select,#projectHubForm button').forEach(el=>el.disabled=true);
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(ui!==projectHubUi||identity!==projectHubIdentity_())return;ui.busy=false;
   projectHubTimingRecord_('案件保存',started,!!result&&result.ok===true);
   if(!result||result.ok!==true){ui.error='保存結果を確認できませんでした。同じ入力を保持しています。';renderPageIfActive('projects');return;}

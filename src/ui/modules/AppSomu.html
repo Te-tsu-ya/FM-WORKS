@@ -46,7 +46,7 @@ function somuLoad(force){
  }
  // Keep the previous cards and selected row visible during silent refresh.
  if(!hadData&&state.page==='office')renderPageIfActive('office');
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
   if(ui!==somuUi||identity!==somuSessionIdentity())return;
   somuUi.loading=false;
   if(somuUi.refreshNeeded){somuUi.refreshNeeded=false;somuLoad(true);return;}
@@ -102,7 +102,7 @@ function somuPageEnsure_(delay,retry){
   if(ui!==somuUi||identity!==somuSessionIdentity()||epoch!==somuPageEpoch_||key!==somuPageKey_()||state.page!=='office'){if(somuPageView_&&somuPageView_.key===key)somuPageView_=null;return;}
   const valid=()=>ui===somuUi&&identity===somuSessionIdentity()&&epoch===somuPageEpoch_;
   const fail=err=>{if(!valid()||key!==somuPageKey_())return;somuPageView_={key:key,items:[],loading:false,error:cleanApiErrorMessage(err,'台帳の検索に失敗しました。再試行してください。'),stamp:0};somuRefreshLists();};
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
    if(!valid())return;
    if(!result||result.ok!==true||result.kind!==params.kind||!Array.isArray(result.items)||result.items.length>60||result.items.some(item=>!item||typeof item!=='object'||!item.id)||typeof result.hasMore!=='boolean'||
      result.hasMore&&(!Number.isSafeInteger(result.nextBefore)||result.nextBefore<2||params.before&&result.nextBefore>=params.before))return fail(new Error('ページ結果を確認できません。'));
@@ -287,7 +287,7 @@ function somuSubmit(){
  if(form&&form.querySelectorAll)form.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=true);
  const button=document.getElementById('somuSaveButton');if(button){button.disabled=true;button.textContent='保存中…';}
  const identity=somuSessionIdentity();
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;
   if(!result||result.ok!==true){somuFormFailure_('保存結果を確認できませんでした。');return;}
@@ -342,7 +342,7 @@ function somuCommitDecision(){
 }
 function somuAction_(api,args,message){
  const identity=somuSessionIdentity();somuUi.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;
   if(!result||result.ok!==true){showToast('処理結果を確認できませんでした');return;}

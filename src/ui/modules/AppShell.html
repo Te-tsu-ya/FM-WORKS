@@ -133,7 +133,7 @@ function submitLogin(event){
   }
   if(remember)localStorage.setItem('fmworks.employeeId',id);else localStorage.removeItem('fmworks.employeeId');
   setLoginBusy(true);
-  const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
+  const runner=(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(acceptLogin).withFailureHandler(err=>{setLoginBusy(false);const msg=sessionErrorMessage(err)||'ログインできませんでした。';renderLogin(msg)});
   if(state.publicConfig&&state.publicConfig.needsSetup)runner.initializeFirstAdmin(id,pin,clientInfo(),initialSupport,remember);
   else runner.login(id,pin,clientInfo(),remember);
 }
@@ -158,7 +158,7 @@ function showRequiredPinChange_(){
     display();
     return;
   }
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run)
     .withSuccessHandler(config=>{
       if(state.sessionToken!==token||state.data)return;
       state.publicConfig=config;
@@ -242,7 +242,7 @@ function loadAuthenticatedApp(mustChangePin,initialData){
     return;
   }
   setLoading();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(state.sessionToken!==requestToken)return;
     mountAuthenticatedApp(data,mustChangePin);
   }).withFailureHandler(err=>{
@@ -344,7 +344,7 @@ function performGlobalSearch(query){
     return epoch===globalSearchEpoch&&state.sessionToken===session&&state.page===route&&
       !!active&&active.value.trim()===q;
   };
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run)
     .withSuccessHandler(items=>{if(current())renderSearchResults(items)})
     .withFailureHandler(err=>{if(current())handleApiError(err,'検索できませんでした')})
     .searchApp(session,q);
@@ -402,7 +402,7 @@ function openSearchResult(index){
 function loadNotifications(){
   if(!state.sessionToken||!state.data)return;
   const requestToken=state.sessionToken,requestData=state.data;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run)
     .withSuccessHandler(data=>{
       if(requestToken!==state.sessionToken||requestData!==state.data)return;
       const dot=document.getElementById('notificationDot');
@@ -447,7 +447,7 @@ function openNotificationItem(index){
       projectHubUi.selected=item.projectId;projectHubUi.view='detail';
       projectHubUi.tab=item.type==='案件共有'?'updates':'tasks';
       if(item.notificationId){
-        (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{loadNotifications();})
+        (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{loadNotifications();})
           .withFailureHandler(()=>{}).markProjectAlertRead(state.sessionToken,item.notificationId);
       }
     }
@@ -481,7 +481,7 @@ function performLogout(confirmed=false){
     if(state.sessionToken||state.data)return;
     showLogin('ログアウトしました。');
   };
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(completed).withFailureHandler(completed).logout(token);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(completed).withFailureHandler(completed).logout(token);
 }
 
 function openChangePinModal(force=false){
@@ -504,7 +504,7 @@ function submitOwnPinChange(force){
   const current=document.getElementById('currentPin').value,newPin=document.getElementById('newPin').value,confirmPin=document.getElementById('newPinConfirm').value;
   if(newPin!==confirmPin){showToast('確認用PINが一致しません');return}
   const token=state.sessionToken;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
     if(token!==state.sessionToken)return;
     closeModal();
     showToast('PINを変更しました');
@@ -533,14 +533,14 @@ function openPinHelpModal(){
 function submitPinHelp(){
   const id=document.getElementById('helpEmployeeId').value.trim().toUpperCase();
   const note=document.getElementById('helpNote').value;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{state.publicConfig.support=result.support||state.publicConfig.support;closeModal();showToast('PIN再発行依頼を登録しました')})
     .withFailureHandler(()=>{closeModal();showToast('案内先の管理者へ直接ご連絡ください')})
     .requestPinHelp(id,note,clientInfo());
 }
 
 function loadPublicLoginConfig(message=''){
   state.publicConfigLoading=true;state.publicConfigError=false;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(config=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(config=>{
     if(state.sessionToken||state.data)return;
     state.publicConfigLoading=false;state.publicConfigError=false;state.publicConfig=config;
     showLogin(message);
@@ -591,7 +591,7 @@ function bootstrap(){
     // not overwrite another user's session or reopen the logged-out app.
     const resumeToken=state.sessionToken;
     setLoading();
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
       if(state.sessionToken!==resumeToken)return;
       if(result.mustChangePin){showRequiredPinChange_();return;}
       loadAuthenticatedApp(false,result&&result.initialData||null);

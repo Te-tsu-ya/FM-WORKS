@@ -325,7 +325,7 @@ function financeBulkNext_(){
  const identity=financeIdentity();
  ui.busy=true;
  renderPageIfActive('finance');
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run)
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run)
   .withSuccessHandler(result=>{
    if(ui!==financeBulkUi||identity!==financeIdentity())return;
    ui.busy=false;

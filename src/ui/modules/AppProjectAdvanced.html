@@ -20,7 +20,7 @@ function projectAdvancedLoad_(force=false){
   if(serial!==(ui.serial||0)||ui.refreshNeeded){ui.refreshNeeded=false;if(state.page==='projects'&&projectHubUi.selected===id&&projectHubUi.tab==='advanced')projectAdvancedLoad_(true);return false;}
   return true;
  };
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(!finish())return;
   if(typeof projectHubTimingRecord_==='function')projectHubTimingRecord_('詳細管理',started,!!result&&!result.setupRequired);
   ui.data=result;ui.at=Date.now();renderPageIfActive('projects');
@@ -43,7 +43,7 @@ function projectAdvancedSaveDeps_(taskId){
  if(!box)return;
  const selected=Array.from(box.querySelectorAll('input[data-dep-id]:checked')).map(x=>x.dataset.depId);
  ui.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
   ui.busy=false;projectAdvancedLoad_(true);showToast('作業の前提条件を更新しました');
  }).withFailureHandler(err=>{ui.busy=false;showToast(cleanApiErrorMessage(err,'依存関係を保存できませんでした。'));renderPageIfActive('projects');})
  .saveProjectDependencies(state.sessionToken,ui.id,taskId,selected,record.revision);
@@ -81,7 +81,7 @@ function projectAdvancedUpload_(){
   const fingerprint=JSON.stringify([id,file.name,file.size,file.lastModified,mime,picker&&picker.value||'']);
   if(!ui.fileAttempt||ui.fileAttempt.fingerprint!==fingerprint)ui.fileAttempt={fingerprint,key:'PHFILE-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,14)};
   const requestKey=ui.fileAttempt.key;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
    ui.busy=false;ui.fileAttempt=null;showToast('非公開のプロジェクト資料として保存しました');projectAdvancedLoad_(true);
   }).withFailureHandler(err=>{ui.busy=false;showToast(cleanApiErrorMessage(err,'ファイルを保存できませんでした。'));renderPageIfActive('projects');})
   .uploadProjectAttachment(state.sessionToken,{projectId:id,resourceId:picker&&picker.value||'',name:file.name,mime,base64,requestKey:requestKey});
@@ -92,7 +92,7 @@ function projectAdvancedUpload_(){
 function projectAdvancedDownload_(id){
  if(projectAdvancedUi.busy)return;
  projectAdvancedUi.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   projectAdvancedUi.busy=false;
   try{
    const binary=atob(result.base64),bytes=new Uint8Array(binary.length);
@@ -110,7 +110,7 @@ function projectAdvancedDelete_(id){
  if(!pending||pending.kind!=='file'||pending.id!==id){projectAdvancedUi.confirmRemove={kind:'file',id};renderPageIfActive('projects');return;}
  projectAdvancedUi.confirmRemove=null;
  projectAdvancedUi.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{projectAdvancedUi.busy=false;projectAdvancedLoad_(true);showToast('添付を非表示にしました');})
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{projectAdvancedUi.busy=false;projectAdvancedLoad_(true);showToast('添付を非表示にしました');})
  .withFailureHandler(err=>{projectAdvancedUi.busy=false;showToast(cleanApiErrorMessage(err,'操作に失敗しました。'));}).deleteProjectAttachment(state.sessionToken,id);
 }
 
@@ -128,7 +128,7 @@ function projectAdvancedBudgetSave_(){
  const ui=projectAdvancedUi,d=ui.data,amount=document.getElementById('phBudgetAmount'),note=document.getElementById('phBudgetNote');
  if(ui.busy||!d||!amount||!note)return;
  ui.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{ui.busy=false;showToast('予算を保存しました');projectAdvancedLoad_(true);})
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{ui.busy=false;showToast('予算を保存しました');projectAdvancedLoad_(true);})
  .withFailureHandler(err=>{ui.busy=false;showToast(cleanApiErrorMessage(err,'予算を保存できませんでした'));})
  .saveProjectBudget(state.sessionToken,ui.id,{amount:amount.value,note:note.value,revision:d.budget.revision});
 }
@@ -140,7 +140,7 @@ function projectAdvancedCostSave_(){
  const fingerprint=JSON.stringify(values.map(v=>v.value));
  if(!ui.costAttempt||ui.costAttempt.fingerprint!==fingerprint)ui.costAttempt={fingerprint,key:'PHCOST-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,15)};
  const p={date:values[0].value,kind:values[1].value,note:values[2].value,amount:values[3].value,requestKey:ui.costAttempt.key};
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{ui.busy=false;ui.costAttempt=null;showToast('案件原価を追加しました');projectAdvancedLoad_(true);})
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{ui.busy=false;ui.costAttempt=null;showToast('案件原価を追加しました');projectAdvancedLoad_(true);})
  .withFailureHandler(err=>{ui.busy=false;showToast(cleanApiErrorMessage(err,'案件原価を保存できませんでした'));})
  .saveProjectCost(state.sessionToken,ui.id,p);
 }
@@ -151,7 +151,7 @@ function projectAdvancedCostDelete_(id){
  if(!pending||pending.kind!=='cost'||pending.id!==id){projectAdvancedUi.confirmRemove={kind:'cost',id};renderPageIfActive('projects');return;}
  projectAdvancedUi.confirmRemove=null;
  projectAdvancedUi.busy=true;
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{
   projectAdvancedUi.busy=false;showToast('原価の記録を取り消しました');projectAdvancedLoad_(true);
  }).withFailureHandler(err=>{
   projectAdvancedUi.busy=false;showToast(cleanApiErrorMessage(err,'原価記録を取り消せませんでした。'));

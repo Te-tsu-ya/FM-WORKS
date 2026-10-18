@@ -44,7 +44,7 @@ function somuGrowthLoad(force){
  somuGrowth.forceOnNextLoad=false;
  somuGrowth.loading=true;somuGrowth.error='';
  if(somuGrowthTab_(somuUi.tab)&&!wasLoaded&&state.page==='office')renderPageIfActive('office');
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
   if(ui!==somuGrowth||identity!==somuSessionIdentity()||serial!==somuGrowth.serial)return;
   somuGrowth.loading=false;
   if(somuGrowth.refreshNeeded){somuGrowth.refreshNeeded=false;somuGrowthLoad(true);return;}
@@ -256,7 +256,7 @@ function somuGrowthSubmit_(){
  const freeze=value=>{if(form&&form.querySelectorAll)form.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=value);};freeze(true);
  if(save){save.disabled=true;save.textContent='保存中…';}
  const identity=somuSessionIdentity();
- (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+ (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
   if(identity!==somuSessionIdentity())return;
   somuUi.busy=false;freeze(false);
   if(!result||!result.ok){

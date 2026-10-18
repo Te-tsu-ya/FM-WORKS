@@ -27,7 +27,7 @@ function financeLoadInsights(force=false){
   const serial=financeUi.insightSerial=(financeUi.insightSerial||0)+1;
   financeUi.insightLoading=true;financeUi.insightRefreshNeeded=false;financeUi.insightError='';
   renderPageIfActive('finance');
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(ui!==financeUi||identity!==financeIdentity()||year!==financeUi.insightYear||serial!==financeUi.insightSerial)return;
     financeUi.insightLoading=false;
     if(financeUi.insightRefreshNeeded){financeUi.insightRefreshNeeded=false;financeLoadInsights(true);return;}
@@ -150,7 +150,7 @@ function financeLookupInvoice(){
   }
   if(target)target.textContent='国税庁の公表情報を照会中…';
   financeUi.invoiceIssuer=null;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(id!==financeIdentity())return;
     const now=String((document.getElementById('fin-invoiceNo')||{}).value||'').replace(/[\s　-]/g,'').toUpperCase();
     if(now!==result.number)return;
@@ -206,7 +206,7 @@ function financeExplainTravel(){
   const id=financeIdentity(),result=document.getElementById('financeTravelExplanation');
   financeUi.travelEstimate=null;
   if(result)result.textContent='旅費規程と入力内容を照合しています…';
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(id!==financeIdentity()||financeActiveForm!==active||currentSignature()!==signature)return;
     financeUi.travelEstimate=data;
     const target=document.getElementById('financeTravelExplanation');

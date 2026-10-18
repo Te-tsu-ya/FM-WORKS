@@ -168,7 +168,7 @@ function adminPeopleContent(){
 }
 function installLeaveDailyAutomation(){
   openConfirmDialog('年休の毎日自動確認','年休自動管理を有効にした社員について、毎朝の付与チェックを設定します。出勤率等を確認できない期間は付与を保留します。','日次処理を設定',function(){
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
       showToast('年休の毎日チェックを設定しました');
     }).withFailureHandler(function(err){handleApiError(err,'日次処理を設定できませんでした。権限の承認が必要な場合があります');})
     .installAnnualLeaveDailyJob(state.sessionToken);
@@ -185,7 +185,7 @@ function leaveLedgerTypeLabel(type){return ({OPENING:'初期残数',GRANT:'付�
 function openLeaveLedgerModal(employeeId){
   const r=ensureModal();
   r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card" role="dialog" aria-modal="true"><div class="modal-head"><div><small>年次有給休暇管理簿</small><h2>読み込み中...</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="loading-card"></div></section>';
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(renderLeaveLedgerModal).withFailureHandler(function(err){handleApiError(err,'年休台帳を読み込めませんでした');closeModal();}).getLeaveLedger(state.sessionToken,employeeId);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(renderLeaveLedgerModal).withFailureHandler(function(err){handleApiError(err,'年休台帳を読み込めませんでした');closeModal();}).getLeaveLedger(state.sessionToken,employeeId);
 }
 function renderLeaveLedgerModal(data){
   const r=ensureModal(),f=data.fiveDay||{},rows=data.rows||[],stateInfo=data.state||{};
@@ -198,7 +198,7 @@ function renderLeaveLedgerModal(data){
 function postLeaveLedgerFromModal(employeeId){
   const type=document.getElementById('leaveLedgerType').value,days=Number(document.getElementById('leaveLedgerDays').value),date=document.getElementById('leaveLedgerDate').value,note=document.getElementById('leaveLedgerNote').value;
   if(!Number.isFinite(days)||days===0){showToast('日数を入力してください');return;}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('年休台帳を更新しました');openLeaveLedgerModal(employeeId);invalidatePageCache('authAdmin','requests','homeOverview');loadAuthAdmin({force:true,silent:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'年休台帳を更新できませんでした');}).postLeaveLedgerEntry(state.sessionToken,employeeId,type,days,date,note);
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('年休台帳を更新しました');openLeaveLedgerModal(employeeId);invalidatePageCache('authAdmin','requests','homeOverview');loadAuthAdmin({force:true,silent:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'年休台帳を更新できませんでした');}).postLeaveLedgerEntry(state.sessionToken,employeeId,type,days,date,note);
 }
 
 function employeeManagerOptions(e){
@@ -400,7 +400,7 @@ function performEmployeeSave(payload){
   ui.saving=true;
   const button=document.getElementById('adminEmployeeSaveButton');
   if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
     ui.saving=false;
     if(session!==state.sessionToken||ui!==state.adminUi)return;
     ui.selectedEmployeeId=String(payload.employeeId||'').trim().toUpperCase();
@@ -422,7 +422,7 @@ function refreshAppData(callback,options={}){
   const worklogDraft=typeof worklogQuickDrafts!=='undefined'&&typeof worklogDraftKey==='function'
     ?worklogQuickDrafts.get(worklogDraftKey(previousToday)):null;
   const keepWorklogDate=!!(worklogDraft&&String(worklogDraft.wlQuickProject||worklogDraft.wlQuickDescription||'').trim());
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(data){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(data){
     if(requestToken!==state.sessionToken||previous!==state.data){done();return;}
     if(!data||!data.user||!/^\d{4}-\d{2}-\d{2}$/.test(data.today||'')||!data.attendance){
       done();showToast('最新情報の形式を確認できませんでした。');return;
@@ -504,7 +504,7 @@ function requestMonthlyResult_(month,employeeId,callback,options={}){
   const request={callbacks:[callback],generation:monthlyResultGeneration,session:state.sessionToken};
   monthlyPendingRequests.set(key,request);
   const started=Date.now();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(monthlyPendingRequests.get(key)!==request)return;
     monthlyPendingRequests.delete(key);
     if(request.generation!==monthlyResultGeneration||request.session!==state.sessionToken)return;
@@ -656,7 +656,7 @@ function openMonthlyDay(date){
 function confirmMonthlyReviewFromPage(){
   const d=state.monthly.data;if(!d)return;
   openConfirmDialog('勤怠確認を完了しますか？',d.yearMonth+' の出退勤・休暇・残業・工数を確認し、内容に誤りがないことを記録します。','確認完了',()=>{
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(status=>{
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(status=>{
       d.reviewStatus=status;
       renderPageIfActive('monthly');
       showToast(d.yearMonth+'の勤怠確認を完了しました');
@@ -668,18 +668,18 @@ function confirmMonthlyReviewFromPage(){
 function closeMonthly(){
   const ym=state.monthly.yearMonth;
   openConfirmDialog('月次を締めますか？',ym+' の給与対象者について、要確認勤怠・工数差異・承認待ち申請がないか確認して締めます。','月次締めを実行',()=>{
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast(ym+'を締めました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'月次締めできませんでした')).closeMonthlyPeriod(state.sessionToken,ym);
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast(ym+'を締めました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'月次締めできませんでした')).closeMonthlyPeriod(state.sessionToken,ym);
   },false);
 }
 function reopenMonthly(){
   const ym=state.monthly.yearMonth;
   openReasonDialog('月次締めを解除','解除理由を入力してください。','締め解除を実行',reason=>{
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast(ym+'の締めを解除しました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'締めを解除できませんでした')).reopenMonthlyPeriod(state.sessionToken,ym,reason);
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast(ym+'の締めを解除しました');invalidatePageCache('monthly');loadMonthly({force:true});}).withFailureHandler(err=>handleApiError(err,'締めを解除できませんでした')).reopenMonthlyPeriod(state.sessionToken,ym,reason);
   });
 }
 
 function downloadTeamMonthlyExport(){
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(result){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(result){
     var binary=atob(result.base64),bytes=new Uint8Array(binary.length);
     for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
     var blob=new Blob([bytes],{type:result.mimeType||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -690,7 +690,7 @@ function downloadTeamMonthlyExport(){
   }).withFailureHandler(function(err){handleApiError(err,'一括提出データを作成できませんでした');})
     .createTeamMonthlyExport(state.sessionToken,state.monthly.yearMonth);
 }
-function downloadMonthlyExport(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(result){var binary=atob(result.base64),bytes=new Uint8Array(binary.length);for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);var blob=new Blob([bytes],{type:result.mimeType||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=result.filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);openExportMessageModal(result.emailText);}).withFailureHandler(function(err){handleApiError(err,'提出データを作成できませんでした');}).createMonthlyExport(state.sessionToken,state.monthly.yearMonth,state.monthly.employeeId);}
+function downloadMonthlyExport(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(result){var binary=atob(result.base64),bytes=new Uint8Array(binary.length);for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);var blob=new Blob([bytes],{type:result.mimeType||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=result.filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);openExportMessageModal(result.emailText);}).withFailureHandler(function(err){handleApiError(err,'提出データを作成できませんでした');}).createMonthlyExport(state.sessionToken,state.monthly.yearMonth,state.monthly.employeeId);}
 function openExportMessageModal(text){var r=ensureModal();r.innerHTML='<div class="modal-backdrop" onclick="closeModal()"></div><section class="modal-card small" role="dialog" aria-modal="true"><div class="modal-head"><div><small>税理士提出用</small><h2>メール記載内容</h2></div><button type="button" class="icon-button" onclick="closeModal()" aria-label="閉じる">×</button></div><label class="field"><span>そのままコピーできます</span><textarea id="exportEmailText" rows="9">'+escapeHtml(text||'')+'</textarea></label><div class="modal-actions"><span></span><div><button class="secondary-button" onclick="navigator.clipboard.writeText(document.getElementById(\'exportEmailText\').value);showToast(\'コピーしました\')">コピー</button><button class="primary-button" onclick="closeModal()">閉じる</button></div></div></section>';}
 
 </script>

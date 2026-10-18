@@ -26,7 +26,7 @@ function loadFinanceOverview(options={}){
   financeUi.identity=identity;financeUi.loading=true;financeUi.refreshNeeded=false;financeUi.error='';
   if(state.page==='finance'&&!hadData&&!options.silent)renderPage();
   const started=Date.now();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(ui!==financeUi||identity!==financeIdentity())return;
     if(revision!==financeUi.revOverview||financeUi.refreshNeeded){
       financeUi.loading=false;financeUi.refreshNeeded=false;
@@ -65,7 +65,7 @@ function loadMyFinanceItems(options={}){
   const ui=financeUi,identity=financeIdentity(),hadData=!!financeUi.mine,started=Date.now(),revision=financeUi.revMine;
   financeUi.identity=identity;financeUi.ownLoading=true;financeUi.ownRefreshNeeded=false;financeUi.ownError='';
   if(!hadData&&!options.silent)renderPageIfActive('requests');
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(ui!==financeUi||identity!==financeIdentity())return;
     if(revision!==financeUi.revMine||financeUi.ownRefreshNeeded){
       financeUi.ownLoading=false;financeUi.ownRefreshNeeded=false;
@@ -438,7 +438,7 @@ function submitFinanceForm(){
   frozen.forEach(({el})=>{el.disabled=true;});
   const button=document.getElementById('financeSubmitButton');if(button){button.disabled=true;button.textContent='登録しています…';}
   const err=document.getElementById('financeFormError');if(err)err.hidden=true;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true||!result.id){
@@ -920,7 +920,7 @@ function financeSubmitDecision(kind,id,decision){
   const ui=financeUi,identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='処理しています…';}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');
@@ -960,7 +960,7 @@ function financeSubmitSettlement(kind,id){
   const ui=financeUi,identity=financeIdentity();financeUi.busy=true;
   const action=document.getElementById('financeDecisionSubmitButton');
   if(action){action.disabled=true;action.textContent='確認を登録しています…';}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(result=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(result=>{
     if(ui!==financeUi||identity!==financeIdentity())return;
     financeUi.busy=false;
     if(!result||result.ok!==true){const node=document.getElementById('financeDecisionError');

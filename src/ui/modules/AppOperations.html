@@ -479,7 +479,7 @@ function loadWorklogs(options={}){
     if(worklogActiveRequest===request)worklogActiveRequest=worklogWindowRequests.values().next().value||null;
   };
   const started=Date.now();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     finalize();
     const currentIdentity=worklogWindowIdentity();
     if(identity!==currentIdentity)return;
@@ -685,7 +685,7 @@ function saveQuickWorklog(){
   const actionButton=get('wlQuickSaveButton');
   if(actionButton){actionButton.disabled=true;actionButton.setAttribute('aria-busy','true')}
   const identity=requestsIdentity();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
     if(identity!==requestsIdentity())return;
     state.busy=false;
     worklogSubmissionKeys.delete(token.fingerprint);
@@ -772,7 +772,7 @@ function saveWorklogFromModal(id){
     note:document.getElementById('wlNote').value};
   const submission=worklogRequestKey_(payload);payload.requestKey=submission.key;
   const identity=requestsIdentity();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
     if(identity!==requestsIdentity())return;
     state.busy=false;worklogSubmissionKeys.delete(submission.fingerprint);
     closeModal();state.worklog.date=payload.date;showToast('工数を保存しました');
@@ -787,7 +787,7 @@ function saveWorklogFromModal(id){
 function deleteWorklogItem(id){
   openConfirmDialog('工数を削除','削除後も監査用データは保持されます。削除しますか？','削除',function(){
     const identity=requestsIdentity();
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
       if(identity!==requestsIdentity())return;
       showToast('工数を削除しました');invalidatePageCache('worklog','monthly');loadWorklogs({force:true});
     }).withFailureHandler(function(err){
@@ -922,7 +922,7 @@ function loadSchedule(options={}){
     endPageLoad(ticket);
     scheduleWindowRequests.delete(activeKey);
   };
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     finalize();
     if(generation!==scheduleWindowGeneration||session!==state.sessionToken||identity!==scheduleWindowIdentity())return;
     const stored=saveScheduleWindow(identity,range,data);
@@ -1470,8 +1470,8 @@ function openScheduleEditor(id='',date=''){
   toggleScheduleTimes();
 }
 function toggleScheduleTimes(){const all=document.getElementById('schAllDay');document.querySelectorAll('.time-field').forEach(x=>x.style.display=all&&all.checked?'none':'grid')}
-function saveScheduleFromModal(id){const employeeIds=[...document.querySelectorAll("input[name='schEmployee']:checked")].map(x=>x.value);const payload={id:id,date:document.getElementById('schDate').value,title:document.getElementById('schTitle').value,allDay:document.getElementById('schAllDay').checked,start:document.getElementById('schStart').value,end:document.getElementById('schEnd').value,category:document.getElementById('schCategory').value,location:document.getElementById('schLocation').value,detail:document.getElementById('schDetail').value,visibility:document.getElementById('schVisibility').value,employeeIds};showToast('予定を保存しています...');(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{closeModal();showToast('予定を保存しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'保存に失敗しました')).saveSchedule(state.sessionToken,payload)}
-function deleteScheduleFromModal(id){openConfirmDialog('予定を削除','この予定を削除しますか？','削除',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast('予定を削除しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'削除に失敗しました')).deleteSchedule(state.sessionToken,id);},true)}
+function saveScheduleFromModal(id){const employeeIds=[...document.querySelectorAll("input[name='schEmployee']:checked")].map(x=>x.value);const payload={id:id,date:document.getElementById('schDate').value,title:document.getElementById('schTitle').value,allDay:document.getElementById('schAllDay').checked,start:document.getElementById('schStart').value,end:document.getElementById('schEnd').value,category:document.getElementById('schCategory').value,location:document.getElementById('schLocation').value,detail:document.getElementById('schDetail').value,visibility:document.getElementById('schVisibility').value,employeeIds};showToast('予定を保存しています...');(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{closeModal();showToast('予定を保存しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'保存に失敗しました')).saveSchedule(state.sessionToken,payload)}
+function deleteScheduleFromModal(id){openConfirmDialog('予定を削除','この予定を削除しますか？','削除',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast('予定を削除しました');invalidatePageCache('schedule');loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'削除に失敗しました')).deleteSchedule(state.sessionToken,id);},true)}
 
 function canEditCompanyCalendar(){return !!(state.data&&state.data.permissions&&state.data.permissions.companyCalendarEdit)}
 function loadCompanyCalendar(year,options={}){
@@ -1482,7 +1482,7 @@ function loadCompanyCalendar(year,options={}){
   const hasCurrent=cacheHas('company',key);
   state.company.loading=!hasCurrent;
   if(!options.silent)renderPageIfActive('companyCalendar');
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     endPageLoad(ticket);
     if(String(state.company.year)!==String(key))return;
     Object.assign(state.company,data,{loading:false});
@@ -1518,11 +1518,11 @@ function generateCompanyCalendarYear(targetYear){
   if(!year){showToast('作成する年度を確認できませんでした');return}
   openConfirmDialog('新しい年度を作成',year+'年の会社カレンダーを土日＋国民の祝日を基準に作成します。作成するまで社員画面には表示されません。会社独自休日・調整出勤日は作成後に設定してください。',''+year+'年を作成',function(){
     showToast(year+'年の会社カレンダーを作成しています...');
-    (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{showToast(year+'年を作成しました');invalidatePageCache('company','schedule','monthly');state.company.year=year;loadCompanyCalendar(year,{force:true})}).withFailureHandler(err=>handleApiError(err,'会社カレンダーを生成できませんでした')).generateStandardCompanyCalendarYear(state.sessionToken,year);
+    (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{showToast(year+'年を作成しました');invalidatePageCache('company','schedule','monthly');state.company.year=year;loadCompanyCalendar(year,{force:true})}).withFailureHandler(err=>handleApiError(err,'会社カレンダーを生成できませんでした')).generateStandardCompanyCalendarYear(state.sessionToken,year);
   },false);
 }
 function openCompanyDay(date){const cd=(state.company.days||[]).find(x=>x.date===date)||{date,type:'通常勤務',name:'',start:'09:00',end:'18:00',breakMinutes:60,working:true};const editable=canEditCompanyCalendar(),r=ensureModal();if(!editable){r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー / 閲覧専用</small><h2>${fmtDate(date)}</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div><div class='readonly-calendar-detail'><div><span>区分</span><strong>${escapeHtml(cd.type||'未登録')}</strong></div><div><span>名称</span><strong>${escapeHtml(cd.name||'—')}</strong></div><div><span>勤務時間</span><strong>${cd.working?`${escapeHtml(cd.start||'--:--')} - ${escapeHtml(cd.end||'--:--')}`:'休日'}</strong></div><div><span>休憩</span><strong>${cd.working?`${Number(cd.breakMinutes||0)}分`:'—'}</strong></div></div><div class='modal-actions'><span class='muted'>変更するには管理者または編集権限が必要です。</span><div><button class='primary-button' onclick='closeModal()'>閉じる</button></div></div></section>`;return}r.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div><section class='modal-card small' role='dialog' aria-modal='true'><div class='modal-head'><div><small>会社カレンダー編集</small><h2>${fmtDate(date)}</h2></div><button type='button' class='icon-button' onclick='closeModal()' aria-label='閉じる'>×</button></div><div class='form-grid'><label class='field full'><span>区分</span><select id='companyType'>${['通常勤務','法定祝日','法定休日','会社休日','調整出勤日','週末'].map(x=>`<option value='${x}' ${cd.type===x?'selected':''}>${x}</option>`).join('')}</select></label><label class='field full'><span>名称</span><input id='companyName' value='${escapeHtml(cd.name||'')}' placeholder='例：夏季休暇'></label><label class='field'><span>勤務開始</span><input id='companyStart' type='time' value='${escapeHtml(cd.start||'09:00')}'></label><label class='field'><span>勤務終了</span><input id='companyEnd' type='time' value='${escapeHtml(cd.end||'18:00')}'></label><label class='field'><span>休憩（分）</span><input id='companyBreak' type='number' min='0' value='${cd.breakMinutes??60}'></label></div><div class='modal-actions'><span></span><div><button class='secondary-button' onclick='closeModal()'>キャンセル</button><button class='primary-button' onclick="saveCompanyDayFromModal('${date}')">保存</button></div></div></section>`}
-function saveCompanyDayFromModal(date){if(!canEditCompanyCalendar()){showToast('会社カレンダーの編集権限がありません');return}const payload={date,type:document.getElementById('companyType').value,name:document.getElementById('companyName').value,start:document.getElementById('companyStart').value,end:document.getElementById('companyEnd').value,breakMinutes:document.getElementById('companyBreak').value};(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(()=>{closeModal();showToast('会社カレンダーを更新しました');invalidatePageCache('company','schedule','monthly');loadCompanyCalendar(state.company.year,{force:true});if(state.page==='schedule')loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'更新に失敗しました')).saveCompanyCalendarDay(state.sessionToken,payload)}
+function saveCompanyDayFromModal(date){if(!canEditCompanyCalendar()){showToast('会社カレンダーの編集権限がありません');return}const payload={date,type:document.getElementById('companyType').value,name:document.getElementById('companyName').value,start:document.getElementById('companyStart').value,end:document.getElementById('companyEnd').value,breakMinutes:document.getElementById('companyBreak').value};(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(()=>{closeModal();showToast('会社カレンダーを更新しました');invalidatePageCache('company','schedule','monthly');loadCompanyCalendar(state.company.year,{force:true});if(state.page==='schedule')loadSchedule({force:true})}).withFailureHandler(err=>handleApiError(err,'更新に失敗しました')).saveCompanyCalendarDay(state.sessionToken,payload)}
 
 
 
@@ -1553,7 +1553,7 @@ function loadRequests(options={}){
   r.loading=!ready;r.refreshing=ready;r.error='';
   if(!options.silent)renderPageIfActive('requests');
   const token=state.sessionToken;
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     endPageLoad(ticket);
     if(token!==state.sessionToken||key!==requestsIdentity())return;
     r.own=Array.isArray(data&&data.own)?data.own:[];
@@ -2038,7 +2038,7 @@ function refreshRequestPreview(){
   box.classList.remove('is-hidden');
   box.innerHTML="<span class='preview-loading'>有給日数を確認しています…</span>";
   const seq=++requestPreviewSequence,identity=requestsIdentity();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(data=>{
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(data=>{
     if(identity!==requestsIdentity()||seq!==requestPreviewSequence||!document.getElementById('requestPreview'))return;
     if(!data.leaveBalanceConfigured){
       box.innerHTML="<div class='preview-warning'><strong>有給残日数が未設定です</strong><span>管理者が社員情報から設定すると、有給を申請できます。</span></div>";
@@ -2056,7 +2056,7 @@ function loadCorrectionPunchOptions(){
   const date=document.getElementById('reqStart').value;if(!date)return;
   const select=document.getElementById('reqOriginalPunch');if(select)select.innerHTML='<option value="">読み込み中…</option>';
   const identity=requestsIdentity();
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(items){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(items){
     if(identity!==requestsIdentity())return;
     const el=document.getElementById('reqOriginalPunch'),start=document.getElementById('reqStart');if(!el||!start||start.value!==date)return;
     el.innerHTML='<option value="">不足打刻として追加</option>'+items.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.timestamp.slice(11,16)+' '+x.action+' / '+x.workLocation)+'</option>').join('');
@@ -2071,7 +2071,7 @@ function submitRequestFromModal(){
   requestState.submitting=true;
   const button=document.getElementById('requestSubmitButton');
   if(button){button.disabled=true;button.dataset.label=button.textContent;button.textContent='申請中…'}
-  (typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){
+  (typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){
     requestState.submitting=false;
     if(requestState!==state.requests||identity!==requestsIdentity())return;
     closeModal();showToast('申請を登録しました');
@@ -2085,12 +2085,12 @@ function submitRequestFromModal(){
     showRequestError(msg,field);
   }).submitRequest(state.sessionToken,payload);
 }
-function requestApprovedCancel(id){openReasonDialog('承認済み申請の取消を依頼','取消理由を入力してください。承認者の確認後に取消されます。','取消を依頼',function(reason){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('取消を依頼しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'取消依頼できませんでした');}).requestApprovedCancellation(state.sessionToken,id,reason);});}
-function approveCancellationRequest(id){openConfirmDialog('取消を承認','承認済み申請を取り消しますか？ 有給の場合は残日数を戻します。','取消を承認',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('取消を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'取消承認できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'APPROVE','');},true);}
-function rejectCancellationRequest(id){openReasonDialog('取消を却下','申請者に表示する理由を入力してください。','取消を却下',function(reason){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('取消を却下しました');invalidatePageCache('requests');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'取消却下できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'REJECT',reason);});}
-function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
-function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
-function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){(typeof FMRotaryRPC==='function'?FMRotaryRPC():google.script.run).withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
+function requestApprovedCancel(id){openReasonDialog('承認済み申請の取消を依頼','取消理由を入力してください。承認者の確認後に取消されます。','取消を依頼',function(reason){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('取消を依頼しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'取消依頼できませんでした');}).requestApprovedCancellation(state.sessionToken,id,reason);});}
+function approveCancellationRequest(id){openConfirmDialog('取消を承認','承認済み申請を取り消しますか？ 有給の場合は残日数を戻します。','取消を承認',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('取消を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});}).withFailureHandler(function(err){handleApiError(err,'取消承認できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'APPROVE','');},true);}
+function rejectCancellationRequest(id){openReasonDialog('取消を却下','申請者に表示する理由を入力してください。','取消を却下',function(reason){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('取消を却下しました');invalidatePageCache('requests');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'取消却下できませんでした');}).decideApprovedCancellation(state.sessionToken,id,'REJECT',reason);});}
+function cancelOwnRequest(id){openConfirmDialog('申請を取り消す','承認待ちの申請を取り消しますか？','取り消す',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('申請を取り消しました');invalidatePageCache('requests','monthly');loadRequests({force:true});}).withFailureHandler(function(err){handleApiError(err,'申請を取り消せませんでした');}).cancelRequest(state.sessionToken,id);},true);}
+function approveTeamRequest(id){openConfirmDialog('申請を承認','この申請を承認しますか？','承認する',function(){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('申請を承認しました');invalidatePageCache('requests','monthly','homeOverview');loadRequests({force:true});loadHomeOverview({force:true,silent:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'承認できませんでした');}).approveRequest(state.sessionToken,id,'APPROVE','');},false);}
+function rejectTeamRequest(id){openReasonDialog('申請を差し戻す','申請者に表示する差戻し理由を入力してください。','差し戻す',function(comment){(typeof FMRotaryRPC==='function'?FMRotaryRPC():FMApi.run).withSuccessHandler(function(){showToast('申請を差し戻しました');invalidatePageCache('requests','monthly');loadRequests({force:true});loadNotifications();}).withFailureHandler(function(err){handleApiError(err,'差戻しできませんでした');}).approveRequest(state.sessionToken,id,'REJECT',comment);});}
 
 
 </script>
