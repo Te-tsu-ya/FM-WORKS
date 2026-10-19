@@ -107,7 +107,7 @@ const engine='export const appVersion = '+JSON.stringify(appVersion)+';\nexport 
  requireAdminSession_=(token)=>{const session=requireSession_(token);if(session.employee.role!=='ADMIN')throw Error('管理者権限が必要です。');return session;};
  withScriptLock_=(fn)=>fn();
  const api={${allowed.join(',')}};
- return {employee:id=>getEmployee_(id),directory:()=>getEmployees_(),initial:()=>buildInitialDataForEmployee_(getEmployee_(actor.employeeId)),invoke(method,args){if(!Object.hasOwn(api,method))throw Error('SITES_MIGRATION_PENDING: この操作はSites版への移行中です。');return api[method](...args);}};
+ return {employee:id=>getEmployee_(id),directory:()=>getEmployees_(),initial:()=>buildInitialDataForEmployee_(requireSession_(sessionToken).employee),invoke(method,args){if(!Object.hasOwn(api,method))throw Error('SITES_MIGRATION_PENDING: この操作はSites版への移行中です。');return api[method](...args);}};
 }\n`;
 fs.writeFileSync('src/generated/engine.mjs',engine);
 

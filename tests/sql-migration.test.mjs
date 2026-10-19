@@ -98,3 +98,45 @@ test('prototype version matches package before generation',async()=>{
  const version=runInContext('APP.version',createDemoRuntime().context);
  assert.equal(version,packageVersion);
 });
+
+test('public demo directory selects active employees without reading all business tables',async()=>{
+ const db=new TestD1();let snapshots=0;
+ const batch=db.batch.bind(db);
+ db.batch=async statements=>{
+  if(statements.some(item=>item.sql.includes(' AS domain, row_no,')))snapshots++;
+  return batch(statements);
+ };
+ const config=()=>handleRpc(new Request('http://localhost/api/rpc/getPublicAuthConfig',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({args:[]})
+ }),db,'getPublicAuthConfig');
+ try{
+  const first=await config();assert.equal(first.status,200);
+  const employees=(await first.json()).result.demoEmployees;
+  assert.equal(employees.length,5);
+  assert.ok(employees.some(e=>e.employeeId==='FM0001'&&e.role==='ADMIN'));
+  assert.equal(snapshots,0,'opening the login screen must not read all 54 business tables');
+  await db.prepare('UPDATE employees SET status = ? WHERE employee_id = ?').bind('退職','FM0005').run();
+  const again=await config();assert.equal(again.status,200);
+  const next=(await again.json()).result.demoEmployees;
+  assert.equal(next.length,4);
+  assert.ok(next.every(e=>e.employeeId!=='FM0005'));
+  assert.equal(snapshots,0,'reloading login choices remains independent of all business tables');
+ }finally{db.close();}
+});
+
+test('an employee disabled after login cannot resume the previous session',async()=>{
+ const db=new TestD1();let token='',cookie='';
+ const rpc=(method,args)=>handleRpc(new Request('http://localhost/api/rpc/'+method,{
+  method:'POST',headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},body:JSON.stringify({args})
+ }),db,method);
+ try{
+  const login=await rpc('login',['FM0001','000000',{},true]);assert.equal(login.status,200);
+  cookie=login.headers.get('set-cookie').split(';')[0];
+  token=(await login.json()).result.sessionToken;
+  assert.equal((await rpc('resumeSession',[token])).status,200);
+  await db.prepare('UPDATE employees SET status = ? WHERE employee_id = ?').bind('退職','FM0001').run();
+  const denied=await rpc('resumeSession',[token]);
+  assert.equal(denied.status,401,'a retired employee must not see cached initial state');
+  assert.equal((await rpc('getInitialData',[token])).status,401);
+ }finally{db.close();}
+});

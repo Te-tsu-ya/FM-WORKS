@@ -33,6 +33,17 @@ export class SqlRepository {
   }
   return this;
  }
+ async listDemoEmployees(){
+  await this.initialize();
+  const spec=this.definitions.find(entry=>entry.name==='社員マスタ');
+  if(!spec)throw Error('社員マスタのSQL定義がありません。');
+  const [idCol,nameCol,roleCol,statusCol]=[0,1,5,6].map(index=>spec.columns[index]);
+  if([idCol,nameCol,roleCol,statusCol].some(col=>!col||typeof col!=='string'))throw Error('社員マスタのSQL列定義が不正です。');
+  const query='SELECT '+quote(idCol)+' AS employee_id, '+quote(nameCol)+' AS name, '+quote(roleCol)+' AS role FROM '+quote(spec.table)+
+   ' WHERE '+quote(statusCol)+' = ? AND '+quote(idCol)+" IS NOT NULL AND "+quote(idCol)+" <> '' ORDER BY row_no";
+  const rows=await this.db.prepare(query).bind('在籍').all();
+  return (rows.results||[]).map(row=>({employeeId:row.employee_id,name:row.name||'',role:row.role||'USER'}));
+ }
  getDb(){return {getSheetByName:name=>this.tables.get(name)||null,getSheets:()=>[...this.tables.values()],getId:()=> 'SITES_SQL_ONLY'};}
  async commit(){
   const changed=this.definitions.filter(s=>JSON.stringify(this.tables.get(s.name).rows.slice(1))!==this.initial.get(s.name));

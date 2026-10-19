@@ -26,10 +26,14 @@ export async function handleRpc(request,database,method){
    await database.prepare('DELETE FROM site_sessions WHERE token_hash = ?').bind(hash(token)).run();
    return json({result:{ok:true}},200,{'Set-Cookie':'fmworks_sql=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});
   }
-  const repository=await new SqlRepository(database,definitions,seed).load();
+  const repository=new SqlRepository(database,definitions,seed);
+  if(method==='getPublicAuthConfig'){
+   const demoEmployees=await repository.listDemoEmployees();
+   return json({result:{appVersion,needsSetup:false,prototypeMode:true,pinLength:6,demoEmployees,support:{note:'開発版では担当者を選ぶだけで利用できます。'}}});
+  }
+  await repository.load();
   const services=createServices(repository);
   const engine=createEngine(services,valid?{employeeId:session.employee_id}:null,token);
-  if(method==='getPublicAuthConfig')return json({result:{appVersion,needsSetup:false,prototypeMode:true,pinLength:6,demoEmployees:engine.directory().map(e=>({employeeId:e.employeeId,name:e.name,role:e.role})),support:{note:'開発版では担当者を選ぶだけで利用できます。'}}});
   if(method==='login'){
    const id=String(input.args[0]||'').toUpperCase();const employee=engine.directory().find(e=>e.employeeId===id);
    if(!employee)return json({error:'架空の担当者を選択してください。'},400);
