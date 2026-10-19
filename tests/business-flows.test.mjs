@@ -176,3 +176,34 @@ test('attendance today keeps calendar accessible with long punch history',()=>{
  assert.match(css,/\.attendance-dashboard \.attendance-top-grid\{grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
  assert.match(css,/@media\(max-width:820px\)\{\.attendance-dashboard \.attendance-top-grid/);
 });
+
+test('attendance render size stays fixed while recorded events accumulate',()=>{
+ const source=fs.readFileSync('src/ui/operations.html','utf8');
+ const start=source.indexOf('function attendancePage(){');
+ const end=source.indexOf('\nfunction formatMinutesClient(',start);
+ assert.ok(start>=0&&end>start);
+ const render=(historyCount,stateName)=>{
+  const state={data:{
+   today:'2026-10-19',
+   attendance:{state:stateName,stateLabel:'勤務中',clockIn:stateName==='off'?'':'09:00',clockOut:'',history:Array.from({length:historyCount},()=>({action:'勤務場所変更',time:'09:27',workLocation:'出社'}))},
+   companyToday:{name:'通常勤務'}
+  }};
+  const context={
+   state,attendanceDisplayPreview:()=>null,
+   pageHead:()=>'<header>HEADER</header>',attendanceWorkspaceTabs:()=>'<nav>TABS</nav>',
+   attendanceStatusTone:()=>stateName,liveWorkedText:()=>'0時間00分',
+   escapeHtml:String,fmtDate:String,svg:()=>'',attendancePunchActions:()=>'PUNCH',
+   attendanceLocationControl:()=>'LOCATION',attendanceAlerts:()=>'ALERTS',
+   attendanceTodayStats:()=>'STATS',attendanceMonthCalendar:()=>'CALENDAR',
+   attendanceMonthSummary:()=>'MONTH_SUMMARY'
+  };
+  return vm.runInNewContext(source.slice(start,end)+'\nattendancePage();',context,{timeout:1000});
+ };
+ for(const mode of ['off','working','break','finished']){
+  const empty=render(0,mode),many=render(1000,mode);
+  assert.equal(many.length,empty.length,mode+' must not render recorded events in the default page');
+  for(const section of ['PUNCH','LOCATION','ALERTS','STATS','CALENDAR','MONTH_SUMMARY']){
+   assert.ok(many.includes(section),section+' remains accessible in '+mode);
+  }
+ }
+});
