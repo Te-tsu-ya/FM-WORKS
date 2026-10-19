@@ -65,7 +65,7 @@
 
 ## 5. API契約
 
-`POST /api/rpc/:method`へ`{"args":[...]}`をJSONで送る。応答は`{"result":...}`、失敗は`{"error":"理由"}`。`FMApi.run`が成功・失敗コールバックへ渡す。同一Sitesへcookieを同送する。
+`POST /api/rpc/:method`へ`{"args":[...]}`をJSONで送る。応答は`{"result":...}`、失敗は`{"error":"理由"}`。`FMApi.run`が成功・失敗コールバックへ渡す。失敗コールバックがない呼出しは共通トースト（未生成時はログ）を使い、非JSONエラーや不正な成功応答は成功扱いしない。同一Sitesへcookieを同送する。
 
 業務公開メソッドは生成した`src/generated/api-contract.json`に列挙し、実行前に生成済み`apiMethods`と照合する。末尾`_`の内部関数は公開しない。ログイン・ログアウト・復帰・公開ログイン設定はAPI側で扱う。Google依存の発行・添付・バックアップ等は拒否する。外部サービスへ到達した場合も実行補助層が拒否する。
 
