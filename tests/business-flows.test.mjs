@@ -156,3 +156,23 @@ test('page, login and document content remain reachable when viewport height is 
  const shell=fs.readFileSync('src/ui/shell.html','utf8');
  assert.doesNotMatch(shell,/classList\.(?:add|toggle)\([^\n]*one-screen/);
 });
+
+test('attendance today keeps calendar accessible with long punch history',()=>{
+ const source=fs.readFileSync('src/ui/operations.html','utf8');
+ const start=source.indexOf('function attendancePage(){');
+ const end=source.indexOf('\nfunction formatMinutesClient(',start);
+ assert.ok(start>=0&&end>start);
+ const page=source.slice(start,end);
+ assert.doesNotMatch(page,/attendanceTimeline\s*\(/);
+ assert.doesNotMatch(page,/attendanceRecentHistory\s*\(/);
+ assert.match(page,/attendanceMonthCalendar\(preview\)/);
+ assert.match(page,/attendanceMonthSummary\(preview\)/);
+ assert.match(page,/openAttendanceTodayHistory\(\)/);
+ assert.match(page,/openAttendanceMonthly\('list'\)/);
+ assert.ok(page.indexOf('attendance-calendar-card')>page.indexOf('attendance-top-grid'));
+ assert.match(source,/function openAttendanceTodayHistory\(\)/);
+ assert.match(source,/aria-labelledby='attendanceEventTitle'/);
+ const css=fs.readFileSync('src/ui/styles.html','utf8');
+ assert.match(css,/\.attendance-dashboard \.attendance-top-grid\{grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
+ assert.match(css,/@media\(max-width:820px\)\{\.attendance-dashboard \.attendance-top-grid/);
+});
