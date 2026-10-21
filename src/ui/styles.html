@@ -4146,4 +4146,17 @@ body{overflow-y:auto}
 .login-stage{height:auto;min-height:min(590px,calc(100svh - 24px));overflow:visible}
 .login-panel{height:auto;overflow:visible;min-width:0}
 .notification-menu,.search-results{max-height:min(440px,calc(100dvh - var(--topbar) - 24px));overflow-y:auto}
+
+/* Daily attendance: current action first, calendar before optional event history. */
+.attendance-dashboard .attendance-top-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+.attendance-dashboard .attendance-side-stack{grid-column:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px}
+.attendance-dashboard .attendance-bottom-grid{grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr)}
+.attendance-history-link{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface2);color:var(--blue);font-size:12px;font-weight:750;text-align:left;cursor:pointer}
+.attendance-history-link:hover{border-color:var(--blue)}
+.attendance-history-link:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.attendance-event-modal{width:min(660px,calc(100vw - 24px))}
+.attendance-event-note{font-size:12px;color:var(--muted);margin:0 0 14px}
+.attendance-event-modal .attendance-timeline{padding:3px 1px}
+@media(max-width:1260px){.attendance-dashboard .attendance-bottom-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:820px){.attendance-dashboard .attendance-top-grid,.attendance-dashboard .attendance-side-stack{grid-template-columns:minmax(0,1fr)}}
 </style>
