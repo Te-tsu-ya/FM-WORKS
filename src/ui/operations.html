@@ -258,6 +258,19 @@ function attendanceTimeline(a,company){
   return rows.length?rows.join(''):`<div class='attendance-empty'><strong>本日の打刻はまだありません</strong><span>出勤するとここに時系列で表示されます。</span></div>`;
 }
 
+function openAttendanceTodayHistory(){
+  const d=state.data;
+  if(!d||!d.attendance)return;
+  const a=d.attendance, count=Array.isArray(a.history)?a.history.length:0;
+  const root=ensureModal();
+  root.innerHTML=`<div class='modal-backdrop' onclick='closeModal()'></div>
+    <section class='modal-card attendance-event-modal' role='dialog' aria-modal='true' aria-labelledby='attendanceEventTitle'>
+      <div class='modal-head'><div><small>${escapeHtml(fmtDate(d.today))}</small><h2 id='attendanceEventTitle'>今日の操作履歴</h2></div><button type='button' class='secondary-button compact' onclick='closeModal()'>閉じる</button></div>
+      <p class='attendance-event-note'>出勤・休憩・退勤・勤務場所の変更（${count}件）</p>
+      <div class='attendance-timeline'>${attendanceTimeline(a,d.companyToday||null)}</div>
+    </section>`;
+}
+
 function attendanceScheduledMinutes(company){
   if(!company||!company.working||!company.start||!company.end)return 0;
   const toMin=v=>{const p=String(v).split(':').map(Number);return p.length===2?p[0]*60+p[1]:0};
@@ -351,41 +364,35 @@ function attendancePage(){
   const stateTone=attendanceStatusTone(a);
   const currentMain=a.clockIn?`<strong class='attendance-live-value' data-live-worked>${escapeHtml(liveWorkedText(a))}</strong><span class='attendance-live-range'>${escapeHtml(a.clockIn)} 〜 ${escapeHtml(a.clockOut||'現在')}</span>`:`<strong class='attendance-live-value off-copy'>まだ出勤していません</strong><span class='attendance-live-range'>勤務を開始すると実働時間を表示します</span>`;
   return `<div class='attendance-dashboard'>
-    ${pageHead('勤怠','出退勤、休憩、勤務場所、打刻履歴、月間勤怠を1つの流れで確認します。',dateAction)}
+    ${pageHead('勤怠','現在の勤務状況と今月の勤怠を確認できます。',dateAction)}
     ${attendanceWorkspaceTabs('attendance')}
     <div class='attendance-top-grid'>
       <section class='attendance-focus-card ${stateTone}'>
-        <header><div><span class='eyebrow'>CURRENT STATUS</span><h2>現在の勤務状況</h2></div><span class='attendance-state-pill ${stateTone}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
+        <header><div><h2>現在の勤務状況</h2></div><span class='attendance-state-pill ${stateTone}'><i></i>${escapeHtml(a.stateLabel)}</span></header>
         <div class='attendance-focus-main'>${currentMain}</div>
         ${attendancePunchActions(a)}
         ${attendanceLocationControl()}
       </section>
-      <section class='attendance-panel attendance-timeline-card'>
-        <header><div><span class='eyebrow'>TODAY</span><h2>今日の勤務タイムライン</h2></div><button class='text-button' onclick="openAttendanceMonthly('list')">履歴を見る</button></header>
-        <div class='attendance-timeline'>${attendanceTimeline(a,company)}</div>
-        ${company&&company.working?`<div class='attendance-schedule-strip'><span>予定勤務</span><strong>${escapeHtml(company.start||'--:--')} 〜 ${escapeHtml(company.end||'--:--')}</strong><small>休憩 ${formatMinutesClient(company.breakMinutes||0)}</small></div>`:''}
-      </section>
       <div class='attendance-side-stack'>
         <section class='attendance-panel attendance-alert-card'>
-          <header><div><span class='eyebrow'>CHECK</span><h2>確認が必要なこと</h2></div></header>
+          <header><div><h2>確認が必要なこと</h2></div></header>
           <div class='attendance-alert-list'>${attendanceAlerts(preview)}</div>
         </section>
         <section class='attendance-panel attendance-today-card'>
-          <header><div><span class='eyebrow'>SUMMARY</span><h2>本日の集計</h2></div><button class='text-button' onclick="openAttendanceMonthly('calendar')">詳細</button></header>
+          <header><div><h2>今日の集計</h2></div><button type='button' class='text-button' onclick="openAttendanceTodayHistory()">操作履歴を見る</button></header>
           ${attendanceTodayStats(a,company,preview)}
         </section>
       </div>
     </div>
     <div class='attendance-bottom-grid'>
       <section class='attendance-panel attendance-calendar-card'>
-        <header><div><span class='eyebrow'>MONTH</span><h2>${escapeHtml(d.today.slice(0,7).replace('-','年'))}月のカレンダー</h2></div><button class='text-button' onclick="openAttendanceMonthly('calendar')">月間を開く</button></header>
+        <header><div><h2>${escapeHtml(d.today.slice(0,7).replace('-','年'))}月のカレンダー</h2></div><button class='text-button' onclick="openAttendanceMonthly('calendar')">月間を開く</button></header>
         ${attendanceMonthCalendar(preview)}
       </section>
       <section class='attendance-panel attendance-history-card'>
-        <header><div><span class='eyebrow'>MONTHLY SUMMARY</span><h2>今月の勤怠サマリー</h2></div><button class='text-button' onclick="openAttendanceMonthly('list')">すべて見る</button></header>
+        <header><div><h2>今月の集計</h2></div><button class='text-button' onclick="openAttendanceMonthly('list')">すべて見る</button></header>
         ${attendanceMonthSummary(preview)}
-        <div class='attendance-history-title'>直近の勤怠履歴</div>
-        ${attendanceRecentHistory(preview)}
+        <button type='button' class='attendance-history-link' onclick="openAttendanceMonthly('list')">月間の勤怠履歴を見る <span aria-hidden='true'>›</span></button>
       </section>
     </div>
   </div>`;
